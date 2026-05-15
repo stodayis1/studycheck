@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import Image from 'next/image'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
@@ -39,43 +38,29 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f5f3ee] to-white flex flex-col items-center justify-center px-4">
 
-      {/* 로고 + 캐릭터 */}
-      <div className="mb-6 text-center flex flex-col items-center">
-        {/* 로고 이미지 */}
+      {/* 로고 */}
+      <div className="mb-8 text-center flex flex-col items-center">
         <img
           src="/logo.png"
-          alt="수학의지혜 로고"
-          className="h-20 object-contain mb-2"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-          }}
+          alt="수학의지혜"
+          className="h-24 object-contain mb-2"
         />
         <p className="text-sm text-gray-500 font-medium">과제 관리 플랫폼</p>
-
-        {/* 캐릭터 */}
-        <img
-          src="/character.png"
-          alt="캐릭터"
-          className="h-32 object-contain mt-2"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-          }}
-        />
       </div>
 
       {/* 로그인 카드 */}
       <div className="w-full max-w-sm bg-white rounded-3xl shadow-md border border-gray-100 p-6">
-        <h2 className="text-center text-base font-bold text-[#1a2f5e] mb-5">로그인</h2>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">이메일</label>
-            <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="이메일 주소 입력" required
+            <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)}
+              placeholder="이메일 주소 입력" required
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a2f5e] focus:border-transparent" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">비밀번호</label>
-            <input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="비밀번호 입력" required
+            <input type="password" value={password} onChange={(e)=>setPassword(e.target.value)}
+              placeholder="비밀번호 입력" required
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a2f5e] focus:border-transparent" />
           </div>
           {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
@@ -95,7 +80,8 @@ export default function LoginPage() {
         <div className="grid grid-cols-3 gap-2">
           {QUICK_ACCOUNTS.map((acc) => (
             <button key={acc.email} onClick={()=>handleQuickLogin(acc)} disabled={loading}
-              className={cx('py-2.5 rounded-xl text-xs font-semibold border transition-all active:scale-95', acc.color, loading&&'opacity-50 cursor-not-allowed')}>
+              className={cx('py-2.5 rounded-xl text-xs font-semibold border transition-all active:scale-95',
+                acc.color, loading&&'opacity-50 cursor-not-allowed')}>
               {acc.label}
             </button>
           ))}
