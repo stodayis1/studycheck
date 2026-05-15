@@ -1,72 +1,182 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { Card, SectionCard, StatusBadge, StatCard, Badge, EmptyState } from '@/components/ui'
-import { getMockStudentAssignments } from '@/data/mockData'
+import { supabase } from '@/lib/supabase'
 import { formatDueDate, formatDate, cx } from '@/lib/utils'
-import type { StudentAssignmentItem } from '@/types'
 
-const CURRENT_STUDENT_ID = 'student-001'
-const CURRENT_STUDENT_NAME = '이지수'
+interface StudentInfo {
+  id: string
+  name: string
+  school: string
+  grade: string
+  teacher_name: string
+}
+
+interface WorksheetRecord {
+  id: string
+  grade_level: string
+  unit: string
+  unit_name: string
+  current_level: number
+  status: string
+  worksheet_type: string
+  score: number | null
+  assigned_at: string
+}
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:         { label: '과제중',    color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
+  submitted:        { label: '채점대기',  color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
+  similar_assigned: { label: '오답유사',  color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
+  similar_submitted:{ label: '오답유사채점', color: 'text-pink-500', bg: 'bg-pink-50 border-pink-200' },
+  scored:           { label: '결과대기',  color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
+  passed:           { label: '완료✓',    color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
+  retry:            { label: '재도전',    color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
+}
 
 export default function StudentDashboard() {
   const router = useRouter()
-  const assignments = getMockStudentAssignments(CURRENT_STUDENT_ID)
+  const [student, setStudent] = useState<StudentInfo | null>(null)
+  const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const today = assignments.filter((a) => {
-    const due = new Date(a.assignment_set.due_date)
-    const now = new Date()
-    const diffDay = Math.floor((due.getTime()-now.getTime())/86400000)
-    return diffDay <= 1 && diffDay >= -1
-  })
-  const incomplete = assignments.filter((a) => !a.submission || a.submission.final_status==='not_started'||a.submission.final_status==='in_progress')
-  const completed = assignments.filter((a) => ['submitted','checked','late'].includes(a.submission?.final_status??''))
-  const hasFeedback = assignments.filter((a) => a.submission?.teacher_feedback)
-  const completionRate = assignments.length>0 ? Math.round((completed.length/assignments.length)*100) : 0
+  useEffect(() => {
+    async function init() {
+      // 세션에서 학생 정보 가져오기
+      try {
+        const stored = sessionStorage.getItem('studycheck_student')
+        if (!stored) { router.push('/auth/login'); return }
+
+        const session = JSON.parse(stored)
+
+        // 학생 정보 DB에서 가져오기
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', session.id)
+          .single()
+
+        if (!studentData) { router.push('/auth/login'); return }
+        setStudent(studentData)
+
+        // 학습지 현황 가져오기
+        const { data: wsData } = await supabase
+          .from('student_worksheets')
+          .select('*')
+          .eq('student_id', session.id)
+          .order('assigned_at', { ascending: false })
+
+        if (wsData) setWorksheets(wsData)
+      } catch {
+        router.push('/auth/login')
+      }
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <span className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  if (!student) return null
+
+  const activeWorksheets = worksheets.filter((w) => !['passed'].includes(w.status))
+  const completedWorksheets = worksheets.filter((w) => w.status === 'passed')
 
   return (
     <div>
-      <Header title={`안녕하세요, ${CURRENT_STUDENT_NAME} 학생 👋`} subtitle="오늘도 화이팅!" />
+      <Header title={`안녕하세요, ${student.name} 학생 👋`} subtitle="오늘도 화이팅!" />
       <div className="px-4 py-4 space-y-5">
 
-        <Card className="bg-gradient-to-r from-blue-600 to-blue-500 border-0" padding="lg">
-          <p className="text-blue-100 text-xs font-medium mb-1">이번 주 과제 완료율</p>
-          <div className="flex items-end gap-2 mb-3">
-            <span className="text-4xl font-bold text-white">{completionRate}%</span>
-            <span className="text-blue-200 text-sm mb-1">{completed.length}/{assignments.length}개 완료</span>
-          </div>
-          <div className="h-2 bg-blue-400/40 rounded-full overflow-hidden">
-            <div className="h-full bg-white rounded-full transition-all duration-700" style={{width:`${completionRate}%`}} />
+        {/* 학생 정보 카드 */}
+        <Card className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 border-0" padding="lg">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
+              <span className="text-2xl font-black text-white">{student.name[0]}</span>
+            </div>
+            <div>
+              <p className="text-white font-black text-lg">{student.name}</p>
+              <p className="text-blue-100 text-sm">{student.school} · {student.grade}</p>
+              {student.teacher_name && (
+                <p className="text-blue-200 text-xs mt-0.5">담당: {student.teacher_name} 선생님</p>
+              )}
+            </div>
           </div>
         </Card>
 
+        {/* 통계 */}
         <div className="grid grid-cols-3 gap-2">
-          <StatCard label="오늘 마감" value={today.length} accent="orange" />
-          <StatCard label="미완료" value={incomplete.length} accent={incomplete.length>0?'red':'green'} />
-          <StatCard label="피드백" value={hasFeedback.length} accent="blue" />
+          <StatCard label="진행중" value={activeWorksheets.length} accent="blue" />
+          <StatCard label="완료" value={completedWorksheets.length} accent="green" />
+          <StatCard label="전체" value={worksheets.length} accent="gray" />
         </div>
 
-        <SectionCard title="🔥 오늘의 과제" subtitle={today.length===0?'오늘 마감 과제가 없어요':`${today.length}개 과제`}>
-          {today.length===0
-            ? <EmptyState icon="🎉" title="오늘 마감 과제가 없어요!" description="잘 하고 있어요" />
-            : <div className="space-y-3">{today.map((a) => <AssignmentCard key={a.assignment_set.id} item={a} onClick={()=>router.push(`/student/assignments/${a.assignment_set.id}`)} />)}</div>
-          }
+        {/* 진행중인 과제 */}
+        <SectionCard title="📝 진행중인 학습지">
+          {activeWorksheets.length === 0 ? (
+            <EmptyState icon="🎉" title="진행중인 과제가 없어요!" description="선생님이 곧 새 과제를 배정해드릴 거예요" />
+          ) : (
+            <div className="space-y-3">
+              {activeWorksheets.map((w) => {
+                const cfg = STATUS_CONFIG[w.status] ?? STATUS_CONFIG.assigned
+                return (
+                  <div key={w.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-gray-900">{w.grade_level} {w.unit}</p>
+                          {w.unit_name && <span className="text-xs text-gray-500">({w.unit_name})</span>}
+                          {w.worksheet_type === 'similar' && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-md">오답유사</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          <span className={cx('font-bold', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>
+                            {w.current_level}레벨
+                          </span>
+                          {w.current_level >= 4 && ' · 심화'}
+                        </p>
+                        {w.score != null && (
+                          <p className={cx('text-sm font-black mt-1',
+                            w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
+                            {w.score}점
+                          </p>
+                        )}
+                      </div>
+                      <span className={cx('text-xs font-bold px-2.5 py-1 rounded-full border shrink-0', cfg.bg, cfg.color)}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </SectionCard>
 
-        {incomplete.length>0 && (
-          <SectionCard title="⚠️ 미완료 과제" action={<Badge variant="red" size="sm">{incomplete.length}개</Badge>}>
-            <div className="space-y-3">{incomplete.map((a) => <AssignmentCard key={a.assignment_set.id} item={a} onClick={()=>router.push(`/student/assignments/${a.assignment_set.id}`)} />)}</div>
-          </SectionCard>
-        )}
-
-        {hasFeedback.length>0 && (
-          <SectionCard title="💬 선생님 피드백">
-            <div className="space-y-3">
-              {hasFeedback.map((a) => (
-                <div key={a.assignment_set.id} className="bg-blue-50 rounded-xl p-3">
-                  <p className="text-xs font-semibold text-blue-700 mb-1">{a.assignment_set.title}</p>
-                  <p className="text-sm text-gray-700">{a.submission?.teacher_feedback}</p>
+        {/* 완료한 과제 */}
+        {completedWorksheets.length > 0 && (
+          <SectionCard title="✅ 완료한 학습지">
+            <div className="space-y-2">
+              {completedWorksheets.slice(0, 5).map((w) => (
+                <div key={w.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-700">{w.grade_level} {w.unit}</p>
+                    <p className="text-xs text-gray-400">{w.current_level}레벨</p>
+                  </div>
+                  {w.score != null && (
+                    <span className={cx('text-sm font-black',
+                      w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
+                      {w.score}점
+                    </span>
+                  )}
+                  <span className="text-xs text-green-500 font-bold">✓</span>
                 </div>
               ))}
             </div>
@@ -75,43 +185,5 @@ export default function StudentDashboard() {
 
       </div>
     </div>
-  )
-}
-
-function AssignmentCard({ item, onClick }: { item: StudentAssignmentItem; onClick: ()=>void }) {
-  const due = formatDueDate(item.assignment_set.due_date)
-  const status = item.submission?.final_status ?? 'not_started'
-  const videoItem = item.items.find((i)=>i.type==='video')
-  const textbookItem = item.items.find((i)=>i.type==='textbook')
-  const worksheetItem = item.items.find((i)=>i.type==='worksheet')
-
-  return (
-    <div onClick={onClick} className={cx('border rounded-2xl p-4 cursor-pointer transition-all active:scale-[0.98] hover:shadow-sm', status==='checked'?'border-green-200 bg-green-50':due.isOverdue?'border-red-200 bg-red-50':due.isUrgent?'border-orange-200 bg-orange-50':'border-gray-100 bg-white')}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <p className="text-sm font-bold text-gray-900 flex-1">{item.assignment_set.title}</p>
-        <StatusBadge status={status} size="sm" />
-      </div>
-      <p className={cx('text-xs mb-2 font-medium', due.isOverdue?'text-red-500':due.isUrgent?'text-orange-500':'text-gray-400')}>
-        {due.isOverdue?'🚨':due.isUrgent?'⚡':'📅'} {due.text} · {formatDate(item.assignment_set.due_date)}
-      </p>
-      <div className="flex gap-2">
-        {videoItem && <ItemCheck label="영상" done={['submitted','checked','late'].includes(item.submission?.video_status??'')} color="purple" />}
-        {textbookItem && <ItemCheck label="교재" done={['submitted','checked','late'].includes(item.submission?.textbook_status??'')} color="blue" />}
-        {worksheetItem && <ItemCheck label="학습지" done={['submitted','checked','late'].includes(item.submission?.worksheet_status??'')} color="green" />}
-      </div>
-    </div>
-  )
-}
-
-function ItemCheck({ label, done, color }: { label:string; done:boolean; color:string }) {
-  const colors: Record<string,{done:string;todo:string}> = {
-    purple:{done:'bg-purple-500 text-white',todo:'bg-purple-100 text-purple-400'},
-    blue:{done:'bg-blue-500 text-white',todo:'bg-blue-100 text-blue-400'},
-    green:{done:'bg-green-500 text-white',todo:'bg-green-100 text-green-400'},
-  }
-  return (
-    <span className={cx('inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold', done?colors[color].done:colors[color].todo)}>
-      <span>{done?'✓':'○'}</span>{label}
-    </span>
   )
 }

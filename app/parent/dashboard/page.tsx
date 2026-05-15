@@ -1,158 +1,240 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
-import { getMockChildWeeklySummary, MOCK_CLASSES, MOCK_ASSIGNMENT_ITEMS } from '@/data/mockData'
-import { formatDate, formatDateTime, formatDueDate, formatRelativeTime, cx } from '@/lib/utils'
-import type { StudentAssignmentItem, SubmissionStatus, AssignmentItemType } from '@/types'
+import { supabase } from '@/lib/supabase'
+import { cx } from '@/lib/utils'
 
-const CURRENT_PARENT_ID = 'parent-user-001'
+interface StudentInfo {
+  id: string
+  name: string
+  school: string
+  grade: string
+  teacher_name: string
+  class_time: string
+}
+
+interface WorksheetRecord {
+  id: string
+  grade_level: string
+  unit: string
+  unit_name: string
+  current_level: number
+  status: string
+  worksheet_type: string
+  score: number | null
+  assigned_at: string
+}
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:         { label: '과제중',    color: 'text-blue-600',   bg: 'bg-blue-50' },
+  submitted:        { label: '채점대기',  color: 'text-orange-500', bg: 'bg-orange-50' },
+  similar_assigned: { label: '오답유사',  color: 'text-purple-600', bg: 'bg-purple-50' },
+  similar_submitted:{ label: '오답유사채점', color: 'text-pink-500', bg: 'bg-pink-50' },
+  scored:           { label: '결과대기',  color: 'text-gray-500',   bg: 'bg-gray-50' },
+  passed:           { label: '완료✓',    color: 'text-green-600',  bg: 'bg-green-50' },
+  retry:            { label: '재도전',    color: 'text-red-500',    bg: 'bg-red-50' },
+}
 
 export default function ParentDashboardPage() {
-  const summary = getMockChildWeeklySummary(CURRENT_PARENT_ID)
+  const router = useRouter()
+  const [student, setStudent] = useState<StudentInfo | null>(null)
+  const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [openSection, setOpenSection] = useState<string | null>('active')
 
-  if (!summary) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 text-center">
-        <div className="text-5xl mb-4">👨‍👩‍👧</div>
-        <h2 className="text-base font-bold text-gray-700 mb-1">연결된 자녀가 없습니다</h2>
-        <p className="text-sm text-gray-400">선생님에게 자녀 계정 연결을 요청해주세요.</p>
-      </div>
-    )
+  useEffect(() => {
+    async function init() {
+      try {
+        const stored = sessionStorage.getItem('studycheck_student')
+        if (!stored) { router.push('/auth/login'); return }
+
+        const session = JSON.parse(stored)
+
+        // 학생 정보 가져오기
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', session.id)
+          .single()
+
+        if (!studentData) { router.push('/auth/login'); return }
+        setStudent(studentData)
+
+        // 학습지 현황 가져오기
+        const { data: wsData } = await supabase
+          .from('student_worksheets')
+          .select('*')
+          .eq('student_id', session.id)
+          .order('assigned_at', { ascending: false })
+
+        if (wsData) setWorksheets(wsData)
+      } catch {
+        router.push('/auth/login')
+      }
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  function signOut() {
+    sessionStorage.removeItem('studycheck_student')
+    router.push('/auth/login')
   }
 
-  const { student, total_assignments, completed_count, not_started_count, late_count, completion_rate, feedback_count, assignments } = summary
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <span className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
 
-  const cls = MOCK_CLASSES.find((c) => c.id === student.class_group_id)
-  const completedList = assignments.filter((a) => ['submitted','checked'].includes(a.submission?.final_status ?? ''))
-  const incompleteList = assignments.filter((a) => !a.submission || ['not_started','in_progress'].includes(a.submission.final_status))
-  const lateList = assignments.filter((a) => a.submission?.final_status === 'late')
-  const feedbackList = assignments.filter((a) => a.submission?.teacher_feedback)
+  if (!student) return null
+
+  const activeWorksheets = worksheets.filter((w) => !['passed'].includes(w.status))
+  const completedWorksheets = worksheets.filter((w) => w.status === 'passed')
+  const completionRate = worksheets.length > 0
+    ? Math.round((completedWorksheets.length / worksheets.length) * 100)
+    : 0
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title={`${student.name} 학생`} subtitle={cls?.name ?? ''} />
+      <Header
+        title={`${student.name} 학생`}
+        subtitle="학부모 화면"
+        action={
+          <button onClick={signOut} className="text-xs text-gray-400 hover:text-gray-600">
+            로그아웃
+          </button>
+        }
+      />
+
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 
-        {/* 프로필 */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-blue-100 flex items-center justify-center shrink-0">
-            <span className="text-blue-600 font-bold text-lg">{student.name[0]}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-base font-bold text-gray-900">{student.name}</p>
-              {student.grade && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-md">고{student.grade}</span>}
+        {/* 자녀 프로필 */}
+        <div className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 rounded-2xl p-5 text-white">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
+              <span className="text-2xl font-black text-white">{student.name[0]}</span>
             </div>
-            <p className="text-xs text-gray-400 truncate mt-0.5">{[student.school, cls?.name].filter(Boolean).join(' · ')}</p>
+            <div>
+              <p className="text-white font-black text-lg">{student.name}</p>
+              <p className="text-blue-100 text-sm">{student.school} · {student.grade}</p>
+              {student.teacher_name && (
+                <p className="text-blue-200 text-xs mt-0.5">담당: {student.teacher_name} 선생님</p>
+              )}
+              {student.class_time && (
+                <p className="text-blue-200 text-xs">수업: {student.class_time}</p>
+              )}
+            </div>
           </div>
-          <span className="shrink-0 text-[10px] font-bold text-gray-300 border border-gray-100 px-2 py-1 rounded-full">보기 전용</span>
-        </div>
 
-        {/* 완료율 히어로 */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className={cx('px-5 py-5 bg-gradient-to-r', completion_rate>=80?'from-emerald-500 to-green-400':completion_rate>=50?'from-blue-600 to-blue-400':'from-orange-500 to-amber-400')}>
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-white/80 text-xs font-medium mb-0.5">이번 주 과제 완료율</p>
-                <div className="flex items-end gap-2">
-                  <span className="text-5xl font-black text-white leading-none">{completion_rate}</span>
-                  <span className="text-white/90 text-xl font-bold mb-1">%</span>
-                </div>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl">
-                {completion_rate>=80?'🏆':completion_rate>=50?'📚':'⚡'}
-              </div>
+          {/* 완료율 */}
+          <div>
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-blue-100">학습지 완료율</span>
+              <span className="text-white font-bold">{completedWorksheets.length}/{worksheets.length}개</span>
             </div>
             <div className="h-2.5 bg-white/25 rounded-full overflow-hidden">
-              <div className="h-full bg-white rounded-full transition-all duration-700" style={{width:`${completion_rate}%`}} />
+              <div className="h-full bg-white rounded-full transition-all duration-700"
+                style={{ width: `${completionRate}%` }} />
             </div>
           </div>
-          <div className="grid grid-cols-4 divide-x divide-gray-100">
-            {[
-              {label:'전체', value:total_assignments, color:'text-gray-800'},
-              {label:'완료', value:completed_count, color:'text-green-600'},
-              {label:'미완료', value:not_started_count, color:not_started_count>0?'text-orange-500':'text-gray-300'},
-              {label:'지각', value:late_count, color:late_count>0?'text-red-500':'text-gray-300'},
-            ].map((item) => (
-              <div key={item.label} className="py-3.5 text-center">
-                <p className={cx('text-xl font-black', item.color)}>{item.value}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{item.label}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* 미완료 */}
-        {incompleteList.length > 0 && (
-          <Section title="미완료 과제" icon="⚠️" count={incompleteList.length} color="text-orange-500">
-            {incompleteList.map((a) => {
-              const due = formatDueDate(a.assignment_set.due_date)
-              return (
-                <div key={a.assignment_set.id} className={cx('rounded-xl border p-3.5', due.isOverdue?'border-red-100 bg-red-50':'border-orange-100 bg-orange-50')}>
-                  <p className="text-sm font-semibold text-gray-800">{a.assignment_set.title}</p>
-                  <p className={cx('text-xs mt-0.5', due.isOverdue?'text-red-500':'text-orange-500')}>
-                    마감 {formatDate(a.assignment_set.due_date)} · {due.text}
-                  </p>
+        {/* 통계 */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: '진행중', value: activeWorksheets.length, color: 'text-blue-600', bg: 'bg-blue-50' },
+            { label: '완료',   value: completedWorksheets.length, color: 'text-green-600', bg: 'bg-green-50' },
+            { label: '전체',   value: worksheets.length, color: 'text-gray-700', bg: 'bg-gray-50' },
+          ].map(({ label, value, color, bg }) => (
+            <div key={label} className={cx('rounded-2xl p-3 text-center', bg)}>
+              <p className={cx('text-2xl font-black', color)}>{value}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* 진행중인 학습지 */}
+        <Section
+          title="📝 진행중인 학습지"
+          count={activeWorksheets.length}
+          isOpen={openSection === 'active'}
+          onToggle={() => setOpenSection(openSection === 'active' ? null : 'active')}
+        >
+          {activeWorksheets.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">진행중인 과제가 없어요</p>
+          ) : (
+            <div className="space-y-2">
+              {activeWorksheets.map((w) => {
+                const cfg = STATUS_CONFIG[w.status] ?? STATUS_CONFIG.assigned
+                return (
+                  <div key={w.id} className={cx('rounded-xl border p-3.5', cfg.bg)}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-gray-900">{w.grade_level} {w.unit}</p>
+                          {w.unit_name && <span className="text-xs text-gray-500">({w.unit_name})</span>}
+                          {w.worksheet_type === 'similar' && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-md">오답유사</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          <span className={cx('font-bold', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>
+                            {w.current_level}레벨
+                          </span>
+                          {w.current_level >= 4 && ' · 심화'}
+                        </p>
+                      </div>
+                      <span className={cx('text-xs font-bold px-2 py-1 rounded-full shrink-0', cfg.color, cfg.bg)}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                    {w.score != null && (
+                      <p className={cx('text-sm font-black mt-2',
+                        w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
+                        점수: {w.score}점
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Section>
+
+        {/* 완료한 학습지 */}
+        <Section
+          title="✅ 완료한 학습지"
+          count={completedWorksheets.length}
+          isOpen={openSection === 'completed'}
+          onToggle={() => setOpenSection(openSection === 'completed' ? null : 'completed')}
+        >
+          {completedWorksheets.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">완료한 과제가 없어요</p>
+          ) : (
+            <div className="space-y-2">
+              {completedWorksheets.map((w) => (
+                <div key={w.id} className="bg-green-50 rounded-xl p-3.5 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">{w.grade_level} {w.unit}</p>
+                    <p className="text-xs text-gray-400">{w.current_level}레벨</p>
+                  </div>
+                  <div className="text-right">
+                    {w.score != null && (
+                      <p className={cx('text-sm font-black',
+                        w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
+                        {w.score}점
+                      </p>
+                    )}
+                    <span className="text-xs text-green-500 font-bold">완료 ✓</span>
+                  </div>
                 </div>
-              )
-            })}
-          </Section>
-        )}
-
-        {/* 지각 */}
-        {lateList.length > 0 && (
-          <Section title="지각 제출" icon="🚨" count={lateList.length} color="text-red-500">
-            {lateList.map((a) => (
-              <div key={a.assignment_set.id} className="bg-red-50 border border-red-100 rounded-xl p-3.5">
-                <p className="text-sm font-semibold text-gray-800">{a.assignment_set.title}</p>
-                <p className="text-xs text-gray-400 mt-0.5">마감 {formatDate(a.assignment_set.due_date)}</p>
-              </div>
-            ))}
-          </Section>
-        )}
-
-        {/* 완료 */}
-        {completedList.length > 0 && (
-          <Section title="완료한 과제" icon="✅" count={completedList.length} color="text-green-600">
-            {completedList.map((a) => (
-              <div key={a.assignment_set.id} className="bg-green-50 border border-green-100 rounded-xl p-3.5 flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-800">{a.assignment_set.title}</p>
-                <span className="text-green-500 text-lg">✓</span>
-              </div>
-            ))}
-          </Section>
-        )}
-
-        {/* 피드백 */}
-        {feedbackList.length > 0 && (
-          <Section title="선생님 피드백" icon="💬" count={feedbackList.length} color="text-blue-600">
-            {feedbackList.map((a) => (
-              <div key={a.assignment_set.id} className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                <p className="text-xs font-bold text-blue-700 mb-2">{a.assignment_set.title}</p>
-                <p className="text-sm text-gray-700 leading-relaxed">{a.submission?.teacher_feedback}</p>
-              </div>
-            ))}
-          </Section>
-        )}
-
-        {/* 주간 요약 */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-          <p className="text-sm font-bold text-gray-800">📊 주간 학습 요약</p>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              {icon:'✅', label:'완료', value:completed_count, bg:'bg-green-50', text:'text-green-600'},
-              {icon:'⏰', label:'지각', value:late_count, bg:late_count>0?'bg-red-50':'bg-gray-50', text:late_count>0?'text-red-500':'text-gray-300'},
-              {icon:'💬', label:'피드백', value:feedback_count, bg:feedback_count>0?'bg-blue-50':'bg-gray-50', text:feedback_count>0?'text-blue-600':'text-gray-300'},
-            ].map(({icon, label, value, bg, text}) => (
-              <div key={label} className={cx('rounded-xl p-3 text-center', bg)}>
-                <p className="text-lg mb-0.5">{icon}</p>
-                <p className={cx('text-xl font-black', text)}>{value}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          )}
+        </Section>
 
         <p className="text-center text-xs text-gray-300 pb-2">학부모 화면은 읽기 전용입니다 🔒</p>
       </div>
@@ -160,19 +242,24 @@ export default function ParentDashboardPage() {
   )
 }
 
-function Section({ title, icon, count, color, children }: {
-  title: string; icon: string; count: number; color: string; children: React.ReactNode
+function Section({ title, count, isOpen, onToggle, children }: {
+  title: string
+  count: number
+  isOpen: boolean
+  onToggle: () => void
+  children: React.ReactNode
 }) {
-  const [open, setOpen] = useState(true)
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <button onClick={() => setOpen(v => !v)} className="w-full px-4 py-3.5 flex items-center gap-2.5 border-b border-gray-50">
-        <span className="text-base">{icon}</span>
+      <button onClick={onToggle} className="w-full px-4 py-3.5 flex items-center gap-2.5 border-b border-gray-50">
         <span className="text-sm font-bold text-gray-800 flex-1 text-left">{title}</span>
-        <span className={cx('text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100', color)}>{count}개</span>
-        <svg viewBox="0 0 12 8" className={cx('w-3 h-3 text-gray-400 transition-transform', open ? 'rotate-180' : '')} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M1 1l5 5 5-5"/></svg>
+        <span className="text-xs font-bold text-gray-400">{count}개</span>
+        <svg viewBox="0 0 12 8" className={cx('w-3 h-3 text-gray-400 transition-transform', isOpen ? 'rotate-180' : '')}
+          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M1 1l5 5 5-5" />
+        </svg>
       </button>
-      {open && <div className="px-4 py-3.5 space-y-2">{children}</div>}
+      {isOpen && <div className="px-4 py-3.5 space-y-2">{children}</div>}
     </div>
   )
 }

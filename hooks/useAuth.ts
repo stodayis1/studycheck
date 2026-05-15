@@ -2,55 +2,61 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import type { User, UserRole } from '@/types'
-import { MOCK_TEACHER, MOCK_STUDENTS_USERS, MOCK_PARENT_USER } from '@/data/mockData'
+import { MOCK_TEACHER } from '@/data/mockData'
 
-const MOCK_ACCOUNTS: Record<string, { password: string; user: User }> = {
-  'teacher@test.com':  { password: 'test1234', user: MOCK_TEACHER },
-  'student1@test.com': { password: 'test1234', user: MOCK_STUDENTS_USERS[0] },
-  'student2@test.com': { password: 'test1234', user: MOCK_STUDENTS_USERS[1] },
-  'parent1@test.com':  { password: 'test1234', user: MOCK_PARENT_USER },
-}
-
-const SESSION_KEY = 'studycheck_mock_user'
-
-function getRoleRedirectPath(role: UserRole): string {
-  switch (role) {
-    case 'teacher': return '/teacher/dashboard'
-    case 'student': return '/student/dashboard'
-    case 'parent':  return '/parent/dashboard'
-  }
-}
+const SESSION_KEY = 'studycheck_student'
 
 export function useAuth() {
   const router = useRouter()
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentStudent, setCurrentStudent] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
+  const [role, setRole] = useState<'teacher' | 'student' | 'parent' | null>(null)
 
   useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem(SESSION_KEY)
-      if (stored) setCurrentUser(JSON.parse(stored))
-    } catch {}
-    finally { setLoading(false) }
+    async function init() {
+      // 선생님 세션 확인
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        setCurrentUser(MOCK_TEACHER)
+        setRole('teacher')
+        setLoading(false)
+        return
+      }
+
+      // 학생/학부모 세션 확인
+      try {
+        const stored = sessionStorage.getItem(SESSION_KEY)
+        if (stored) {
+          const data = JSON.parse(stored)
+          setCurrentStudent(data)
+          setRole(data.role)
+        }
+      } catch {}
+      setLoading(false)
+    }
+    init()
   }, [])
 
   async function signIn(email: string, password: string): Promise<{ error?: string }> {
-    const account = MOCK_ACCOUNTS[email]
-    if (!account || account.password !== password) {
-      return { error: '이메일 또는 비밀번호가 올바르지 않습니다.' }
-    }
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(account.user))
-    setCurrentUser(account.user)
-    router.push(getRoleRedirectPath(account.user.role))
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) return { error: '이메일 또는 비밀번호가 올바르지 않습니다.' }
+    setCurrentUser(MOCK_TEACHER)
+    setRole('teacher')
+    router.push('/teacher/dashboard')
     return {}
   }
 
   function signOut() {
+    supabase.auth.signOut()
     sessionStorage.removeItem(SESSION_KEY)
     setCurrentUser(null)
+    setCurrentStudent(null)
+    setRole(null)
     router.push('/auth/login')
   }
 
-  return { currentUser, loading, signIn, signOut }
+  return { currentUser, currentStudent, loading, role, signIn, signOut }
 }
