@@ -26,7 +26,11 @@ interface WorksheetRecord {
   assigned_at: string
 }
 
-const LEVELS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+const GRADE_GROUPS = [
+  { label: '초등', grades: ['초1','초2','초3','초4','초5','초6'] },
+  { label: '중등', grades: ['중1','중2','중3'] },
+  { label: '고등', grades: ['고1','고2','고3'] },
+]
 
 export default function TeacherReportsPage() {
   const [students, setStudents] = useState<Student[]>([])
@@ -34,6 +38,9 @@ export default function TeacherReportsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [searchText, setSearchText] = useState('')
+  const [selectedGroup, setSelectedGroup] = useState('초등')
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
+  const [selectedTeacher, setSelectedTeacher] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -55,6 +62,25 @@ export default function TeacherReportsPage() {
     setLoading(false)
   }
 
+  // 현재 그룹의 학년 목록
+  const currentGrades = GRADE_GROUPS.find((g) => g.label === selectedGroup)?.grades ?? []
+
+  // 선생님 목록 (중복 제거)
+  const teachers = [...new Set(students.map((s) => s.teacher_name).filter(Boolean))].sort()
+
+  // 필터링된 학생 목록
+  const filteredStudents = students.filter((s) => {
+    const gradeMatch = currentGrades.some((g) => s.grade?.includes(g.replace('초','').replace('중','').replace('고','')) &&
+      (selectedGroup === '초등' ? s.grade?.includes('초') :
+       selectedGroup === '중등' ? s.grade?.includes('중') :
+       s.grade?.includes('고'))
+    )
+    const gradeFilterMatch = selectedGrade ? s.grade?.includes(selectedGrade) : true
+    const teacherMatch = selectedTeacher ? s.teacher_name === selectedTeacher : true
+    const searchMatch = s.name.includes(searchText) || s.school?.includes(searchText)
+    return gradeMatch && gradeFilterMatch && teacherMatch && searchMatch
+  })
+
   // 특정 학생의 단원 목록
   function getStudentUnits(studentId: string) {
     const studentWS = worksheets.filter((w) => w.student_id === studentId)
@@ -74,47 +100,30 @@ export default function TeacherReportsPage() {
              w.current_level === level
     )
     if (records.length === 0) return null
-    // 가장 최신 기록 반환
     return records[records.length - 1]
   }
 
-  // 셀 스타일 결정
+  // 셀 스타일
   function getCellStyle(record: WorksheetRecord | null) {
     if (!record) return { bg: 'bg-gray-50', text: '-', textColor: 'text-gray-300' }
-
-    if (record.status === 'assigned') {
-      return { bg: 'bg-white border border-blue-200', text: '진행중', textColor: 'text-blue-600' }
-    }
-    if (record.status === 'similar_assigned' || record.status === 'similar_submitted') {
-      return { bg: 'bg-white border border-purple-200', text: '오답유사', textColor: 'text-purple-600' }
-    }
-    if (record.status === 'submitted') {
-      return { bg: 'bg-white border border-orange-200', text: '채점대기', textColor: 'text-orange-500' }
-    }
+    if (record.status === 'assigned') return { bg: 'bg-white border border-blue-200', text: '진행중', textColor: 'text-blue-600' }
+    if (record.status === 'similar_assigned' || record.status === 'similar_submitted') return { bg: 'bg-white border border-purple-200', text: '오답유사', textColor: 'text-purple-600' }
+    if (record.status === 'submitted') return { bg: 'bg-white border border-orange-200', text: '채점대기', textColor: 'text-orange-500' }
     if (record.score != null) {
-      if (record.score >= 85) {
-        return { bg: 'bg-green-100', text: `${record.score}점`, textColor: 'text-green-700' }
-      } else if (record.score >= 80) {
-        return { bg: 'bg-yellow-100', text: `${record.score}점`, textColor: 'text-yellow-700' }
-      } else {
-        return { bg: 'bg-red-100', text: `${record.score}점`, textColor: 'text-red-600' }
-      }
+      if (record.score >= 85) return { bg: 'bg-green-100', text: `${record.score}점`, textColor: 'text-green-700' }
+      if (record.score >= 80) return { bg: 'bg-yellow-100', text: `${record.score}점`, textColor: 'text-yellow-700' }
+      return { bg: 'bg-red-100', text: `${record.score}점`, textColor: 'text-red-600' }
     }
     return { bg: 'bg-gray-50', text: '-', textColor: 'text-gray-300' }
   }
 
-  const filteredStudents = students.filter((s) =>
-    s.name.includes(searchText) || s.school?.includes(searchText)
-  )
-
-  const studentUnits = selectedStudent ? getStudentUnits(selectedStudent.id) : []
-
-  // 사용된 레벨만 표시 (해당 학생 기록 기반)
   function getUsedLevels(studentId: string) {
     const studentWS = worksheets.filter((w) => w.student_id === studentId)
     const levels = [...new Set(studentWS.map((w) => w.current_level))].sort((a, b) => a - b)
-    return levels.length > 0 ? levels : LEVELS.slice(0, 6)
+    return levels.length > 0 ? levels : [1.0, 1.5, 2.0, 2.5, 3.0]
   }
+
+  const studentUnits = selectedStudent ? getStudentUnits(selectedStudent.id) : []
 
   return (
     <div>
@@ -122,54 +131,121 @@ export default function TeacherReportsPage() {
 
       <div className="px-4 py-4 space-y-4 md:px-6">
 
-        {/* 검색 + 학생 선택 */}
+        {/* 학생 선택 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-50">
             <h3 className="text-sm font-bold text-gray-800">학생 선택</h3>
           </div>
-          <div className="p-3">
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              placeholder="이름 또는 학교로 검색"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-            />
-            <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
-              {filteredStudents.map((s) => {
-                const hasRecord = worksheets.some((w) => w.student_id === s.id)
+          <div className="p-3 space-y-3">
+
+            {/* 학교급 탭 */}
+            <div className="flex gap-2">
+              {GRADE_GROUPS.map((g) => {
+                const count = students.filter((s) =>
+                  g.grades.some((grade) =>
+                    s.grade?.includes(grade.replace('초','').replace('중','').replace('고','')) &&
+                    (g.label === '초등' ? s.grade?.includes('초') :
+                     g.label === '중등' ? s.grade?.includes('중') :
+                     s.grade?.includes('고'))
+                  )
+                ).length
                 return (
-                  <button
-                    key={s.id}
-                    onClick={() => setSelectedStudent(s)}
-                    className={cx(
-                      'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
-                      selectedStudent?.id === s.id
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : hasRecord
-                        ? 'bg-white text-gray-700 border-gray-300 hover:border-blue-300'
-                        : 'bg-gray-50 text-gray-400 border-gray-100',
-                    )}
-                  >
-                    {s.name}
+                  <button key={g.label}
+                    onClick={() => { setSelectedGroup(g.label); setSelectedGrade(null); setSelectedStudent(null) }}
+                    className={cx('flex-1 py-2 rounded-xl text-sm font-bold border transition-all',
+                      selectedGroup === g.label ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                    {g.label}
+                    <span className={cx('ml-1 text-xs', selectedGroup === g.label ? 'text-blue-200' : 'text-gray-400')}>
+                      {count}명
+                    </span>
                   </button>
                 )
               })}
             </div>
+
+            {/* 학년 필터 */}
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setSelectedGrade(null)}
+                className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                  selectedGrade === null ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200')}>
+                전체
+              </button>
+              {currentGrades.map((g) => {
+                const count = students.filter((s) => s.grade?.includes(g)).length
+                return (
+                  <button key={g}
+                    onClick={() => setSelectedGrade(g)}
+                    className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                      selectedGrade === g ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200')}>
+                    {g} <span className="opacity-60">{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* 선생님 필터 */}
+            {teachers.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setSelectedTeacher(null)}
+                  className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                    selectedTeacher === null ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200')}>
+                  👩‍🏫 전체
+                </button>
+                {teachers.map((t) => (
+                  <button key={t}
+                    onClick={() => setSelectedTeacher(t)}
+                    className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                      selectedTeacher === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200')}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 검색 */}
+            <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
+              placeholder="이름 또는 학교로 검색"
+              className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+            {/* 학생 버튼 목록 */}
+            <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+              {filteredStudents.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">해당하는 학생이 없어요</p>
+              ) : (
+                filteredStudents.map((s) => {
+                  const hasRecord = worksheets.some((w) => w.student_id === s.id)
+                  return (
+                    <button key={s.id} onClick={() => setSelectedStudent(s)}
+                      className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
+                        selectedStudent?.id === s.id ? 'bg-blue-600 text-white border-blue-600' :
+                        hasRecord ? 'bg-white text-gray-700 border-gray-300 hover:border-blue-300' :
+                        'bg-gray-50 text-gray-400 border-gray-100')}>
+                      {s.name}
+                      {s.teacher_name && <span className="ml-1 opacity-50 text-[10px]">{s.teacher_name}</span>}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+            <p className="text-[10px] text-gray-400">총 {filteredStudents.length}명 · 과제기록 있는 학생은 진하게 표시</p>
           </div>
         </div>
 
         {/* 진단표 */}
-        {selectedStudent && (
+        {selectedStudent ? (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {/* 헤더 */}
             <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                 {selectedStudent.name[0]}
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-bold text-gray-900">{selectedStudent.name}</p>
-                <p className="text-xs text-gray-400">{selectedStudent.school} · {selectedStudent.grade}</p>
+                <p className="text-xs text-gray-400">
+                  {selectedStudent.school} · {selectedStudent.grade}
+                  {selectedStudent.teacher_name && ` · ${selectedStudent.teacher_name} 선생님`}
+                </p>
               </div>
             </div>
 
@@ -184,16 +260,13 @@ export default function TeacherReportsPage() {
                   const usedLevels = getUsedLevels(selectedStudent.id)
                   return (
                     <table className="w-full text-xs border-collapse">
-                      {/* 테이블 헤더 */}
                       <thead>
                         <tr className="bg-gray-50">
                           <th className="px-3 py-2.5 text-left text-gray-500 font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[80px]">단원</th>
                           <th className="px-3 py-2.5 text-left text-gray-500 font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[120px]">단원명</th>
                           {usedLevels.map((l) => (
-                            <th key={l} className={cx(
-                              'px-3 py-2.5 text-center font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[70px]',
-                              l >= 4 ? 'text-orange-500' : 'text-gray-500'
-                            )}>
+                            <th key={l} className={cx('px-3 py-2.5 text-center font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[70px]',
+                              l >= 4 ? 'text-orange-500' : 'text-gray-500')}>
                               {l}레벨
                               {l >= 4 && <span className="block text-[9px] text-orange-400">심화</span>}
                             </th>
@@ -203,24 +276,17 @@ export default function TeacherReportsPage() {
                       <tbody>
                         {studentUnits.map(({ grade_level, unit, unit_name }, idx) => (
                           <tr key={idx} className="hover:bg-gray-50/50">
-                            {/* 단원 */}
                             <td className="px-3 py-2.5 border-b border-r border-gray-100">
                               <p className="font-bold text-gray-800">{unit}</p>
                               <p className="text-gray-400 text-[10px]">{grade_level}</p>
                             </td>
-                            {/* 단원명 */}
-                            <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600">
-                              {unit_name || '-'}
-                            </td>
-                            {/* 레벨별 점수 */}
+                            <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600">{unit_name || '-'}</td>
                             {usedLevels.map((level) => {
                               const record = getRecord(selectedStudent.id, grade_level, unit, level)
                               const cell = getCellStyle(record)
                               return (
                                 <td key={level} className={cx('px-2 py-2.5 border-b border-r border-gray-100 text-center', cell.bg)}>
-                                  <span className={cx('font-bold', cell.textColor)}>
-                                    {cell.text}
-                                  </span>
+                                  <span className={cx('font-bold', cell.textColor)}>{cell.text}</span>
                                 </td>
                               )
                             })}
@@ -252,15 +318,12 @@ export default function TeacherReportsPage() {
               ))}
             </div>
           </div>
-        )}
-
-        {!selectedStudent && !loading && (
+        ) : (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
             <p className="text-4xl mb-3">📊</p>
             <p className="text-sm font-semibold text-gray-600">학생을 선택하면 진단표가 나와요</p>
           </div>
         )}
-
       </div>
     </div>
   )
