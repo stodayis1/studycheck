@@ -1,110 +1,265 @@
 ﻿'use client'
 
+import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
-import { SectionCard, ProgressBar, StatCard } from '@/components/ui'
-import { getMockAssignmentSummaries, MOCK_STUDENTS, MOCK_SUBMISSIONS } from '@/data/mockData'
+import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 
+interface Student {
+  id: string
+  name: string
+  school: string
+  grade: string
+  teacher_name: string
+}
+
+interface WorksheetRecord {
+  id: string
+  student_id: string
+  grade_level: string
+  unit: string
+  unit_name: string
+  current_level: number
+  status: string
+  worksheet_type: string
+  score: number | null
+  assigned_at: string
+}
+
+const LEVELS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+
 export default function TeacherReportsPage() {
-  const summaries = getMockAssignmentSummaries()
-  const students = MOCK_STUDENTS.filter((s) => s.class_group_id === 'class-001')
+  const [students, setStudents] = useState<Student[]>([])
+  const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+  const [searchText, setSearchText] = useState('')
 
-  const avgRate = Math.round(summaries.reduce((acc, s) => acc + s.completion_rate, 0) / summaries.length)
-  const totalSubmissions = MOCK_SUBMISSIONS.filter((s) => ['submitted','checked','late'].includes(s.final_status)).length
-  const lateCount = MOCK_SUBMISSIONS.filter((s) => s.final_status === 'late').length
-  const feedbackCount = MOCK_SUBMISSIONS.filter((s) => s.teacher_feedback).length
+  useEffect(() => { fetchData() }, [])
 
-  // 학생별 완료율
-  const studentStats = students.map((student) => {
-    const subs = MOCK_SUBMISSIONS.filter((s) => s.student_id === student.id)
-    const done = subs.filter((s) => ['submitted','checked','late'].includes(s.final_status)).length
-    const rate = summaries.length > 0 ? Math.round((done / summaries.length) * 100) : 0
-    return { student, rate, done, total: summaries.length }
-  }).sort((a, b) => b.rate - a.rate)
+  async function fetchData() {
+    setLoading(true)
+    const { data: studentData } = await supabase
+      .from('students')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+
+    const { data: worksheetData } = await supabase
+      .from('student_worksheets')
+      .select('*')
+      .order('assigned_at', { ascending: true })
+
+    if (studentData) setStudents(studentData)
+    if (worksheetData) setWorksheets(worksheetData)
+    setLoading(false)
+  }
+
+  // 특정 학생의 단원 목록
+  function getStudentUnits(studentId: string) {
+    const studentWS = worksheets.filter((w) => w.student_id === studentId)
+    const units = [...new Set(studentWS.map((w) => `${w.grade_level}__${w.unit}__${w.unit_name ?? ''}`))]
+    return units.map((u) => {
+      const [grade_level, unit, unit_name] = u.split('__')
+      return { grade_level, unit, unit_name }
+    })
+  }
+
+  // 특정 학생 + 단원 + 레벨의 최신 기록
+  function getRecord(studentId: string, gradeLevel: string, unit: string, level: number) {
+    const records = worksheets.filter(
+      (w) => w.student_id === studentId &&
+             w.grade_level === gradeLevel &&
+             w.unit === unit &&
+             w.current_level === level
+    )
+    if (records.length === 0) return null
+    // 가장 최신 기록 반환
+    return records[records.length - 1]
+  }
+
+  // 셀 스타일 결정
+  function getCellStyle(record: WorksheetRecord | null) {
+    if (!record) return { bg: 'bg-gray-50', text: '-', textColor: 'text-gray-300' }
+
+    if (record.status === 'assigned') {
+      return { bg: 'bg-white border border-blue-200', text: '진행중', textColor: 'text-blue-600' }
+    }
+    if (record.status === 'similar_assigned' || record.status === 'similar_submitted') {
+      return { bg: 'bg-white border border-purple-200', text: '오답유사', textColor: 'text-purple-600' }
+    }
+    if (record.status === 'submitted') {
+      return { bg: 'bg-white border border-orange-200', text: '채점대기', textColor: 'text-orange-500' }
+    }
+    if (record.score != null) {
+      if (record.score >= 85) {
+        return { bg: 'bg-green-100', text: `${record.score}점`, textColor: 'text-green-700' }
+      } else if (record.score >= 80) {
+        return { bg: 'bg-yellow-100', text: `${record.score}점`, textColor: 'text-yellow-700' }
+      } else {
+        return { bg: 'bg-red-100', text: `${record.score}점`, textColor: 'text-red-600' }
+      }
+    }
+    return { bg: 'bg-gray-50', text: '-', textColor: 'text-gray-300' }
+  }
+
+  const filteredStudents = students.filter((s) =>
+    s.name.includes(searchText) || s.school?.includes(searchText)
+  )
+
+  const studentUnits = selectedStudent ? getStudentUnits(selectedStudent.id) : []
+
+  // 사용된 레벨만 표시 (해당 학생 기록 기반)
+  function getUsedLevels(studentId: string) {
+    const studentWS = worksheets.filter((w) => w.student_id === studentId)
+    const levels = [...new Set(studentWS.map((w) => w.current_level))].sort((a, b) => a - b)
+    return levels.length > 0 ? levels : LEVELS.slice(0, 6)
+  }
 
   return (
     <div>
-      <Header title="보고서" subtitle="주간 학습 통계" />
+      <Header title="진단표" subtitle="학생별 단원/레벨 학습 현황" />
+
       <div className="px-4 py-4 space-y-4 md:px-6">
 
-        {/* 주간 요약 통계 */}
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard label="평균 완료율"   value={`${avgRate}%`}        accent="blue"   icon="📊" />
-          <StatCard label="총 제출 수"    value={totalSubmissions}      accent="green"  icon="📥" />
-          <StatCard label="지각 제출"     value={lateCount}             accent={lateCount > 0 ? 'orange' : 'gray'} icon="⏰" />
-          <StatCard label="피드백 완료"   value={feedbackCount}         accent="blue"   icon="💬" />
+        {/* 검색 + 학생 선택 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">학생 선택</h3>
+          </div>
+          <div className="p-3">
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="이름 또는 학교로 검색"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+            />
+            <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+              {filteredStudents.map((s) => {
+                const hasRecord = worksheets.some((w) => w.student_id === s.id)
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelectedStudent(s)}
+                    className={cx(
+                      'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
+                      selectedStudent?.id === s.id
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : hasRecord
+                        ? 'bg-white text-gray-700 border-gray-300 hover:border-blue-300'
+                        : 'bg-gray-50 text-gray-400 border-gray-100',
+                    )}
+                  >
+                    {s.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
-        {/* 과제별 완료율 */}
-        <SectionCard title="과제별 완료율">
-          <div className="space-y-4">
-            {summaries.map(({ assignment_set, completion_rate, submitted_count, total_assigned }) => (
-              <div key={assignment_set.id}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-sm font-medium text-gray-700 truncate flex-1 pr-2">
-                    {assignment_set.title}
-                  </p>
-                  <span className="text-xs font-bold text-gray-600 shrink-0">
-                    {submitted_count}/{total_assigned}명
-                  </span>
-                </div>
-                <ProgressBar value={completion_rate} showLabel size="sm" />
+        {/* 진단표 */}
+        {selectedStudent && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* 헤더 */}
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
+                {selectedStudent.name[0]}
               </div>
-            ))}
-          </div>
-        </SectionCard>
+              <div>
+                <p className="text-sm font-bold text-gray-900">{selectedStudent.name}</p>
+                <p className="text-xs text-gray-400">{selectedStudent.school} · {selectedStudent.grade}</p>
+              </div>
+            </div>
 
-        {/* 학생별 완료율 순위 */}
-        <SectionCard title="🏆 학생별 완료율">
-          <div className="space-y-3">
-            {studentStats.map(({ student, rate, done, total }, index) => (
-              <div key={student.id} className="flex items-center gap-3">
-                {/* 순위 */}
-                <div className={cx(
-                  'w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0',
-                  index === 0 ? 'bg-yellow-100 text-yellow-600' :
-                  index === 1 ? 'bg-gray-100 text-gray-500' :
-                  index === 2 ? 'bg-orange-100 text-orange-500' :
-                  'bg-gray-50 text-gray-400'
-                )}>
-                  {index + 1}
-                </div>
+            {studentUnits.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-3xl mb-2">📋</p>
+                <p className="text-sm text-gray-400">아직 과제 기록이 없어요</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                {(() => {
+                  const usedLevels = getUsedLevels(selectedStudent.id)
+                  return (
+                    <table className="w-full text-xs border-collapse">
+                      {/* 테이블 헤더 */}
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-3 py-2.5 text-left text-gray-500 font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[80px]">단원</th>
+                          <th className="px-3 py-2.5 text-left text-gray-500 font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[120px]">단원명</th>
+                          {usedLevels.map((l) => (
+                            <th key={l} className={cx(
+                              'px-3 py-2.5 text-center font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[70px]',
+                              l >= 4 ? 'text-orange-500' : 'text-gray-500'
+                            )}>
+                              {l}레벨
+                              {l >= 4 && <span className="block text-[9px] text-orange-400">심화</span>}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentUnits.map(({ grade_level, unit, unit_name }, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50/50">
+                            {/* 단원 */}
+                            <td className="px-3 py-2.5 border-b border-r border-gray-100">
+                              <p className="font-bold text-gray-800">{unit}</p>
+                              <p className="text-gray-400 text-[10px]">{grade_level}</p>
+                            </td>
+                            {/* 단원명 */}
+                            <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600">
+                              {unit_name || '-'}
+                            </td>
+                            {/* 레벨별 점수 */}
+                            {usedLevels.map((level) => {
+                              const record = getRecord(selectedStudent.id, grade_level, unit, level)
+                              const cell = getCellStyle(record)
+                              return (
+                                <td key={level} className={cx('px-2 py-2.5 border-b border-r border-gray-100 text-center', cell.bg)}>
+                                  <span className={cx('font-bold', cell.textColor)}>
+                                    {cell.text}
+                                  </span>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                })()}
+              </div>
+            )}
 
-                {/* 아바타 */}
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 shrink-0">
-                  {student.name[0]}
-                </div>
-
-                {/* 이름 + 바 */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-semibold text-gray-800">{student.name}</span>
-                    <span className="text-xs font-bold text-gray-600">{done}/{total} ({rate}%)</span>
+            {/* 범례 */}
+            <div className="px-4 py-3 border-t border-gray-50 flex flex-wrap gap-3">
+              <p className="text-[10px] font-bold text-gray-400 mr-1">범례:</p>
+              {[
+                { bg: 'bg-green-100', text: 'text-green-700', label: '85점↑ 통과' },
+                { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '80~84점 통과' },
+                { bg: 'bg-red-100', text: 'text-red-600', label: '80점↓ 재도전' },
+                { bg: 'bg-white border border-blue-200', text: 'text-blue-600', label: '진행중' },
+                { bg: 'bg-white border border-purple-200', text: 'text-purple-600', label: '오답유사' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-1">
+                  <div className={cx('w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold', item.bg, item.text)}>
+                    {item.label.includes('진행') ? '중' : item.label.includes('유사') ? '유' : '점'}
                   </div>
-                  <ProgressBar value={rate} size="sm" />
+                  <span className="text-[10px] text-gray-500">{item.label}</span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </SectionCard>
+        )}
 
-        {/* 이번 주 코멘트 */}
-        <SectionCard title="📝 이번 주 요약">
-          <div className="space-y-2">
-            {[
-              avgRate >= 80 ? '이번 주 전체적으로 과제 수행률이 높아요! 👍' :
-              avgRate >= 50 ? '절반 이상 완료했어요. 미완료 학생을 확인해보세요.' :
-              '전체 완료율이 낮아요. 학생들을 독려해주세요.',
-              lateCount > 0 ? `지각 제출이 ${lateCount}건 있어요.` : '지각 제출이 없어요! 👏',
-              feedbackCount > 0 ? `피드백 ${feedbackCount}건을 남겼어요.` : '아직 피드백을 남기지 않은 학생이 있어요.',
-            ].map((c, i) => (
-              <div key={i} className="flex items-start gap-2 bg-gray-50 rounded-xl px-4 py-3">
-                <span className="text-gray-300 mt-0.5 shrink-0">•</span>
-                <p className="text-sm text-gray-600 leading-relaxed">{c}</p>
-              </div>
-            ))}
+        {!selectedStudent && !loading && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+            <p className="text-4xl mb-3">📊</p>
+            <p className="text-sm font-semibold text-gray-600">학생을 선택하면 진단표가 나와요</p>
           </div>
-        </SectionCard>
+        )}
 
       </div>
     </div>
