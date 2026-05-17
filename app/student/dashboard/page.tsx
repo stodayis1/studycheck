@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
-import { Card, SectionCard, StatusBadge, StatCard, Badge, EmptyState } from '@/components/ui'
+import { Card, SectionCard, StatCard, EmptyState } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { formatDueDate, formatDate, cx } from '@/lib/utils'
+import { cx } from '@/lib/utils'
 
 interface StudentInfo {
   id: string
@@ -27,49 +27,66 @@ interface WorksheetRecord {
   assigned_at: string
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  assigned:         { label: '과제중',    color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  submitted:        { label: '채점대기',  color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
-  similar_assigned: { label: '오답유사',  color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  similar_submitted:{ label: '오답유사채점', color: 'text-pink-500', bg: 'bg-pink-50 border-pink-200' },
-  scored:           { label: '결과대기',  color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
-  passed:           { label: '완료✓',    color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-  retry:            { label: '재도전',    color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
+interface TextbookRecord {
+  id: string
+  concept_id: string
+  textbook_name: string
+  textbook_type: string
+  status: string
+  memo: string | null
+  assigned_at: string
+}
+
+interface Concept {
+  id: string
+  grade: string
+  chapter: string
+  concept_name: string
+}
+
+const WS_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:          { label: '과제중',       color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
+  submitted:         { label: '채점대기',     color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
+  similar_assigned:  { label: '오답유사',     color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
+  similar_submitted: { label: '오답유사채점', color: 'text-pink-500',   bg: 'bg-pink-50 border-pink-200' },
+  scored:            { label: '결과대기',     color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
+  passed:            { label: '완료✓',       color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
+  retry:             { label: '재도전',       color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
+}
+
+const TB_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:  { label: '과제중',   color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
+  submitted: { label: '제출완료', color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
+  checked:   { label: '채점완료', color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
 }
 
 export default function StudentDashboard() {
   const router = useRouter()
   const [student, setStudent] = useState<StudentInfo | null>(null)
   const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
+  const [textbooks, setTextbooks] = useState<TextbookRecord[]>([])
+  const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function init() {
-      // 세션에서 학생 정보 가져오기
       try {
         const stored = sessionStorage.getItem('studycheck_student')
         if (!stored) { router.push('/auth/login'); return }
-
         const session = JSON.parse(stored)
 
-        // 학생 정보 DB에서 가져오기
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('*')
-          .eq('id', session.id)
-          .single()
+        const [{ data: studentData }, { data: wsData }, { data: tbData }, { data: cData }] = await Promise.all([
+          supabase.from('students').select('*').eq('id', session.id).single(),
+          supabase.from('student_worksheets').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
+          supabase.from('student_textbooks').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
+          supabase.from('concepts').select('id, grade, chapter, concept_name'),
+        ])
 
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
-
-        // 학습지 현황 가져오기
-        const { data: wsData } = await supabase
-          .from('student_worksheets')
-          .select('*')
-          .eq('student_id', session.id)
-          .order('assigned_at', { ascending: false })
-
         if (wsData) setWorksheets(wsData)
+        if (tbData) setTextbooks(tbData)
+        if (cData) setConcepts(cData)
       } catch {
         router.push('/auth/login')
       }
@@ -77,6 +94,10 @@ export default function StudentDashboard() {
     }
     init()
   }, [])
+
+  function getConceptById(id: string) {
+    return concepts.find((c) => c.id === id)
+  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -88,6 +109,8 @@ export default function StudentDashboard() {
 
   const activeWorksheets = worksheets.filter((w) => !['passed'].includes(w.status))
   const completedWorksheets = worksheets.filter((w) => w.status === 'passed')
+  const activeTextbooks = textbooks.filter((t) => t.status !== 'checked')
+  const completedTextbooks = textbooks.filter((t) => t.status === 'checked')
 
   return (
     <div>
@@ -111,20 +134,58 @@ export default function StudentDashboard() {
         </Card>
 
         {/* 통계 */}
-        <div className="grid grid-cols-3 gap-2">
-          <StatCard label="진행중" value={activeWorksheets.length} accent="blue" />
-          <StatCard label="완료" value={completedWorksheets.length} accent="green" />
-          <StatCard label="전체" value={worksheets.length} accent="gray" />
+        <div className="grid grid-cols-4 gap-2">
+          <StatCard label="학습지" value={activeWorksheets.length} accent="blue" />
+          <StatCard label="교재" value={activeTextbooks.length} accent="green" />
+          <StatCard label="학습지완료" value={completedWorksheets.length} accent="gray" />
+          <StatCard label="교재완료" value={completedTextbooks.length} accent="gray" />
         </div>
 
-        {/* 진행중인 과제 */}
+        {/* 진행중인 교재 과제 */}
+        <SectionCard title="📖 진행중인 교재 과제">
+          {activeTextbooks.length === 0 ? (
+            <EmptyState icon="📚" title="진행중인 교재 과제가 없어요" description="선생님이 곧 새 과제를 배정해드릴 거예요" />
+          ) : (
+            <div className="space-y-3">
+              {activeTextbooks.map((t) => {
+                const cfg = TB_STATUS_CONFIG[t.status] ?? TB_STATUS_CONFIG.assigned
+                const concept = getConceptById(t.concept_id)
+                return (
+                  <div key={t.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-gray-900">{t.textbook_name}</p>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-green-100 text-green-600 rounded-md">{t.textbook_type}</span>
+                        </div>
+                        {concept && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {concept.grade} · {concept.chapter} &gt; {concept.concept_name}
+                          </p>
+                        )}
+                        {t.memo && (
+                          <p className="text-xs text-gray-400 mt-1">📝 {t.memo}</p>
+                        )}
+                      </div>
+                      <span className={cx('text-xs font-bold px-2.5 py-1 rounded-full border shrink-0', cfg.bg, cfg.color)}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </SectionCard>
+
+        {/* 진행중인 학습지 */}
         <SectionCard title="📝 진행중인 학습지">
           {activeWorksheets.length === 0 ? (
             <EmptyState icon="🎉" title="진행중인 과제가 없어요!" description="선생님이 곧 새 과제를 배정해드릴 거예요" />
           ) : (
             <div className="space-y-3">
               {activeWorksheets.map((w) => {
-                const cfg = STATUS_CONFIG[w.status] ?? STATUS_CONFIG.assigned
+                const cfg = WS_STATUS_CONFIG[w.status] ?? WS_STATUS_CONFIG.assigned
                 return (
                   <div key={w.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
                     <div className="flex items-start justify-between gap-2">
@@ -160,7 +221,7 @@ export default function StudentDashboard() {
           )}
         </SectionCard>
 
-        {/* 완료한 과제 */}
+        {/* 완료한 학습지 */}
         {completedWorksheets.length > 0 && (
           <SectionCard title="✅ 완료한 학습지">
             <div className="space-y-2">
