@@ -46,9 +46,9 @@ interface Concept {
 
 const WS_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   assigned:          { label: '과제중',       color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  submitted:         { label: '채점대기',     color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
+  submitted:         { label: '제출완료',     color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
   similar_assigned:  { label: '오답유사',     color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  similar_submitted: { label: '오답유사채점', color: 'text-pink-500',   bg: 'bg-pink-50 border-pink-200' },
+  similar_submitted: { label: '오답유사제출', color: 'text-pink-500',   bg: 'bg-pink-50 border-pink-200' },
   scored:            { label: '결과대기',     color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
   passed:            { label: '완료✓',       color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
   retry:             { label: '재도전',       color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
@@ -67,6 +67,11 @@ export default function StudentDashboard() {
   const [textbooks, setTextbooks] = useState<TextbookRecord[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
+
+  // 학습지 점수 입력 상태
+  const [scoreInputId, setScoreInputId] = useState<string | null>(null)
+  const [scoreInputValue, setScoreInputValue] = useState('')
+  const [submittingId, setSubmittingId] = useState<string | null>(null)
 
   useEffect(() => {
     async function init() {
@@ -99,6 +104,45 @@ export default function StudentDashboard() {
     return concepts.find((c) => c.id === id)
   }
 
+  async function fetchData(studentId: string) {
+    const [{ data: wsData }, { data: tbData }] = await Promise.all([
+      supabase.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }),
+      supabase.from('student_textbooks').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }),
+    ])
+    if (wsData) setWorksheets(wsData)
+    if (tbData) setTextbooks(tbData)
+  }
+
+  // 교재 제출완료
+  async function handleTBSubmit(id: string) {
+    if (!student) return
+    setSubmittingId(id)
+    await supabase.from('student_textbooks')
+      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+      .eq('id', id)
+    await fetchData(student.id)
+    setSubmittingId(null)
+  }
+
+  // 학습지 제출완료 (점수 입력 후)
+  async function handleWSSubmit(w: WorksheetRecord) {
+    if (!student) return
+    const score = parseInt(scoreInputValue)
+    if (isNaN(score) || score < 0 || score > 100) {
+      alert('0~100 사이 점수를 입력해주세요.')
+      return
+    }
+    setSubmittingId(w.id)
+    const nextStatus = w.status === 'similar_assigned' ? 'similar_submitted' : 'submitted'
+    await supabase.from('student_worksheets')
+      .update({ status: nextStatus, submitted_at: new Date().toISOString(), score })
+      .eq('id', w.id)
+    setScoreInputId(null)
+    setScoreInputValue('')
+    await fetchData(student.id)
+    setSubmittingId(null)
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <span className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -115,7 +159,7 @@ export default function StudentDashboard() {
   return (
     <div>
       <Header title={`안녕하세요, ${student.name} 학생 👋`} subtitle="오늘도 화이팅!" />
-      <div className="px-4 py-4 space-y-5">
+      <div className="px-4 py-4 space-y-5 pb-10">
 
         {/* 학생 정보 카드 */}
         <Card className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 border-0" padding="lg">
@@ -150,6 +194,7 @@ export default function StudentDashboard() {
               {activeTextbooks.map((t) => {
                 const cfg = TB_STATUS_CONFIG[t.status] ?? TB_STATUS_CONFIG.assigned
                 const concept = getConceptById(t.concept_id)
+                const isSubmitting = submittingId === t.id
                 return (
                   <div key={t.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
                     <div className="flex items-start justify-between gap-2">
@@ -163,14 +208,30 @@ export default function StudentDashboard() {
                             {concept.grade} · {concept.chapter} &gt; {concept.concept_name}
                           </p>
                         )}
-                        {t.memo && (
-                          <p className="text-xs text-gray-400 mt-1">📝 {t.memo}</p>
-                        )}
+                        {t.memo && <p className="text-xs text-gray-400 mt-1">📝 {t.memo}</p>}
                       </div>
                       <span className={cx('text-xs font-bold px-2.5 py-1 rounded-full border shrink-0', cfg.bg, cfg.color)}>
                         {cfg.label}
                       </span>
                     </div>
+
+                    {/* 제출 버튼 */}
+                    {t.status === 'assigned' && (
+                      <button
+                        onClick={() => handleTBSubmit(t.id)}
+                        disabled={isSubmitting}
+                        className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isSubmitting
+                          ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />제출 중...</>
+                          : '✅ 다 풀었어요! 제출하기'}
+                      </button>
+                    )}
+                    {t.status === 'submitted' && (
+                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-orange-50 text-orange-500 border border-orange-200 text-center">
+                        📬 제출완료 · 선생님 채점 대기중
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -186,10 +247,14 @@ export default function StudentDashboard() {
             <div className="space-y-3">
               {activeWorksheets.map((w) => {
                 const cfg = WS_STATUS_CONFIG[w.status] ?? WS_STATUS_CONFIG.assigned
+                const isSubmitting = submittingId === w.id
+                const isEnteringScore = scoreInputId === w.id
+                const canSubmit = w.status === 'assigned' || w.status === 'similar_assigned'
+
                 return (
                   <div key={w.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-bold text-gray-900">{w.grade_level} {w.unit}</p>
                           {w.unit_name && <span className="text-xs text-gray-500">({w.unit_name})</span>}
@@ -214,6 +279,75 @@ export default function StudentDashboard() {
                         {cfg.label}
                       </span>
                     </div>
+
+                    {/* 제출 버튼 / 점수 입력 */}
+                    {canSubmit && !isEnteringScore && (
+                      <button
+                        onClick={() => { setScoreInputId(w.id); setScoreInputValue('') }}
+                        className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        ✏️ 점수 입력하고 제출하기
+                      </button>
+                    )}
+
+                    {canSubmit && isEnteringScore && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs font-bold text-gray-600">내가 채점한 점수를 입력해주세요</p>
+                        <input
+                          type="number" min="0" max="100"
+                          value={scoreInputValue}
+                          onChange={(e) => setScoreInputValue(e.target.value)}
+                          placeholder="0 ~ 100"
+                          autoFocus
+                          className="w-full px-4 py-3 rounded-xl border-2 border-blue-300 text-2xl font-black text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {scoreInputValue && (
+                          <div className={cx('rounded-xl p-2.5 text-center text-xs font-bold',
+                            parseInt(scoreInputValue) >= 85 ? 'bg-green-50 text-green-600' :
+                            parseInt(scoreInputValue) >= 80 ? 'bg-orange-50 text-orange-500' :
+                            'bg-red-50 text-red-500')}>
+                            {parseInt(scoreInputValue) >= 85 ? '🎉 잘했어요!' :
+                             parseInt(scoreInputValue) >= 80 ? '👍 통과!' :
+                             '💪 조금 더 힘내요!'}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setScoreInputId(null); setScoreInputValue('') }}
+                            className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={() => handleWSSubmit(w)}
+                            disabled={!scoreInputValue || isSubmitting}
+                            className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-blue-600 text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {isSubmitting
+                              ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />제출 중...</>
+                              : '제출하기'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {(w.status === 'submitted' || w.status === 'similar_submitted') && (
+                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-orange-50 text-orange-500 border border-orange-200 text-center">
+                        📬 제출완료 · 선생님 확인 대기중
+                      </div>
+                    )}
+
+                    {w.status === 'scored' && (
+                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-gray-50 text-gray-500 border border-gray-200 text-center">
+                        ⏳ 선생님이 다음 단계를 정하는 중이에요
+                      </div>
+                    )}
+
+                    {w.status === 'retry' && (
+                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-red-50 text-red-500 border border-red-200 text-center">
+                        💪 오답유사 학습지가 곧 배정될 거예요
+                      </div>
+                    )}
                   </div>
                 )
               })}
