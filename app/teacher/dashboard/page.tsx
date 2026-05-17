@@ -1,113 +1,136 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
 import { Header } from '@/components/common/Header'
-import { Card, SectionCard, StatCard, StatusBadge, ProgressBar, Badge } from '@/components/ui'
-import { getMockAssignmentSummaries, getMockSubmissionRows, MOCK_ASSIGNMENT_SETS, MOCK_STUDENTS } from '@/data/mockData'
-import { formatDueDate, formatRelativeTime } from '@/lib/utils'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { cx } from '@/lib/utils'
+import Link from 'next/link'
 
-function cx(...classes: (string|boolean|undefined|null)[]) {
-  return classes.filter(Boolean).join(' ')
-}
+export default function TeacherDashboardPage() {
+  const { currentUser, isAdmin } = useAuth()
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    activeWorksheets: 0,
+    activeTextbooks: 0,
+    pendingScore: 0,
+  })
+  const [loading, setLoading] = useState(true)
 
-export default function TeacherDashboard() {
-  const router = useRouter()
-  const summaries = getMockAssignmentSummaries()
-  const todayRows = getMockSubmissionRows('aset-001')
-  const totalStudents = MOCK_STUDENTS.filter((s) => s.class_group_id === 'class-001').length
-  const notStartedCount = todayRows.filter((r) => !r.submission || r.submission.final_status === 'not_started').length
-  const submittedCount = todayRows.filter((r) => ['submitted','checked','late'].includes(r.submission?.final_status ?? '')).length
-  const avgRate = Math.round(summaries.reduce((acc,s) => acc+s.completion_rate,0) / summaries.length)
+  useEffect(() => {
+    if (!currentUser) return
+    fetchStats()
+  }, [currentUser])
+
+  async function fetchStats() {
+    setLoading(true)
+
+    // 담당 학생 수
+    let studentQuery = supabase.from('students').select('id', { count: 'exact' }).eq('is_active', true)
+    if (!isAdmin()) studentQuery = studentQuery.eq('teacher_name', currentUser?.name)
+    const { count: studentCount } = await studentQuery
+
+    // 진행중인 학습지
+    const { data: wsData } = await supabase
+      .from('student_worksheets')
+      .select('student_id, status')
+      .not('status', 'in', '("passed")')
+
+    // 진행중인 교재
+    const { data: tbData } = await supabase
+      .from('student_textbooks')
+      .select('student_id, status')
+      .eq('status', 'assigned')
+
+    // 담당 학생 ID 목록
+    const { data: myStudents } = await supabase
+      .from('students')
+      .select('id')
+      .eq('is_active', true)
+      .eq('teacher_name', currentUser?.name ?? '')
+
+    const myStudentIds = new Set(myStudents?.map((s) => s.id) ?? [])
+
+    const filterByMyStudents = (items: any[]) =>
+      isAdmin() ? items : items.filter((w) => myStudentIds.has(w.student_id))
+
+    const myWS = filterByMyStudents(wsData ?? [])
+    const myTB = filterByMyStudents(tbData ?? [])
+    const pendingScore = myWS.filter((w) => w.status === 'submitted' || w.status === 'similar_submitted').length
+
+    setStats({
+      totalStudents: studentCount ?? 0,
+      activeWorksheets: myWS.length,
+      activeTextbooks: myTB.length,
+      pendingScore,
+    })
+    setLoading(false)
+  }
 
   return (
     <div>
-      <Header title="대시보드" subtitle="2025 수학1 화목반"
-        action={<button onClick={()=>router.push('/teacher/assignments/new')} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg">+ 과제 등록</button>}
+      <Header
+        title={`${currentUser?.name ?? ''} 선생님`}
+        subtitle={isAdmin() ? '관리자 대시보드' : '담당 학생 현황'}
       />
-      <div className="px-4 py-4 space-y-5 md:px-6">
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="총 학생 수" value={totalStudents} sub="화목반" accent="blue" icon="👥" />
-          <StatCard label="이번 주 완료율" value={`${avgRate}%`} accent="green" icon="✅" />
-          <StatCard label="미완료 학생" value={notStartedCount} accent="orange" icon="⏳" />
-          <StatCard label="제출 완료" value={submittedCount} accent="gray" icon="📥" />
+      <div className="px-4 py-4 space-y-4 md:px-6">
+
+        {/* 통계 카드 */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: '담당 학생', value: stats.totalStudents, unit: '명', color: 'text-blue-600', bg: 'bg-blue-50', icon: '👨‍🎓' },
+            { label: '채점 대기', value: stats.pendingScore, unit: '건', color: 'text-orange-500', bg: 'bg-orange-50', icon: '✏️' },
+            { label: '학습지 진행중', value: stats.activeWorksheets, unit: '건', color: 'text-purple-600', bg: 'bg-purple-50', icon: '📝' },
+            { label: '교재 진행중', value: stats.activeTextbooks, unit: '건', color: 'text-green-600', bg: 'bg-green-50', icon: '📖' },
+          ].map((item) => (
+            <div key={item.label} className={cx('rounded-2xl p-4', item.bg)}>
+              <p className="text-xl mb-1">{item.icon}</p>
+              {loading ? (
+                <div className="w-8 h-6 bg-gray-200 rounded animate-pulse mb-1" />
+              ) : (
+                <p className={cx('text-2xl font-black', item.color)}>
+                  {item.value}<span className="text-sm font-semibold ml-0.5">{item.unit}</span>
+                </p>
+              )}
+              <p className="text-xs text-gray-500 font-medium">{item.label}</p>
+            </div>
+          ))}
         </div>
 
-        <SectionCard title="오늘 마감 과제" subtitle={MOCK_ASSIGNMENT_SETS[0].title}
-          action={<Badge variant="orange" size="sm">{notStartedCount}명 미완료</Badge>}
-        >
-          <div className="space-y-3">
-            {todayRows.map((row) => {
-              const status = row.submission?.final_status ?? 'not_started'
-              return (
-                <div key={row.student.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 shrink-0">
-                    {row.student.name[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{row.student.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {(['video','textbook','worksheet'] as const).map((type) => {
-                        const statusKey = `${type}_status` as 'video_status'|'textbook_status'|'worksheet_status'
-                        const s = row.submission?.[statusKey] ?? 'not_started'
-                        const dot: Record<string,string> = { not_started:'bg-gray-200', in_progress:'bg-blue-400', submitted:'bg-green-400', checked:'bg-indigo-500', need_retry:'bg-orange-400', late:'bg-red-400' }
-                        const label = { video:'영상', textbook:'교재', worksheet:'학습지' }[type]
-                        return (
-                          <span key={type} className="flex items-center gap-0.5">
-                            <span className={cx('w-2 h-2 rounded-full', dot[s])} />
-                            <span className="text-[9px] text-gray-400">{label}</span>
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex flex-col items-end gap-1">
-                    <StatusBadge status={status} size="sm" />
-                    {row.submission?.submitted_at && <span className="text-[10px] text-gray-400">{formatRelativeTime(row.submission.submitted_at)}</span>}
-                  </div>
-                </div>
-              )
-            })}
+        {/* 바로가기 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">빠른 메뉴</h3>
           </div>
-        </SectionCard>
-
-        <SectionCard title="이번 주 과제 현황">
-          <div className="space-y-4">
-            {summaries.map(({assignment_set, completion_rate, submitted_count, total_assigned}) => {
-              const due = formatDueDate(assignment_set.due_date)
-              return (
-                <div key={assignment_set.id} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{assignment_set.title}</p>
-                      <p className={cx('text-xs mt-0.5', due.isOverdue?'text-red-400':due.isUrgent?'text-orange-500':'text-gray-400')}>{due.text}</p>
-                    </div>
-                    <span className="text-sm font-bold text-gray-700 ml-3">{submitted_count}/{total_assigned}명</span>
-                  </div>
-                  <ProgressBar value={completion_rate} showLabel size="sm" />
-                </div>
-              )
-            })}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="최근 제출" action={<button className="text-xs text-blue-600 font-medium" onClick={()=>router.push('/teacher/submissions')}>전체 보기</button>}>
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 divide-x divide-y divide-gray-50">
             {[
-              {name:'이지수', time:'3시간 전', status:'checked' as const, assignment:'지수법칙 과제'},
-              {name:'박민준', time:'30분 전',  status:'in_progress' as const, assignment:'지수법칙 과제'},
-            ].map((item,i) => (
-              <div key={i} className="flex items-center gap-3 py-1">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">{item.name[0]}</div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">{item.name}<span className="text-gray-400 font-normal"> · {item.assignment}</span></p>
-                  <p className="text-xs text-gray-400">{item.time}</p>
+              { href: '/teacher/assignments', label: '과제 관리', icon: '📝', desc: '학습지·교재 배정' },
+              { href: '/teacher/students', label: '학생 관리', icon: '👨‍🎓', desc: '담당 학생 목록' },
+              { href: '/teacher/reports', label: '진단표', icon: '📊', desc: '학생별 학습 현황' },
+              { href: '/teacher/submissions', label: '제출 현황', icon: '✅', desc: '과제 제출 확인' },
+            ].map((menu) => (
+              <Link key={menu.href} href={menu.href}
+                className="flex items-center gap-3 px-4 py-4 hover:bg-gray-50 transition-colors">
+                <span className="text-2xl">{menu.icon}</span>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">{menu.label}</p>
+                  <p className="text-xs text-gray-400">{menu.desc}</p>
                 </div>
-                <StatusBadge status={item.status} size="sm" />
-              </div>
+              </Link>
             ))}
           </div>
-        </SectionCard>
+        </div>
+
+        {/* 안내 */}
+        <div className="bg-[#1a2f5e]/5 rounded-2xl px-4 py-4">
+          <p className="text-xs text-[#1a2f5e] font-bold mb-1">📌 오늘 할 일</p>
+          <p className="text-xs text-gray-500">
+            {stats.pendingScore > 0
+              ? `채점 대기 ${stats.pendingScore}건이 있어요. 과제 관리에서 점수를 입력해주세요!`
+              : '오늘 채점 대기 과제가 없어요. 수고하셨습니다! 😊'}
+          </p>
+        </div>
 
       </div>
     </div>
