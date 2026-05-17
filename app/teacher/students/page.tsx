@@ -17,6 +17,7 @@ interface Student {
   parent_name: string
   parent_phone: string
   is_active: boolean
+  textbook_grade: string
 }
 
 export default function TeacherStudentsPage() {
@@ -32,7 +33,6 @@ export default function TeacherStudentsPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 학생 목록 불러오기
   async function fetchStudents() {
     setLoading(true)
     const { data, error } = await supabase
@@ -50,7 +50,6 @@ export default function TeacherStudentsPage() {
     s.name?.includes(searchText) || s.school?.includes(searchText)
   )
 
-  // 엑셀 파일 읽기
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -64,14 +63,15 @@ export default function TeacherStudentsPage() {
         const parsed: Student[] = jsonData
           .filter((row) => String(row['재원여부'] ?? '').toUpperCase() === 'O')
           .map((row) => ({
-            name:         String(row['이름'] ?? '').trim(),
-            school:       String(row['학교'] ?? '').trim(),
-            grade:        String(row['학년'] ?? '').trim(),
-            class_time:   String(row['수업'] ?? '').trim(),
-            teacher_name: String(row['담임강사'] ?? '').trim(),
-            parent_name:  String(row['보호자이름'] ?? '').trim(),
-            parent_phone: String(row['보호자연락처'] ?? '').trim(),
-            is_active:    true,
+            name:          String(row['이름'] ?? '').trim(),
+            school:        String(row['학교'] ?? '').trim(),
+            grade:         String(row['학년'] ?? '').trim(),
+            class_time:    String(row['수업'] ?? '').trim(),
+            teacher_name:  String(row['담임강사'] ?? '').trim(),
+            parent_name:   String(row['보호자이름'] ?? '').trim(),
+            parent_phone:  String(row['보호자연락처'] ?? '').trim(),
+            is_active:     true,
+            textbook_grade: 'B',
           }))
           .filter((s) => s.name !== '')
         setImportedStudents(parsed)
@@ -85,81 +85,53 @@ export default function TeacherStudentsPage() {
     e.target.value = ''
   }
 
-  // 일괄 등록 (중복 체크 포함)
   async function handleImport() {
     setImporting(true)
-    let added = 0
-    let skipped = 0
-
+    let added = 0, skipped = 0
     for (const student of importedStudents) {
-      // 이름+학교 중복 체크
       const { data: existing } = await supabase
-        .from('students')
-        .select('id')
-        .eq('name', student.name)
-        .eq('school', student.school)
-        .maybeSingle()
-
-      if (existing) {
-        skipped++
-        continue
-      }
-
-      const { error } = await supabase
-        .from('students')
-        .insert({
-          name:         student.name,
-          school:       student.school,
-          grade:        student.grade,
-          class_time:   student.class_time,
-          teacher_name: student.teacher_name,
-          parent_name:  student.parent_name,
-          parent_phone: student.parent_phone,
-          is_active:    true,
-        })
-
-      if (!error) added++
-      else skipped++
+        .from('students').select('id').eq('name', student.name).eq('school', student.school).maybeSingle()
+      if (existing) { skipped++; continue }
+      const { error } = await supabase.from('students').insert({
+        name: student.name, school: student.school, grade: student.grade,
+        class_time: student.class_time, teacher_name: student.teacher_name,
+        parent_name: student.parent_name, parent_phone: student.parent_phone,
+        is_active: true, textbook_grade: 'B',
+      })
+      if (!error) added++; else skipped++
     }
-
     setImportResult({ added, skipped })
     setImporting(false)
     setImportDone(true)
     fetchStudents()
   }
 
-  // 학생 수정
   async function handleSaveEdit() {
     if (!editStudent?.id) return
     const { error } = await supabase
       .from('students')
       .update({
-        name:         editStudent.name,
-        school:       editStudent.school,
-        grade:        editStudent.grade,
-        class_time:   editStudent.class_time,
-        teacher_name: editStudent.teacher_name,
-        parent_name:  editStudent.parent_name,
-        parent_phone: editStudent.parent_phone,
+        name: editStudent.name, school: editStudent.school, grade: editStudent.grade,
+        class_time: editStudent.class_time, teacher_name: editStudent.teacher_name,
+        parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
+        textbook_grade: editStudent.textbook_grade,
       })
       .eq('id', editStudent.id)
-    if (!error) {
-      setShowEditModal(false)
-      fetchStudents()
-    } else {
-      alert('수정 중 오류가 발생했습니다.')
-    }
+    if (!error) { setShowEditModal(false); fetchStudents() }
+    else alert('수정 중 오류가 발생했습니다.')
   }
 
-  // 학생 삭제 (비활성화)
   async function handleDelete(studentId: string, name: string) {
     if (!confirm(`${name} 학생을 삭제할까요?`)) return
-    const { error } = await supabase
-      .from('students')
-      .update({ is_active: false })
-      .eq('id', studentId)
+    const { error } = await supabase.from('students').update({ is_active: false }).eq('id', studentId)
     if (!error) fetchStudents()
     else alert('삭제 중 오류가 발생했습니다.')
+  }
+
+  const GRADE_COLORS: Record<string, string> = {
+    A: 'bg-blue-100 text-blue-700',
+    B: 'bg-green-100 text-green-700',
+    C: 'bg-orange-100 text-orange-700',
   }
 
   return (
@@ -193,7 +165,6 @@ export default function TeacherStudentsPage() {
               </div>
               <button onClick={() => setShowImport(false)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
-
             {importDone ? (
               <div className="p-6 text-center">
                 <p className="text-3xl mb-2">🎉</p>
@@ -203,9 +174,7 @@ export default function TeacherStudentsPage() {
                   <span className="text-orange-500 font-bold">{importResult.skipped}명</span> 중복 건너뜀
                 </p>
                 <button onClick={() => { setShowImport(false); setImportDone(false) }}
-                  className="mt-4 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-xl">
-                  확인
-                </button>
+                  className="mt-4 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-xl">확인</button>
               </div>
             ) : (
               <>
@@ -237,11 +206,10 @@ export default function TeacherStudentsPage() {
                 </div>
                 <div className="p-4 border-t border-gray-100">
                   <button onClick={handleImport} disabled={importing}
-                    className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                    className="w-full py-3 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                     {importing
                       ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />등록 중...</>
-                      : <>✅ {importedStudents.length}명 일괄 등록하기</>
-                    }
+                      : <>✅ {importedStudents.length}명 일괄 등록하기</>}
                   </button>
                 </div>
               </>
@@ -259,7 +227,6 @@ export default function TeacherStudentsPage() {
           {loading ? (
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
-              <p className="text-sm text-gray-400 mt-2">학생 목록 불러오는 중...</p>
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-sm text-gray-400 py-8">등록된 학생이 없어요</p>
@@ -267,78 +234,85 @@ export default function TeacherStudentsPage() {
             <div className="space-y-2">
               {filtered.map((student) => (
                 <div key={student.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-gray-50">
-                  {/* 아바타 */}
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                     {student.name[0]}
                   </div>
-
-                  {/* 정보 */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-800">{student.name}</p>
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
                       {student.teacher_name && <Badge variant="blue" size="sm">{student.teacher_name}</Badge>}
+                      {/* 교재 등급 */}
+                      <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full', GRADE_COLORS[student.textbook_grade] ?? 'bg-gray-100 text-gray-500')}>
+                        {student.textbook_grade ?? 'B'}등급
+                      </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {[student.school, student.class_time].filter(Boolean).join(' · ')}
                     </p>
-                    {student.parent_name && (
-                      <p className="text-xs text-gray-400">보호자: {student.parent_name} {student.parent_phone}</p>
-                    )}
                   </div>
-
-                  {/* 수정/삭제 버튼 */}
                   <div className="flex gap-1.5 shrink-0">
-                    <button
-                      onClick={() => { setEditStudent(student); setShowEditModal(true) }}
-                      className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100"
-                    >
-                      수정
-                    </button>
-                    <button
-                      onClick={() => handleDelete(student.id!, student.name)}
-                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100"
-                    >
-                      삭제
-                    </button>
+                    <button onClick={() => { setEditStudent(student); setShowEditModal(true) }}
+                      className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
+                    <button onClick={() => handleDelete(student.id!, student.name)}
+                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </SectionCard>
-
       </div>
 
       {/* 수정 모달 */}
       {showEditModal && editStudent && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setShowEditModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900">학생 정보 수정</h3>
               <button onClick={() => setShowEditModal(false)} className="text-gray-400">✕</button>
             </div>
 
+            {/* 교재 등급 */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">교재 등급</label>
+              <div className="flex gap-2">
+                {['A','B','C'].map((g) => (
+                  <button key={g} onClick={() => setEditStudent({ ...editStudent, textbook_grade: g })}
+                    className={cx('flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all',
+                      editStudent.textbook_grade === g
+                        ? g === 'A' ? 'bg-blue-600 text-white border-blue-600'
+                          : g === 'B' ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-500 border-gray-200')}>
+                    {g}등급
+                    <span className="block text-[10px] font-normal opacity-70">
+                      {g === 'A' ? '하루 3개' : g === 'B' ? '하루 2개' : '하루 1개'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 기타 정보 */}
             {[
-              { label: '이름',     key: 'name',         placeholder: '학생 이름' },
-              { label: '학교',     key: 'school',       placeholder: '학교명' },
-              { label: '학년',     key: 'grade',        placeholder: '예: 중3, 고1' },
-              { label: '수업시간', key: 'class_time',   placeholder: '예: 월수금4' },
-              { label: '담임강사', key: 'teacher_name', placeholder: '담임 선생님 이름' },
-              { label: '보호자',   key: 'parent_name',  placeholder: '보호자 이름' },
-              { label: '보호자 연락처', key: 'parent_phone', placeholder: '010-0000-0000' },
+              { label:'이름',       key:'name',         placeholder:'학생 이름' },
+              { label:'학교',       key:'school',       placeholder:'학교명' },
+              { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
+              { label:'수업시간',   key:'class_time',   placeholder:'예: 월수금4' },
+              { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
+              { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (
               <div key={key}>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-                <input
-                  type="text"
+                <input type="text"
                   value={String(editStudent[key as keyof Student] ?? '')}
                   onChange={(e) => setEditStudent({ ...editStudent, [key]: e.target.value })}
                   placeholder={placeholder}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             ))}
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 
 interface Student {
@@ -11,6 +12,7 @@ interface Student {
   school: string
   grade: string
   teacher_name: string
+  textbook_grade: string
 }
 
 interface StudentWorksheet {
@@ -28,226 +30,270 @@ interface StudentWorksheet {
   submitted_at: string | null
 }
 
-const LEVELS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
-const GRADE_LEVELS = ['초1', '초2', '초3', '초4', '초5', '초6']
-const UNITS = ['1단원', '2단원', '3단원', '4단원', '5단원', '6단원', '7단원', '8단원']
-
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  assigned:        { label: '과제중',       color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  submitted:       { label: '점수입력대기', color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
-  similar_assigned:{ label: '오답유사중',   color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  similar_submitted:{ label: '오답유사채점', color: 'text-pink-500',  bg: 'bg-pink-50 border-pink-200' },
-  passed:          { label: '레벨업✓',      color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-  retry:           { label: '재도전',        color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
+interface Concept {
+  id: string
+  school_level: string
+  grade: string
+  semester: number
+  chapter: string
+  concept_order: number
+  concept_name: string
 }
 
+interface StudentTextbook {
+  id: string
+  student_id: string
+  concept_id: string
+  textbook_name: string
+  textbook_type: string
+  status: string
+  memo: string | null
+  assigned_at: string
+  submitted_at: string | null
+}
+
+const WORKSHEET_LEVELS = [1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0,5.5,6.0]
+const WORKSHEET_GRADE_LEVELS = ['초1','초2','초3','초4','초5','초6']
+const WORKSHEET_UNITS = ['1단원','2단원','3단원','4단원','5단원','6단원','7단원','8단원']
+
+const TEXTBOOK_LIST: Record<string, string[]> = {
+  '개념서': ['개념+유형파워', '개념+유형라이트', '교과서 개념잡기'],
+  '유형서': ['디딤돌 응용', '쎈B', '쎈', '수학리더(기본+응용)'],
+  '심화서': ['최고수준', '최상위S', '최상위', '왕수학최상위'],
+}
+
+const WORKSHEET_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:         { label: '과제중',       color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
+  submitted:        { label: '점수입력대기', color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
+  similar_assigned: { label: '오답유사중',   color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
+  similar_submitted:{ label: '오답유사채점', color: 'text-pink-500',   bg: 'bg-pink-50 border-pink-200' },
+  scored:           { label: '결과대기',     color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
+  passed:           { label: '레벨업✓',     color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
+  retry:            { label: '재도전',       color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
+}
+
+const TEXTBOOK_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:  { label: '과제중',   color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
+  submitted: { label: '제출완료', color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
+  checked:   { label: '채점완료', color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
+}
+
+const GRADE_COUNT: Record<string, number> = { A: 3, B: 2, C: 1 }
+
+const GRADE_GROUPS = [
+  { label: '전체', grades: [] as string[] },
+  { label: '초등', grades: ['초1','초2','초3','초4','초5','초6'] },
+  { label: '중등', grades: ['중1','중2','중3'] },
+  { label: '고등', grades: ['고1','고2','고3'] },
+]
+
 export default function TeacherAssignmentsPage() {
-  const [tab, setTab] = useState<'active' | 'history'>('active')
+  const { currentUser, isAdmin } = useAuth()
+  const [tab, setTab] = useState<'worksheet' | 'textbook'>('worksheet')
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
+  const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
+  const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
+  const [gradeGroup, setGradeGroup] = useState('전체')
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
+  const [selectedTeacher, setSelectedTeacher] = useState<string | null>(null)
 
-  // 과제 배정 모달
-  const [showAssignModal, setShowAssignModal] = useState(false)
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-  const [formGradeLevel, setFormGradeLevel] = useState('초4')
-  const [formUnit, setFormUnit] = useState('1단원')
-  const [formUnitName, setFormUnitName] = useState('')
-  const [formLevel, setFormLevel] = useState(2.5)
-  const [assigning, setAssigning] = useState(false)
+  const [showWSModal, setShowWSModal] = useState(false)
+  const [wsStudent, setWsStudent] = useState<Student | null>(null)
+  const [wsGradeLevel, setWsGradeLevel] = useState('초4')
+  const [wsUnit, setWsUnit] = useState('1단원')
+  const [wsUnitName, setWsUnitName] = useState('')
+  const [wsLevel, setWsLevel] = useState(2.5)
+  const [wsAssigning, setWsAssigning] = useState(false)
 
-  // 점수 입력 모달
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [scoreWorksheet, setScoreWorksheet] = useState<StudentWorksheet | null>(null)
   const [inputScore, setInputScore] = useState('')
   const [savingScore, setSavingScore] = useState(false)
 
+  const [showTBModal, setShowTBModal] = useState(false)
+  const [tbStudent, setTbStudent] = useState<Student | null>(null)
+  const [tbGrade, setTbGrade] = useState('초4')
+  const [tbSemester, setTbSemester] = useState(1)
+  const [tbChapter, setTbChapter] = useState('')
+  const [tbConcept, setTbConcept] = useState<Concept | null>(null)
+  const [tbType, setTbType] = useState('개념서')
+  const [tbName, setTbName] = useState('')
+  const [tbMemo, setTbMemo] = useState('')
+  const [tbAssigning, setTbAssigning] = useState(false)
+
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
     setLoading(true)
-    const { data: studentData } = await supabase
-      .from('students')
-      .select('*')
-      .eq('is_active', true)
-      .order('name')
-
-    const { data: worksheetData } = await supabase
-      .from('student_worksheets')
-      .select('*')
-      .order('assigned_at', { ascending: false })
-
-    if (studentData) setStudents(studentData)
-    if (worksheetData) setWorksheets(worksheetData)
+    const [{ data: sData }, { data: wData }, { data: tData }, { data: cData }] = await Promise.all([
+      supabase.from('students').select('*').eq('is_active', true).order('name'),
+      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: false }),
+      supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }),
+      supabase.from('concepts').select('*').eq('school_level', '초등').order('grade').order('semester').order('concept_order'),
+    ])
+    if (sData) setStudents(sData)
+    if (wData) setWorksheets(wData)
+    if (tData) setTextbooks(tData)
+    if (cData) setConcepts(cData)
     setLoading(false)
   }
 
-  function getStudentName(studentId: string) {
-    return students.find((s) => s.id === studentId)?.name ?? '알 수 없음'
+  function getStudentName(id: string) {
+    return students.find((s) => s.id === id)?.name ?? '알 수 없음'
   }
 
-  // 진행중인 과제만 (passed 제외)
-  const activeWorksheets = worksheets.filter((w) =>
-    !['passed'].includes(w.status) &&
-    (getStudentName(w.student_id).includes(searchText) || w.unit.includes(searchText))
-  )
-
-  // 전체 이력
-  const historyWorksheets = worksheets.filter((w) =>
-    getStudentName(w.student_id).includes(searchText) || w.unit.includes(searchText)
-  )
-
-  // ── 과제 배정 ──────────────────────────────────────
-  async function handleAssign() {
-    if (!selectedStudent) return
-    setAssigning(true)
-    const { error } = await supabase
-      .from('student_worksheets')
-      .insert({
-        student_id:    selectedStudent.id,
-        subject:       '수학',
-        grade_level:   formGradeLevel,
-        unit:          formUnit,
-        unit_name:     formUnitName,
-        current_level: formLevel,
-        status:        'assigned',
-        worksheet_type: 'main',
-      })
-    if (!error) {
-      setShowAssignModal(false)
-      setSelectedStudent(null)
-      setFormUnitName('')
-      fetchData()
-    } else {
-      alert('배정 중 오류가 발생했습니다.')
-    }
-    setAssigning(false)
+  function getConceptById(id: string) {
+    return concepts.find((c) => c.id === id)
   }
 
-  // ── 제출 확인 ──────────────────────────────────────
-  async function handleSubmitted(worksheetId: string, currentStatus: string) {
+  // 선생님 목록
+  const teachers = [...new Set(students.map((s) => s.teacher_name).filter(Boolean))].sort()
+
+  // 담당 선생님 필터 (관리자는 전체, 선생님은 본인 담당만)
+  const myStudents = students.filter((s) => {
+    if (!currentUser) return true // 로딩중엔 전체
+    if (currentUser.role === 'admin') return true
+    return s.teacher_name === currentUser?.name
+  })
+
+  // 현재 그룹의 학년 목록
+  const currentGrades = GRADE_GROUPS.find((g) => g.label === gradeGroup)?.grades ?? []
+
+  // 학년 그룹 + 학년 + 선생님 + 검색 필터
+  const filteredStudents = myStudents.filter((s) => {
+    const groupMatch = gradeGroup === '전체' ? true :
+      gradeGroup === '초등' ? ['초1','초2','초3','초4','초5','초6'].includes(s.grade) :
+      gradeGroup === '중등' ? ['중1','중2','중3'].includes(s.grade) :
+      gradeGroup === '고등' ? ['고1','고2','고3'].includes(s.grade) : true
+    const gradeMatch = selectedGrade ? s.grade === selectedGrade : true
+    const teacherMatch = selectedTeacher ? s.teacher_name === selectedTeacher : true
+    const searchMatch = searchText === '' ? true : (s.name.includes(searchText) || s.school?.includes(searchText))
+    return groupMatch && gradeMatch && teacherMatch && searchMatch
+  })
+
+  const tbChapters = [...new Set(
+    concepts.filter((c) => c.grade === tbGrade && c.semester === tbSemester).map((c) => c.chapter)
+  )]
+
+  const tbConcepts = concepts.filter(
+    (c) => c.grade === tbGrade && c.semester === tbSemester && c.chapter === tbChapter
+  )
+
+  async function handleWSAssign() {
+    if (!wsStudent) return
+    setWsAssigning(true)
+    await supabase.from('student_worksheets').insert({
+      student_id: wsStudent.id, subject: '수학',
+      grade_level: wsGradeLevel, unit: wsUnit, unit_name: wsUnitName,
+      current_level: wsLevel, status: 'assigned', worksheet_type: 'main',
+    })
+    setShowWSModal(false); setWsStudent(null); setWsUnitName('')
+    setWsAssigning(false); fetchData()
+  }
+
+  async function handleSubmitted(id: string, currentStatus: string) {
     const nextStatus = currentStatus === 'similar_assigned' ? 'similar_submitted' : 'submitted'
-    await supabase
-      .from('student_worksheets')
-      .update({ status: nextStatus, submitted_at: new Date().toISOString() })
-      .eq('id', worksheetId)
+    await supabase.from('student_worksheets').update({ status: nextStatus, submitted_at: new Date().toISOString() }).eq('id', id)
     fetchData()
   }
 
-  // ── 점수 입력 저장 ──────────────────────────────────
   async function handleSaveScore() {
     if (!scoreWorksheet) return
     const score = parseInt(inputScore)
-    if (isNaN(score) || score < 0 || score > 100) {
-      alert('0~100 사이의 점수를 입력해주세요.')
-      return
-    }
+    if (isNaN(score) || score < 0 || score > 100) { alert('0~100 사이 점수를 입력해주세요.'); return }
     setSavingScore(true)
-
-    // 점수 저장
-    await supabase
-      .from('student_worksheets')
-      .update({ score })
-      .eq('id', scoreWorksheet.id)
-
-    // 점수에 따른 다음 단계 결정
+    await supabase.from('student_worksheets').update({ score }).eq('id', scoreWorksheet.id)
     if (scoreWorksheet.status === 'submitted') {
-      // 일반 학습지 채점
       if (score < 80) {
-        // 80점 미만 → 오답유사 학습지 배정
-        await supabase
-          .from('student_worksheets')
-          .update({ status: 'retry' })
-          .eq('id', scoreWorksheet.id)
-
-        await supabase
-          .from('student_worksheets')
-          .insert({
-            student_id:          scoreWorksheet.student_id,
-            subject:             '수학',
-            grade_level:         scoreWorksheet.grade_level,
-            unit:                scoreWorksheet.unit,
-            unit_name:           scoreWorksheet.unit_name,
-            current_level:       scoreWorksheet.current_level,
-            status:              'similar_assigned',
-            worksheet_type:      'similar',
-            parent_worksheet_id: scoreWorksheet.id,
-          })
+        await supabase.from('student_worksheets').update({ status: 'retry' }).eq('id', scoreWorksheet.id)
+        await supabase.from('student_worksheets').insert({
+          student_id: scoreWorksheet.student_id, subject: '수학',
+          grade_level: scoreWorksheet.grade_level, unit: scoreWorksheet.unit,
+          unit_name: scoreWorksheet.unit_name, current_level: scoreWorksheet.current_level,
+          status: 'similar_assigned', worksheet_type: 'similar', parent_worksheet_id: scoreWorksheet.id,
+        })
       } else {
-        // 80점 이상 → 레벨업/재도전 선택 대기
-        await supabase
-          .from('student_worksheets')
-          .update({ status: 'scored' })
-          .eq('id', scoreWorksheet.id)
+        await supabase.from('student_worksheets').update({ status: 'scored' }).eq('id', scoreWorksheet.id)
       }
     } else if (scoreWorksheet.status === 'similar_submitted') {
-      // 오답유사 학습지 채점 완료 → 레벨업/재도전 선택 대기
-      await supabase
-        .from('student_worksheets')
-        .update({ status: 'scored' })
-        .eq('id', scoreWorksheet.id)
+      await supabase.from('student_worksheets').update({ status: 'scored' }).eq('id', scoreWorksheet.id)
     }
+    setSavingScore(false); setShowScoreModal(false); setInputScore(''); fetchData()
+  }
 
-    setSavingScore(false)
-    setShowScoreModal(false)
-    setInputScore('')
+  async function handleLevelUp(w: StudentWorksheet) {
+    const nextLevel = Math.min(6.0, w.current_level + 0.5)
+    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
+    await supabase.from('student_worksheets').insert({
+      student_id: w.student_id, subject: '수학',
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
+      current_level: nextLevel, status: 'assigned', worksheet_type: 'main',
+    })
     fetchData()
   }
 
-  // ── 레벨업 ──────────────────────────────────────────
-  async function handleLevelUp(worksheet: StudentWorksheet) {
-    const nextLevel = Math.min(6.0, worksheet.current_level + 0.5)
-    await supabase
-      .from('student_worksheets')
-      .update({ status: 'passed' })
-      .eq('id', worksheet.id)
-    await supabase
-      .from('student_worksheets')
-      .insert({
-        student_id:    worksheet.student_id,
-        subject:       '수학',
-        grade_level:   worksheet.grade_level,
-        unit:          worksheet.unit,
-        unit_name:     worksheet.unit_name,
-        current_level: nextLevel,
-        status:        'assigned',
-        worksheet_type: 'main',
+  async function handleRetry(w: StudentWorksheet) {
+    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
+    await supabase.from('student_worksheets').insert({
+      student_id: w.student_id, subject: '수학',
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
+      current_level: w.current_level, status: 'assigned', worksheet_type: 'main',
+    })
+    fetchData()
+  }
+
+  async function handleTBAssign() {
+    if (!tbStudent || !tbConcept || !tbName) return
+    setTbAssigning(true)
+    const conceptsPerDay = GRADE_COUNT[tbStudent.textbook_grade] ?? 2
+    const startIdx = tbConcepts.findIndex((c) => c.id === tbConcept!.id)
+    const selectedConcepts = tbConcepts.slice(startIdx, startIdx + conceptsPerDay)
+    for (const concept of selectedConcepts) {
+      await supabase.from('student_textbooks').insert({
+        student_id: tbStudent.id, concept_id: concept.id,
+        textbook_name: tbName, textbook_type: tbType,
+        status: 'assigned', memo: tbMemo || null,
       })
+    }
+    setShowTBModal(false); setTbStudent(null); setTbConcept(null)
+    setTbChapter(''); setTbMemo(''); setTbName('')
+    setTbAssigning(false); fetchData()
+  }
+
+  async function handleTBSubmitted(id: string) {
+    await supabase.from('student_textbooks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id)
     fetchData()
   }
 
-  // ── 재도전 ──────────────────────────────────────────
-  async function handleRetry(worksheet: StudentWorksheet) {
-    await supabase
-      .from('student_worksheets')
-      .update({ status: 'passed' })
-      .eq('id', worksheet.id)
-    await supabase
-      .from('student_worksheets')
-      .insert({
-        student_id:    worksheet.student_id,
-        subject:       '수학',
-        grade_level:   worksheet.grade_level,
-        unit:          worksheet.unit,
-        unit_name:     worksheet.unit_name,
-        current_level: worksheet.current_level,
-        status:        'assigned',
-        worksheet_type: 'main',
-      })
+  async function handleTBChecked(id: string) {
+    await supabase.from('student_textbooks').update({ status: 'checked' }).eq('id', id)
     fetchData()
   }
 
-  const displayWorksheets = tab === 'active' ? activeWorksheets : historyWorksheets
+  const activeWorksheets = worksheets.filter((w) => {
+    const student = students.find((s) => s.id === w.student_id)
+    if (!isAdmin() && student?.teacher_name !== currentUser?.name) return false
+    return !['passed'].includes(w.status) &&
+      (getStudentName(w.student_id).includes(searchText) || w.unit.includes(searchText))
+  })
 
+  const activeTextbooks = textbooks.filter((t) => {
+    const student = students.find((s) => s.id === t.student_id)
+    if (!isAdmin() && student?.teacher_name !== currentUser?.name) return false
+    return getStudentName(t.student_id).includes(searchText)
+  })
   return (
     <div>
       <Header
         title="과제 관리"
+        subtitle={isAdmin() ? '전체 관리자' : currentUser?.name ? `${currentUser.name} 선생님 담당` : ''}
         action={
-          <button onClick={() => setShowAssignModal(true)}
+          <button onClick={() => tab === 'worksheet' ? setShowWSModal(true) : setShowTBModal(true)}
             className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg">
-            + 과제 배정
+            + {tab === 'worksheet' ? '학습지' : '교재'} 배정
           </button>
         }
       />
@@ -255,8 +301,8 @@ export default function TeacherAssignmentsPage() {
       {/* 탭 */}
       <div className="flex gap-2 px-4 pt-4">
         {[
-          { key: 'active',  label: '📝 진행중' },
-          { key: 'history', label: '📋 전체이력' },
+          { key: 'worksheet', label: '📝 학습지' },
+          { key: 'textbook',  label: '📖 교재' },
         ].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
@@ -267,32 +313,79 @@ export default function TeacherAssignmentsPage() {
       </div>
 
       <div className="px-4 py-4 space-y-3 md:px-6">
+
+        {/* 학교급 탭 */}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {GRADE_GROUPS.map((g) => (
+            <button key={g.label}
+              onClick={() => { setGradeGroup(g.label); setSelectedGrade(null) }}
+              className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold border whitespace-nowrap transition-all',
+                gradeGroup === g.label ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200')}>
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 학년 탭 */}
+        {gradeGroup !== '전체' && (
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setSelectedGrade(null)}
+              className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                selectedGrade === null ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200')}>
+              전체
+            </button>
+            {currentGrades.map((g) => (
+              <button key={g} onClick={() => setSelectedGrade(g)}
+                className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                  selectedGrade === g ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200')}>
+                {g}
+              </button>
+            ))}
+          </div>
+        )}
+{/* 디버그 */}
+        <div className="text-xs text-gray-400 px-1">
+          currentUser: {currentUser?.name} / role: {currentUser?.role} / students: {students.length}명 / myStudents: {myStudents.length}명 / filtered: {filteredStudents.length}명
+        </div>
+        {/* 관리자일 때 선생님 필터 */}
+        {isAdmin() && (
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setSelectedTeacher(null)}
+              className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                selectedTeacher === null ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200')}>
+              👩‍🏫 전체
+            </button>
+            {teachers.map((t) => (
+              <button key={t} onClick={() => setSelectedTeacher(t)}
+                className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
+                  selectedTeacher === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200')}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 검색 */}
         <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
-          placeholder="학생 이름 또는 단원으로 검색"
+          placeholder="학생 이름으로 검색"
           className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
-        {loading ? (
-          <div className="text-center py-8">
-            <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
-          </div>
-        ) : displayWorksheets.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-            <p className="text-4xl mb-3">📝</p>
-            <p className="text-sm font-semibold text-gray-600">
-              {tab === 'active' ? '진행중인 과제가 없어요' : '과제 이력이 없어요'}
-            </p>
-          </div>
-        ) : (
-          displayWorksheets.map((w) => {
-            const statusCfg = STATUS_CONFIG[w.status] ?? STATUS_CONFIG.assigned
-            const studentName = getStudentName(w.student_id)
-            const isSimilar = w.worksheet_type === 'similar'
-
-            return (
-              <div key={w.id} className={cx('bg-white rounded-2xl border-2 shadow-sm overflow-hidden', statusCfg.bg)}>
-                <div className="px-4 py-3.5">
+        {/* 학습지 탭 */}
+        {tab === 'worksheet' && (
+          loading ? (
+            <div className="text-center py-8"><span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" /></div>
+          ) : activeWorksheets.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+              <p className="text-4xl mb-3">📝</p>
+              <p className="text-sm text-gray-500">진행중인 학습지 과제가 없어요</p>
+            </div>
+          ) : (
+            activeWorksheets.map((w) => {
+              const cfg = WORKSHEET_STATUS_CONFIG[w.status] ?? WORKSHEET_STATUS_CONFIG.assigned
+              const studentName = getStudentName(w.student_id)
+              return (
+                <div key={w.id} className={cx('bg-white rounded-2xl border-2 shadow-sm p-3.5', cfg.bg)}>
                   <div className="flex items-start justify-between gap-2">
-                    {/* 학생 정보 */}
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                         {studentName[0]}
@@ -300,172 +393,232 @@ export default function TeacherAssignmentsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-bold text-gray-900">{studentName}</p>
-                          <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full border', statusCfg.color, statusCfg.bg)}>
-                            {statusCfg.label}
-                          </span>
-                          {isSimilar && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-600">
-                              오답유사
-                            </span>
-                          )}
+                          <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full border', cfg.color, cfg.bg)}>{cfg.label}</span>
+                          {w.worksheet_type === 'similar' && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-md">오답유사</span>}
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {w.grade_level} · {w.unit}
-                          {w.unit_name ? ` (${w.unit_name})` : ''} ·{' '}
-                          <span className="font-bold text-blue-600">{w.current_level}레벨</span>
-                          {w.score != null && (
-                            <span className={cx('ml-2 font-bold', w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-orange-500' : 'text-red-500')}>
-                              {w.score}점
-                            </span>
-                          )}
+                          {w.grade_level} · {w.unit}{w.unit_name ? ` (${w.unit_name})` : ''} · <span className={cx('font-bold', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>{w.current_level}레벨</span>
+                          {w.score != null && <span className={cx('ml-2 font-bold', w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>{w.score}점</span>}
                         </p>
                       </div>
                     </div>
-
-                    {/* 액션 버튼 */}
                     <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
-                      {/* 제출확인 */}
                       {(w.status === 'assigned' || w.status === 'similar_assigned') && (
                         <button onClick={() => handleSubmitted(w.id, w.status)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100">
-                          제출확인
-                        </button>
+                          className="px-2.5 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg">제출확인</button>
                       )}
-
-                      {/* 점수 입력 */}
                       {(w.status === 'submitted' || w.status === 'similar_submitted') && (
                         <button onClick={() => { setScoreWorksheet(w); setShowScoreModal(true) }}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
-                          점수입력
-                        </button>
+                          className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg">점수입력</button>
                       )}
-
-                      {/* 레벨업 / 재도전 */}
                       {w.status === 'scored' && (
                         <>
                           <button onClick={() => handleLevelUp(w)}
-                            className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100">
-                            레벨업 ↑
-                          </button>
+                            className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 border border-green-200 rounded-lg">레벨업 ↑</button>
                           <button onClick={() => handleRetry(w)}
-                            className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">
-                            재도전
-                          </button>
+                            className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 border border-red-200 rounded-lg">재도전</button>
                         </>
                       )}
                     </div>
                   </div>
                 </div>
+              )
+            })
+          )
+        )}
+
+        {/* 교재 탭 */}
+        {tab === 'textbook' && (
+          <div className="space-y-3">
+            {/* 학생별 교재 진도 현황 */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50">
+                <h3 className="text-sm font-bold text-gray-800">📚 학생별 교재 진도</h3>
+                <p className="text-xs text-gray-400 mt-0.5">과제배정 버튼으로 다음 개념 배정</p>
               </div>
-            )
-          })
+              <div className="divide-y divide-gray-50">
+                {filteredStudents.filter((s) => s.grade?.includes('초')).length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 py-6">해당하는 학생이 없어요</p>
+                ) : (
+                  filteredStudents.filter((s) => s.grade?.includes('초')).map((student) => {
+                    const studentTBs = textbooks.filter((t) => t.student_id === student.id)
+                    const activeTBs = studentTBs.filter((t) => t.status === 'assigned')
+                    const lastTB = [...studentTBs].sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())[0]
+                    const lastConcept = lastTB ? getConceptById(lastTB.concept_id) : null
+
+                    return (
+                      <div key={student.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50">
+                        <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center text-sm font-bold text-green-700 shrink-0">
+                          {student.name[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-bold text-gray-800">{student.name}</p>
+                            <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                              student.textbook_grade === 'A' ? 'bg-blue-100 text-blue-700' :
+                              student.textbook_grade === 'B' ? 'bg-green-100 text-green-700' :
+                              'bg-orange-100 text-orange-700')}>
+                              {student.textbook_grade ?? 'B'}등급
+                            </span>
+                            <span className="text-[10px] text-gray-400">{student.grade}</span>
+                            {activeTBs.length > 0 && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                                진행중 {activeTBs.length}개
+                              </span>
+                            )}
+                          </div>
+                          {lastConcept ? (
+                            <p className="text-xs text-gray-400 mt-0.5 truncate">
+                              마지막: {lastTB?.textbook_name} · {lastConcept.chapter} &gt; {lastConcept.concept_name}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-gray-400 mt-0.5">교재 과제 없음 · 첫 배정 필요</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setTbStudent(student)
+                            if (lastConcept) {
+                              setTbGrade(lastConcept.grade)
+                              setTbSemester(lastConcept.semester)
+                              setTbChapter(lastConcept.chapter)
+                            } else {
+                              setTbGrade(student.grade?.includes('초') ? student.grade.replace('등학교','').replace('등','') : '초4')
+                              setTbSemester(1)
+                              setTbChapter('')
+                            }
+                            setTbConcept(null)
+                            setShowTBModal(true)
+                          }}
+                          className="px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 shrink-0">
+                          과제배정
+                        </button>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 진행중인 교재 과제 */}
+            <h3 className="text-sm font-bold text-gray-700 px-1">진행중인 교재 과제</h3>
+            {loading ? (
+              <div className="text-center py-4"><span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" /></div>
+            ) : activeTextbooks.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+                <p className="text-sm text-gray-400">진행중인 교재 과제가 없어요</p>
+              </div>
+            ) : (
+              activeTextbooks.map((t) => {
+                const cfg = TEXTBOOK_STATUS_CONFIG[t.status] ?? TEXTBOOK_STATUS_CONFIG.assigned
+                const studentName = getStudentName(t.student_id)
+                const concept = getConceptById(t.concept_id)
+                return (
+                  <div key={t.id} className={cx('bg-white rounded-2xl border-2 shadow-sm p-3.5', cfg.bg)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center text-sm font-bold text-green-700 shrink-0">
+                          {studentName[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-bold text-gray-900">{studentName}</p>
+                            <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full border', cfg.color, cfg.bg)}>{cfg.label}</span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-green-100 text-green-600 rounded-md">{t.textbook_type}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {t.textbook_name}
+                            {concept && ` · ${concept.grade} ${concept.chapter} > ${concept.concept_name}`}
+                          </p>
+                          {t.memo && <p className="text-xs text-gray-400 mt-0.5">📝 {t.memo}</p>}
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        {t.status === 'assigned' && (
+                          <button onClick={() => handleTBSubmitted(t.id)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg">제출확인</button>
+                        )}
+                        {t.status === 'submitted' && (
+                          <button onClick={() => handleTBChecked(t.id)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 border border-green-200 rounded-lg">채점완료</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
         )}
       </div>
 
-      {/* 과제 배정 모달 */}
-      {showAssignModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
-          onClick={() => setShowAssignModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}>
+      {/* 학습지 배정 모달 */}
+      {showWSModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center" onClick={() => setShowWSModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900">📝 학습지 과제 배정</h3>
-              <button onClick={() => setShowAssignModal(false)} className="text-gray-400">✕</button>
+              <button onClick={() => setShowWSModal(false)} className="text-gray-400">✕</button>
             </div>
-
-            {/* 학생 선택 */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학생 선택 <span className="text-red-400">*</span></label>
-              {selectedStudent ? (
+              {wsStudent ? (
                 <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border-2 border-blue-300 rounded-xl">
-                  <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center text-sm font-bold text-blue-700">
-                    {selectedStudent.name[0]}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-blue-800">{selectedStudent.name}</p>
-                    <p className="text-xs text-blue-500">{selectedStudent.school} · {selectedStudent.grade}</p>
-                  </div>
-                  <button onClick={() => setSelectedStudent(null)} className="text-blue-400 hover:text-red-400">✕</button>
+                  <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center text-sm font-bold text-blue-700">{wsStudent.name[0]}</div>
+                  <div className="flex-1"><p className="text-sm font-bold text-blue-800">{wsStudent.name}</p><p className="text-xs text-blue-500">{wsStudent.grade}</p></div>
+                  <button onClick={() => setWsStudent(null)} className="text-blue-400">✕</button>
                 </div>
               ) : (
                 <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                  {students
-                    .filter((s) => s.grade?.includes('초'))
-                    .map((s) => (
-                      <button key={s.id} onClick={() => setSelectedStudent(s)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                          {s.name[0]}
-                        </div>
-                        <div className="flex-1 text-left">
-                          <p className="text-sm font-semibold text-gray-800">{s.name}</p>
-                          <p className="text-xs text-gray-400">{s.school} · {s.grade}</p>
-                        </div>
-                      </button>
-                    ))}
+                  {filteredStudents.filter((s) => s.grade?.includes('초')).map((s) => (
+                    <button key={s.id} onClick={() => setWsStudent(s)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">{s.name[0]}</div>
+                      <div className="flex-1 text-left"><p className="text-sm font-semibold text-gray-800">{s.name}</p><p className="text-xs text-gray-400">{s.grade} · {s.teacher_name}</p></div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-
-            {/* 학년 */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학년</label>
               <div className="flex gap-2 flex-wrap">
-                {GRADE_LEVELS.map((g) => (
-                  <button key={g} onClick={() => setFormGradeLevel(g)}
+                {WORKSHEET_GRADE_LEVELS.map((g) => (
+                  <button key={g} onClick={() => setWsGradeLevel(g)}
                     className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                      formGradeLevel === g ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
-                    {g}
-                  </button>
+                      wsGradeLevel === g ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>{g}</button>
                 ))}
               </div>
             </div>
-
-            {/* 단원 */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">단원</label>
               <div className="flex gap-2 flex-wrap">
-                {UNITS.map((u) => (
-                  <button key={u} onClick={() => setFormUnit(u)}
+                {WORKSHEET_UNITS.map((u) => (
+                  <button key={u} onClick={() => setWsUnit(u)}
                     className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                      formUnit === u ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
-                    {u}
-                  </button>
+                      wsUnit === u ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>{u}</button>
                 ))}
               </div>
             </div>
-
-            {/* 단원명 */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">단원명 <span className="text-gray-400 font-normal">(선택)</span></label>
-              <input type="text" value={formUnitName} onChange={(e) => setFormUnitName(e.target.value)}
-                placeholder="예: 분수의 덧셈과 뺄셈"
+              <input type="text" value={wsUnitName} onChange={(e) => setWsUnitName(e.target.value)} placeholder="예: 분수의 덧셈과 뺄셈"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-
-            {/* 레벨 */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">
-                시작 레벨 <span className="text-blue-600 font-bold">{formLevel}레벨</span>
-              </label>
+              <label className="block text-xs font-bold text-gray-700 mb-2">시작 레벨 <span className="text-blue-600 font-bold">{wsLevel}레벨</span></label>
               <div className="flex gap-1.5 flex-wrap">
-                {LEVELS.map((l) => (
-                  <button key={l} onClick={() => setFormLevel(l)}
+                {WORKSHEET_LEVELS.map((l) => (
+                  <button key={l} onClick={() => setWsLevel(l)}
                     className={cx('px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                      formLevel === l ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200',
-                      l >= 4 ? 'border-orange-200' : '')}>
-                    {l}
-                  </button>
+                      wsLevel === l ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>{l}</button>
                 ))}
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5">💡 3.5이하: 응용 · 4.0이상: 심화</p>
             </div>
-
-            <button onClick={handleAssign} disabled={!selectedStudent || assigning}
-              className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-              {assigning
-                ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</>
-                : <>📝 학습지 과제 배정하기</>}
+            <button onClick={handleWSAssign} disabled={!wsStudent || wsAssigning}
+              className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {wsAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : '📝 학습지 과제 배정하기'}
             </button>
           </div>
         </div>
@@ -473,57 +626,166 @@ export default function TeacherAssignmentsPage() {
 
       {/* 점수 입력 모달 */}
       {showScoreModal && scoreWorksheet && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
-          onClick={() => setShowScoreModal(false)}>
-          <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
-            onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center" onClick={() => setShowScoreModal(false)}>
+          <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900">점수 입력</h3>
               <button onClick={() => setShowScoreModal(false)} className="text-gray-400">✕</button>
             </div>
-
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-sm font-bold text-gray-800">{getStudentName(scoreWorksheet.student_id)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {scoreWorksheet.grade_level} · {scoreWorksheet.unit} · {scoreWorksheet.current_level}레벨
-                {scoreWorksheet.worksheet_type === 'similar' && ' · 오답유사'}
-              </p>
+              <p className="text-xs text-gray-500 mt-0.5">{scoreWorksheet.grade_level} · {scoreWorksheet.unit} · {scoreWorksheet.current_level}레벨{scoreWorksheet.worksheet_type === 'similar' ? ' · 오답유사' : ''}</p>
             </div>
-
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">점수 입력 (0~100)</label>
-              <input
-                type="number" min="0" max="100"
-                value={inputScore}
-                onChange={(e) => setInputScore(e.target.value)}
-                placeholder="점수를 입력하세요"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-              />
+              <label className="block text-xs font-bold text-gray-700 mb-2">점수 (0~100)</label>
+              <input type="number" min="0" max="100" value={inputScore} onChange={(e) => setInputScore(e.target.value)}
+                placeholder="점수 입력" autoFocus
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-
-            {/* 점수 미리보기 */}
             {inputScore && (
               <div className={cx('rounded-xl p-3 text-center text-sm font-bold',
                 parseInt(inputScore) >= 85 ? 'bg-green-50 text-green-600' :
-                parseInt(inputScore) >= 80 ? 'bg-orange-50 text-orange-500' :
-                'bg-red-50 text-red-500')}>
+                parseInt(inputScore) >= 80 ? 'bg-orange-50 text-orange-500' : 'bg-red-50 text-red-500')}>
                 {parseInt(inputScore) >= 85 ? '✓ 85점 이상 → 레벨업/재도전 선택' :
                  parseInt(inputScore) >= 80 ? '△ 80점 이상 → 레벨업/재도전 선택' :
-                 '✕ 80점 미만 → 오답유사 학습지 자동 배정'}
+                 '✕ 80점 미만 → 오답유사 자동 배정'}
               </div>
             )}
-
             <div className="flex gap-2">
-              <button onClick={() => setShowScoreModal(false)}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
+              <button onClick={() => setShowScoreModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveScore} disabled={!inputScore || savingScore}
                 className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-                {savingScore
-                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장중...</>
-                  : '저장'}
+                {savingScore ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장중...</> : '저장'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 교재 배정 모달 */}
+      {showTBModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center" onClick={() => setShowTBModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">📖 교재 과제 배정</h3>
+              <button onClick={() => setShowTBModal(false)} className="text-gray-400">✕</button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">학생 선택 <span className="text-red-400">*</span></label>
+              {tbStudent ? (
+                <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border-2 border-green-300 rounded-xl">
+                  <div className="w-8 h-8 rounded-full bg-green-200 flex items-center justify-center text-sm font-bold text-green-700">{tbStudent.name[0]}</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-green-800">{tbStudent.name}</p>
+                    <p className="text-xs text-green-500">{tbStudent.grade} · <span className="font-bold">{tbStudent.textbook_grade}등급 (하루 {GRADE_COUNT[tbStudent.textbook_grade] ?? 2}개)</span></p>
+                  </div>
+                  <button onClick={() => setTbStudent(null)} className="text-green-400">✕</button>
+                </div>
+              ) : (
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
+                  {filteredStudents.filter((s) => s.grade?.includes('초')).map((s) => (
+                    <button key={s.id} onClick={() => setTbStudent(s)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-green-50 border-b border-gray-50 last:border-0">
+                      <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">{s.name[0]}</div>
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-semibold text-gray-800">{s.name}</p>
+                        <p className="text-xs text-gray-400">{s.grade} · {s.textbook_grade ?? 'B'}등급</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">학년</label>
+              <div className="flex gap-2 flex-wrap">
+                {['초1','초2','초3','초4','초5','초6'].map((g) => (
+                  <button key={g} onClick={() => { setTbGrade(g); setTbChapter(''); setTbConcept(null) }}
+                    className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                      tbGrade === g ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>{g}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">학기</label>
+              <div className="flex gap-2">
+                {[1,2].map((s) => (
+                  <button key={s} onClick={() => { setTbSemester(s); setTbChapter(''); setTbConcept(null) }}
+                    className={cx('px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                      tbSemester === s ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>{s}학기</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">단원</label>
+              <div className="flex gap-2 flex-wrap">
+                {tbChapters.map((ch) => (
+                  <button key={ch} onClick={() => { setTbChapter(ch); setTbConcept(null) }}
+                    className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                      tbChapter === ch ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>{ch}</button>
+                ))}
+              </div>
+            </div>
+            {tbChapter && (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2">
+                  시작 개념 선택
+                  {tbStudent && <span className="ml-2 text-green-600 font-normal">({tbStudent.textbook_grade}등급 → {GRADE_COUNT[tbStudent.textbook_grade] ?? 2}개 자동 배정)</span>}
+                </label>
+                <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-xl">
+                  {tbConcepts.map((c) => {
+                    const isDone = tbStudent ? textbooks.some((t) => t.student_id === tbStudent.id && t.concept_id === c.id) : false
+                    return (
+                      <button key={c.id} onClick={() => setTbConcept(c)}
+                        className={cx('w-full text-left px-3 py-2.5 text-xs border-b border-gray-50 last:border-0 transition-colors flex items-center gap-2',
+                          tbConcept?.id === c.id ? 'bg-green-50 text-green-700 font-bold' : 'hover:bg-gray-50 text-gray-700')}>
+                        <span className={cx('w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0',
+                          isDone ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400')}>
+                          {isDone ? '✓' : c.concept_order}
+                        </span>
+                        {c.concept_name}
+                        {isDone && <span className="ml-auto text-[10px] text-green-500 font-bold">완료</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">교재 종류</label>
+              <div className="flex gap-2">
+                {Object.keys(TEXTBOOK_LIST).map((type) => (
+                  <button key={type} onClick={() => { setTbType(type); setTbName('') }}
+                    className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                      tbType === type ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>{type}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">교재명</label>
+              <div className="flex gap-2 flex-wrap">
+                {TEXTBOOK_LIST[tbType].map((name) => (
+                  <button key={name} onClick={() => setTbName(name)}
+                    className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                      tbName === name ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>{name}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">메모 <span className="text-gray-400 font-normal">(선택)</span></label>
+              <input type="text" value={tbMemo} onChange={(e) => setTbMemo(e.target.value)} placeholder="예: p.24~35"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+            {tbStudent && tbConcept && tbName && (
+              <div className="bg-green-50 rounded-xl px-4 py-3 text-xs text-green-700">
+                💡 <span className="font-bold">{tbStudent.name}</span> ({tbStudent.textbook_grade}등급) →
+                <span className="font-bold"> {GRADE_COUNT[tbStudent.textbook_grade] ?? 2}개 개념</span> 자동 배정
+              </div>
+            )}
+            <button onClick={handleTBAssign} disabled={!tbStudent || !tbConcept || !tbName || tbAssigning}
+              className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : '📖 교재 과제 배정하기'}
+            </button>
           </div>
         </div>
       )}
