@@ -19,6 +19,7 @@ interface Schedule {
   student_id: string
   day_of_week: string
   start_time: string
+  periods: number
   is_active: boolean
 }
 
@@ -108,6 +109,29 @@ export default function TeacherLearningNotesPage() {
     if (isAdmin()) return true
     return s.teacher_name === currentUser?.name
   })
+
+  // 오늘 요일
+  const todayDayIndex = new Date().getDay() // 0=일, 1=월, ...6=토
+  const dayMap: Record<number, string> = { 1:'월', 2:'화', 3:'수', 4:'목', 5:'금', 6:'토', 0:'일' }
+  const todayDay = dayMap[todayDayIndex]
+
+  // 오늘 수업 있는 학생 시간순 정렬
+  const todayStudents = myStudents
+    .map((s) => {
+      const sc = schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay)
+      return { student: s, schedule: sc }
+    })
+    .filter((x) => x.schedule)
+    .sort((a, b) => {
+      const timeA = a.schedule!.start_time
+      const timeB = b.schedule!.start_time
+      return timeA.localeCompare(timeB)
+    })
+
+  // 오늘 수업 없는 학생 (이름순)
+  const otherStudents = myStudents
+    .filter((s) => !schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   // 학생별 시간표
   function getStudentSchedules(studentId: string) {
@@ -247,99 +271,172 @@ export default function TeacherLearningNotesPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {myStudents.map((student) => {
-                const studentSessions = getStudentSessions(student.id)
-                  .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
-                  .slice(0, 5) // 최근 5개만
-
-                return (
-                  <div key={student.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    {/* 학생 헤더 */}
-                    <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
-                        {student.name[0]}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">{student.name}</p>
-                        <p className="text-xs text-gray-400">{student.school} · {student.grade}</p>
-                      </div>
-                      <button
-                        onClick={() => { setSessionStudent(student); setShowSessionModal(true) }}
-                        className="px-2.5 py-1 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg"
-                      >
-                        + 수업
-                      </button>
-                    </div>
-
-                    {/* 수업 회차 목록 */}
-                    {studentSessions.length === 0 ? (
-                      <p className="text-center text-xs text-gray-400 py-4">수업 기록이 없어요</p>
-                    ) : (
-                      <div className="divide-y divide-gray-50">
-                        {studentSessions.map((session) => {
-                          const note = getSessionNote(session.id)
-                          const isToday = session.session_date === todayStr
-                          return (
-                            <div key={session.id} className="px-4 py-3 flex items-center gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-semibold text-gray-800">
-                                    {session.session_date}
-                                  </p>
-                                  {isToday && (
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">오늘</span>
-                                  )}
-                                  {session.session_type === '추가' && (
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded-full">추가수업</span>
-                                  )}
-                                  {note && (
-                                    <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                                      note.attendance === '결석' ? 'bg-red-100 text-red-600' :
-                                      note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
-                                      'bg-green-100 text-green-600')}>
-                                      {note.attendance}
-                                    </span>
-                                  )}
-                                </div>
-                                {session.today_textbook_name && (
-                                  <p className="text-xs text-gray-400 mt-0.5">
-                                    📖 {session.today_textbook_name} · {session.today_chapter}
-                                  </p>
-                                )}
-                                {note && (
-                                  <div className="flex gap-2 mt-1 flex-wrap">
-                                    <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
-                                      note.worksheet_submitted ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500')}>
-                                      학습지 {note.worksheet_submitted ? '제출' : '미제출'}
-                                      {note.worksheet_score != null && ` ${note.worksheet_score}점`}
-                                    </span>
-                                    <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
-                                      note.textbook_submitted ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500')}>
-                                      교재 {note.textbook_submitted ? '제출' : '미제출'}
-                                      {note.textbook_page && ` p.${note.textbook_page}`}
-                                    </span>
-                                    <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
-                                      note.workbook_done ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500')}>
-                                      연산서 {note.workbook_done ? '완료' : '미완료'}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => openNoteModal(session)}
-                                className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg shrink-0',
-                                  note ? 'text-gray-600 bg-gray-50 border border-gray-200' : 'text-blue-600 bg-blue-50 border border-blue-200')}
-                              >
-                                {note ? '수정' : '기록'}
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+              {/* 오늘 수업 학생 */}
+              {todayStudents.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-1 mb-2">
+                    <span className="text-sm font-bold text-blue-600">📅 오늘 ({todayDay}요일) 수업</span>
+                    <span className="text-xs text-gray-400">{todayStudents.length}명</span>
                   </div>
-                )
-              })}
+                  {todayStudents.map(({ student, schedule }) => {
+                    const studentSessions = getStudentSessions(student.id)
+                      .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+                      .slice(0, 5)
+
+                    return (
+                      <div key={student.id} className="bg-white rounded-2xl border-2 border-blue-100 shadow-sm overflow-hidden mb-3">
+                        <div className="px-4 py-3 border-b border-blue-50 bg-blue-50 flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
+                            {student.name[0]}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-gray-900">{student.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-xs text-gray-500">{student.grade}</p>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                {schedule!.start_time.slice(0,5)} · {schedule!.periods}교시
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => { setSessionStudent(student); setShowSessionModal(true) }}
+                            className="px-2.5 py-1 text-xs font-semibold text-blue-600 bg-white border border-blue-200 rounded-lg"
+                          >
+                            + 수업
+                          </button>
+                        </div>
+                        {studentSessions.length === 0 ? (
+                          <p className="text-center text-xs text-gray-400 py-4">수업 기록이 없어요</p>
+                        ) : (
+                          <div className="divide-y divide-gray-50">
+                            {studentSessions.map((session) => {
+                              const note = getSessionNote(session.id)
+                              const isToday = session.session_date === todayStr
+                              return (
+                                <div key={session.id} className="px-4 py-3 flex items-center gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-semibold text-gray-800">{session.session_date}</p>
+                                      {isToday && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">오늘</span>}
+                                      {session.session_type === '추가' && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded-full">추가수업</span>}
+                                      {note && (
+                                        <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                                          note.attendance === '결석' ? 'bg-red-100 text-red-600' :
+                                          note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
+                                          'bg-green-100 text-green-600')}>
+                                          {note.attendance}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {session.today_textbook_name && (
+                                      <p className="text-xs text-gray-400 mt-0.5">📖 {session.today_textbook_name} · {session.today_chapter}</p>
+                                    )}
+                                    {note && (
+                                      <div className="flex gap-2 mt-1 flex-wrap">
+                                        <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
+                                          note.worksheet_submitted ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500')}>
+                                          학습지 {note.worksheet_submitted ? '제출' : '미제출'}{note.worksheet_score != null && ` ${note.worksheet_score}점`}
+                                        </span>
+                                        <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
+                                          note.textbook_submitted ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500')}>
+                                          교재 {note.textbook_submitted ? '제출' : '미제출'}{note.textbook_page && ` p.${note.textbook_page}`}
+                                        </span>
+                                        <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
+                                          note.workbook_done ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500')}>
+                                          연산서 {note.workbook_done ? '완료' : '미완료'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => openNoteModal(session)}
+                                    className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg shrink-0',
+                                      note ? 'text-gray-600 bg-gray-50 border border-gray-200' : 'text-blue-600 bg-blue-50 border border-blue-200')}
+                                  >
+                                    {note ? '수정' : '기록'}
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* 오늘 수업 없는 학생 */}
+              {otherStudents.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-1 mb-2">
+                    <span className="text-sm font-bold text-gray-400">오늘 수업 없는 학생</span>
+                    <span className="text-xs text-gray-300">{otherStudents.length}명</span>
+                  </div>
+                  {otherStudents.map((student) => {
+                    const studentSessions = getStudentSessions(student.id)
+                      .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+                      .slice(0, 3)
+
+                    return (
+                      <div key={student.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-3">
+                        <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 shrink-0">
+                            {student.name[0]}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-gray-700">{student.name}</p>
+                            <p className="text-xs text-gray-400">{student.grade}</p>
+                          </div>
+                          <button
+                            onClick={() => { setSessionStudent(student); setShowSessionModal(true) }}
+                            className="px-2.5 py-1 text-xs font-semibold text-gray-500 bg-gray-50 border border-gray-200 rounded-lg"
+                          >
+                            + 수업
+                          </button>
+                        </div>
+                        {studentSessions.length === 0 ? (
+                          <p className="text-center text-xs text-gray-400 py-3">수업 기록 없음</p>
+                        ) : (
+                          <div className="divide-y divide-gray-50">
+                            {studentSessions.map((session) => {
+                              const note = getSessionNote(session.id)
+                              return (
+                                <div key={session.id} className="px-4 py-2.5 flex items-center gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-xs font-semibold text-gray-600">{session.session_date}</p>
+                                      {note && (
+                                        <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                                          note.attendance === '결석' ? 'bg-red-100 text-red-600' :
+                                          note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
+                                          'bg-green-100 text-green-600')}>
+                                          {note.attendance}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => openNoteModal(session)}
+                                    className={cx('px-2 py-1 text-xs font-semibold rounded-lg shrink-0',
+                                      note ? 'text-gray-500 bg-gray-50 border border-gray-200' : 'text-blue-600 bg-blue-50 border border-blue-200')}
+                                  >
+                                    {note ? '수정' : '기록'}
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {todayStudents.length === 0 && otherStudents.length === 0 && (
+                <div className="text-center py-8 text-sm text-gray-400">담당 학생이 없어요</div>
+              )}
             </div>
           )
         )}
