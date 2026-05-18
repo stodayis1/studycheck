@@ -149,7 +149,7 @@ export default function TeacherReportsPage() {
             {/* 학교급 탭 */}
             <div className="flex gap-2">
               {GRADE_GROUPS.map((g) => {
-                const count = students.filter((s) =>
+                const count = myStudents.filter((s) =>
                   g.grades.some((grade) =>
                     s.grade?.includes(grade.replace('초','').replace('중','').replace('고','')) &&
                     (g.label === '초등' ? s.grade?.includes('초') :
@@ -192,8 +192,8 @@ export default function TeacherReportsPage() {
               })}
             </div>
 
-            {/* 선생님 필터 */}
-            {teachers.length > 0 && (
+            {/* 선생님 필터 - 관리자만 */}
+            {isAdmin() && teachers.length > 0 && (
               <div className="flex gap-1.5 flex-wrap">
                 <button
                   onClick={() => setSelectedTeacher(null)}
