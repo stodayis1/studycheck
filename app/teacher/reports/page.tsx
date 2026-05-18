@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
 
 interface Student {
   id: string
@@ -33,6 +34,7 @@ const GRADE_GROUPS = [
 ]
 
 export default function TeacherReportsPage() {
+  const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,8 +70,14 @@ export default function TeacherReportsPage() {
   // 선생님 목록 (중복 제거)
   const teachers = [...new Set(students.map((s) => s.teacher_name).filter(Boolean))].sort()
 
+  // 담당 학생 필터
+  const myStudents = students.filter((s) => {
+    if (isAdmin()) return true
+    return s.teacher_name === currentUser?.name
+  })
+
   // 필터링된 학생 목록
-  const filteredStudents = students.filter((s) => {
+  const filteredStudents = myStudents.filter((s) => {
     const gradeMatch = currentGrades.some((g) => s.grade?.includes(g.replace('초','').replace('중','').replace('고','')) &&
       (selectedGroup === '초등' ? s.grade?.includes('초') :
        selectedGroup === '중등' ? s.grade?.includes('중') :

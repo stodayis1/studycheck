@@ -6,6 +6,7 @@ import { SectionCard, Badge } from '@/components/ui'
 import { cx } from '@/lib/utils'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 
 interface Student {
   id?: string
@@ -21,6 +22,7 @@ interface Student {
 }
 
 export default function TeacherStudentsPage() {
+  const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
@@ -36,18 +38,21 @@ export default function TeacherStudentsPage() {
 
   async function fetchStudents() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('students')
-      .select('*')
-      .eq('is_active', true)
-      .order('name')
+    let query = supabase.from('students').select('*').eq('is_active', true).order('name')
+    const { data, error } = await query
     if (!error && data) setStudents(data)
     setLoading(false)
   }
 
   useEffect(() => { fetchStudents() }, [])
 
-  const filtered = students.filter((s) =>
+  // 담당 학생 필터
+  const myStudents = students.filter((s) => {
+    if (isAdmin()) return true
+    return s.teacher_name === currentUser?.name
+  })
+
+  const filtered = myStudents.filter((s) =>
     s.name?.includes(searchText) || s.school?.includes(searchText)
   )
 
