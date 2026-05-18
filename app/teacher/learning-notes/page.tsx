@@ -296,49 +296,55 @@ export default function TeacherLearningNotesPage() {
                     <span className="text-sm font-bold text-gray-800">📅 오늘 ({todayDay}요일) 시간표</span>
                     <span className="text-xs text-gray-400">{todayStudents.length}명</span>
                   </div>
-                  <div className="p-3">
-                    {/* 시간대별 그룹핑 - 연속수업 세로 블록으로 표현 */}
+                  <div className="p-3 overflow-x-auto">
                     {(() => {
                       const times = [...new Set(todayStudents.map(({ schedule }) => schedule!.start_time))].sort()
-                      const ROW_HEIGHT = 56 // px per hour
+                      const HOUR_PX = 72
 
                       return (
-                        <div className="relative">
-                          {/* 시간 레이블 + 구분선 */}
-                          {times.map((time) => (
-                            <div key={time} className="flex items-start gap-2 mb-0" style={{ height: ROW_HEIGHT }}>
-                              <div className="w-12 shrink-0 pt-1">
-                                <span className="text-xs font-bold text-gray-400">{time.slice(0,5)}</span>
-                              </div>
-                              <div className="flex-1 border-t border-gray-100 pt-1 flex flex-wrap gap-1.5">
-                                {todayStudents
-                                  .filter(({ schedule }) => schedule!.start_time === time)
-                                  .map(({ student, schedule }) => {
-                                    const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
-                                    const periods = schedule!.periods
-                                    const blockHeight = periods * ROW_HEIGHT - 8
-                                    return (
-                                      <div key={student.id}
-                                        className="rounded-xl px-2.5 flex flex-col justify-center"
-                                        style={{
-                                          backgroundColor: color.bg,
-                                          borderLeft: `4px solid ${color.border}`,
-                                          height: blockHeight,
-                                          minWidth: 76,
-                                        }}>
-                                        <span className="text-xs font-black" style={{ color: '#111' }}>
-                                          {student.name}
-                                        </span>
-                                        <span className="text-[10px] font-semibold mt-0.5" style={{ color: color.sub }}>
-                                          {student.grade} · {periods}교시
-                                        </span>
-                                      </div>
-                                    )
-                                  })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        <table style={{ borderCollapse: 'separate', borderSpacing: '0 4px', width: '100%' }}>
+                          <tbody>
+                            {times.map((time) => {
+                              const studentsAtTime = todayStudents.filter(({ schedule }) => schedule!.start_time === time)
+                              const maxPeriods = Math.max(...studentsAtTime.map(({ schedule }) => schedule!.periods))
+
+                              return (
+                                <tr key={time} style={{ verticalAlign: 'top' }}>
+                                  {/* 시간 레이블 */}
+                                  <td style={{ width: 48, paddingTop: 8, paddingRight: 8 }}>
+                                    <span className="text-xs font-bold text-gray-400">{time.slice(0,5)}</span>
+                                  </td>
+                                  {/* 학생 블록들 */}
+                                  <td style={{ height: HOUR_PX * maxPeriods }}>
+                                    <div className="flex flex-wrap gap-1.5 items-start border-t border-gray-100 pt-1.5 h-full">
+                                      {studentsAtTime.map(({ student, schedule }) => {
+                                        const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
+                                        const periods = schedule!.periods
+                                        const blockH = HOUR_PX * periods - 10
+
+                                        return (
+                                          <div key={student.id}
+                                            className="rounded-xl px-2.5 flex flex-col justify-center shrink-0"
+                                            style={{
+                                              backgroundColor: color.bg,
+                                              borderLeft: `4px solid ${color.border}`,
+                                              height: blockH,
+                                              minWidth: 76,
+                                            }}>
+                                            <span className="text-xs font-black text-gray-900">{student.name}</span>
+                                            <span className="text-[10px] font-semibold mt-0.5" style={{ color: color.sub }}>
+                                              {student.grade} · {periods}교시
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
                       )
                     })()}
                   </div>
