@@ -31,6 +31,7 @@ export default function TeacherStudentsPage() {
   const [importResult, setImportResult] = useState({ added: 0, skipped: 0 })
   const [editStudent, setEditStudent] = useState<Student | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [editSchedules, setEditSchedules] = useState<{day: string, time: string, periods: number}[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function fetchStudents() {
@@ -117,8 +118,24 @@ export default function TeacherStudentsPage() {
         textbook_grade: editStudent.textbook_grade,
       })
       .eq('id', editStudent.id)
-    if (!error) { setShowEditModal(false); fetchStudents() }
-    else alert('수정 중 오류가 발생했습니다.')
+    if (error) { alert('수정 중 오류가 발생했습니다.'); return }
+
+    // schedules 테이블 업데이트 (기존 삭제 후 재등록)
+    await supabase.from('schedules').update({ is_active: false }).eq('student_id', editStudent.id)
+    for (const sc of editSchedules) {
+      if (sc.day && sc.time) {
+        await supabase.from('schedules').insert({
+          student_id: editStudent.id,
+          day_of_week: sc.day,
+          start_time: sc.time,
+          periods: sc.periods,
+          is_active: true,
+        })
+      }
+    }
+
+    setShowEditModal(false)
+    fetchStudents()
   }
 
   async function handleDelete(studentId: string, name: string) {
@@ -252,7 +269,22 @@ export default function TeacherStudentsPage() {
                     </p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button onClick={() => { setEditStudent(student); setShowEditModal(true) }}
+                    <button onClick={async () => {
+                      setEditStudent(student)
+                      // 기존 시간표 불러오기
+                      const { data: scData } = await supabase
+                        .from('schedules')
+                        .select('*')
+                        .eq('student_id', student.id)
+                        .eq('is_active', true)
+                        .order('day_of_week')
+                      setEditSchedules(scData ? scData.map((s: any) => ({
+                        day: s.day_of_week,
+                        time: s.start_time.slice(0, 5),
+                        periods: s.periods ?? 2,
+                      })) : [])
+                      setShowEditModal(true)
+                    }}
                       className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
                     <button onClick={() => handleDelete(student.id!, student.name)}
                       className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
@@ -301,7 +333,6 @@ export default function TeacherStudentsPage() {
               { label:'이름',       key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'수업시간',   key:'class_time',   placeholder:'예: 월수금4' },
               { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
@@ -315,6 +346,63 @@ export default function TeacherStudentsPage() {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             ))}
+
+            {/* 시간표 편집 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-600">수업 시간표</label>
+                <button
+                  onClick={() => setEditSchedules([...editSchedules, { day: '월', time: '16:00', periods: 2 }])}
+                  className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                  + 추가
+                </button>
+              </div>
+              {editSchedules.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-2">등록된 시간표가 없어요</p>
+              )}
+              {editSchedules.map((sc, idx) => (
+                <div key={idx} className="flex items-center gap-2 mb-2">
+                  <select value={sc.day}
+                    onChange={(e) => {
+                      const updated = [...editSchedules]
+                      updated[idx] = { ...updated[idx], day: e.target.value }
+                      setEditSchedules(updated)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
+                    {['월','화','수','목','금','토'].map((d) => (
+                      <option key={d} value={d}>{d}요일</option>
+                    ))}
+                  </select>
+                  <select value={sc.time}
+                    onChange={(e) => {
+                      const updated = [...editSchedules]
+                      updated[idx] = { ...updated[idx], time: e.target.value }
+                      setEditSchedules(updated)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none flex-1">
+                    {['14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <select value={sc.periods}
+                    onChange={(e) => {
+                      const updated = [...editSchedules]
+                      updated[idx] = { ...updated[idx], periods: parseInt(e.target.value) }
+                      setEditSchedules(updated)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
+                    {[1,2,3,4].map((p) => (
+                      <option key={p} value={p}>{p}교시</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setEditSchedules(editSchedules.filter((_, i) => i !== idx))}
+                    className="text-red-400 hover:text-red-600 text-sm font-bold px-1">
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
 
             <div className="flex gap-2 pt-2">
               <button onClick={() => setShowEditModal(false)}
