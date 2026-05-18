@@ -49,6 +49,23 @@ interface LearningNote {
 const DAYS = ['월', '화', '수', '목', '금', '토']
 const TIMES = ['14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']
 
+// 학년별 색상 (bg, border, text, sub)
+const GRADE_COLORS: Record<string, { bg: string; border: string; text: string; sub: string }> = {
+  '초1': { bg: '#fffde7', border: '#fff176', text: '#f9a825', sub: '#fbc02d' },
+  '초2': { bg: '#fff9c4', border: '#ffee58', text: '#f57f17', sub: '#f9a825' },
+  '초3': { bg: '#fff59d', border: '#ffeb3b', text: '#e65100', sub: '#ef6c00' },
+  '초4': { bg: '#ffe0b2', border: '#ffb74d', text: '#e65100', sub: '#f57c00' },
+  '초5': { bg: '#ffcc80', border: '#ffa726', text: '#bf360c', sub: '#d84315' },
+  '초6': { bg: '#ffb74d', border: '#ff9800', text: '#bf360c', sub: '#e64a19' },
+  '중1': { bg: '#e8f5e9', border: '#81c784', text: '#2e7d32', sub: '#388e3c' },
+  '중2': { bg: '#c8e6c9', border: '#66bb6a', text: '#1b5e20', sub: '#2e7d32' },
+  '중3': { bg: '#a5d6a7', border: '#4caf50', text: '#1b5e20', sub: '#1b5e20' },
+  '고1': { bg: '#ffebee', border: '#ef9a9a', text: '#b71c1c', sub: '#c62828' },
+  '고2': { bg: '#ffcdd2', border: '#e57373', text: '#b71c1c', sub: '#b71c1c' },
+  '고3': { bg: '#ef9a9a', border: '#f44336', text: '#7f0000', sub: '#b71c1c' },
+  'default': { bg: '#f5f5f5', border: '#bdbdbd', text: '#424242', sub: '#757575' },
+}
+
 export default function TeacherLearningNotesPage() {
   const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
@@ -271,6 +288,54 @@ export default function TeacherLearningNotesPage() {
             </div>
           ) : (
             <div className="space-y-4">
+
+              {/* ── 오늘 시간표 시각화 ── */}
+              {todayStudents.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-800">📅 오늘 ({todayDay}요일) 시간표</span>
+                    <span className="text-xs text-gray-400">{todayStudents.length}명</span>
+                  </div>
+                  <div className="p-3">
+                    {/* 시간대별 그룹핑 */}
+                    {(() => {
+                      // 시간대 목록 추출
+                      const times = [...new Set(todayStudents.map(({ schedule }) => schedule!.start_time))].sort()
+                      return times.map((time) => {
+                        const studentsAtTime = todayStudents.filter(({ schedule }) => schedule!.start_time === time)
+                        return (
+                          <div key={time} className="flex gap-2 mb-2 last:mb-0">
+                            {/* 시간 레이블 */}
+                            <div className="w-14 shrink-0 pt-1.5">
+                              <span className="text-xs font-bold text-gray-500">{time.slice(0,5)}</span>
+                            </div>
+                            {/* 학생 블록들 */}
+                            <div className="flex-1 flex flex-wrap gap-1.5">
+                              {studentsAtTime.map(({ student, schedule }) => {
+                                const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
+                                const periods = schedule!.periods
+                                return (
+                                  <div key={student.id}
+                                    className="rounded-xl px-3 py-1.5 flex flex-col min-w-[80px]"
+                                    style={{ backgroundColor: color.bg, borderLeft: `3px solid ${color.border}` }}>
+                                    <span className="text-xs font-black" style={{ color: color.text }}>
+                                      {student.name}
+                                    </span>
+                                    <span className="text-[10px] font-semibold" style={{ color: color.sub }}>
+                                      {student.grade} · {periods}교시
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                </div>
+              )}
+
               {/* 오늘 수업 학생 */}
               {todayStudents.length > 0 && (
                 <div>
