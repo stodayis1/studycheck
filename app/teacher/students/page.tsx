@@ -418,7 +418,7 @@ export default function TeacherStudentsPage() {
                       setEditSchedules(updated)
                     }}
                     className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none flex-1">
-                    {['14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'].map((t) => (
+                    {['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'].map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
