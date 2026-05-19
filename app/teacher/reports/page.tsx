@@ -180,7 +180,7 @@ export default function TeacherReportsPage() {
                 전체
               </button>
               {currentGrades.map((g) => {
-                const count = students.filter((s) => s.grade?.includes(g)).length
+                const count = myStudents.filter((s) => s.grade?.includes(g)).length
                 return (
                   <button key={g}
                     onClick={() => setSelectedGrade(g)}
