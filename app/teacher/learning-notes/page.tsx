@@ -236,20 +236,69 @@ export default function TeacherLearningNotesPage() {
     setShowNoteModal(true)
   }
 
-  // 피드백 저장
+  // 피드백 저장 (AI 알림장 자동 생성)
   async function handleSaveFeedback() {
     if (!feedbackStudent || !feedbackContent.trim()) return
     setSavingFeedback(true)
+
+    // 해당 학생의 최근 배움노트 데이터 수집
+    const studentSessions = sessions.filter((s) => s.student_id === feedbackStudent.id)
+    const studentNotes = notes.filter((n) =>
+      studentSessions.some((s) => s.id === n.session_id)
+    )
+    const recentNotes = studentNotes.slice(0, 3)
+    const recentSubmitRate = recentNotes.length > 0
+      ? Math.round(recentNotes.filter((n) => n.worksheet_submitted).length / recentNotes.length * 100) : 0
+
+    // 오늘 가장 최근 수업 찾기
+    const todayStr = new Date().toISOString().split('T')[0]
+    const recentSession = studentSessions[0] // 가장 최근 수업
+    const recentNote = recentSession ? notes.find((n) => n.session_id === recentSession.id) : null
+
+    // AI 알림장 생성
+    let aiMessage = null
+    try {
+      const response = await fetch('/api/generate-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: feedbackStudent.name,
+          studentGrade: feedbackStudent.grade,
+          date: recentSession?.session_date ?? todayStr,
+          textbookName: recentSession?.today_textbook_name,
+          chapter: recentSession?.today_chapter,
+          attendance: recentNote?.attendance,
+          worksheetSubmitted: recentNote?.worksheet_submitted ?? false,
+          worksheetScore: recentNote?.worksheet_score,
+          textbookSubmitted: recentNote?.textbook_submitted ?? false,
+          textbookPage: recentNote?.textbook_page,
+          workbookDone: recentNote?.workbook_done ?? false,
+          videoCompleted: !!recentNote?.video_completed_at,
+          videoStarted: !!recentNote?.video_started_at,
+          teacherMemo: feedbackContent.trim(),
+          recentSubmitRate,
+          recentSessions: recentNotes.length,
+        }),
+      })
+      const data = await response.json()
+      aiMessage = data.message ?? null
+    } catch {
+      console.error('AI 생성 실패')
+    }
+
     await supabase.from('feedbacks').insert({
       student_id: feedbackStudent.id,
       teacher_name: currentUser?.name,
       content: feedbackContent.trim(),
+      ai_message: aiMessage,
       is_read: false,
     })
+
     setShowFeedbackModal(false)
     setFeedbackStudent(null)
     setFeedbackContent('')
     setSavingFeedback(false)
+    fetchData()
   }
 
   // 시간표 저장
@@ -931,14 +980,17 @@ export default function TeacherLearningNotesPage() {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
+            <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-600">
+              💡 저장하면 AI가 자동으로 학부모용 알림장을 생성해요
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setShowFeedbackModal(false)}
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveFeedback} disabled={!feedbackContent.trim() || savingFeedback}
                 className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                 {savingFeedback
-                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</>
-                  : '💬 피드백 보내기'}
+                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />AI 알림장 생성 중...</>
+                  : '✨ 저장 + AI 알림장 생성'}
               </button>
             </div>
           </div>
