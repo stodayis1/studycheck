@@ -30,6 +30,7 @@ interface ClassSession {
   session_type: string
   today_textbook_name: string | null
   today_chapter: string | null
+  video_url: string | null
   created_by: string | null
 }
 
@@ -83,6 +84,7 @@ export default function TeacherLearningNotesPage() {
   const [sessionType, setSessionType] = useState('정규')
   const [sessionTextbook, setSessionTextbook] = useState('')
   const [sessionChapter, setSessionChapter] = useState('')
+  const [sessionVideoUrl, setSessionVideoUrl] = useState('')
   const [savingSession, setSavingSession] = useState(false)
 
   // 배움노트 입력 모달
@@ -175,12 +177,14 @@ export default function TeacherLearningNotesPage() {
       session_type: sessionType,
       today_textbook_name: sessionTextbook || null,
       today_chapter: sessionChapter || null,
+      video_url: sessionVideoUrl || null,
       created_by: currentUser?.name,
     })
     setShowSessionModal(false)
     setSessionStudent(null)
     setSessionTextbook('')
     setSessionChapter('')
+    setSessionVideoUrl('')
     setSavingSession(false)
     fetchData()
   }
@@ -298,53 +302,62 @@ export default function TeacherLearningNotesPage() {
                   </div>
                   <div className="p-3 overflow-x-auto">
                     {(() => {
+                      const HOUR_PX = 64
                       const times = [...new Set(todayStudents.map(({ schedule }) => schedule!.start_time))].sort()
-                      const HOUR_PX = 72
 
                       return (
-                        <table style={{ borderCollapse: 'separate', borderSpacing: '0 4px', width: '100%' }}>
-                          <tbody>
+                        <div className="flex gap-2" style={{ minWidth: 'max-content' }}>
+                          {/* 시간 레이블 컬럼 */}
+                          <div className="flex flex-col shrink-0" style={{ width: 44 }}>
                             {times.map((time) => {
                               const studentsAtTime = todayStudents.filter(({ schedule }) => schedule!.start_time === time)
                               const maxPeriods = Math.max(...studentsAtTime.map(({ schedule }) => schedule!.periods))
-
                               return (
-                                <tr key={time} style={{ verticalAlign: 'top' }}>
-                                  {/* 시간 레이블 */}
-                                  <td style={{ width: 48, paddingTop: 8, paddingRight: 8 }}>
-                                    <span className="text-xs font-bold text-gray-400">{time.slice(0,5)}</span>
-                                  </td>
-                                  {/* 학생 블록들 */}
-                                  <td style={{ height: HOUR_PX * maxPeriods }}>
-                                    <div className="flex flex-wrap gap-1.5 items-start border-t border-gray-100 pt-1.5 h-full">
-                                      {studentsAtTime.map(({ student, schedule }) => {
-                                        const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
-                                        const periods = schedule!.periods
-                                        const blockH = HOUR_PX * periods - 10
-
-                                        return (
-                                          <div key={student.id}
-                                            className="rounded-xl px-2.5 flex flex-col justify-center shrink-0"
-                                            style={{
-                                              backgroundColor: color.bg,
-                                              borderLeft: `4px solid ${color.border}`,
-                                              height: blockH,
-                                              minWidth: 76,
-                                            }}>
-                                            <span className="text-xs font-black text-gray-900">{student.name}</span>
-                                            <span className="text-[10px] font-semibold mt-0.5" style={{ color: color.sub }}>
-                                              {student.grade} · {periods}교시
-                                            </span>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  </td>
-                                </tr>
+                                <div key={time} style={{ height: HOUR_PX * maxPeriods, paddingTop: 8 }}>
+                                  <span className="text-xs font-bold text-gray-400">{time.slice(0,5)}</span>
+                                </div>
                               )
                             })}
-                          </tbody>
-                        </table>
+                          </div>
+
+                          {/* 학생별 독립 컬럼 */}
+                          {todayStudents.map(({ student, schedule }) => {
+                            const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
+                            const periods = schedule!.periods
+                            const startTime = schedule!.start_time
+
+                            // 이 학생 이전 시간대들의 총 높이 계산
+                            const offsetHeight = times
+                              .filter((t) => t < startTime)
+                              .reduce((acc, t) => {
+                                const studentsAtTime = todayStudents.filter(({ schedule: sc }) => sc!.start_time === t)
+                                const maxPeriods = Math.max(...studentsAtTime.map(({ schedule: sc }) => sc!.periods))
+                                return acc + HOUR_PX * maxPeriods
+                              }, 0)
+
+                            const blockH = HOUR_PX * periods - 8
+
+                            return (
+                              <div key={student.id} className="shrink-0" style={{ width: 80 }}>
+                                {/* 위 여백 */}
+                                {offsetHeight > 0 && <div style={{ height: offsetHeight }} />}
+                                {/* 학생 블록 */}
+                                <div
+                                  className="rounded-xl px-2 flex flex-col justify-center"
+                                  style={{
+                                    backgroundColor: color.bg,
+                                    borderLeft: `4px solid ${color.border}`,
+                                    height: blockH,
+                                  }}>
+                                  <span className="text-xs font-black text-gray-900 truncate">{student.name}</span>
+                                  <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: color.sub }}>
+                                    {student.grade} · {periods}교시
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       )
                     })()}
                   </div>
@@ -410,6 +423,9 @@ export default function TeacherLearningNotesPage() {
                                     </div>
                                     {session.today_textbook_name && (
                                       <p className="text-xs text-gray-400 mt-0.5">📖 {session.today_textbook_name} · {session.today_chapter}</p>
+                                    )}
+                                    {session.video_url && (
+                                      <p className="text-xs text-blue-400 mt-0.5">📹 영상 과제 있음</p>
                                     )}
                                     {note && (
                                       <div className="flex gap-2 mt-1 flex-wrap">
@@ -649,6 +665,17 @@ export default function TeacherLearningNotesPage() {
               <input type="text" value={sessionChapter} onChange={(e) => setSessionChapter(e.target.value)}
                 placeholder="예: IV 비와 비율 > 비"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            {/* 영상 과제 링크 */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">📹 영상 과제 링크 <span className="text-gray-400 font-normal">(선택 · 중등/고등)</span></label>
+              <input type="url" value={sessionVideoUrl} onChange={(e) => setSessionVideoUrl(e.target.value)}
+                placeholder="https://youtube.com/..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              {sessionVideoUrl && (
+                <p className="text-xs text-blue-500 mt-1">✓ 학생 배움노트에 영상 시청 버튼이 표시돼요</p>
+              )}
             </div>
 
             <button onClick={handleSaveSession} disabled={!sessionStudent || savingSession}

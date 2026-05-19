@@ -13,6 +13,7 @@ interface ClassSession {
   session_type: string
   today_textbook_name: string | null
   today_chapter: string | null
+  video_url: string | null
 }
 
 interface LearningNote {
@@ -25,6 +26,8 @@ interface LearningNote {
   textbook_page: string | null
   workbook_done: boolean
   memo: string | null
+  video_started_at: string | null
+  video_completed_at: string | null
 }
 
 export default function StudentLearningNotesPage() {
@@ -122,6 +125,54 @@ export default function StudentLearningNotesPage() {
   // 초등 여부 (연산서 표시용)
   const isElementary = studentGrade.includes('초')
 
+  // 영상 시작 기록
+  async function handleVideoStart(session: ClassSession) {
+    if (!studentId) return
+    const existing = getNoteBySession(session.id)
+    const now = new Date().toISOString()
+    if (existing) {
+      await supabase.from('learning_notes')
+        .update({ video_started_at: now })
+        .eq('id', existing.id)
+    } else {
+      await supabase.from('learning_notes').insert({
+        student_id: studentId,
+        session_id: session.id,
+        attendance: '정시',
+        worksheet_submitted: false,
+        textbook_submitted: false,
+        workbook_done: false,
+        video_started_at: now,
+      })
+    }
+    // 영상 링크 새탭으로 열기
+    window.open(session.video_url!, '_blank')
+    fetchData(studentId)
+  }
+
+  // 영상 완료 기록
+  async function handleVideoComplete(session: ClassSession) {
+    if (!studentId) return
+    const existing = getNoteBySession(session.id)
+    const now = new Date().toISOString()
+    if (existing) {
+      await supabase.from('learning_notes')
+        .update({ video_completed_at: now })
+        .eq('id', existing.id)
+    } else {
+      await supabase.from('learning_notes').insert({
+        student_id: studentId,
+        session_id: session.id,
+        attendance: '정시',
+        worksheet_submitted: false,
+        textbook_submitted: false,
+        workbook_done: false,
+        video_completed_at: now,
+      })
+    }
+    fetchData(studentId)
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <span className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -181,6 +232,57 @@ export default function StudentLearningNotesPage() {
                     {note ? '수정' : '✏️ 작성'}
                   </button>
                 </div>
+
+                {/* 영상 과제 */}
+                {session.video_url && (
+                  <div className="px-4 pb-3">
+                    <div className="bg-blue-50 rounded-xl p-3 flex items-center gap-3">
+                      <span className="text-2xl">📹</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-blue-800">영상 과제</p>
+                        {note?.video_completed_at ? (
+                          <p className="text-[10px] text-green-600 font-bold mt-0.5">
+                            ✅ 완료 {new Date(note.video_completed_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        ) : note?.video_started_at ? (
+                          <p className="text-[10px] text-blue-500 mt-0.5">
+                            ▶ 시청중 · {new Date(note.video_started_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 시작
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-blue-400 mt-0.5">아직 시청 안 했어요</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {!note?.video_started_at ? (
+                          <button
+                            onClick={() => handleVideoStart(session)}
+                            className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg whitespace-nowrap">
+                            ▶ 영상 시작
+                          </button>
+                        ) : !note?.video_completed_at ? (
+                          <>
+                            <button
+                              onClick={() => window.open(session.video_url!, '_blank')}
+                              className="px-3 py-1.5 text-xs font-bold bg-blue-100 text-blue-600 rounded-lg whitespace-nowrap">
+                              ▶ 다시 보기
+                            </button>
+                            <button
+                              onClick={() => handleVideoComplete(session)}
+                              className="px-3 py-1.5 text-xs font-bold bg-green-600 text-white rounded-lg whitespace-nowrap">
+                              ✅ 시청 완료
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => window.open(session.video_url!, '_blank')}
+                            className="px-3 py-1.5 text-xs font-bold bg-gray-100 text-gray-500 rounded-lg whitespace-nowrap">
+                            다시 보기
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 배움노트 내용 */}
                 {note && (

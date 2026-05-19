@@ -12,6 +12,7 @@ interface ClassSession {
   session_type: string
   today_textbook_name: string | null
   today_chapter: string | null
+  video_url: string | null
 }
 
 interface LearningNote {
@@ -24,6 +25,8 @@ interface LearningNote {
   textbook_page: string | null
   workbook_done: boolean
   memo: string | null
+  video_started_at: string | null
+  video_completed_at: string | null
 }
 
 export default function ParentLearningNotesPage() {
@@ -186,6 +189,16 @@ export default function ParentLearningNotesPage() {
                       📖 {session.today_textbook_name}
                       {session.today_chapter && ` · ${session.today_chapter}`}
                     </p>
+                  </div>
+                )}
+                {session.video_url && (
+                  <div className="px-4 pt-1 pb-1">
+                    <span className={cx('text-[10px] font-bold px-2 py-1 rounded-lg inline-block',
+                      note?.video_completed_at ? 'bg-green-50 text-green-700' :
+                      note?.video_started_at ? 'bg-blue-50 text-blue-600' :
+                      'bg-gray-50 text-gray-400')}>
+                      📹 영상 {note?.video_completed_at ? '시청완료' : note?.video_started_at ? '시청중' : '미시청'}
+                    </span>
                   </div>
                 )}
 
