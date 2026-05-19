@@ -9,14 +9,13 @@ function cx(...classes: (string|boolean|undefined|null)[]) {
 }
 
 const NAV_ITEMS = [
-  { href:'/teacher/dashboard',   label:'대시보드',  icon:'⊞' },
-  { href:'/teacher/classes',     label:'반 관리',   icon:'◫' },
-  { href:'/teacher/students',    label:'학생 관리', icon:'◎' },
-  { href:'/teacher/assignments', label:'과제 관리', icon:'☑' },
-  { href:'/teacher/learning-notes', label:'배움노트', icon:'📓' },
-  { href:'/teacher/exams', label:'평가 관리', icon:'🏆' },
-  { href:'/teacher/submissions', label:'제출 현황', icon:'◐' },
-  { href:'/teacher/reports',     label:'보고서',    icon:'◈' },
+  { href:'/teacher/dashboard',      label:'대시보드',    icon:'⊞' },
+  { href:'/teacher/learning-notes', label:'진도관리',    icon:'📓' },
+  { href:'/teacher/students',       label:'학생관리',    icon:'◎' },
+  { href:'/teacher/assignments',    label:'레벨학습지',  icon:'📝' },
+  { href:'/teacher/submissions',    label:'제출현황',    icon:'◐' },
+  { href:'/teacher/exams',          label:'평가관리',    icon:'🏆' },
+  { href:'/teacher/reports',        label:'보고서',      icon:'◈' },
 ]
 
 export function TeacherSidebar() {
@@ -27,19 +26,11 @@ export function TeacherSidebar() {
     <>
       {/* 데스크톱 사이드바 */}
       <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-100 min-h-screen sticky top-0">
-
-        {/* 로고 영역 */}
         <div className="px-4 py-4 border-b border-gray-100 flex flex-col items-center gap-2">
-          <img
-            src="/logo.png"
-            alt="수학의지혜"
-            className="h-12 object-contain"
-            onError={(e) => { e.currentTarget.style.display='none' }}
-          />
-          <p className="text-[10px] text-gray-400 font-medium text-center">과제 관리 플랫폼</p>
+          <img src="/logo.png" alt="수학의지혜" className="h-12 object-contain"
+            onError={(e) => { e.currentTarget.style.display='none' }} />
+          <p className="text-[10px] text-gray-400 font-medium text-center">수업일지 · 진도관리</p>
         </div>
-
-        {/* 네비게이션 */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href+'/')
@@ -53,18 +44,10 @@ export function TeacherSidebar() {
             )
           })}
         </nav>
-
-        {/* 캐릭터 */}
         <div className="flex justify-center px-4 pb-2">
-          <img
-            src="/character.png"
-            alt="캐릭터"
-            className="h-24 object-contain"
-            onError={(e) => { e.currentTarget.style.display='none' }}
-          />
+          <img src="/character.png" alt="캐릭터" className="h-24 object-contain"
+            onError={(e) => { e.currentTarget.style.display='none' }} />
         </div>
-
-        {/* 사용자 정보 */}
         <div className="px-4 py-3 border-t border-gray-100">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-8 h-8 bg-[#1a2f5e] rounded-full flex items-center justify-center text-sm font-semibold text-white">
