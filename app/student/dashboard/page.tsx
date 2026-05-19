@@ -20,6 +20,12 @@ interface ClassSession {
   today_textbook_name: string | null
   today_chapter: string | null
   video_url: string | null
+  progress_content: string | null
+  daily_test_unit: string | null
+  daily_test_score: number | null
+  hw_textbook_name: string | null
+  hw_textbook_page: string | null
+  hw_worksheet_range: string | null
 }
 
 interface LearningNote {
@@ -168,6 +174,65 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
+        {/* 수업 과제 (선생님이 수업일지에서 배부한 것) */}
+        {todaySession && (todaySession.hw_textbook_name || todaySession.hw_worksheet_range) && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+              <span className="text-base">📋</span>
+              <h3 className="text-sm font-bold text-gray-800">오늘 배부된 과제</h3>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {/* 진도 내용 */}
+              {todaySession.progress_content && (
+                <div className="px-4 py-3">
+                  <p className="text-xs text-gray-400 mb-0.5">오늘 진도</p>
+                  <p className="text-sm font-semibold text-gray-700">{todaySession.progress_content}</p>
+                </div>
+              )}
+              {/* 교재 과제 */}
+              {todaySession.hw_textbook_name && (
+                <div className="px-4 py-3 flex items-center gap-3">
+                  <span className="text-xl">📖</span>
+                  <div>
+                    <p className="text-xs text-gray-400">교재 과제</p>
+                    <p className="text-sm font-bold text-gray-800">{todaySession.hw_textbook_name}</p>
+                    {todaySession.hw_textbook_page && (
+                      <p className="text-xs text-gray-500 mt-0.5">{todaySession.hw_textbook_page}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* 학습지 과제 */}
+              {todaySession.hw_worksheet_range && (
+                <div className="px-4 py-3 flex items-center gap-3">
+                  <span className="text-xl">📝</span>
+                  <div>
+                    <p className="text-xs text-gray-400">학습지 과제</p>
+                    <p className="text-sm font-bold text-gray-800">{todaySession.hw_worksheet_range}</p>
+                  </div>
+                </div>
+              )}
+              {/* 데일리 테스트 결과 */}
+              {todaySession.daily_test_unit && (
+                <div className="px-4 py-3 flex items-center gap-3">
+                  <span className="text-xl">📊</span>
+                  <div>
+                    <p className="text-xs text-gray-400">데일리 테스트</p>
+                    <p className="text-sm font-bold text-gray-800">{todaySession.daily_test_unit}</p>
+                    {todaySession.daily_test_score != null && (
+                      <p className={cx('text-sm font-black mt-0.5',
+                        todaySession.daily_test_score >= 90 ? 'text-green-600' :
+                        todaySession.daily_test_score >= 70 ? 'text-blue-600' : 'text-red-500')}>
+                        {todaySession.daily_test_score}점
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 영상 과제 */}
         {hasVideoTask && (
           <div className={cx('rounded-2xl p-4 border-2',
@@ -292,7 +357,7 @@ export default function StudentDashboardPage() {
         )}
 
         {/* 과제 없음 */}
-        {!hasVideoTask && worksheets.length === 0 && textbooks.length === 0 && (
+        {!hasVideoTask && worksheets.length === 0 && textbooks.length === 0 && !todaySession?.hw_textbook_name && !todaySession?.hw_worksheet_range && (
           <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
             <p className="text-4xl mb-3">🎉</p>
             <p className="text-sm font-bold text-gray-600">오늘 과제가 없어요!</p>

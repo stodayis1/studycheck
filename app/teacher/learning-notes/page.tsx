@@ -504,8 +504,8 @@ export default function TeacherLearningNotesPage() {
                         {/* 수업일지 요약 */}
                         {note && session && (
                           <div className="px-4 py-2.5 flex flex-wrap gap-2">
-                            {session.today_textbook_name && (
-                              <span className="text-[10px] text-gray-500">📖 {session.today_textbook_name} · {session.today_chapter}</span>
+                            {(session.progress_content || session.today_textbook_name) && (
+                              <span className="text-[10px] text-gray-500">📖 {session.progress_content || session.today_textbook_name}</span>
                             )}
                             <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
                               note.attendance === '결석' ? 'bg-red-100 text-red-600' :
@@ -519,6 +519,27 @@ export default function TeacherLearningNotesPage() {
                             {note.worksheet_score != null && (
                               <span className={cx('text-[10px] font-bold', note.worksheet_score >= 85 ? 'text-green-600' : note.worksheet_score >= 70 ? 'text-blue-600' : 'text-red-500')}>
                                 과제성취도 {note.worksheet_score}점
+                              </span>
+                            )}
+                            {/* 영상 시청 시간 (선생님만 표시) */}
+                            {note.video_started_at && note.video_completed_at && (() => {
+                              const start = new Date(note.video_started_at)
+                              const end = new Date(note.video_completed_at)
+                              const diffMin = Math.round((end.getTime() - start.getTime()) / 60000)
+                              return (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                                  📹 영상 {diffMin}분 시청
+                                </span>
+                              )
+                            })()}
+                            {note.video_started_at && !note.video_completed_at && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-yellow-50 text-yellow-600 rounded-full">
+                                📹 영상 시청중
+                              </span>
+                            )}
+                            {session.video_url && !note.video_started_at && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full">
+                                📹 영상 미시청
                               </span>
                             )}
                             {note.memo && <span className="text-[10px] text-gray-400">📝 {note.memo}</span>}
