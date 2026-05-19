@@ -175,10 +175,15 @@ export default function TeacherAssignmentsPage() {
   }
 
   // 진행중인 레벨학습지
-  const activeWorksheets = worksheets.filter((w) =>
-    myStudentIds.has(w.student_id) && w.status !== 'passed' &&
-    (searchText === '' || getStudentName(w.student_id).includes(searchText))
-  )
+  const activeWorksheets = worksheets.filter((w) => {
+    const student = students.find((s) => s.id === w.student_id)
+    const groupMatch = gradeGroup === '전체' ? true :
+      gradeGroup === '초등' ? student?.grade.includes('초') :
+      gradeGroup === '중등' ? student?.grade.includes('중') :
+      student?.grade.includes('고')
+    return myStudentIds.has(w.student_id) && w.status !== 'passed' && !!groupMatch &&
+      (searchText === '' || getStudentName(w.student_id).includes(searchText))
+  })
 
   // 진행중인 교재과제
   const activeTextbooks = textbooks.filter((t) =>
@@ -276,18 +281,34 @@ export default function TeacherAssignmentsPage() {
   }
 
   async function handleTBAssign() {
-    if (!tbStudent || !tbConcept || !tbName) return
+    if (!tbStudent || !tbName) return
     setTbAssigning(true)
-    const conceptsPerDay = GRADE_COUNT[tbStudent.textbook_grade] ?? 2
-    const startIdx = tbConcepts.findIndex((c) => c.id === tbConcept!.id)
-    const selectedConcepts = tbConcepts.slice(startIdx, startIdx + conceptsPerDay)
-    for (const concept of selectedConcepts) {
+
+    const isMiddle = tbStudent.grade.includes('중') || tbStudent.grade.includes('고')
+
+    if (isMiddle) {
+      // 중등/고등: concept 없이 직접 배정
       await supabase.from('student_textbooks').insert({
-        student_id: tbStudent.id, concept_id: concept.id,
+        student_id: tbStudent.id,
+        concept_id: null,
         textbook_name: tbName, textbook_type: tbType,
         status: 'assigned', memo: tbMemo || null,
       })
+    } else {
+      // 초등: concept 기반 배정
+      if (!tbConcept) { setTbAssigning(false); return }
+      const conceptsPerDay = GRADE_COUNT[tbStudent.textbook_grade] ?? 2
+      const startIdx = tbConcepts.findIndex((c) => c.id === tbConcept!.id)
+      const selectedConcepts = tbConcepts.slice(startIdx, startIdx + conceptsPerDay)
+      for (const concept of selectedConcepts) {
+        await supabase.from('student_textbooks').insert({
+          student_id: tbStudent.id, concept_id: concept.id,
+          textbook_name: tbName, textbook_type: tbType,
+          status: 'assigned', memo: tbMemo || null,
+        })
+      }
     }
+
     setShowTBModal(false); setTbStudent(null); setTbConcept(null)
     setTbChapter(''); setTbMemo(''); setTbName('')
     setTbAssigning(false); fetchData()
@@ -925,7 +946,7 @@ export default function TeacherAssignmentsPage() {
                 placeholder="예: p.24~35"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
-            <button onClick={handleTBAssign} disabled={!tbStudent || !tbConcept || !tbName || tbAssigning}
+            <button onClick={handleTBAssign} disabled={!tbStudent || !tbName || (!tbConcept && !tbStudent?.grade.includes('중') && !tbStudent?.grade.includes('고')) || tbAssigning}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
               {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : '📖 병행교재 배정하기'}
             </button>
