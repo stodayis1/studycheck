@@ -41,5 +41,5 @@ export const PARENT_NAV_ITEMS: NavItem[] = [
   { href:'/parent/dashboard', label:'현황', icon:'◎', activeIcon:'●' },
   { href:'/parent/learning-notes', label:'배움노트', icon:'📓', activeIcon:'📓' },
   { href:'/parent/assignments', label:'과제', icon:'☐', activeIcon:'☑' },
-  { href:'/parent/reports', label:'리포트', icon:'◇', activeIcon:'◆' },
+  { href:'/parent/reports', label:'보고서', icon:'◇', activeIcon:'◆' },
 ]

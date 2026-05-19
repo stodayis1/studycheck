@@ -12,11 +12,11 @@ interface StudentInfo {
   school: string
   grade: string
   teacher_name: string
+  wise_step: string
 }
 
 interface Schedule {
   id: string
-  student_id: string
   day_of_week: string
   start_time: string
   periods: number
@@ -24,11 +24,15 @@ interface Schedule {
 
 interface ClassSession {
   id: string
-  student_id: string
   session_date: string
-  session_type: string
   today_textbook_name: string | null
-  today_chapter: string | null
+  progress_content: string | null
+  hw_textbook_name: string | null
+  hw_textbook_page: string | null
+  hw_worksheet_range: string | null
+  video_url: string | null
+  daily_test_unit: string | null
+  daily_test_score: number | null
 }
 
 interface LearningNote {
@@ -39,27 +43,39 @@ interface LearningNote {
   worksheet_score: number | null
   textbook_submitted: boolean
   workbook_done: boolean
-  memo: string | null
+  video_started_at: string | null
+  video_completed_at: string | null
 }
 
 interface StudentWorksheet {
   id: string
   grade_level: string
   unit: string
+  unit_name: string
   current_level: number
   status: string
+  worksheet_type: string
   score: number | null
+  assigned_at: string
 }
 
 interface StudentTextbook {
   id: string
-  concept_id: string
   textbook_name: string
   textbook_type: string
   status: string
 }
 
 const DAYS = ['일','월','화','수','목','금','토']
+
+function ProgressBar({ rate, color, height = 'h-2' }: { rate: number; color: string; height?: string }) {
+  return (
+    <div className={cx(height, 'bg-gray-100 rounded-full overflow-hidden')}>
+      <div className={cx('h-full rounded-full transition-all duration-700', color)}
+        style={{ width: `${Math.min(100, Math.max(0, rate))}%` }} />
+    </div>
+  )
+}
 
 export default function ParentDashboardPage() {
   const router = useRouter()
@@ -70,6 +86,7 @@ export default function ParentDashboardPage() {
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week')
 
   useEffect(() => {
     async function init() {
@@ -116,83 +133,79 @@ export default function ParentDashboardPage() {
   const todayStr = today.toISOString().split('T')[0]
   const todayDay = DAYS[today.getDay()]
 
+  // 기간 설정
+  const periodStart = new Date(today)
+  if (viewMode === 'week') {
+    periodStart.setDate(today.getDate() - today.getDay() + 1)
+  } else {
+    periodStart.setDate(1)
+  }
+  const periodStartStr = periodStart.toISOString().split('T')[0]
+
+  // 기간 내 수업
+  const periodSessions = sessions.filter(s => s.session_date >= periodStartStr && s.session_date <= todayStr)
+  const periodNotes = notes.filter(n => periodSessions.some(s => s.id === n.session_id))
+
+  // 통계
+  const totalSessions = periodNotes.length
+  const attendRate = totalSessions > 0
+    ? Math.round(periodNotes.filter(n => n.attendance === '정시').length / totalSessions * 100) : 0
+  const wsSubmitRate = totalSessions > 0
+    ? Math.round(periodNotes.filter(n => n.worksheet_submitted).length / totalSessions * 100) : 0
+  const tbSubmitRate = totalSessions > 0
+    ? Math.round(periodNotes.filter(n => n.textbook_submitted).length / totalSessions * 100) : 0
+  const videoSessions = periodSessions.filter(s => s.video_url)
+  const videoCompleteRate = videoSessions.length > 0
+    ? Math.round(notes.filter(n => videoSessions.some(s => s.id === n.session_id) && n.video_completed_at).length / videoSessions.length * 100) : 0
+
+  // 학습지 현황
+  const activeWS = worksheets.filter(w => w.status !== 'passed')
+  const recentWS = worksheets.slice(0, 5)
+
   // 오늘/다음 수업
-  const todaySchedule = schedules.find((s) => s.day_of_week === todayDay)
-  const todaySession = sessions.find((s) => s.session_date === todayStr)
+  const todaySchedule = schedules.find(s => s.day_of_week === todayDay)
+  const todaySession = sessions.find(s => s.session_date === todayStr)
   const nextSchedule = (() => {
     const dayOrder = ['월','화','수','목','금','토','일']
     const todayIdx = dayOrder.indexOf(todayDay)
     for (let i = 1; i <= 7; i++) {
       const nextDay = dayOrder[(todayIdx + i) % 7]
-      const sc = schedules.find((s) => s.day_of_week === nextDay)
-      if (sc) {
-        const nextDate = new Date(today)
-        nextDate.setDate(today.getDate() + i)
-        return { schedule: sc, day: nextDay }
-      }
+      const sc = schedules.find(s => s.day_of_week === nextDay)
+      if (sc) return { schedule: sc, day: nextDay }
     }
     return null
   })()
 
-  // 성취도 통계 (배움노트 기반)
-  const allNotes = notes
-  const totalSessions = allNotes.length
-  const wsSubmitRate = totalSessions > 0
-    ? Math.round(allNotes.filter((n) => n.worksheet_submitted).length / totalSessions * 100) : 0
-  const tbSubmitRate = totalSessions > 0
-    ? Math.round(allNotes.filter((n) => n.textbook_submitted).length / totalSessions * 100) : 0
-  const attendRate = totalSessions > 0
-    ? Math.round(allNotes.filter((n) => n.attendance === '정시').length / totalSessions * 100) : 0
-  const scoredNotes = allNotes.filter((n) => n.worksheet_score != null)
-  const avgScore = scoredNotes.length > 0
-    ? Math.round(scoredNotes.reduce((sum, n) => sum + (n.worksheet_score ?? 0), 0) / scoredNotes.length) : null
-
-  // 레벨학습지 현황
-  const activeWS = worksheets.filter((w) => w.status !== 'passed')
-  const completedWS = worksheets.filter((w) => w.status === 'passed')
-  const wsRate = worksheets.length > 0
-    ? Math.round(completedWS.length / worksheets.length * 100) : 0
-
-  // 병행교재 현황 (타입별)
-  const activeTBByType: Record<string, StudentTextbook[]> = {}
-  textbooks.filter((t) => t.status !== 'checked').forEach((t) => {
-    if (!activeTBByType[t.textbook_type]) activeTBByType[t.textbook_type] = []
-    activeTBByType[t.textbook_type].push(t)
+  // 병행교재
+  const activeTBByType: Record<string, StudentTextbook> = {}
+  textbooks.filter(t => t.status === 'assigned').forEach(t => {
+    if (!activeTBByType[t.textbook_type]) activeTBByType[t.textbook_type] = t
   })
-
-  // 최근 수업 기록 (최근 3회)
-  const recentSessions = sessions.slice(0, 3)
-
-  function getNote(sessionId: string) {
-    return notes.find((n) => n.session_id === sessionId)
-  }
-
-  function ProgressBar({ rate, color }: { rate: number; color: string }) {
-    return (
-      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={cx('h-full rounded-full transition-all duration-700', color)}
-          style={{ width: `${rate}%` }} />
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title={`${student.name} 학생`} subtitle="학부모 화면"
+      <Header title={`${student.name} 학생`} subtitle="학습 현황"
         action={<button onClick={signOut} className="text-xs text-gray-400 hover:text-gray-600">로그아웃</button>} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 
-        {/* 프로필 */}
+        {/* 프로필 카드 */}
         <div className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 rounded-2xl p-5 text-white">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
               <span className="text-2xl font-black">{student.name[0]}</span>
             </div>
-            <div>
+            <div className="flex-1">
               <p className="font-black text-lg">{student.name}</p>
               <p className="text-blue-100 text-sm">{student.school} · {student.grade}</p>
-              {student.teacher_name && <p className="text-blue-200 text-xs mt-0.5">담당: {student.teacher_name} 선생님</p>}
+              <div className="flex items-center gap-2 mt-1">
+                {student.teacher_name && <span className="text-blue-200 text-xs">{student.teacher_name} 선생님</span>}
+                {student.wise_step && (
+                  <span className="text-[10px] font-black px-2 py-0.5 bg-white/20 rounded-full">
+                    {student.wise_step}단계
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -205,8 +218,8 @@ export default function ParentDashboardPage() {
               <>
                 <p className="text-lg font-black">{todaySchedule.start_time.slice(0,5)}</p>
                 <p className="text-xs text-blue-200 mt-0.5">{todaySchedule.periods}교시</p>
-                {todaySession?.today_textbook_name && (
-                  <p className="text-xs text-blue-100 mt-1 truncate">📖 {todaySession.today_textbook_name}</p>
+                {todaySession?.progress_content && (
+                  <p className="text-xs text-blue-100 mt-1 truncate">📖 {todaySession.progress_content}</p>
                 )}
               </>
             ) : <p className="text-sm font-bold text-gray-400">수업 없음</p>}
@@ -217,86 +230,111 @@ export default function ParentDashboardPage() {
               <>
                 <p className="text-sm font-black text-gray-800">{nextSchedule.day}요일</p>
                 <p className="text-lg font-black text-blue-600">{nextSchedule.schedule.start_time.slice(0,5)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{nextSchedule.schedule.periods}교시</p>
               </>
             ) : <p className="text-sm font-bold text-gray-400">-</p>}
           </div>
         </div>
 
-        {/* 핵심 지표 막대형 카드 */}
+        {/* 주간/월간 토글 */}
+        <div className="flex bg-gray-100 rounded-xl p-1">
+          {[['week','이번 주'],['month','이번 달']].map(([mode, label]) => (
+            <button key={mode} onClick={() => setViewMode(mode as typeof viewMode)}
+              className={cx('flex-1 py-2 rounded-lg text-sm font-bold transition-all',
+                viewMode === mode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500')}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 핵심 지표 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-          <h3 className="text-sm font-bold text-gray-800">📊 학습 현황</h3>
+          <h3 className="text-sm font-bold text-gray-800">
+            📊 {viewMode === 'week' ? '이번 주' : '이번 달'} 학습 현황
+            <span className="text-xs font-normal text-gray-400 ml-2">수업 {totalSessions}회 기준</span>
+          </h3>
 
-          {/* 정시 출석률 */}
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="font-semibold text-gray-600">✅ 정시 출석률</span>
-              <span className={cx('font-black', attendRate >= 90 ? 'text-green-600' : attendRate >= 70 ? 'text-yellow-600' : 'text-red-500')}>
-                {totalSessions > 0 ? `${attendRate}%` : '-'}
-              </span>
-            </div>
-            <ProgressBar rate={attendRate} color={attendRate >= 90 ? 'bg-green-500' : attendRate >= 70 ? 'bg-yellow-400' : 'bg-red-400'} />
-          </div>
-
-          {/* 과제 달성률 */}
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="font-semibold text-gray-600">📝 과제 달성률</span>
-              <span className={cx('font-black', wsSubmitRate >= 80 ? 'text-green-600' : wsSubmitRate >= 60 ? 'text-yellow-600' : 'text-red-500')}>
-                {totalSessions > 0 ? `${wsSubmitRate}%` : '-'}
-              </span>
-            </div>
-            <ProgressBar rate={wsSubmitRate} color={wsSubmitRate >= 80 ? 'bg-green-500' : wsSubmitRate >= 60 ? 'bg-yellow-400' : 'bg-red-400'} />
-          </div>
-
-          {/* 교재 제출률 */}
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="font-semibold text-gray-600">📖 교재 제출률</span>
-              <span className={cx('font-black', tbSubmitRate >= 80 ? 'text-green-600' : tbSubmitRate >= 60 ? 'text-yellow-600' : 'text-red-500')}>
-                {totalSessions > 0 ? `${tbSubmitRate}%` : '-'}
-              </span>
-            </div>
-            <ProgressBar rate={tbSubmitRate} color={tbSubmitRate >= 80 ? 'bg-blue-500' : tbSubmitRate >= 60 ? 'bg-yellow-400' : 'bg-red-400'} />
-          </div>
-
-          {/* 레벨학습지 완료율 */}
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="font-semibold text-gray-600">🎯 레벨학습지 완료율</span>
-              <span className={cx('font-black', wsRate >= 70 ? 'text-green-600' : 'text-blue-600')}>
-                {worksheets.length > 0 ? `${wsRate}% (${completedWS.length}/${worksheets.length})` : '-'}
-              </span>
-            </div>
-            <ProgressBar rate={wsRate} color="bg-purple-500" />
-          </div>
-
-          {/* 평균 과제 성취도 */}
-          {avgScore != null && (
-            <div className="flex items-center justify-between px-3 py-2.5 bg-blue-50 rounded-xl">
-              <span className="text-xs font-semibold text-gray-600">🏆 평균 과제 성취도</span>
-              <span className={cx('text-lg font-black',
-                avgScore >= 85 ? 'text-green-600' : avgScore >= 75 ? 'text-blue-600' : 'text-orange-500')}>
-                {avgScore}점
-              </span>
+          {totalSessions === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-2">이 기간 수업 기록이 없어요</p>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { label: '✅ 정시 출석률', rate: attendRate, color: attendRate >= 90 ? 'bg-green-500' : attendRate >= 70 ? 'bg-yellow-400' : 'bg-red-400' },
+                { label: '📝 과제 달성률', rate: wsSubmitRate, color: wsSubmitRate >= 80 ? 'bg-green-500' : wsSubmitRate >= 60 ? 'bg-yellow-400' : 'bg-red-400' },
+                { label: '📖 교재 제출률', rate: tbSubmitRate, color: tbSubmitRate >= 80 ? 'bg-blue-500' : tbSubmitRate >= 60 ? 'bg-yellow-400' : 'bg-red-400' },
+                ...(videoSessions.length > 0 ? [{ label: '📹 영상 완료율', rate: videoCompleteRate, color: videoCompleteRate >= 80 ? 'bg-purple-500' : 'bg-orange-400' }] : []),
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-gray-600">{item.label}</span>
+                    <span className={cx('font-black',
+                      item.rate >= 80 ? 'text-green-600' : item.rate >= 60 ? 'text-yellow-600' : 'text-red-500')}>
+                      {item.rate}%
+                    </span>
+                  </div>
+                  <ProgressBar rate={item.rate} color={item.color} height="h-2" />
+                </div>
+              ))}
             </div>
           )}
         </div>
+
+        {/* 레벨학습지 현황 */}
+        {recentWS.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">📝 레벨학습지 현황</h3>
+              <div className="flex gap-2 text-xs text-gray-400">
+                <span>진행중 {activeWS.length}개</span>
+                <span>·</span>
+                <span>완료 {worksheets.filter(w => w.status === 'passed').length}개</span>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {recentWS.map((w) => (
+                <div key={w.id} className="px-4 py-2.5 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-gray-800 truncate">
+                      {w.grade_level} {w.unit}
+                      {w.unit_name && <span className="font-normal text-gray-400"> · {w.unit_name}</span>}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {w.worksheet_type === 'similar' ? '오답유사 · ' : ''}{w.current_level}레벨
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {w.score != null ? (
+                      <p className={cx('text-sm font-black',
+                        w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
+                        {w.score}점
+                      </p>
+                    ) : (
+                      <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                        w.status === 'passed' ? 'bg-green-100 text-green-600' :
+                        w.status === 'submitted' ? 'bg-orange-100 text-orange-500' :
+                        'bg-blue-100 text-blue-600')}>
+                        {w.status === 'passed' ? '완료' : w.status === 'submitted' ? '채점대기' : '진행중'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 병행교재 현황 */}
         {Object.keys(activeTBByType).length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <h3 className="text-sm font-bold text-gray-800 mb-3">📚 병행교재 현황</h3>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(activeTBByType).map(([type, tbs]) => (
+              {Object.entries(activeTBByType).map(([type, tb]) => (
                 <div key={type} className={cx('px-3 py-2 rounded-xl border text-xs',
                   type === '개념서' ? 'bg-blue-50 border-blue-200' :
                   type === '유형서' ? 'bg-green-50 border-green-200' :
                   type === '심화서' ? 'bg-orange-50 border-orange-200' :
                   'bg-purple-50 border-purple-200')}>
                   <p className="font-bold text-gray-700">{type}</p>
-                  <p className="text-gray-500 mt-0.5">{tbs[0]?.textbook_name}</p>
-                  <p className="text-gray-400 text-[10px] mt-0.5">{tbs.length}개 진행중</p>
+                  <p className="text-gray-500 mt-0.5 text-[11px]">{tb.textbook_name}</p>
                 </div>
               ))}
             </div>
@@ -308,43 +346,48 @@ export default function ParentDashboardPage() {
           <div className="px-4 py-3 border-b border-gray-50">
             <h3 className="text-sm font-bold text-gray-800">📓 최근 수업 기록</h3>
           </div>
-          {recentSessions.length === 0 ? (
+          {sessions.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-4">수업 기록이 없어요</p>
           ) : (
             <div className="divide-y divide-gray-50">
-              {recentSessions.map((session) => {
-                const note = getNote(session.id)
+              {sessions.slice(0, 4).map((session) => {
+                const note = notes.find(n => n.session_id === session.id)
                 const isToday = session.session_date === todayStr
                 return (
                   <div key={session.id} className="px-4 py-3">
                     <div className="flex items-center gap-2 mb-1.5">
                       <p className="text-xs font-bold text-gray-700">{session.session_date}</p>
                       {isToday && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">오늘</span>}
-                      {note ? (
+                      {note && (
                         <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-auto',
                           note.attendance === '결석' ? 'bg-red-100 text-red-600' :
                           note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
                           'bg-green-100 text-green-600')}>
                           {note.attendance}
                         </span>
-                      ) : <span className="text-[10px] text-gray-400 ml-auto">미기록</span>}
+                      )}
                     </div>
-                    {session.today_textbook_name && (
-                      <p className="text-xs text-gray-500 mb-1.5">
-                        📖 {session.today_textbook_name}{session.today_chapter && ` · ${session.today_chapter}`}
-                      </p>
+                    {session.progress_content && (
+                      <p className="text-xs text-gray-500 mb-1">📖 {session.progress_content}</p>
                     )}
                     {note && (
                       <div className="flex flex-wrap gap-1.5">
                         <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-lg',
                           note.worksheet_submitted ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-500')}>
-                          과제달성률 {note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
+                          과제달성 {note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
                         </span>
                         {note.worksheet_score != null && (
                           <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-lg',
                             note.worksheet_score >= 85 ? 'bg-green-50 text-green-700' :
                             note.worksheet_score >= 70 ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-500')}>
-                            과제성취도 {note.worksheet_score}점
+                            성취도 {note.worksheet_score}%
+                          </span>
+                        )}
+                        {session.daily_test_score != null && (
+                          <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-lg',
+                            session.daily_test_score >= 90 ? 'bg-green-50 text-green-700' :
+                            session.daily_test_score >= 70 ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-500')}>
+                            테스트 {session.daily_test_score}점
                           </span>
                         )}
                       </div>
@@ -355,6 +398,7 @@ export default function ParentDashboardPage() {
             </div>
           )}
         </div>
+
       </div>
     </div>
   )
