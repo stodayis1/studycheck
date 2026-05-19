@@ -115,7 +115,8 @@ export default function TeacherAssignmentsPage() {
   const [mwSemester, setMwSemester] = useState(1)
   const [mwLargeUnit, setMwLargeUnit] = useState('')
   const [mwMediumUnit, setMwMediumUnit] = useState('')
-  const [mwLesson, setMwLesson] = useState<MiddleWorksheet | null>(null)
+  const [mwSelectedLessons, setMwSelectedLessons] = useState<MiddleWorksheet[]>([])
+  const [mwRangeStart, setMwRangeStart] = useState<MiddleWorksheet | null>(null)
   const [mwLevel, setMwLevel] = useState(2.5)
 
   // 점수 입력 모달
@@ -214,18 +215,27 @@ export default function TeacherAssignmentsPage() {
   }
 
   async function handleMWAssign() {
-    if (!wsStudent || !mwLesson) return
+    if (!wsStudent || mwSelectedLessons.length === 0) return
     setWsAssigning(true)
+    const firstLesson = mwSelectedLessons[0]
+    const lastLesson = mwSelectedLessons[mwSelectedLessons.length - 1]
+    const unitName = mwSelectedLessons.length === 1
+      ? firstLesson.lesson_name
+      : `${firstLesson.lesson_no}차시~${lastLesson.lesson_no}차시`
+    const matholicNos = [...new Set(mwSelectedLessons.map((l) => l.matholic_no).filter(Boolean))].join(', ')
+
     await supabase.from('student_worksheets').insert({
       student_id: wsStudent.id, subject: '수학',
       grade_level: wsStudent.grade,
-      unit: mwLesson.medium_unit || mwLesson.large_unit,
-      unit_name: mwLesson.lesson_name,
+      unit: firstLesson.medium_unit || firstLesson.large_unit,
+      unit_name: unitName,
       current_level: mwLevel,
       status: 'assigned', worksheet_type: 'main',
-      memo: mwLesson.matholic_no ? `매쓰홀릭 ${mwLesson.matholic_no}` : null,
+      memo: matholicNos ? `매쓰홀릭 ${matholicNos}` : null,
     })
-    setShowWSModal(false); setWsStudent(null); setMwLesson(null); setMwLargeUnit(''); setMwMediumUnit('')
+    setShowWSModal(false); setWsStudent(null)
+    setMwSelectedLessons([]); setMwRangeStart(null)
+    setMwLargeUnit(''); setMwMediumUnit('')
     setWsAssigning(false); fetchData()
   }
 
@@ -595,14 +605,15 @@ export default function TeacherAssignmentsPage() {
               {wsStudent ? (
                 <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border-2 border-blue-300 rounded-xl">
                   <p className="text-sm font-bold text-blue-800 flex-1">{wsStudent.name} · {wsStudent.grade}</p>
-                  <button onClick={() => { setWsStudent(null); setMwLesson(null); setMwLargeUnit(''); setMwMediumUnit('') }} className="text-blue-400">✕</button>
+                  <button onClick={() => { setWsStudent(null); setMwSelectedLessons([]); setMwRangeStart(null); setMwLargeUnit(''); setMwMediumUnit('') }} className="text-blue-400">✕</button>
                 </div>
               ) : (
                 <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
                   {filteredStudents.map((s) => (
                     <button key={s.id} onClick={() => {
                       setWsStudent(s)
-                      setMwLesson(null); setMwLargeUnit(''); setMwMediumUnit('')
+                      setMwSelectedLessons([]); setMwRangeStart(null); setMwLargeUnit(''); setMwMediumUnit('')
+                      setMwSelectedLessons([]); setMwRangeStart(null)
                       setMwSemester(1)
                     }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0">
@@ -625,7 +636,7 @@ export default function TeacherAssignmentsPage() {
                   <label className="block text-xs font-bold text-gray-700 mb-2">학기</label>
                   <div className="flex gap-2">
                     {[1, 2].map((s) => (
-                      <button key={s} onClick={() => { setMwSemester(s); setMwLargeUnit(''); setMwMediumUnit(''); setMwLesson(null) }}
+                      <button key={s} onClick={() => { setMwSemester(s); setMwLargeUnit(''); setMwMediumUnit(''); setMwSelectedLessons([]); setMwRangeStart(null) }}
                         className={cx('flex-1 py-2 rounded-xl text-sm font-bold border transition-all',
                           mwSemester === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
                         {s}학기
@@ -643,7 +654,7 @@ export default function TeacherAssignmentsPage() {
                       <label className="block text-xs font-bold text-gray-700 mb-2">대단원</label>
                       <div className="flex flex-col gap-1.5">
                         {largeUnits.map((u) => (
-                          <button key={u} onClick={() => { setMwLargeUnit(u); setMwMediumUnit(''); setMwLesson(null) }}
+                          <button key={u} onClick={() => { setMwLargeUnit(u); setMwMediumUnit(''); setMwSelectedLessons([]); setMwRangeStart(null) }}
                             className={cx('px-3 py-2 rounded-xl text-xs font-semibold border text-left transition-all',
                               mwLargeUnit === u ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
                             {u}
@@ -666,7 +677,7 @@ export default function TeacherAssignmentsPage() {
                       <label className="block text-xs font-bold text-gray-700 mb-2">중단원</label>
                       <div className="flex flex-wrap gap-1.5">
                         {mediumUnits.map((u) => (
-                          <button key={u} onClick={() => { setMwMediumUnit(u); setMwLesson(null) }}
+                          <button key={u} onClick={() => { setMwMediumUnit(u); setMwSelectedLessons([]); setMwRangeStart(null) }}
                             className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
                               mwMediumUnit === u ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200')}>
                             {u}
@@ -677,36 +688,68 @@ export default function TeacherAssignmentsPage() {
                   )
                 })()}
 
-                {/* 차시 선택 */}
+                {/* 차시 범위 선택 */}
                 {mwMediumUnit && (() => {
                   const lessons = middleWorksheets.filter((m) =>
                     m.grade === wsStudent.grade && m.semester === mwSemester &&
                     m.large_unit === mwLargeUnit && m.medium_unit === mwMediumUnit
                   )
+
+                  function handleLessonClick(lesson: MiddleWorksheet, e: React.MouseEvent) {
+                    if (e.shiftKey && mwRangeStart) {
+                      // Shift 클릭: 범위 선택
+                      const startIdx = lessons.findIndex((l) => l.id === mwRangeStart.id)
+                      const endIdx = lessons.findIndex((l) => l.id === lesson.id)
+                      const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx]
+                      setMwSelectedLessons(lessons.slice(from, to + 1))
+                    } else {
+                      // 일반 클릭: 단일 선택 or 시작점 설정
+                      setMwRangeStart(lesson)
+                      setMwSelectedLessons([lesson])
+                    }
+                  }
+
                   return (
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2">차시 선택</label>
-                      <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl">
-                        {lessons.map((lesson) => (
-                          <button key={lesson.id} onClick={() => setMwLesson(lesson)}
-                            className={cx('w-full text-left px-3 py-2.5 border-b border-gray-50 last:border-0 flex items-center gap-3 transition-all',
-                              mwLesson?.id === lesson.id ? 'bg-blue-50' : 'hover:bg-gray-50')}>
-                            <span className={cx('w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0',
-                              mwLesson?.id === lesson.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500')}>
-                              {lesson.lesson_no}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className={cx('text-xs font-semibold truncate',
-                                mwLesson?.id === lesson.id ? 'text-blue-700' : 'text-gray-700')}>
-                                {lesson.lesson_name}
-                              </p>
-                              {lesson.matholic_no && (
-                                <p className="text-[10px] text-gray-400">매쓰홀릭 {lesson.matholic_no}</p>
-                              )}
-                            </div>
-                            {mwLesson?.id === lesson.id && <span className="text-blue-600 text-sm">✓</span>}
-                          </button>
-                        ))}
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-gray-700">차시 선택</label>
+                        <span className="text-[10px] text-gray-400">Shift+클릭으로 범위 선택</span>
+                      </div>
+                      {mwSelectedLessons.length > 0 && (
+                        <div className="mb-2 px-3 py-2 bg-blue-50 rounded-xl text-xs text-blue-700 font-semibold">
+                          {mwSelectedLessons.length === 1
+                            ? `${mwSelectedLessons[0].lesson_no}차시 선택`
+                            : `${mwSelectedLessons[0].lesson_no}차시 ~ ${mwSelectedLessons[mwSelectedLessons.length-1].lesson_no}차시 (${mwSelectedLessons.length}개) 선택`}
+                        </div>
+                      )}
+                      <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl select-none">
+                        {lessons.map((lesson) => {
+                          const isSelected = mwSelectedLessons.some((l) => l.id === lesson.id)
+                          const isStart = mwRangeStart?.id === lesson.id
+                          return (
+                            <button key={lesson.id}
+                              onClick={(e) => handleLessonClick(lesson, e)}
+                              className={cx('w-full text-left px-3 py-2.5 border-b border-gray-50 last:border-0 flex items-center gap-3 transition-all',
+                                isSelected ? 'bg-blue-100' : 'hover:bg-gray-50')}>
+                              <span className={cx('w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0',
+                                isStart ? 'bg-blue-600 text-white' :
+                                isSelected ? 'bg-blue-400 text-white' :
+                                'bg-gray-100 text-gray-500')}>
+                                {lesson.lesson_no}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className={cx('text-xs font-semibold truncate',
+                                  isSelected ? 'text-blue-700' : 'text-gray-700')}>
+                                  {lesson.lesson_name}
+                                </p>
+                                {lesson.matholic_no && (
+                                  <p className="text-[10px] text-gray-400">매쓰홀릭 {lesson.matholic_no}</p>
+                                )}
+                              </div>
+                              {isSelected && <span className="text-blue-500 text-sm shrink-0">✓</span>}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   )
@@ -725,19 +768,29 @@ export default function TeacherAssignmentsPage() {
                 </div>
 
                 {/* 선택 요약 */}
-                {mwLesson && (
+                {mwSelectedLessons.length > 0 && (
                   <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
                     <p className="font-bold mb-1">✓ 배정 예정</p>
                     <p>{wsStudent.name} · {wsStudent.grade} {mwSemester}학기</p>
-                    <p className="mt-0.5">{mwLesson.medium_unit} · {mwLesson.lesson_no}차시 {mwLesson.lesson_name}</p>
-                    {mwLesson.matholic_no && <p className="text-blue-500">매쓰홀릭 {mwLesson.matholic_no}</p>}
+                    <p className="mt-0.5">
+                      {mwSelectedLessons[0].medium_unit} ·{' '}
+                      {mwSelectedLessons.length === 1
+                        ? `${mwSelectedLessons[0].lesson_no}차시 ${mwSelectedLessons[0].lesson_name}`
+                        : `${mwSelectedLessons[0].lesson_no}~${mwSelectedLessons[mwSelectedLessons.length-1].lesson_no}차시 (${mwSelectedLessons.length}개)`}
+                    </p>
+                    {(() => {
+                      const nos = [...new Set(mwSelectedLessons.map((l) => l.matholic_no).filter(Boolean))]
+                      return nos.length > 0 && <p className="text-blue-500">매쓰홀릭 {nos.join(', ')}</p>
+                    })()}
                     <p className="font-bold mt-0.5">{mwLevel}레벨</p>
                   </div>
                 )}
 
-                <button onClick={handleMWAssign} disabled={!wsStudent || !mwLesson || wsAssigning}
+                <button onClick={handleMWAssign} disabled={!wsStudent || mwSelectedLessons.length === 0 || wsAssigning}
                   className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-                  {wsAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : '📝 레벨학습지 배정하기'}
+                  {wsAssigning
+                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</>
+                    : `📝 레벨학습지 배정하기${mwSelectedLessons.length > 1 ? ` (${mwSelectedLessons.length}차시)` : ''}`}
                 </button>
               </>
             ) : (
