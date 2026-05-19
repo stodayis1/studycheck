@@ -31,6 +31,12 @@ interface ClassSession {
   today_textbook_name: string | null
   today_chapter: string | null
   video_url: string | null
+  progress_content: string | null
+  daily_test_unit: string | null
+  daily_test_score: number | null
+  hw_textbook_name: string | null
+  hw_textbook_page: string | null
+  hw_worksheet_range: string | null
 }
 
 interface LearningNote {
@@ -97,6 +103,7 @@ export default function TeacherLearningNotesPage() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'today' | 'schedule'>('today')
+  const [noteTab, setNoteTab] = useState<'basic' | 'daily' | 'hw'>('basic')
 
   // 수업일지 입력 모달
   const [showNoteModal, setShowNoteModal] = useState(false)
@@ -104,16 +111,22 @@ export default function TeacherLearningNotesPage() {
   const [noteSession, setNoteSession] = useState<ClassSession | null>(null)
 
   // 수업일지 필드
-  const [noteTextbook, setNoteTextbook] = useState('')
-  const [noteChapter, setNoteChapter] = useState('')
+  const [noteProgress, setNoteProgress] = useState('')        // 진도 내용 (통합)
   const [noteWISE, setNoteWISE] = useState('')
   const [noteAttendance, setNoteAttendance] = useState('정시')
-  const [noteAchievement, setNoteAchievement] = useState(100)
-  const [noteScore, setNoteScore] = useState('')
+  const [noteAchievement, setNoteAchievement] = useState(100) // 과제 달성률
+  const [noteScorePct, setNoteScorePct] = useState(100)       // 과제 성취도 %
   const [noteExtraClass, setNoteExtraClass] = useState(false)
   const [noteExtraTime, setNoteExtraTime] = useState('')
   const [noteMemo, setNoteMemo] = useState('')
-  const [noteVideoUrl, setNoteVideoUrl] = useState('')
+  // 데일리 테스트
+  const [dailyTestUnit, setDailyTestUnit] = useState('')
+  const [dailyTestScore, setDailyTestScore] = useState('')
+  // 과제 배부
+  const [hwTextbookName, setHwTextbookName] = useState('')
+  const [hwTextbookPage, setHwTextbookPage] = useState('')
+  const [hwWorksheetRange, setHwWorksheetRange] = useState('')
+  const [hwVideoUrl, setHwVideoUrl] = useState('')
   const [savingNote, setSavingNote] = useState(false)
 
   // 피드백 모달
@@ -184,18 +197,28 @@ export default function TeacherLearningNotesPage() {
   function openNoteModal(student: Student) {
     const session = getTodaySession(student.id)
     const note = getTodayNote(student.id)
+    // 이전 수업 (오늘 제외 최근 1개)
+    const prevSession = sessions
+      .filter((s) => s.student_id === student.id && s.session_date < todayStr)
+      .sort((a, b) => b.session_date.localeCompare(a.session_date))[0] ?? null
+
     setNoteStudent(student)
     setNoteSession(session ?? null)
-    setNoteTextbook(session?.today_textbook_name ?? '')
-    setNoteChapter(session?.today_chapter ?? '')
-    setNoteVideoUrl(session?.video_url ?? '')
+    setNoteTab('basic')
+    setNoteProgress(session?.progress_content ?? session?.today_textbook_name ?? '')
     setNoteWISE(student.wise_step || 'W')
     setNoteAttendance(note?.attendance ?? '정시')
     setNoteAchievement(100)
-    setNoteScore(note?.worksheet_score?.toString() ?? '')
+    setNoteScorePct(100)
     setNoteExtraClass(false)
     setNoteExtraTime('')
     setNoteMemo(note?.memo ?? '')
+    setDailyTestUnit(session?.daily_test_unit ?? '')
+    setDailyTestScore(session?.daily_test_score?.toString() ?? '')
+    setHwTextbookName(session?.hw_textbook_name ?? '')
+    setHwTextbookPage(session?.hw_textbook_page ?? '')
+    setHwWorksheetRange(session?.hw_worksheet_range ?? '')
+    setHwVideoUrl(session?.video_url ?? '')
     setShowNoteModal(true)
   }
 
@@ -203,40 +226,50 @@ export default function TeacherLearningNotesPage() {
     if (!noteStudent) return
     setSavingNote(true)
 
-    // session 없으면 생성
+    // session 없으면 생성, 있으면 업데이트
     let sessionId = noteSession?.id
+    const sessionData = {
+      student_id: noteStudent.id,
+      session_date: todayStr,
+      session_type: '정규',
+      today_textbook_name: noteProgress || null,
+      today_chapter: null,
+      progress_content: noteProgress || null,
+      daily_test_unit: dailyTestUnit || null,
+      daily_test_score: dailyTestScore ? parseInt(dailyTestScore) : null,
+      hw_textbook_name: hwTextbookName || null,
+      hw_textbook_page: hwTextbookPage || null,
+      hw_worksheet_range: hwWorksheetRange || null,
+      video_url: hwVideoUrl || null,
+      created_by: currentUser?.name,
+    }
+
     if (!sessionId) {
-      const { data: newSession } = await supabase.from('class_sessions').insert({
-        student_id: noteStudent.id,
-        session_date: todayStr,
-        session_type: '정규',
-        today_textbook_name: noteTextbook || null,
-        today_chapter: noteChapter || null,
-        video_url: noteVideoUrl || null,
-        created_by: currentUser?.name,
-      }).select().single()
+      const { data: newSession } = await supabase.from('class_sessions')
+        .insert(sessionData).select().single()
       sessionId = newSession?.id
     } else {
-      // session 업데이트
-      await supabase.from('class_sessions').update({
-        today_textbook_name: noteTextbook || null,
-        today_chapter: noteChapter || null,
-        video_url: noteVideoUrl || null,
-      }).eq('id', sessionId)
+      await supabase.from('class_sessions').update(sessionData).eq('id', sessionId)
     }
 
     if (!sessionId) { setSavingNote(false); return }
 
     const existingNote = notes.find((n) => n.session_id === sessionId)
+    const memoText = [
+      noteWISE ? `[${noteWISE}단계]` : '',
+      noteExtraClass ? `추가수업 ${noteExtraTime}` : '',
+      noteMemo,
+    ].filter(Boolean).join(' ') || null
+
     const noteData = {
       student_id: noteStudent.id,
       session_id: sessionId,
       attendance: noteAttendance,
       worksheet_submitted: noteAchievement > 0,
-      worksheet_score: noteScore ? parseInt(noteScore) : null,
+      worksheet_score: noteScorePct,
       textbook_submitted: noteAchievement > 0,
       workbook_done: noteAchievement === 100,
-      memo: [noteWISE ? `[${noteWISE}단계]` : '', noteExtraClass ? `추가수업 ${noteExtraTime}` : '', noteMemo].filter(Boolean).join(' ') || null,
+      memo: memoText,
     }
 
     if (existingNote) {
@@ -577,14 +610,17 @@ export default function TeacherLearningNotesPage() {
       {showNoteModal && noteStudent && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setShowNoteModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+
+            {/* 헤더 */}
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-gray-900">📓 수업일지 입력</h3>
               <button onClick={() => setShowNoteModal(false)} className="text-gray-400">✕</button>
             </div>
 
-            <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center gap-3">
+            {/* 학생 정보 */}
+            <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center gap-3 mb-4">
               <div className="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center text-sm font-bold text-blue-700">
                 {noteStudent.name[0]}
               </div>
@@ -594,125 +630,227 @@ export default function TeacherLearningNotesPage() {
               </div>
             </div>
 
-            {/* 교재 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">📖 오늘 진도 교재</label>
-              <input type="text" value={noteTextbook} onChange={(e) => setNoteTextbook(e.target.value)}
-                placeholder="예: 개념+유형라이트"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {/* 이전 수업 요약 */}
+            {(() => {
+              const prevSession = sessions
+                .filter((s) => s.student_id === noteStudent.id && s.session_date < todayStr)
+                .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
+              if (!prevSession) return null
+              return (
+                <div className="bg-gray-50 rounded-xl px-4 py-2.5 mb-4 border border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 mb-1">지난 수업 ({prevSession.session_date})</p>
+                  {prevSession.progress_content && (
+                    <p className="text-xs text-gray-600">📖 {prevSession.progress_content}</p>
+                  )}
+                  {prevSession.hw_textbook_name && (
+                    <p className="text-xs text-gray-500 mt-0.5">📚 교재과제: {prevSession.hw_textbook_name} {prevSession.hw_textbook_page}</p>
+                  )}
+                  {prevSession.hw_worksheet_range && (
+                    <p className="text-xs text-gray-500 mt-0.5">📝 학습지: {prevSession.hw_worksheet_range}</p>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* 탭 */}
+            <div className="flex gap-1.5 mb-4">
+              {[
+                { key: 'basic', label: '수업내용' },
+                { key: 'daily', label: '데일리테스트' },
+                { key: 'hw', label: '과제배부' },
+              ].map((t) => (
+                <button key={t.key} onClick={() => setNoteTab(t.key as typeof noteTab)}
+                  className={cx('px-3 py-1.5 rounded-lg text-xs font-bold border transition-all',
+                    noteTab === t.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                  {t.label}
+                </button>
+              ))}
             </div>
 
-            {/* 단원/차시 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">📌 오늘 진도 단원/차시</label>
-              <input type="text" value={noteChapter} onChange={(e) => setNoteChapter(e.target.value)}
-                placeholder="예: IV 비와 비율 > 비의 성질"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
+            {/* ── 수업내용 탭 ── */}
+            {noteTab === 'basic' && (
+              <div className="space-y-4">
+                {/* 진도 내용 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📖 진도 내용</label>
+                  <textarea value={noteProgress} onChange={(e) => setNoteProgress(e.target.value)}
+                    rows={2} placeholder="예: 이차방정식 - 근의 공식 / 인수분해 응용"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
 
-            {/* W/I/S/E Step */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-gray-700">🎯 W·I·S·E Step</label>
-                <span className="text-[10px] text-gray-400">학생 설정에서 자동 로드 · 수정 가능</span>
+                {/* WISE Step */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-gray-700">🎯 W·I·S·E Step</label>
+                    <span className="text-[10px] text-gray-400">학생 설정 자동 로드</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {WISE_STEPS.map((step) => (
+                      <button key={step} onClick={() => setNoteWISE(step)}
+                        className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
+                          noteWISE === step ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                        <span>{step}</span>
+                        <span className="text-[9px] font-normal opacity-70">{WISE_DESC[step].split(' ')[0]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 출결 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">출결</label>
+                  <div className="flex gap-2">
+                    {['정시', '지각', '결석'].map((att) => (
+                      <button key={att} onClick={() => setNoteAttendance(att)}
+                        className={cx('flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all',
+                          noteAttendance === att
+                            ? att === '정시' ? 'bg-green-600 text-white border-green-600'
+                            : att === '지각' ? 'bg-yellow-500 text-white border-yellow-500'
+                            : 'bg-red-500 text-white border-red-500'
+                            : 'bg-white text-gray-600 border-gray-200')}>
+                        {att === '정시' ? '✅ 정시' : att === '지각' ? '⚠️ 지각' : '❌ 결석'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 과제 달성률 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📊 과제 달성률</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {ACHIEVEMENT_OPTIONS.map((opt) => (
+                      <button key={opt.value} onClick={() => setNoteAchievement(opt.value)}
+                        className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all',
+                          noteAchievement === opt.value ? opt.bg : 'bg-white text-gray-600 border-gray-200',
+                          noteAchievement === opt.value ? opt.color : '')}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 과제 성취도 % */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">🎯 과제 성취도</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[0, 30, 50, 70, 90, 100].map((pct) => (
+                      <button key={pct} onClick={() => setNoteScorePct(pct)}
+                        className={cx('px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all',
+                          noteScorePct === pct
+                            ? pct >= 90 ? 'bg-green-600 text-white border-green-600'
+                            : pct >= 70 ? 'bg-blue-600 text-white border-blue-600'
+                            : pct >= 50 ? 'bg-yellow-500 text-white border-yellow-500'
+                            : 'bg-red-500 text-white border-red-500'
+                            : 'bg-white text-gray-600 border-gray-200')}>
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 추가수업 */}
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <input type="checkbox" id="extraClass" checked={noteExtraClass}
+                      onChange={(e) => setNoteExtraClass(e.target.checked)}
+                      className="w-4 h-4 accent-blue-600" />
+                    <label htmlFor="extraClass" className="text-xs font-bold text-gray-700">추가수업</label>
+                  </div>
+                  {noteExtraClass && (
+                    <input type="text" value={noteExtraTime} onChange={(e) => setNoteExtraTime(e.target.value)}
+                      placeholder="예: 오후 6시~7시"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  )}
+                </div>
+
+                {/* 메모 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📝 메모 <span className="text-gray-400 font-normal">(선택)</span></label>
+                  <textarea value={noteMemo} onChange={(e) => setNoteMemo(e.target.value)}
+                    rows={2} placeholder="특이사항, 다음 수업 준비사항 등"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {WISE_STEPS.map((step) => (
-                  <button key={step} onClick={() => setNoteWISE(step)}
-                    className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
-                      noteWISE === step ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
-                    <span>{step}</span>
-                    <span className="text-[9px] font-normal opacity-70">{WISE_DESC[step].split(' ')[0]}</span>
-                  </button>
-                ))}
+            )}
+
+            {/* ── 데일리 테스트 탭 ── */}
+            {noteTab === 'daily' && (
+              <div className="space-y-4">
+                <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700">
+                  💡 수업 중 진행한 데일리 테스트 결과를 입력해주세요
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">단원명 / 범위</label>
+                  <input type="text" value={dailyTestUnit} onChange={(e) => setDailyTestUnit(e.target.value)}
+                    placeholder="예: 이차방정식 근의 공식"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">점수</label>
+                  <input type="number" min="0" max="100" value={dailyTestScore}
+                    onChange={(e) => setDailyTestScore(e.target.value)}
+                    placeholder="0 ~ 100"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                </div>
+                {dailyTestScore && (
+                  <div className={cx('rounded-xl p-3 text-center text-sm font-bold',
+                    parseInt(dailyTestScore) >= 90 ? 'bg-green-50 text-green-600' :
+                    parseInt(dailyTestScore) >= 70 ? 'bg-blue-50 text-blue-600' :
+                    'bg-red-50 text-red-500')}>
+                    {dailyTestScore}점 · {parseInt(dailyTestScore) >= 90 ? '우수 🎉' : parseInt(dailyTestScore) >= 70 ? '양호 👍' : '보완 필요 📚'}
+                  </div>
+                )}
               </div>
-              {noteWISE && (
-                <p className="text-xs text-blue-600 mt-1.5 font-semibold">✓ {WISE_DESC[noteWISE]}</p>
-              )}
-            </div>
+            )}
 
-            {/* 출결 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">출결</label>
-              <div className="flex gap-2">
-                {['정시', '지각', '결석'].map((att) => (
-                  <button key={att} onClick={() => setNoteAttendance(att)}
-                    className={cx('flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all',
-                      noteAttendance === att
-                        ? att === '정시' ? 'bg-green-600 text-white border-green-600'
-                        : att === '지각' ? 'bg-yellow-500 text-white border-yellow-500'
-                        : 'bg-red-500 text-white border-red-500'
-                        : 'bg-white text-gray-600 border-gray-200')}>
-                    {att === '정시' ? '✅ 정시' : att === '지각' ? '⚠️ 지각' : '❌ 결석'}
-                  </button>
-                ))}
+            {/* ── 과제 배부 탭 ── */}
+            {noteTab === 'hw' && (
+              <div className="space-y-4">
+                <div className="bg-green-50 rounded-xl p-3 text-xs text-green-700">
+                  💡 과제 배부 시 학생 앱 "오늘 과제" 탭에 자동으로 표시됩니다
+                </div>
+
+                {/* 교재 과제 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📖 교재 과제</label>
+                  <input type="text" value={hwTextbookName} onChange={(e) => setHwTextbookName(e.target.value)}
+                    placeholder="교재명 (예: 쎈B, RPM)"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 mb-2" />
+                  <input type="text" value={hwTextbookPage} onChange={(e) => setHwTextbookPage(e.target.value)}
+                    placeholder="페이지/범위 (예: p.45~52, 3단원 B유형)"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+
+                {/* 학습지 과제 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📝 학습지 과제</label>
+                  <input type="text" value={hwWorksheetRange} onChange={(e) => setHwWorksheetRange(e.target.value)}
+                    placeholder="범위 (예: 이차방정식 2.1.3~2.1.5차시, 3레벨)"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+
+                {/* 영상 과제 */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📹 영상 과제 링크</label>
+                  <input type="url" value={hwVideoUrl} onChange={(e) => setHwVideoUrl(e.target.value)}
+                    placeholder="https://youtube.com/..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  {hwVideoUrl && (
+                    <p className="text-xs text-green-600 mt-1">✓ 학생이 영상 시작/완료 버튼을 사용할 수 있어요</p>
+                  )}
+                </div>
               </div>
-            </div>
-
-            {/* 과제 달성률 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">📊 과제 달성률</label>
-              <div className="grid grid-cols-4 gap-2">
-                {ACHIEVEMENT_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => setNoteAchievement(opt.value)}
-                    className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all',
-                      noteAchievement === opt.value ? opt.bg : 'bg-white text-gray-600 border-gray-200',
-                      noteAchievement === opt.value ? opt.color : '')}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 과제 성취도 점수 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">🎯 과제 성취도 점수 <span className="text-gray-400 font-normal">(선택)</span></label>
-              <input type="number" min="0" max="100" value={noteScore}
-                onChange={(e) => setNoteScore(e.target.value)}
-                placeholder="0 ~ 100점"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-
-            {/* 추가수업 */}
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <input type="checkbox" id="extraClass" checked={noteExtraClass}
-                  onChange={(e) => setNoteExtraClass(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600" />
-                <label htmlFor="extraClass" className="text-xs font-bold text-gray-700">추가수업 여부</label>
-              </div>
-              {noteExtraClass && (
-                <input type="text" value={noteExtraTime} onChange={(e) => setNoteExtraTime(e.target.value)}
-                  placeholder="예: 오후 6시~7시"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              )}
-            </div>
-
-            {/* 영상 과제 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">📹 영상 과제 링크 <span className="text-gray-400 font-normal">(선택)</span></label>
-              <input type="url" value={noteVideoUrl} onChange={(e) => setNoteVideoUrl(e.target.value)}
-                placeholder="https://youtube.com/..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-
-            {/* 선생님 메모 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">📝 선생님 메모 <span className="text-gray-400 font-normal">(선택)</span></label>
-              <textarea value={noteMemo} onChange={(e) => setNoteMemo(e.target.value)}
-                rows={2} placeholder="특이사항, 다음 수업 준비사항 등"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
+            )}
 
             <button onClick={handleSaveNote} disabled={savingNote}
-              className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              className="w-full mt-6 py-3.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
               {savingNote ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : '📓 수업일지 저장'}
             </button>
           </div>
         </div>
       )}
 
-      {/* ── 알림장(피드백) 모달 ── */}
+            {/* ── 알림장(피드백) 모달 ── */}
       {showFeedbackModal && feedbackStudent && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setShowFeedbackModal(false)}>

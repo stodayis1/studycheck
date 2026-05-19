@@ -10,7 +10,7 @@ function cx(...classes: (string|boolean|undefined|null)[]) {
 
 const NAV_ITEMS = [
   { href:'/teacher/dashboard',      label:'대시보드',    icon:'⊞' },
-  { href:'/teacher/learning-notes', label:'진도관리',    icon:'📓' },
+  { href:'/teacher/learning-notes', label:'학습관리',    icon:'📓' },
   { href:'/teacher/students',       label:'학생관리',    icon:'◎' },
   { href:'/teacher/assignments',    label:'레벨학습지',  icon:'📝' },
   { href:'/teacher/submissions',    label:'제출현황',    icon:'◐' },
