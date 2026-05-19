@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href:'/teacher/students',    label:'학생 관리', icon:'◎' },
   { href:'/teacher/assignments', label:'과제 관리', icon:'☑' },
   { href:'/teacher/learning-notes', label:'배움노트', icon:'📓' },
+  { href:'/teacher/exams', label:'평가 관리', icon:'🏆' },
   { href:'/teacher/submissions', label:'제출 현황', icon:'◐' },
   { href:'/teacher/reports',     label:'보고서',    icon:'◈' },
 ]
