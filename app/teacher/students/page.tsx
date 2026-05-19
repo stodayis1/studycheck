@@ -19,6 +19,7 @@ interface Student {
   parent_phone: string
   is_active: boolean
   textbook_grade: string
+  wise_step: string
 }
 
 export default function TeacherStudentsPage() {
@@ -121,6 +122,7 @@ export default function TeacherStudentsPage() {
         class_time: editStudent.class_time, teacher_name: editStudent.teacher_name,
         parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
         textbook_grade: editStudent.textbook_grade,
+        wise_step: editStudent.wise_step || 'W',
       })
       .eq('id', editStudent.id)
     if (error) { alert('수정 중 오류가 발생했습니다.'); return }
@@ -331,6 +333,37 @@ export default function TeacherStudentsPage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* W·I·S·E Step */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">
+                🎯 W·I·S·E Step
+                <span className="text-gray-400 font-normal ml-1">(현재 학습 단계)</span>
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { step: 'W', desc: 'Warm-up', sub: '도입' },
+                  { step: 'I', desc: 'Input', sub: '개념' },
+                  { step: 'S', desc: 'Skill', sub: '유형연습' },
+                  { step: 'E', desc: 'Evaluation', sub: '확인' },
+                ].map(({ step, desc, sub }) => (
+                  <button key={step}
+                    onClick={() => setEditStudent({ ...editStudent, wise_step: step })}
+                    className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
+                      editStudent.wise_step === step
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-600 border-gray-200')}>
+                    <span>{step}</span>
+                    <span className="text-[9px] font-normal opacity-70">{sub}</span>
+                  </button>
+                ))}
+              </div>
+              {editStudent.wise_step && (
+                <p className="text-xs text-blue-600 mt-1.5 font-semibold">
+                  ✓ 수업일지 입력 시 {editStudent.wise_step} 단계가 자동 표시됩니다
+                </p>
+              )}
             </div>
 
             {/* 기타 정보 */}

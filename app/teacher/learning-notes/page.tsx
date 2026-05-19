@@ -12,6 +12,7 @@ interface Student {
   school: string
   grade: string
   teacher_name: string
+  wise_step: string
 }
 
 interface Schedule {
@@ -188,7 +189,7 @@ export default function TeacherLearningNotesPage() {
     setNoteTextbook(session?.today_textbook_name ?? '')
     setNoteChapter(session?.today_chapter ?? '')
     setNoteVideoUrl(session?.video_url ?? '')
-    setNoteWISE('')
+    setNoteWISE(student.wise_step || 'W')
     setNoteAttendance(note?.attendance ?? '정시')
     setNoteAchievement(100)
     setNoteScore(note?.worksheet_score?.toString() ?? '')
@@ -444,6 +445,11 @@ export default function TeacherLearningNotesPage() {
                               <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">
                                 {schedule!.start_time.slice(0,5)} · {schedule!.periods}교시
                               </span>
+                              {student.wise_step && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                                  {student.wise_step}단계
+                                </span>
+                              )}
                               {note && (
                                 <span className="text-[10px] font-bold text-green-600">✓ 수업일지 완료</span>
                               )}
@@ -606,10 +612,13 @@ export default function TeacherLearningNotesPage() {
 
             {/* W/I/S/E Step */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">🎯 W·I·S·E Step</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-gray-700">🎯 W·I·S·E Step</label>
+                <span className="text-[10px] text-gray-400">학생 설정에서 자동 로드 · 수정 가능</span>
+              </div>
               <div className="grid grid-cols-4 gap-2">
                 {WISE_STEPS.map((step) => (
-                  <button key={step} onClick={() => setNoteWISE(noteWISE === step ? '' : step)}
+                  <button key={step} onClick={() => setNoteWISE(step)}
                     className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
                       noteWISE === step ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
                     <span>{step}</span>
