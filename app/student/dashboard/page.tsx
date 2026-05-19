@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
-import { Card, SectionCard, StatCard, EmptyState } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 
@@ -15,7 +14,22 @@ interface StudentInfo {
   teacher_name: string
 }
 
-interface WorksheetRecord {
+interface ClassSession {
+  id: string
+  session_date: string
+  today_textbook_name: string | null
+  today_chapter: string | null
+  video_url: string | null
+}
+
+interface LearningNote {
+  id: string
+  session_id: string
+  video_started_at: string | null
+  video_completed_at: string | null
+}
+
+interface StudentWorksheet {
   id: string
   grade_level: string
   unit: string
@@ -24,12 +38,13 @@ interface WorksheetRecord {
   status: string
   worksheet_type: string
   score: number | null
+  memo: string | null
   assigned_at: string
 }
 
-interface TextbookRecord {
+interface StudentTextbook {
   id: string
-  concept_id: string
+  concept_id: string | null
   textbook_name: string
   textbook_type: string
   status: string
@@ -37,41 +52,25 @@ interface TextbookRecord {
   assigned_at: string
 }
 
-interface Concept {
-  id: string
-  grade: string
-  chapter: string
-  concept_name: string
+const WS_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  assigned:          { label: '과제중',   color: 'text-blue-600',   bg: 'bg-blue-50' },
+  submitted:         { label: '제출완료', color: 'text-orange-500', bg: 'bg-orange-50' },
+  similar_assigned:  { label: '오답유사', color: 'text-purple-600', bg: 'bg-purple-50' },
+  similar_submitted: { label: '유사제출', color: 'text-pink-500',   bg: 'bg-pink-50' },
+  passed:            { label: '완료✓',   color: 'text-green-600',  bg: 'bg-green-50' },
 }
 
-const WS_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  assigned:          { label: '과제중',       color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  submitted:         { label: '제출완료',     color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
-  similar_assigned:  { label: '오답유사',     color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  similar_submitted: { label: '오답유사제출', color: 'text-pink-500',   bg: 'bg-pink-50 border-pink-200' },
-  scored:            { label: '결과대기',     color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
-  passed:            { label: '완료✓',       color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-  retry:             { label: '재도전',       color: 'text-red-500',    bg: 'bg-red-50 border-red-200' },
-}
-
-const TB_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  assigned:  { label: '과제중',   color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  submitted: { label: '제출완료', color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
-  checked:   { label: '채점완료', color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-}
-
-export default function StudentDashboard() {
+export default function StudentDashboardPage() {
   const router = useRouter()
   const [student, setStudent] = useState<StudentInfo | null>(null)
-  const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
-  const [textbooks, setTextbooks] = useState<TextbookRecord[]>([])
-  const [concepts, setConcepts] = useState<Concept[]>([])
+  const [todaySession, setTodaySession] = useState<ClassSession | null>(null)
+  const [todayNote, setTodayNote] = useState<LearningNote | null>(null)
+  const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
+  const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [loading, setLoading] = useState(true)
+  const [studentId, setStudentId] = useState<string | null>(null)
 
-  // 학습지 점수 입력 상태
-  const [scoreInputId, setScoreInputId] = useState<string | null>(null)
-  const [scoreInputValue, setScoreInputValue] = useState('')
-  const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const todayStr = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
     async function init() {
@@ -79,68 +78,63 @@ export default function StudentDashboard() {
         const stored = sessionStorage.getItem('studycheck_student')
         if (!stored) { router.push('/auth/login'); return }
         const session = JSON.parse(stored)
+        setStudentId(session.id)
 
-        const [{ data: studentData }, { data: wsData }, { data: tbData }, { data: cData }] = await Promise.all([
-          supabase.from('students').select('*').eq('id', session.id).single(),
-          supabase.from('student_worksheets').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
-          supabase.from('student_textbooks').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
-          supabase.from('concepts').select('id, grade, chapter, concept_name'),
-        ])
-
+        const { data: studentData } = await supabase
+          .from('students').select('*').eq('id', session.id).single()
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
-        if (wsData) setWorksheets(wsData)
-        if (tbData) setTextbooks(tbData)
-        if (cData) setConcepts(cData)
-      } catch {
-        router.push('/auth/login')
-      }
+
+        await fetchData(session.id)
+      } catch { router.push('/auth/login') }
       setLoading(false)
     }
     init()
   }, [])
 
-  function getConceptById(id: string) {
-    return concepts.find((c) => c.id === id)
-  }
-
-  async function fetchData(studentId: string) {
-    const [{ data: wsData }, { data: tbData }] = await Promise.all([
-      supabase.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }),
-      supabase.from('student_textbooks').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }),
+  async function fetchData(sid: string) {
+    const [{ data: ssData }, { data: wsData }, { data: tbData }] = await Promise.all([
+      supabase.from('class_sessions').select('*').eq('student_id', sid).eq('session_date', todayStr).single(),
+      supabase.from('student_worksheets').select('*').eq('student_id', sid).not('status', 'in', '("passed")').order('assigned_at', { ascending: false }),
+      supabase.from('student_textbooks').select('*').eq('student_id', sid).not('status', 'in', '("checked")').order('assigned_at', { ascending: false }),
     ])
+
+    if (ssData) {
+      setTodaySession(ssData)
+      // 오늘 배움노트
+      const { data: noteData } = await supabase
+        .from('learning_notes').select('*').eq('session_id', ssData.id).single()
+      if (noteData) setTodayNote(noteData)
+    }
     if (wsData) setWorksheets(wsData)
     if (tbData) setTextbooks(tbData)
   }
 
-  // 교재 제출완료
-  async function handleTBSubmit(id: string) {
-    if (!student) return
-    setSubmittingId(id)
-    await supabase.from('student_textbooks')
-      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-      .eq('id', id)
-    await fetchData(student.id)
-    setSubmittingId(null)
+  // 영상 시작
+  async function handleVideoStart() {
+    if (!todaySession || !studentId) return
+    const now = new Date().toISOString()
+    if (todayNote) {
+      await supabase.from('learning_notes').update({ video_started_at: now }).eq('id', todayNote.id)
+      setTodayNote({ ...todayNote, video_started_at: now })
+    } else {
+      const { data } = await supabase.from('learning_notes').insert({
+        student_id: studentId, session_id: todaySession.id,
+        attendance: '정시', worksheet_submitted: false,
+        textbook_submitted: false, workbook_done: false,
+        video_started_at: now,
+      }).select().single()
+      if (data) setTodayNote(data)
+    }
+    window.open(todaySession.video_url!, '_blank')
   }
 
-  // 학습지 제출완료 (점수 입력 후)
-  async function handleWSSubmit(w: WorksheetRecord) {
-    if (!student) return
-    const score = parseInt(scoreInputValue)
-    if (isNaN(score) || score < 0 || score > 100) {
-      alert('0~100 사이 점수를 입력해주세요.')
-      return
-    }
-    setSubmittingId(w.id)
-    const nextStatus = w.status === 'similar_assigned' ? 'similar_submitted' : 'submitted'
-    await supabase.from('student_worksheets')
-      .update({ status: nextStatus, submitted_at: new Date().toISOString(), score })
-      .eq('id', w.id)
-    setScoreInputId(null)
-    setScoreInputValue('')
-    await fetchData(student.id)
-    setSubmittingId(null)
+  // 영상 완료
+  async function handleVideoComplete() {
+    if (!todayNote || !studentId) return
+    const now = new Date().toISOString()
+    await supabase.from('learning_notes').update({ video_completed_at: now }).eq('id', todayNote.id)
+    setTodayNote({ ...todayNote, video_completed_at: now })
   }
 
   if (loading) return (
@@ -151,233 +145,164 @@ export default function StudentDashboard() {
 
   if (!student) return null
 
-  const activeWorksheets = worksheets.filter((w) => !['passed'].includes(w.status))
-  const completedWorksheets = worksheets.filter((w) => w.status === 'passed')
-  const activeTextbooks = textbooks.filter((t) => t.status !== 'checked')
-  const completedTextbooks = textbooks.filter((t) => t.status === 'checked')
+  const isElementary = student.grade.includes('초')
+  const hasVideoTask = !!todaySession?.video_url
+  const videoStarted = !!todayNote?.video_started_at
+  const videoCompleted = !!todayNote?.video_completed_at
 
   return (
-    <div>
-      <Header title={`안녕하세요, ${student.name} 학생 👋`} subtitle="오늘도 화이팅!" />
-      <div className="px-4 py-4 space-y-5 pb-10">
+    <div className="min-h-screen bg-gray-50">
+      <Header title="오늘 과제" subtitle={`${student.name} 학생`} />
 
-        {/* 학생 정보 카드 */}
-        <Card className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 border-0" padding="lg">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
-              <span className="text-2xl font-black text-white">{student.name[0]}</span>
+      <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
+
+        {/* 학생 프로필 */}
+        <div className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 rounded-2xl p-4 text-white flex items-center gap-4">
+          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <span className="text-xl font-black">{student.name[0]}</span>
+          </div>
+          <div>
+            <p className="font-black text-base">{student.name}</p>
+            <p className="text-blue-100 text-xs">{student.school} · {student.grade}</p>
+            <p className="text-blue-200 text-xs mt-0.5">{todayStr} 과제</p>
+          </div>
+        </div>
+
+        {/* 영상 과제 */}
+        {hasVideoTask && (
+          <div className={cx('rounded-2xl p-4 border-2',
+            videoCompleted ? 'bg-green-50 border-green-200' :
+            videoStarted ? 'bg-blue-50 border-blue-200' :
+            'bg-white border-gray-100 shadow-sm')}>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl">📹</span>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-gray-900">영상 과제</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {videoCompleted ? '✅ 시청 완료!' :
+                   videoStarted ? '▶ 시청 중...' :
+                   '아직 시청 안 했어요'}
+                </p>
+              </div>
+              {videoCompleted && (
+                <span className="text-xs font-bold px-2 py-1 bg-green-100 text-green-700 rounded-full">완료</span>
+              )}
             </div>
-            <div>
-              <p className="text-white font-black text-lg">{student.name}</p>
-              <p className="text-blue-100 text-sm">{student.school} · {student.grade}</p>
-              {student.teacher_name && (
-                <p className="text-blue-200 text-xs mt-0.5">담당: {student.teacher_name} 선생님</p>
+            <div className="flex gap-2">
+              {!videoStarted ? (
+                <button onClick={handleVideoStart}
+                  className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm">
+                  ▶ 영상 시작하기
+                </button>
+              ) : !videoCompleted ? (
+                <>
+                  <button onClick={() => window.open(todaySession!.video_url!, '_blank')}
+                    className="flex-1 py-3 bg-blue-100 text-blue-600 font-bold rounded-xl text-sm">
+                    ▶ 다시 보기
+                  </button>
+                  <button onClick={handleVideoComplete}
+                    className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl text-sm">
+                    ✅ 시청 완료
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => window.open(todaySession!.video_url!, '_blank')}
+                  className="flex-1 py-3 bg-gray-100 text-gray-500 font-bold rounded-xl text-sm">
+                  다시 보기
+                </button>
               )}
             </div>
           </div>
-        </Card>
+        )}
 
-        {/* 통계 */}
-        <div className="grid grid-cols-4 gap-2">
-          <StatCard label="학습지" value={activeWorksheets.length} accent="blue" />
-          <StatCard label="교재" value={activeTextbooks.length} accent="green" />
-          <StatCard label="학습지완료" value={completedWorksheets.length} accent="gray" />
-          <StatCard label="교재완료" value={completedTextbooks.length} accent="gray" />
-        </div>
-
-        {/* 진행중인 교재 과제 */}
-        <SectionCard title="📖 진행중인 교재 과제">
-          {activeTextbooks.length === 0 ? (
-            <EmptyState icon="📚" title="진행중인 교재 과제가 없어요" description="선생님이 곧 새 과제를 배정해드릴 거예요" />
-          ) : (
-            <div className="space-y-3">
-              {activeTextbooks.map((t) => {
-                const cfg = TB_STATUS_CONFIG[t.status] ?? TB_STATUS_CONFIG.assigned
-                const concept = getConceptById(t.concept_id)
-                const isSubmitting = submittingId === t.id
+        {/* 학습지 과제 */}
+        {worksheets.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+              <span className="text-base">📝</span>
+              <h3 className="text-sm font-bold text-gray-800">레벨학습지 과제</h3>
+              <span className="text-xs text-gray-400 ml-auto">{worksheets.length}개</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {worksheets.map((w) => {
+                const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
                 return (
-                  <div key={t.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-gray-900">{t.textbook_name}</p>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-green-100 text-green-600 rounded-md">{t.textbook_type}</span>
-                        </div>
-                        {concept && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            {concept.grade} · {concept.chapter} &gt; {concept.concept_name}
-                          </p>
-                        )}
-                        {t.memo && <p className="text-xs text-gray-400 mt-1">📝 {t.memo}</p>}
-                      </div>
-                      <span className={cx('text-xs font-bold px-2.5 py-1 rounded-full border shrink-0', cfg.bg, cfg.color)}>
+                  <div key={w.id} className="px-4 py-3">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className={cx('text-xs font-bold px-2 py-0.5 rounded-full', cfg.bg, cfg.color)}>
                         {cfg.label}
                       </span>
+                      {w.worksheet_type === 'similar' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-md">오답유사</span>
+                      )}
+                      <span className={cx('text-xs font-black ml-auto', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>
+                        {w.current_level}레벨
+                      </span>
                     </div>
-
-                    {/* 제출 버튼 */}
-                    {t.status === 'assigned' && (
-                      <button
-                        onClick={() => handleTBSubmit(t.id)}
-                        disabled={isSubmitting}
-                        className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {isSubmitting
-                          ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />제출 중...</>
-                          : '✅ 다 풀었어요! 제출하기'}
-                      </button>
-                    )}
-                    {t.status === 'submitted' && (
-                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-orange-50 text-orange-500 border border-orange-200 text-center">
-                        📬 제출완료 · 선생님 채점 대기중
-                      </div>
+                    <p className="text-sm font-bold text-gray-800">
+                      {w.grade_level} {w.unit}
+                      {w.unit_name && <span className="font-normal text-gray-500"> · {w.unit_name}</span>}
+                    </p>
+                    {w.memo && <p className="text-xs text-blue-500 mt-0.5">{w.memo}</p>}
+                    {w.score != null && (
+                      <p className={cx('text-sm font-black mt-1',
+                        w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
+                        {w.score}점
+                      </p>
                     )}
                   </div>
                 )
               })}
             </div>
-          )}
-        </SectionCard>
+          </div>
+        )}
 
-        {/* 진행중인 학습지 */}
-        <SectionCard title="📝 진행중인 학습지">
-          {activeWorksheets.length === 0 ? (
-            <EmptyState icon="🎉" title="진행중인 과제가 없어요!" description="선생님이 곧 새 과제를 배정해드릴 거예요" />
-          ) : (
-            <div className="space-y-3">
-              {activeWorksheets.map((w) => {
-                const cfg = WS_STATUS_CONFIG[w.status] ?? WS_STATUS_CONFIG.assigned
-                const isSubmitting = submittingId === w.id
-                const isEnteringScore = scoreInputId === w.id
-                const canSubmit = w.status === 'assigned' || w.status === 'similar_assigned'
-
-                return (
-                  <div key={w.id} className={cx('rounded-2xl border-2 p-4', cfg.bg)}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-gray-900">{w.grade_level} {w.unit}</p>
-                          {w.unit_name && <span className="text-xs text-gray-500">({w.unit_name})</span>}
-                          {w.worksheet_type === 'similar' && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-md">오답유사</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          <span className={cx('font-bold', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>
-                            {w.current_level}레벨
-                          </span>
-                          {w.current_level >= 4 && ' · 심화'}
-                        </p>
-                        {w.score != null && (
-                          <p className={cx('text-sm font-black mt-1',
-                            w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
-                            {w.score}점
-                          </p>
-                        )}
-                      </div>
-                      <span className={cx('text-xs font-bold px-2.5 py-1 rounded-full border shrink-0', cfg.bg, cfg.color)}>
-                        {cfg.label}
-                      </span>
-                    </div>
-
-                    {/* 제출 버튼 / 점수 입력 */}
-                    {canSubmit && !isEnteringScore && (
-                      <button
-                        onClick={() => { setScoreInputId(w.id); setScoreInputValue('') }}
-                        className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
-                      >
-                        ✏️ 점수 입력하고 제출하기
-                      </button>
-                    )}
-
-                    {canSubmit && isEnteringScore && (
-                      <div className="mt-3 space-y-2">
-                        <p className="text-xs font-bold text-gray-600">내가 채점한 점수를 입력해주세요</p>
-                        <input
-                          type="number" min="0" max="100"
-                          value={scoreInputValue}
-                          onChange={(e) => setScoreInputValue(e.target.value)}
-                          placeholder="0 ~ 100"
-                          autoFocus
-                          className="w-full px-4 py-3 rounded-xl border-2 border-blue-300 text-2xl font-black text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {scoreInputValue && (
-                          <div className={cx('rounded-xl p-2.5 text-center text-xs font-bold',
-                            parseInt(scoreInputValue) >= 85 ? 'bg-green-50 text-green-600' :
-                            parseInt(scoreInputValue) >= 80 ? 'bg-orange-50 text-orange-500' :
-                            'bg-red-50 text-red-500')}>
-                            {parseInt(scoreInputValue) >= 85 ? '🎉 잘했어요!' :
-                             parseInt(scoreInputValue) >= 80 ? '👍 통과!' :
-                             '💪 조금 더 힘내요!'}
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setScoreInputId(null); setScoreInputValue('') }}
-                            className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600"
-                          >
-                            취소
-                          </button>
-                          <button
-                            onClick={() => handleWSSubmit(w)}
-                            disabled={!scoreInputValue || isSubmitting}
-                            className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-blue-600 text-white disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            {isSubmitting
-                              ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />제출 중...</>
-                              : '제출하기'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {(w.status === 'submitted' || w.status === 'similar_submitted') && (
-                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-orange-50 text-orange-500 border border-orange-200 text-center">
-                        📬 제출완료 · 선생님 확인 대기중
-                      </div>
-                    )}
-
-                    {w.status === 'scored' && (
-                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-gray-50 text-gray-500 border border-gray-200 text-center">
-                        ⏳ 선생님이 다음 단계를 정하는 중이에요
-                      </div>
-                    )}
-
-                    {w.status === 'retry' && (
-                      <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-red-50 text-red-500 border border-red-200 text-center">
-                        💪 오답유사 학습지가 곧 배정될 거예요
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+        {/* 교재 과제 */}
+        {textbooks.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+              <span className="text-base">📖</span>
+              <h3 className="text-sm font-bold text-gray-800">교재 과제</h3>
+              <span className="text-xs text-gray-400 ml-auto">{textbooks.length}개</span>
             </div>
-          )}
-        </SectionCard>
-
-        {/* 완료한 학습지 */}
-        {completedWorksheets.length > 0 && (
-          <SectionCard title="✅ 완료한 학습지">
-            <div className="space-y-2">
-              {completedWorksheets.slice(0, 5).map((w) => (
-                <div key={w.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+            <div className="divide-y divide-gray-50">
+              {textbooks.map((t) => (
+                <div key={t.id} className="px-4 py-3 flex items-center gap-3">
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-700">{w.grade_level} {w.unit}</p>
-                    <p className="text-xs text-gray-400">{w.current_level}레벨</p>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
+                        t.textbook_type === '개념서' ? 'bg-blue-100 text-blue-700' :
+                        t.textbook_type === '유형서' ? 'bg-green-100 text-green-700' :
+                        t.textbook_type === '심화서' ? 'bg-orange-100 text-orange-700' :
+                        'bg-purple-100 text-purple-700')}>
+                        {t.textbook_type}
+                      </span>
+                      <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                        t.status === 'submitted' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-600')}>
+                        {t.status === 'submitted' ? '제출완료' : '과제중'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-gray-800">{t.textbook_name}</p>
+                    {t.memo && <p className="text-xs text-gray-400 mt-0.5">{t.memo}</p>}
                   </div>
-                  {w.score != null && (
-                    <span className={cx('text-sm font-black',
-                      w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
-                      {w.score}점
-                    </span>
-                  )}
-                  <span className="text-xs text-green-500 font-bold">✓</span>
                 </div>
               ))}
             </div>
-          </SectionCard>
+          </div>
         )}
 
+        {/* 과제 없음 */}
+        {!hasVideoTask && worksheets.length === 0 && textbooks.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+            <p className="text-4xl mb-3">🎉</p>
+            <p className="text-sm font-bold text-gray-600">오늘 과제가 없어요!</p>
+            <p className="text-xs text-gray-400 mt-1">선생님이 과제를 배정하면 여기에 나타나요</p>
+          </div>
+        )}
+
+        <p className="text-center text-xs text-gray-300 pb-2">
+          배움노트는 학원에서 작성해주세요 📓
+        </p>
       </div>
     </div>
   )
