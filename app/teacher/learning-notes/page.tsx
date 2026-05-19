@@ -99,6 +99,12 @@ export default function TeacherLearningNotesPage() {
   const [noteMemo, setNoteMemo] = useState('')
   const [savingNote, setSavingNote] = useState(false)
 
+  // 피드백
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [feedbackStudent, setFeedbackStudent] = useState<Student | null>(null)
+  const [feedbackContent, setFeedbackContent] = useState('')
+  const [savingFeedback, setSavingFeedback] = useState(false)
+
   // 시간표 모달
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [scheduleStudent, setScheduleStudent] = useState<Student | null>(null)
@@ -228,6 +234,22 @@ export default function TeacherLearningNotesPage() {
     setNoteWBDone(existing?.workbook_done ?? false)
     setNoteMemo(existing?.memo ?? '')
     setShowNoteModal(true)
+  }
+
+  // 피드백 저장
+  async function handleSaveFeedback() {
+    if (!feedbackStudent || !feedbackContent.trim()) return
+    setSavingFeedback(true)
+    await supabase.from('feedbacks').insert({
+      student_id: feedbackStudent.id,
+      teacher_name: currentUser?.name,
+      content: feedbackContent.trim(),
+      is_read: false,
+    })
+    setShowFeedbackModal(false)
+    setFeedbackStudent(null)
+    setFeedbackContent('')
+    setSavingFeedback(false)
   }
 
   // 시간표 저장
@@ -391,12 +413,20 @@ export default function TeacherLearningNotesPage() {
                               </span>
                             </div>
                           </div>
-                          <button
-                            onClick={() => { setSessionStudent(student); setShowSessionModal(true) }}
-                            className="px-2.5 py-1 text-xs font-semibold text-blue-600 bg-white border border-blue-200 rounded-lg"
-                          >
-                            + 수업
-                          </button>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => { setFeedbackStudent(student); setFeedbackContent(''); setShowFeedbackModal(true) }}
+                              className="px-2.5 py-1 text-xs font-semibold text-purple-600 bg-white border border-purple-200 rounded-lg"
+                            >
+                              💬 피드백
+                            </button>
+                            <button
+                              onClick={() => { setSessionStudent(student); setShowSessionModal(true) }}
+                              className="px-2.5 py-1 text-xs font-semibold text-blue-600 bg-white border border-blue-200 rounded-lg"
+                            >
+                              + 수업
+                            </button>
+                          </div>
                         </div>
                         {studentSessions.length === 0 ? (
                           <p className="text-center text-xs text-gray-400 py-4">수업 기록이 없어요</p>
@@ -867,6 +897,50 @@ export default function TeacherLearningNotesPage() {
                 ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</>
                 : '저장하기'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 피드백 작성 모달 ── */}
+      {showFeedbackModal && feedbackStudent && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => setShowFeedbackModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">💬 피드백 작성</h3>
+              <button onClick={() => setShowFeedbackModal(false)} className="text-gray-400">✕</button>
+            </div>
+            <div className="bg-purple-50 rounded-xl px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-purple-200 flex items-center justify-center text-sm font-bold text-purple-700">
+                {feedbackStudent.name[0]}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-purple-800">{feedbackStudent.name}</p>
+                <p className="text-xs text-purple-500">{feedbackStudent.grade}</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">피드백 내용 <span className="text-red-400">*</span></label>
+              <textarea
+                value={feedbackContent}
+                onChange={(e) => setFeedbackContent(e.target.value)}
+                rows={4}
+                placeholder="학생에게 전달할 피드백을 입력하세요..."
+                autoFocus
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowFeedbackModal(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
+              <button onClick={handleSaveFeedback} disabled={!feedbackContent.trim() || savingFeedback}
+                className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingFeedback
+                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</>
+                  : '💬 피드백 보내기'}
+              </button>
+            </div>
           </div>
         </div>
       )}

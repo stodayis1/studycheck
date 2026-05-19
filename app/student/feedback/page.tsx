@@ -1,74 +1,93 @@
-﻿'use client'
+'use client'
 
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
-import { EmptyState } from '@/components/ui'
-import { getMockStudentAssignments } from '@/data/mockData'
-import { formatRelativeTime, cx } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
+import { cx } from '@/lib/utils'
 
-const CURRENT_STUDENT_ID = 'student-001'
+interface Feedback {
+  id: string
+  teacher_name: string
+  content: string
+  is_read: boolean
+  created_at: string
+}
 
 export default function StudentFeedbackPage() {
-  const assignments = getMockStudentAssignments(CURRENT_STUDENT_ID)
-  const withFeedback = assignments.filter((a) => a.submission?.teacher_feedback)
+  const router = useRouter()
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  const [loading, setLoading] = useState(true)
+  const [studentId, setStudentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function init() {
+      try {
+        const stored = sessionStorage.getItem('studycheck_student')
+        if (!stored) { router.push('/auth/login'); return }
+        const session = JSON.parse(stored)
+        setStudentId(session.id)
+
+        const { data } = await supabase
+          .from('feedbacks')
+          .select('*')
+          .eq('student_id', session.id)
+          .order('created_at', { ascending: false })
+
+        if (data) setFeedbacks(data)
+
+        // 읽지 않은 피드백 읽음 처리
+        await supabase.from('feedbacks')
+          .update({ is_read: true })
+          .eq('student_id', session.id)
+          .eq('is_read', false)
+      } catch { router.push('/auth/login') }
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  function formatDate(dateStr: string) {
+    const d = new Date(dateStr)
+    return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`
+  }
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <span className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
 
   return (
     <div>
-      <Header title="선생님 피드백" subtitle={`총 ${withFeedback.length}개`} />
-      <div className="px-4 py-4 space-y-3">
-        {withFeedback.length === 0 ? (
-          <EmptyState
-            icon="💬"
-            title="아직 피드백이 없어요"
-            description="과제를 제출하면 선생님이 피드백을 남겨드립니다."
-          />
+      <Header title="선생님 피드백" subtitle={`총 ${feedbacks.length}개`} />
+      <div className="px-4 py-4 space-y-3 pb-10">
+        {feedbacks.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+            <p className="text-4xl mb-3">💬</p>
+            <p className="text-sm font-semibold text-gray-600">아직 피드백이 없어요</p>
+            <p className="text-xs text-gray-400 mt-1">선생님이 피드백을 남기면 여기에 나타나요</p>
+          </div>
         ) : (
-          withFeedback.map((a) => (
-            <div key={a.assignment_set.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              {/* 상단 컬러 바 */}
-              <div className={cx(
-                'h-1',
-                a.submission?.final_status === 'checked' ? 'bg-indigo-500' :
-                a.submission?.final_status === 'late' ? 'bg-red-400' : 'bg-blue-500'
-              )} />
-
+          feedbacks.map((fb) => (
+            <div key={fb.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="h-1 bg-blue-500" />
               <div className="p-4">
-                {/* 과제명 + 상태 */}
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
-                    <span className="text-white text-xs font-bold">T</span>
+                  <div className="w-8 h-8 bg-blue-500 rounded-xl flex items-center justify-center shrink-0">
+                    <span className="text-white text-xs font-black">{fb.teacher_name?.[0] ?? 'T'}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-blue-700 truncate">{a.assignment_set.title}</p>
-                    {a.submission?.checked_at && (
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        {formatRelativeTime(a.submission.checked_at)} 확인
-                      </p>
-                    )}
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-blue-700">{fb.teacher_name} 선생님</p>
+                    <p className="text-[10px] text-gray-400">{formatDate(fb.created_at)}</p>
                   </div>
+                  {!fb.is_read && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-red-100 text-red-500 rounded-full">NEW</span>
+                  )}
                 </div>
-
-                {/* 피드백 내용 */}
-                <div className="bg-blue-50 rounded-xl px-4 py-3 mb-3">
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {a.submission?.teacher_feedback}
-                  </p>
+                <div className="bg-blue-50 rounded-xl px-4 py-3">
+                  <p className="text-sm text-gray-700 leading-relaxed">{fb.content}</p>
                 </div>
-
-                {/* 어려웠던 문제 */}
-                {a.submission?.difficult_problems && (
-                  <div className="flex items-center gap-2 bg-orange-50 rounded-xl px-3 py-2">
-                    <span className="text-xs text-orange-400 font-semibold">어려웠던 문제</span>
-                    <span className="text-xs font-bold text-gray-700">{a.submission.difficult_problems}</span>
-                  </div>
-                )}
-
-                {/* 내 영상 요약 */}
-                {a.submission?.video_summary && (
-                  <div className="flex items-start gap-2 bg-purple-50 rounded-xl px-3 py-2 mt-2">
-                    <span className="text-xs text-purple-400 font-semibold shrink-0">내 요약</span>
-                    <span className="text-xs text-gray-600">{a.submission.video_summary}</span>
-                  </div>
-                )}
               </div>
             </div>
           ))
