@@ -653,7 +653,14 @@ export default function TeacherAssignmentsPage() {
               ) : (
                 <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
                   {filteredStudents.map((s) => (
-                    <button key={s.id} onClick={() => setTbStudent(s)}
+                    <button key={s.id} onClick={() => {
+                      setTbStudent(s)
+                      // 학생 학년에 맞게 자동 설정
+                      if (s.grade.includes('초')) setTbGrade(s.grade.replace('학년','').trim() as any)
+                      else if (s.grade.includes('중')) setTbGrade(s.grade.includes('1') ? '중1' : s.grade.includes('2') ? '중2' : '중3')
+                      else if (s.grade.includes('고')) setTbGrade(s.grade.includes('1') ? '고1' : s.grade.includes('2') ? '고2' : '고3')
+                      setTbChapter(''); setTbConcept(null)
+                    }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-green-50 border-b border-gray-50 last:border-0">
                       <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">{s.name[0]}</div>
                       <div className="flex-1 text-left">
@@ -668,7 +675,10 @@ export default function TeacherAssignmentsPage() {
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학년</label>
               <div className="flex gap-2 flex-wrap">
-                {['초1','초2','초3','초4','초5','초6'].map((g) => (
+                {(tbStudent?.grade.includes('초') ? ['초1','초2','초3','초4','초5','초6'] :
+                  tbStudent?.grade.includes('중') ? ['중1','중2','중3'] :
+                  tbStudent?.grade.includes('고') ? ['고1','고2','고3'] :
+                  ['초1','초2','초3','초4','초5','초6']).map((g) => (
                   <button key={g} onClick={() => { setTbGrade(g); setTbChapter(''); setTbConcept(null) }}
                     className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
                       tbGrade === g ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>{g}</button>
