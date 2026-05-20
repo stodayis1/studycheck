@@ -366,7 +366,7 @@ export default function TeacherLearningNotesPage() {
   return (
     <div>
       <Header
-        title="진도관리"
+        title="학습관리"
         subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}
         action={
           <button onClick={() => setShowScheduleModal(true)}

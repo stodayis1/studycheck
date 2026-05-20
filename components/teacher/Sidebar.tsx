@@ -20,7 +20,7 @@ const NAV_ITEMS = [
 
 export function TeacherSidebar() {
   const pathname = usePathname()
-  const { currentUser, signOut } = useAuth()
+  const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
 
   return (
     <>
@@ -48,6 +48,21 @@ export function TeacherSidebar() {
           <img src="/character.png" alt="캐릭터" className="h-24 object-contain"
             onError={(e) => { e.currentTarget.style.display='none' }} />
         </div>
+        {/* 관리자 모드 토글 */}
+        {currentUser?.role === 'admin' && (
+          <div className="px-3 pb-2">
+            <button onClick={toggleAdminMode}
+              className={cx('w-full py-2 rounded-xl text-xs font-bold border transition-all',
+                adminMode
+                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                  : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100')}>
+              {adminMode ? '🔴 관리자 모드' : '🔵 강사 모드'}
+              <span className="block text-[9px] font-normal opacity-60 mt-0.5">
+                {adminMode ? '강사 모드로 전환' : '관리자 모드로 전환'}
+              </span>
+            </button>
+          </div>
+        )}
         <div className="px-4 py-3 border-t border-gray-100">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-8 h-8 bg-[#1a2f5e] rounded-full flex items-center justify-center text-sm font-semibold text-white">

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 const SESSION_KEY = 'studycheck_student'
+const ADMIN_MODE_KEY = 'studycheck_admin_mode'
 
 export function useAuth() {
   const router = useRouter()
@@ -12,8 +13,12 @@ export function useAuth() {
   const [currentStudent, setCurrentStudent] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [role, setRole] = useState<'teacher' | 'student' | 'parent' | 'admin' | null>(null)
+  const [adminMode, setAdminModeState] = useState<boolean>(true) // true=관리자, false=강사
 
   useEffect(() => {
+    const savedMode = localStorage.getItem(ADMIN_MODE_KEY)
+    if (savedMode !== null) setAdminModeState(savedMode === 'true')
+
     async function init() {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
@@ -79,10 +84,18 @@ export function useAuth() {
     router.push('/auth/login')
   }
 
-  // 관리자 또는 해당 선생님인지 확인
+  // 관리자 여부 (adminMode 고려)
   function isAdmin() {
-    return currentUser?.role === 'admin'
+    if (currentUser?.role !== 'admin') return false
+    return adminMode
   }
 
-  return { currentUser, currentStudent, loading, role, signIn, signOut, isAdmin }
+  // 관리자 모드 토글
+  function toggleAdminMode() {
+    const newMode = !adminMode
+    setAdminModeState(newMode)
+    localStorage.setItem(ADMIN_MODE_KEY, String(newMode))
+  }
+
+  return { currentUser, currentStudent, loading, role, signIn, signOut, isAdmin, adminMode, toggleAdminMode }
 }
