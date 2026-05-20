@@ -141,6 +141,16 @@ export default function TeacherStudentsPage() {
       }
     }
 
+    // class_time 텍스트 자동 업데이트 (목록 표시용)
+    const DAY_ORDER = ['월','화','수','목','금','토','일']
+    const sortedSchedules = [...editSchedules]
+      .filter(sc => sc.day && sc.time)
+      .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))
+    const classTimeText = sortedSchedules
+      .map(sc => `${sc.day}${sc.time.slice(0,5)}·${sc.periods}교시`)
+      .join(', ')
+    await supabase.from('students').update({ class_time: classTimeText }).eq('id', editStudent.id)
+
     setShowEditModal(false)
     fetchStudents()
   }
