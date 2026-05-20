@@ -117,6 +117,7 @@ export default function ParentDashboardPage() {
         if (tbData) setTextbooks(tbData)
         if (pgData) setStudentProgress(pgData)
         if (etData) setElementaryTBs(etData)
+        console.log('진도데이터:', pgData?.length, '교재데이터:', etData?.length, '학년:', studentData?.grade)
       } catch { router.push('/auth/login') }
       setLoading(false)
     }
