@@ -39,6 +39,13 @@ interface Feedback {
   created_at: string
 }
 
+function getLocalDateStr(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function getWeekDates(weekOffset: number) {
   const now = new Date()
   const monday = new Date(now)
@@ -46,7 +53,7 @@ function getWeekDates(weekOffset: number) {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
-    return d.toISOString().split('T')[0]
+    return getLocalDateStr(d)
   })
 }
 
@@ -156,7 +163,7 @@ export default function StudentLearningNotesPage() {
 
   const isElementary = studentGrade.includes('초')
   const weekDates = getWeekDates(weekOffset)
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = getLocalDateStr(new Date())
 
   function fmtDate(d: string) {
     const [, m, day] = d.split('-')

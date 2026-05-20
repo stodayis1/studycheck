@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -15,9 +15,22 @@ export default function LoginPage() {
   const [mode, setMode] = useState<LoginMode>('teacher')
   const [loginId, setLoginId] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [isDuplicate, setIsDuplicate] = useState(false)
+
+  // 저장된 로그인 정보 불러오기
+  useEffect(() => {
+    const saved = localStorage.getItem('studycheck_remember')
+    if (saved) {
+      const { mode: savedMode, loginId: savedId, password: savedPw } = JSON.parse(saved)
+      setMode(savedMode)
+      setLoginId(savedId)
+      setPassword(savedPw)
+      setRememberMe(true)
+    }
+  }, [])
 
   // 이름 입력 시 동명이인 체크
   async function checkDuplicate(name: string) {
@@ -44,6 +57,12 @@ export default function LoginPage() {
           password,
         })
         if (error) throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.')
+        // 로그인 정보 저장
+        if (rememberMe) {
+          localStorage.setItem('studycheck_remember', JSON.stringify({ mode, loginId, password }))
+        } else {
+          localStorage.removeItem('studycheck_remember')
+        }
         router.push('/teacher/dashboard')
 
       } else {
@@ -81,6 +100,13 @@ export default function LoginPage() {
           name: student.name,
           role: mode,
         }))
+
+        // 로그인 정보 저장
+        if (rememberMe) {
+          localStorage.setItem('studycheck_remember', JSON.stringify({ mode, loginId, password }))
+        } else {
+          localStorage.removeItem('studycheck_remember')
+        }
 
         if (mode === 'student') router.push('/student/dashboard')
         else router.push('/parent/dashboard')
@@ -181,6 +207,16 @@ export default function LoginPage() {
               {error}
             </div>
           )}
+
+          {/* 로그인 정보 기억하기 */}
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="rememberMe" checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 accent-blue-600 cursor-pointer" />
+            <label htmlFor="rememberMe" className="text-sm text-gray-500 cursor-pointer select-none">
+              로그인 정보 기억하기
+            </label>
+          </div>
 
           <button onClick={handleLogin} disabled={loading || !loginId || !password}
             className="w-full py-3 bg-[#1a2f5e] text-white font-bold rounded-xl hover:bg-[#243d7a] disabled:opacity-50 flex items-center justify-center gap-2">
