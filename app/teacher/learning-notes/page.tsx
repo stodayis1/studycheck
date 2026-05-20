@@ -102,7 +102,14 @@ export default function TeacherLearningNotesPage() {
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'today' | 'schedule'>('today')
+  const [tab, setTab] = useState<'today' | 'schedule' | 'progress'>('today')
+
+  // 진도 현황
+  const [progressStudent, setProgressStudent] = useState<Student | null>(null)
+  const [elementaryTextbooks, setElementaryTextbooks] = useState<any[]>([])
+  const [studentProgress, setStudentProgress] = useState<any[]>([])
+  const [progressLoading, setProgressLoading] = useState(false)
+  const [savingProgress, setSavingProgress] = useState(false)
   const [noteTab, setNoteTab] = useState<'basic' | 'daily' | 'hw'>('basic')
 
   // 수업일지 입력 모달
@@ -160,6 +167,40 @@ export default function TeacherLearningNotesPage() {
     if (nData) setNotes(nData)
     if (fbData) setFeedbacks(fbData)
     setLoading(false)
+  }
+
+  async function loadProgress(student: Student) {
+    setProgressStudent(student)
+    setProgressLoading(true)
+    const grade = student.grade // 예: '초6'
+    const [{ data: tbData }, { data: pgData }] = await Promise.all([
+      supabase.from('elementary_textbooks').select('*')
+        .eq('grade', grade).order('semester').order('chapter_no').order('lesson_no'),
+      supabase.from('student_progress').select('*').eq('student_id', student.id),
+    ])
+    if (tbData) setElementaryTextbooks(tbData)
+    if (pgData) setStudentProgress(pgData)
+    setProgressLoading(false)
+  }
+
+  async function toggleProgress(textbookId: string, type: string) {
+    if (!progressStudent) return
+    setSavingProgress(true)
+    const existing = studentProgress.find(
+      p => p.textbook_id === textbookId && p.textbook_type === type
+    )
+    if (existing) {
+      await supabase.from('student_progress').delete().eq('id', existing.id)
+      setStudentProgress(studentProgress.filter(p => p.id !== existing.id))
+    } else {
+      const { data } = await supabase.from('student_progress').insert({
+        student_id: progressStudent.id,
+        textbook_id: textbookId,
+        textbook_type: type,
+      }).select().single()
+      if (data) setStudentProgress([...studentProgress, data])
+    }
+    setSavingProgress(false)
   }
 
   const myStudents = students.filter((s) => isAdmin() ? true : s.teacher_name === currentUser?.name)
@@ -377,13 +418,14 @@ export default function TeacherLearningNotesPage() {
       />
 
       {/* 탭 */}
-      <div className="flex gap-2 px-4 pt-4">
+      <div className="flex gap-2 px-4 pt-4 overflow-x-auto pb-1">
         {[
           { key: 'today', label: '📓 수업일지' },
+          { key: 'progress', label: '📊 진도현황' },
           { key: 'schedule', label: '📅 시간표 관리' },
         ].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-            className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
+            className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all whitespace-nowrap',
               tab === t.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
             {t.label}
           </button>
@@ -581,6 +623,156 @@ export default function TeacherLearningNotesPage() {
         )}
 
         {/* ── 시간표 관리 탭 ── */}
+        {/* ── 진도 현황 탭 ── */}
+        {tab === 'progress' && (
+          <div className="space-y-3">
+            {/* 학생 선택 */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <p className="text-xs font-bold text-gray-700 mb-2">학생 선택</p>
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                {myStudents.filter(s => s.grade.includes('초')).map(s => (
+                  <button key={s.id}
+                    onClick={() => loadProgress(s)}
+                    className={cx('px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
+                      progressStudent?.id === s.id
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-600 border-gray-200')}>
+                    {s.name}
+                    <span className="opacity-60 ml-1">{s.grade}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {progressStudent && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800">{progressStudent.name} 진도 현황</h3>
+                    <p className="text-xs text-gray-400">{progressStudent.grade} · 개념유형 라이트</p>
+                  </div>
+                  <div className="flex gap-2 text-[10px]">
+                    {[
+                      { type: 'concept', label: '개념서', color: 'bg-yellow-400' },
+                      { type: 'practice', label: '유형서', color: 'bg-green-500' },
+                      { type: 'advanced', label: '심화서', color: 'bg-orange-500' },
+                    ].map(item => (
+                      <div key={item.type} className="flex items-center gap-1">
+                        <div className={cx('w-3 h-3 rounded', item.color)} />
+                        <span className="text-gray-500">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {progressLoading ? (
+                  <div className="p-8 text-center">
+                    <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {/* 학기별 그룹 */}
+                    {[1, 2].map(semester => {
+                      const semesterTBs = elementaryTextbooks.filter(tb => tb.semester === semester)
+                      if (semesterTBs.length === 0) return null
+                      
+                      // 단원별 그룹
+                      const chapters = [...new Set(semesterTBs.map(tb => `${tb.chapter_no}__${tb.chapter_name}`))]
+                      
+                      // 학기 전체 개념 차시만
+                      const conceptLessons = semesterTBs.filter(tb => tb.lesson_type === 'concept')
+                      const completedConcept = conceptLessons.filter(tb =>
+                        studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')
+                      ).length
+                      const conceptRate = conceptLessons.length > 0
+                        ? Math.round(completedConcept / conceptLessons.length * 100) : 0
+
+                      return (
+                        <div key={semester}>
+                          <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
+                            <p className="text-xs font-black text-gray-700">{semester}학기</p>
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-full bg-yellow-400 rounded-full"
+                                  style={{ width: `${conceptRate}%` }} />
+                              </div>
+                              <span className="text-xs font-bold text-yellow-600">{conceptRate}%</span>
+                            </div>
+                          </div>
+
+                          {chapters.map(chapterKey => {
+                            const [chNoStr, chName] = chapterKey.split('__')
+                            const chNo = parseInt(chNoStr)
+                            const chLessons = semesterTBs.filter(tb => tb.chapter_no === chNo)
+                            const conceptOnly = chLessons.filter(tb => tb.lesson_type === 'concept')
+                            
+                            return (
+                              <div key={chapterKey} className="px-4 py-3">
+                                <p className="text-xs font-bold text-gray-700 mb-2">{chName}</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {chLessons.map(tb => {
+                                    const hasConcept = studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')
+                                    const hasPractice = studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'practice')
+                                    const hasAdvanced = studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'advanced')
+                                    
+                                    const bgColor = hasAdvanced ? 'bg-orange-400 text-white border-orange-400' :
+                                      hasPractice ? 'bg-green-500 text-white border-green-500' :
+                                      hasConcept ? 'bg-yellow-400 text-gray-800 border-yellow-400' :
+                                      'bg-white text-gray-400 border-gray-200'
+                                    
+                                    const isSpecial = tb.lesson_type !== 'concept'
+
+                                    return (
+                                      <button key={tb.id}
+                                        onClick={() => {
+                                          if (!hasConcept) toggleProgress(tb.id, 'concept')
+                                          else if (!hasPractice) toggleProgress(tb.id, 'practice')
+                                          else if (!hasAdvanced) toggleProgress(tb.id, 'advanced')
+                                          else toggleProgress(tb.id, 'concept') // 전체 초기화는 불가, concept만 토글
+                                        }}
+                                        disabled={savingProgress}
+                                        className={cx('px-2 py-1 rounded-lg text-[10px] font-bold border transition-all',
+                                          bgColor,
+                                          isSpecial ? 'opacity-70' : '')}>
+                                        {tb.lesson_no}
+                                        {isSpecial && <span className="block text-[8px] leading-none opacity-70">
+                                          {tb.lesson_type === 'review' ? '마무리' :
+                                           tb.lesson_type === 'practice' ? '유형' :
+                                           tb.lesson_type === 'application' ? '응용' : '연산'}
+                                        </span>}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                {/* 단원 진도 요약 */}
+                                <div className="flex gap-2 mt-1.5">
+                                  {conceptOnly.length > 0 && (
+                                    <span className="text-[10px] text-yellow-600">
+                                      개념 {conceptOnly.filter(tb => studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')).length}/{conceptOnly.length}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!progressStudent && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                <p className="text-3xl mb-3">📊</p>
+                <p className="text-sm text-gray-500">초등 학생을 선택하면 진도 현황이 나와요</p>
+                <p className="text-xs text-gray-400 mt-1">차시 버튼 클릭 → 개념서(노랑) → 유형서(초록) → 심화서(주황)</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === 'schedule' && (
           <div className="space-y-4">
             <button onClick={() => setShowScheduleModal(true)}
