@@ -18,6 +18,11 @@ const NAV_ITEMS = [
   { href:'/teacher/reports',        label:'보고서',      icon:'◈' },
 ]
 
+const ADMIN_NAV_ITEMS = [
+  ...NAV_ITEMS,
+  { href:'/teacher/admin',          label:'관리자',      icon:'🔴' },
+]
+
 export function TeacherSidebar() {
   const pathname = usePathname()
   const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
@@ -32,7 +37,7 @@ export function TeacherSidebar() {
           <p className="text-[10px] text-gray-400 font-medium text-center">수업일지 · 진도관리</p>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {(currentUser?.role === 'admin' ? ADMIN_NAV_ITEMS : NAV_ITEMS).map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href+'/')
             return (
               <Link key={item.href} href={item.href}
