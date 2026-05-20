@@ -85,6 +85,8 @@ export default function ParentDashboardPage() {
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
+  const [elementaryTBs, setElementaryTBs] = useState<any[]>([])
+  const [studentProgress, setStudentProgress] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week')
 
@@ -99,18 +101,22 @@ export default function ParentDashboardPage() {
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
 
-        const [{ data: scData }, { data: ssData }, { data: nData }, { data: wsData }, { data: tbData }] = await Promise.all([
+        const [{ data: scData }, { data: ssData }, { data: nData }, { data: wsData }, { data: tbData }, { data: pgData }, { data: etData }] = await Promise.all([
           supabase.from('schedules').select('*').eq('student_id', session.id).eq('is_active', true),
           supabase.from('class_sessions').select('*').eq('student_id', session.id).order('session_date', { ascending: false }),
           supabase.from('learning_notes').select('*').eq('student_id', session.id),
           supabase.from('student_worksheets').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
           supabase.from('student_textbooks').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
+          supabase.from('student_progress').select('*').eq('student_id', session.id),
+          supabase.from('elementary_textbooks').select('*').order('semester').order('chapter_no').order('lesson_no'),
         ])
         if (scData) setSchedules(scData)
         if (ssData) setSessions(ssData)
         if (nData) setNotes(nData)
         if (wsData) setWorksheets(wsData)
         if (tbData) setTextbooks(tbData)
+        if (pgData) setStudentProgress(pgData)
+        if (etData) setElementaryTBs(etData)
       } catch { router.push('/auth/login') }
       setLoading(false)
     }
@@ -318,6 +324,75 @@ export default function ParentDashboardPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* 교재 진도 현황 (초등) */}
+        {student.grade.includes('초') && elementaryTBs.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">📖 교재 진도 현황</h3>
+              <div className="flex gap-2 text-[10px] text-gray-400">
+                <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-sm bg-yellow-400 inline-block"/>개념</span>
+                <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-sm bg-green-500 inline-block"/>유형</span>
+                <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-sm bg-orange-500 inline-block"/>심화</span>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {[1, 2].map(semester => {
+                const semTBs = elementaryTBs.filter(tb =>
+                  tb.grade === student.grade && tb.semester === semester && tb.lesson_type === 'concept'
+                )
+                if (semTBs.length === 0) return null
+
+                const chapters = [...new Map(semTBs.map(tb => [tb.chapter_no, { no: tb.chapter_no, name: tb.chapter_name }])).values()]
+
+                return (
+                  <div key={semester} className="px-4 py-3">
+                    <p className="text-xs font-bold text-gray-500 mb-2">{semester}학기</p>
+                    <div className="space-y-2">
+                      {chapters.map(ch => {
+                        const chLessons = semTBs.filter(tb => tb.chapter_no === ch.no)
+                        const total = chLessons.length
+                        const conceptDone = chLessons.filter(tb =>
+                          studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')
+                        ).length
+                        const practiceDone = chLessons.filter(tb =>
+                          studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'practice')
+                        ).length
+                        const advancedDone = chLessons.filter(tb =>
+                          studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'advanced')
+                        ).length
+
+                        const conceptRate = total > 0 ? Math.round(conceptDone / total * 100) : 0
+                        const practiceRate = total > 0 ? Math.round(practiceDone / total * 100) : 0
+                        const advancedRate = total > 0 ? Math.round(advancedDone / total * 100) : 0
+
+                        return (
+                          <div key={ch.no}>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs text-gray-600 truncate flex-1">{ch.name}</p>
+                              <span className="text-[10px] text-gray-400 ml-2 shrink-0">
+                                {conceptDone}/{total}
+                              </span>
+                            </div>
+                            {/* 3단계 진도 바 */}
+                            <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                              <div className="h-full bg-orange-500 transition-all duration-500"
+                                style={{ width: `${advancedRate}%` }} />
+                              <div className="h-full bg-green-500 transition-all duration-500"
+                                style={{ width: `${Math.max(0, practiceRate - advancedRate)}%` }} />
+                              <div className="h-full bg-yellow-400 transition-all duration-500"
+                                style={{ width: `${Math.max(0, conceptRate - practiceRate)}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

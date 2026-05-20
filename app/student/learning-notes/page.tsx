@@ -67,6 +67,8 @@ export default function StudentLearningNotesPage() {
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  const [elementaryTBs, setElementaryTBs] = useState<any[]>([])
+  const [studentProgress, setStudentProgress] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0)
 
@@ -103,14 +105,18 @@ export default function StudentLearningNotesPage() {
   }, [])
 
   async function fetchData(sid: string) {
-    const [{ data: ssData }, { data: nData }, { data: fbData }] = await Promise.all([
+    const [{ data: ssData }, { data: nData }, { data: fbData }, { data: pgData }, { data: etData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', sid).order('session_date', { ascending: false }),
       supabase.from('learning_notes').select('*').eq('student_id', sid),
       supabase.from('feedbacks').select('*').eq('student_id', sid).order('created_at', { ascending: false }),
+      supabase.from('student_progress').select('*').eq('student_id', sid),
+      supabase.from('elementary_textbooks').select('*').order('semester').order('chapter_no').order('lesson_no'),
     ])
     if (ssData) setSessions(ssData)
     if (nData) setNotes(nData)
     if (fbData) setFeedbacks(fbData)
+    if (pgData) setStudentProgress(pgData)
+    if (etData) setElementaryTBs(etData)
   }
 
   function getNoteBySession(sessionId: string) {
@@ -180,6 +186,61 @@ export default function StudentLearningNotesPage() {
     <div>
       <Header title="배움노트" subtitle="학원에서 수업 후 작성해주세요" />
       <div className="px-4 py-4 space-y-3 pb-10">
+
+        {/* 진도 현황 (초등만) */}
+        {isElementary && studentProgress.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">📖 내 진도 현황</h3>
+              <div className="flex gap-2 text-[10px] text-gray-400">
+                <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-sm bg-yellow-400 inline-block"/>개념</span>
+                <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-sm bg-green-500 inline-block"/>유형</span>
+                <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-sm bg-orange-500 inline-block"/>심화</span>
+              </div>
+            </div>
+            <div className="px-4 py-3 space-y-2">
+              {[1, 2].map(semester => {
+                const semTBs = elementaryTBs.filter(tb =>
+                  tb.grade === studentGrade && tb.semester === semester && tb.lesson_type === 'concept'
+                )
+                if (semTBs.length === 0) return null
+                const chapters = [...new Map(semTBs.map(tb => [tb.chapter_no, { no: tb.chapter_no, name: tb.chapter_name }])).values()]
+
+                return chapters.map(ch => {
+                  const chLessons = semTBs.filter(tb => tb.chapter_no === ch.no)
+                  const total = chLessons.length
+                  const conceptDone = chLessons.filter(tb =>
+                    studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')
+                  ).length
+                  const practiceDone = chLessons.filter(tb =>
+                    studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'practice')
+                  ).length
+                  const advancedDone = chLessons.filter(tb =>
+                    studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'advanced')
+                  ).length
+                  const conceptRate = total > 0 ? Math.round(conceptDone / total * 100) : 0
+                  const practiceRate = total > 0 ? Math.round(practiceDone / total * 100) : 0
+                  const advancedRate = total > 0 ? Math.round(advancedDone / total * 100) : 0
+                  if (conceptDone === 0) return null
+
+                  return (
+                    <div key={`${semester}-${ch.no}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-gray-600 truncate flex-1">{ch.name}</p>
+                        <span className="text-[10px] text-gray-400 ml-2 shrink-0">{conceptDone}/{total}</span>
+                      </div>
+                      <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                        <div className="h-full bg-orange-500 transition-all" style={{ width: `${advancedRate}%` }} />
+                        <div className="h-full bg-green-500 transition-all" style={{ width: `${Math.max(0, practiceRate - advancedRate)}%` }} />
+                        <div className="h-full bg-yellow-400 transition-all" style={{ width: `${Math.max(0, conceptRate - practiceRate)}%` }} />
+                      </div>
+                    </div>
+                  )
+                })
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 주간 네비게이션 */}
         <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 px-4 py-3">
