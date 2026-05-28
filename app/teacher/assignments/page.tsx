@@ -1339,9 +1339,7 @@ export default function TeacherAssignmentsPage() {
                   <button onClick={() => handleRetry(scoreWS)}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold"
                     style={{ background: '#fee2e2', color: '#991b1b', border: '2px solid #dc2626' }}>재도전</button>
-                  <button onClick={() => handleNextUnit(scoreWS)}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-bold"
-                    style={{ background: '#FAEEDA', color: '#633806', border: '2px solid #d97706' }}>다음단원</button>
+
                 </div>
               </div>
             )}
