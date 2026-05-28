@@ -80,6 +80,8 @@ interface StudentTextbook {
   id: string
   textbook_name: string
   textbook_type: string
+  grade: string | null
+  semester: number | null
   status: string
 }
 
