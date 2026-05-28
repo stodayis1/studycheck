@@ -64,18 +64,11 @@ interface Feedback {
 
 const DAYS = ['월','화','수','목','금','토']
 const TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30','21:00']
-const WISE_STEPS = ['W', 'I', 'S', 'E']
-const WISE_DESC: Record<string, string> = {
-  W: 'Warm-up (도입)',
-  I: 'Input (개념 설명)',
-  S: 'Skill (유형 연습)',
-  E: 'Evaluation (확인)',
-}
 const ACHIEVEMENT_OPTIONS = [
   { label: '100%', value: 100, color: 'text-green-600', bg: 'bg-green-50 border-green-300' },
-  { label: '70%', value: 70, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-300' },
-  { label: '50%', value: 50, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-300' },
-  { label: '0%', value: 0, color: 'text-red-500', bg: 'bg-red-50 border-red-300' },
+  { label: '70%',  value: 70,  color: 'text-gray-800',  bg: 'bg-blue-50 border-blue-300' },
+  { label: '50%',  value: 50,  color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-300' },
+  { label: '0%',   value: 0,   color: 'text-red-500',   bg: 'bg-red-50 border-red-300' },
 ]
 
 const GRADE_COLORS: Record<string, { bg: string; border: string; sub: string }> = {
@@ -118,8 +111,22 @@ export default function TeacherLearningNotesPage() {
   const [noteSession, setNoteSession] = useState<ClassSession | null>(null)
 
   // 수업일지 필드
-  const [noteProgress, setNoteProgress] = useState('')        // 진도 내용 (통합)
-  const [noteWISE, setNoteWISE] = useState('')
+  const [noteProgress, setNoteProgress] = useState('')
+  // 개념DB 기반 진도 선택
+  const [concepts, setConcepts] = useState<any[]>([])
+  const [studentTextbooks, setStudentTextbooks] = useState<any[]>([])
+  // 교재별 독립 진도 선택 (tbId → { chapter, subChapters, conceptIds, lastIdx })
+  const [noteProgressByTB, setNoteProgressByTB] = useState<Record<string, {
+    chapter: string; subChapters: string[]; conceptIds: string[]; lastIdx: number
+  }>>({})
+  // 현재 선택된 교재 ID (펼쳐진 교재)
+  const [noteActiveTBId, setNoteActiveTBId] = useState<string>('')
+  // 하위 호환용 (저장 시 사용)
+  const [noteProgressType, setNoteProgressType] = useState<'개념서'|'유형서'|'심화서'>('개념서')
+  const [noteProgressChapter, setNoteProgressChapter] = useState('')
+  const [noteProgressSubChapter, setNoteProgressSubChapter] = useState('')
+  const [noteProgressConcepts, setNoteProgressConcepts] = useState<string[]>([])
+  const [lastClickedIdx, setLastClickedIdx] = useState<number>(-1)
   const [noteAttendance, setNoteAttendance] = useState('정시')
   const [noteAchievement, setNoteAchievement] = useState(100) // 과제 달성률
   const [noteScorePct, setNoteScorePct] = useState(100)       // 과제 성취도 %
@@ -129,23 +136,41 @@ export default function TeacherLearningNotesPage() {
   // 데일리 테스트
   const [dailyTestUnit, setDailyTestUnit] = useState('')
   const [dailyTestScore, setDailyTestScore] = useState('')
+  // 데일리테스트 범위 선택 (교재별)
+  const [dailyActiveTBId, setDailyActiveTBId] = useState('')
+  const [dailyChapter, setDailyChapter] = useState('')
+  const [dailySubChapters, setDailySubChapters] = useState<string[]>([])
+  const [dailyConceptIds, setDailyConceptIds] = useState<string[]>([])
+  const [dailyLastIdx, setDailyLastIdx] = useState(-1)
   // 과제 배부
   const [hwTextbookName, setHwTextbookName] = useState('')
   const [hwTextbookPage, setHwTextbookPage] = useState('')
   const [hwWorksheetRange, setHwWorksheetRange] = useState('')
-  const [hwVideoUrl, setHwVideoUrl] = useState('')
+  const [hwVideoUrls, setHwVideoUrls] = useState<string[]>([''])
+  // 교재 과제 - 배정된 교재 기반 (다중 선택)
+  const [hwSelectedTBIds, setHwSelectedTBIds] = useState<string[]>([])
+  const [hwTBChapters, setHwTBChapters] = useState<Record<string, string>>({})
+  const [hwTBSubChapters, setHwTBSubChapters] = useState<Record<string, string>>({})
+  const [hwTBPages, setHwTBPages] = useState<Record<string, string>>({})
+  // 학습지 - 진행중 목록
+  const [worksheets, setWorksheets] = useState<any[]>([])
+  const [lnCatalog, setLNCatalog] = useState<any[]>([])
+  const [progressChecks, setProgressChecks] = useState<any[]>([])
+  const [videoWatchLogs, setVideoWatchLogs] = useState<any[]>([])
+  const [hwSelectedWSId, setHwSelectedWSId] = useState('')
   const [savingNote, setSavingNote] = useState(false)
 
   // 피드백 모달
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [feedbackStudent, setFeedbackStudent] = useState<Student | null>(null)
   const [feedbackContent, setFeedbackContent] = useState('')
+  const [feedbackCategory, setFeedbackCategory] = useState('수업태도')
   const [savingFeedback, setSavingFeedback] = useState(false)
 
   // 시간표 모달
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [scheduleStudent, setScheduleStudent] = useState<Student | null>(null)
-  const [scheduleDay, setScheduleDay] = useState('월')
+  const [scheduleDays, setScheduleDays] = useState<string[]>([])
   const [scheduleTime, setScheduleTime] = useState('16:00')
   const [schedulePeriods, setSchedulePeriods] = useState(2)
   const [savingSchedule, setSavingSchedule] = useState(false)
@@ -154,18 +179,30 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }] = await Promise.all([
+    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, { data: pcData }, { data: vwData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('schedules').select('*').eq('is_active', true),
       supabase.from('class_sessions').select('*').order('session_date', { ascending: false }),
       supabase.from('learning_notes').select('*'),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
+      supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
+      supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
+      supabase.from('student_worksheets').select('*').not('status', 'eq', 'passed'),
+      supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
+      supabase.from('progress_checks').select('*'),
+      supabase.from('video_watch_logs').select('*'),
     ])
     if (sData) setStudents(sData)
     if (scData) setSchedules(scData)
     if (ssData) setSessions(ssData)
     if (nData) setNotes(nData)
     if (fbData) setFeedbacks(fbData)
+    if (cData) setConcepts(cData)
+    if (stData) setStudentTextbooks(stData)
+    if (wData) setWorksheets(wData)
+    if (catLNData) setLNCatalog(catLNData)
+    if (pcData) setProgressChecks(pcData)
+    if (vwData) setVideoWatchLogs(vwData)
     setLoading(false)
   }
 
@@ -235,8 +272,13 @@ export default function TeacherLearningNotesPage() {
     return notes.find((n) => n.session_id === session.id)
   }
 
-  function openNoteModal(student: Student) {
-    const session = getTodaySession(student.id)
+  function openNoteModal(student: Student, targetSession?: ClassSession) {
+    // 기존 세션이 있고 편집 권한 체크
+    const session = targetSession ?? getTodaySession(student.id)
+    if (session && !canEditNote(session.session_date)) {
+      alert('수업 당일과 다음날까지만 수정할 수 있어요. 그 이후 수정은 관리자에게 문의해주세요.')
+      return
+    }
     const note = getTodayNote(student.id)
     // 이전 수업 (오늘 제외 최근 1개)
     const prevSession = sessions
@@ -247,8 +289,18 @@ export default function TeacherLearningNotesPage() {
     setNoteSession(session ?? null)
     setNoteTab('basic')
     setNoteProgress(session?.progress_content ?? session?.today_textbook_name ?? '')
-    setNoteWISE(student.wise_step || 'W')
+    setNoteProgressByTB({})
+    setNoteActiveTBId('')
+    setNoteProgressType('개념서')
+    setNoteProgressChapter('')
+    setNoteProgressSubChapter('')
+    setNoteProgressConcepts([])
     setNoteAttendance(note?.attendance ?? '정시')
+    setHwSelectedTBIds([])
+    setHwTBChapters({})
+    setHwTBSubChapters({})
+    setHwTBPages({})
+    setHwSelectedWSId('')
     setNoteAchievement(100)
     setNoteScorePct(100)
     setNoteExtraClass(false)
@@ -256,10 +308,19 @@ export default function TeacherLearningNotesPage() {
     setNoteMemo(note?.memo ?? '')
     setDailyTestUnit(session?.daily_test_unit ?? '')
     setDailyTestScore(session?.daily_test_score?.toString() ?? '')
+    setDailyActiveTBId('')
+    setDailyChapter('')
+    setDailySubChapters([])
+    setDailyConceptIds([])
+    setDailyLastIdx(-1)
     setHwTextbookName(session?.hw_textbook_name ?? '')
     setHwTextbookPage(session?.hw_textbook_page ?? '')
     setHwWorksheetRange(session?.hw_worksheet_range ?? '')
-    setHwVideoUrl(session?.video_url ?? '')
+    setHwVideoUrls(
+      session?.video_url
+        ? session.video_url.split('\n').filter(Boolean)
+        : ['']
+    )
     setShowNoteModal(true)
   }
 
@@ -267,21 +328,89 @@ export default function TeacherLearningNotesPage() {
     if (!noteStudent) return
     setSavingNote(true)
 
+    // 진도 텍스트 - "대단원번호-중단원번호 첫개념~마지막개념" 형식
+    const myTBsForText = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+    const progressParts = Object.entries(noteProgressByTB)
+      .filter(([, sel]) => sel.conceptIds.length > 0 || sel.subChapters.length > 0)
+      .map(([tbId, sel]) => {
+        const tb = myTBsForText.find((t) => t.id === tbId)
+        if (!tb) return ''
+        // 대단원 번호 추출 (Ⅰ→1, Ⅱ→2 등 or 숫자)
+        const chNum = sel.chapter.match(/^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨ]/)?.[0]
+          ? {'Ⅰ':'1','Ⅱ':'2','Ⅲ':'3','Ⅳ':'4','Ⅴ':'5','Ⅵ':'6','Ⅶ':'7','Ⅷ':'8','Ⅸ':'9'}[sel.chapter[0]] ?? '?'
+          : sel.chapter.match(/^\d+/)?.[0] ?? sel.chapter.slice(0,2)
+        // 중단원 번호 추출
+        const subNums = sel.subChapters.filter(Boolean).map((s: string) =>
+          s?.match(/^(\d+)\./)?.[1] ?? s?.match(/^[ⅠⅡⅢⅣⅤ]/)?.[0] ?? s?.slice(0,1) ?? ''
+        )
+        // 개념 이름 첫~끝
+        const allConcepts = concepts.filter((c) =>
+          c.grade === tb.grade && sel.subChapters.includes(c.sub_chapter)
+        )
+        const selectedConcepts = allConcepts.filter((c) => sel.conceptIds.includes(c.id))
+          .sort((a, b) => a.concept_order - b.concept_order)
+        let conceptRange = ''
+        if (selectedConcepts.length > 0) {
+          const first = selectedConcepts[0].concept_name
+          const last = selectedConcepts[selectedConcepts.length - 1].concept_name
+          conceptRange = first === last ? ` ${first}` : ` ${first}~${last}`
+        }
+        // 형식: [유형서] 3-1+2 일차함수와 그 그래프~일차방정식
+        const subStr = subNums.length > 0 ? `-${subNums.join('+')}` : ''
+        return `[${tb.textbook_type}] ${chNum}${subStr}${conceptRange}`
+      }).filter(Boolean)
+    const progressText = progressParts.length > 0
+      ? progressParts.join(' / ')
+      : noteProgress || null
+
     // session 없으면 생성, 있으면 업데이트
     let sessionId = noteSession?.id
     const sessionData = {
       student_id: noteStudent.id,
       session_date: todayStr,
       session_type: '정규',
-      today_textbook_name: noteProgress || null,
-      today_chapter: null,
-      progress_content: noteProgress || null,
-      daily_test_unit: dailyTestUnit || null,
+      today_textbook_name: progressText,
+      today_chapter: noteProgressChapter || null,
+      progress_content: progressText,
+      daily_test_unit: (() => {
+        if (dailyChapter) {
+          const conceptNames = concepts
+            .filter((c) => dailyConceptIds.includes(c.id))
+            .map((c) => c.concept_name).join(', ')
+          return [dailyChapter, dailySubChapters.join('+'), conceptNames].filter(Boolean).join(' · ')
+        }
+        return dailyTestUnit || null
+      })(),
       daily_test_score: dailyTestScore ? parseInt(dailyTestScore) : null,
-      hw_textbook_name: hwTextbookName || null,
-      hw_textbook_page: hwTextbookPage || null,
-      hw_worksheet_range: hwWorksheetRange || null,
-      video_url: hwVideoUrl || null,
+      hw_textbook_name: (() => {
+        if (hwSelectedTBIds.length > 0) {
+          return hwSelectedTBIds.map((id) => {
+            const tb = studentTextbooks.find((t) => t.id === id)
+            return tb ? tb.textbook_name : ''
+          }).filter(Boolean).join(', ')
+        }
+        return hwTextbookName || null
+      })(),
+      hw_textbook_page: (() => {
+        if (hwSelectedTBIds.length > 0) {
+          return hwSelectedTBIds.map((id) => {
+            const tb = studentTextbooks.find((t) => t.id === id)
+            const ch = hwTBChapters[id] || ''
+            const sub = hwTBSubChapters[id] || ''
+            const page = hwTBPages[id] || ''
+            return [tb?.textbook_name, ch, sub, page].filter(Boolean).join(' · ')
+          }).filter(Boolean).join(' / ')
+        }
+        return hwTextbookPage || null
+      })(),
+      hw_worksheet_range: (() => {
+        if (hwSelectedWSId) {
+          const ws = worksheets.find((w) => w.id === hwSelectedWSId)
+          return ws ? `${ws.grade_level} · ${ws.unit}${ws.unit_name ? ` (${ws.unit_name})` : ''} · ${ws.current_level}레벨` : null
+        }
+        return hwWorksheetRange || null
+      })(),
+      video_url: hwVideoUrls.filter((u) => u.trim()).join('\n') || null,
       created_by: currentUser?.name,
     }
 
@@ -296,8 +425,45 @@ export default function TeacherLearningNotesPage() {
     if (!sessionId) { setSavingNote(false); return }
 
     const existingNote = notes.find((n) => n.session_id === sessionId)
+    // 교재별 진도 progress_checks 자동 업데이트
+    if (noteStudent && Object.keys(noteProgressByTB).length > 0) {
+      const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+      for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
+        if (sel.conceptIds.length === 0) continue
+        const tb = myTBs.find((t) => t.id === tbId)
+        if (!tb) continue
+        const checkCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+        await Promise.all(sel.conceptIds.map(async (conceptId) => {
+          const { data: existing } = await supabase
+            .from('progress_checks').select('id, check_count')
+            .eq('student_id', noteStudent.id).eq('concept_id', conceptId).single()
+          if (existing) {
+            if (existing.check_count < checkCount)
+              await supabase.from('progress_checks').update({ check_count: checkCount, updated_at: new Date().toISOString() }).eq('id', existing.id)
+          } else {
+            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: checkCount })
+          }
+        }))
+      }
+      // 로컬 즉시 반영
+      const myTBs2 = myTBs
+      setProgressChecks((prev) => {
+        const updated = [...prev]
+        for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
+          const tb = myTBs2.find((t) => t.id === tbId)
+          if (!tb) continue
+          const checkCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+          for (const conceptId of sel.conceptIds) {
+            const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId)
+            if (idx >= 0) { if (updated[idx].check_count < checkCount) updated[idx] = { ...updated[idx], check_count: checkCount } }
+            else updated.push({ id: 'temp_' + conceptId, student_id: noteStudent!.id, concept_id: conceptId, check_count: checkCount })
+          }
+        }
+        return updated
+      })
+    }
+
     const memoText = [
-      noteWISE ? `[${noteWISE}단계]` : '',
       noteExtraClass ? `추가수업 ${noteExtraTime}` : '',
       noteMemo,
     ].filter(Boolean).join(' ') || null
@@ -381,18 +547,57 @@ export default function TeacherLearningNotesPage() {
   }
 
   async function handleSaveSchedule() {
-    if (!scheduleStudent) return
+    if (!scheduleStudent || scheduleDays.length === 0) return
     setSavingSchedule(true)
-    await supabase.from('schedules').insert({
-      student_id: scheduleStudent.id,
-      day_of_week: scheduleDay,
-      start_time: scheduleTime,
-      periods: schedulePeriods,
-      is_active: true,
-    })
+    await Promise.all(
+      scheduleDays.map((day) =>
+        supabase.from('schedules').insert({
+          student_id: scheduleStudent.id,
+          day_of_week: day,
+          start_time: scheduleTime,
+          periods: schedulePeriods,
+          is_active: true,
+        })
+      )
+    )
     setShowScheduleModal(false)
+    setScheduleDays([])
     setSavingSchedule(false)
     fetchData()
+  }
+
+  // 수업일지 삭제 (당일+다음날만 가능, 관리자 예외)
+  async function handleDeleteNote(sessionId: string, sessionDate: string) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(today.getDate() + 1)
+    const sDate = new Date(sessionDate)
+    sDate.setHours(0, 0, 0, 0)
+    const canEdit = isAdmin() || sDate >= today && sDate <= tomorrow
+
+    if (!canEdit) {
+      alert('수정/삭제는 수업 당일과 다음날까지만 가능해요. 그 이후에는 관리자에게 문의해주세요.')
+      return
+    }
+    if (!confirm('수업일지를 삭제할까요?')) return
+    // learning_notes 삭제
+    const note = notes.find((n) => n.session_id === sessionId)
+    if (note) await supabase.from('learning_notes').delete().eq('id', note.id)
+    // class_sessions 삭제
+    await supabase.from('class_sessions').delete().eq('id', sessionId)
+    fetchData()
+  }
+
+  // 수업일지 수정 가능 여부 체크
+  function canEditNote(sessionDate: string) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(today.getDate() + 1)
+    const sDate = new Date(sessionDate)
+    sDate.setHours(0, 0, 0, 0)
+    return isAdmin() || (sDate >= today && sDate <= tomorrow)
   }
 
   async function handleDeleteSchedule(id: string) {
@@ -401,17 +606,33 @@ export default function TeacherLearningNotesPage() {
   }
 
   // 오늘 시간표 시각화
-  const HOUR_PX = 72
-  const times = [...new Set(todayStudents.map(({ schedule }) => schedule!.start_time))].sort()
+  const HOUR_PX = 80
+  const allStartTimes = todayStudents.map(({ schedule }) => schedule!.start_time)
+  const minHour = allStartTimes.length > 0
+    ? Math.floor(Math.min(...allStartTimes.map(t => parseInt(t.split(':')[0]))))
+    : 14
+  const maxEndHour = todayStudents.length > 0
+    ? Math.ceil(Math.max(...todayStudents.map(({ schedule }) => {
+        const [h, m] = schedule!.start_time.split(':').map(Number)
+        return h + m/60 + schedule!.periods
+      })))
+    : 18
+  const hourRange = Array.from({ length: maxEndHour - minHour }, (_, i) => minHour + i)
+  const totalHeight = (maxEndHour - minHour) * HOUR_PX
+
+  function timeToOffset(timeStr: string) {
+    const [h, m] = timeStr.split(':').map(Number)
+    return ((h + m/60) - minHour) * HOUR_PX
+  }
 
   return (
-    <div>
+    <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header
         title="학습관리"
         subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}
         action={
-          <button onClick={() => setShowScheduleModal(true)}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg">
+          <button onClick={() => { setScheduleDays([]); setShowScheduleModal(true) }}
+            className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
             + 시간표
           </button>
         }
@@ -421,12 +642,11 @@ export default function TeacherLearningNotesPage() {
       <div className="flex gap-2 px-4 pt-4 overflow-x-auto pb-1">
         {[
           { key: 'today', label: '📓 수업일지' },
-          { key: 'progress', label: '📊 진도현황' },
           { key: 'schedule', label: '📅 시간표 관리' },
         ].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all whitespace-nowrap',
-              tab === t.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+              tab === t.key ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
             {t.label}
           </button>
         ))}
@@ -452,46 +672,53 @@ export default function TeacherLearningNotesPage() {
                   </div>
                   <div className="p-3 overflow-x-auto">
                     <div className="flex gap-2" style={{ minWidth: 'max-content' }}>
-                      <div className="flex flex-col shrink-0" style={{ width: 44 }}>
-                        {times.map((time) => {
-                          const studentsAtTime = todayStudents.filter(({ schedule }) => schedule!.start_time === time)
-                          const maxPeriods = Math.max(...studentsAtTime.map(({ schedule }) => schedule!.periods))
+                      {/* 시간 라벨 (왼쪽) */}
+                      <div className="flex flex-col shrink-0 relative" style={{ width: 44, height: totalHeight }}>
+                        {hourRange.map((hour) => (
+                          <div key={hour} style={{ position: 'absolute', top: (hour - minHour) * HOUR_PX, height: HOUR_PX }}>
+                            <span className="text-xs font-bold text-gray-400">{String(hour).padStart(2,'0')}:00</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 학생 블록들 */}
+                      <div className="relative flex gap-1.5" style={{ height: totalHeight, minWidth: 0 }}>
+                        {/* 시간 구분선 */}
+                        {hourRange.map((hour) => (
+                          <div key={hour} style={{
+                            position: 'absolute', top: (hour - minHour) * HOUR_PX,
+                            left: 0, right: 0, borderTop: '1px dashed #f0f0f0', zIndex: 0
+                          }} />
+                        ))}
+                        {todayStudents.map(({ student, schedule }) => {
+                          const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
+                          const periods = schedule!.periods
+                          const top = timeToOffset(schedule!.start_time)
+                          const blockH = HOUR_PX * periods - 6
+                          const hasNote = !!getTodayNote(student.id)
                           return (
-                            <div key={time} style={{ height: HOUR_PX * maxPeriods, paddingTop: 8 }}>
-                              <span className="text-xs font-bold text-gray-400">{time.slice(0,5)}</span>
+                            <div key={student.id} className="shrink-0 relative" style={{ width: 80, height: totalHeight }}>
+                              <button
+                                onClick={() => openNoteModal(student)}
+                                className="rounded-xl px-2 flex flex-col justify-center w-full transition-all hover:opacity-80 absolute"
+                                style={{
+                                  backgroundColor: color.bg,
+                                  borderLeft: `4px solid ${hasNote ? '#10b981' : color.border}`,
+                                  height: blockH, top, zIndex: 1
+                                }}>
+                                <span className="text-xs font-black text-gray-900 truncate">{student.name}</span>
+                                <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: color.sub }}>
+                                  {student.grade}
+                                </span>
+                                {hasNote && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
+                                {!hasNote && schedule!.start_time.slice(0,5) && (
+                                  <span className="text-[9px] text-gray-400">{schedule!.start_time.slice(0,5)} · {periods}교시</span>
+                                )}
+                              </button>
                             </div>
                           )
                         })}
                       </div>
-                      {todayStudents.map(({ student, schedule }) => {
-                        const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
-                        const periods = schedule!.periods
-                        const startTime = schedule!.start_time
-                        const offsetHeight = times
-                          .filter((t) => t < startTime)
-                          .reduce((acc, t) => {
-                            const studentsAtTime = todayStudents.filter(({ schedule: sc }) => sc!.start_time === t)
-                            const maxPeriods = Math.max(...studentsAtTime.map(({ schedule: sc }) => sc!.periods))
-                            return acc + HOUR_PX * maxPeriods
-                          }, 0)
-                        const blockH = HOUR_PX * periods - 8
-                        const hasNote = !!getTodayNote(student.id)
-                        return (
-                          <div key={student.id} className="shrink-0" style={{ width: 80 }}>
-                            {offsetHeight > 0 && <div style={{ height: offsetHeight }} />}
-                            <button
-                              onClick={() => openNoteModal(student)}
-                              className="rounded-xl px-2 flex flex-col justify-center w-full transition-all hover:opacity-80"
-                              style={{ backgroundColor: color.bg, borderLeft: `4px solid ${hasNote ? '#10b981' : color.border}`, height: blockH }}>
-                              <span className="text-xs font-black text-gray-900 truncate">{student.name}</span>
-                              <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: color.sub }}>
-                                {student.grade}
-                              </span>
-                              {hasNote && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
-                            </button>
-                          </div>
-                        )
-                      })}
                     </div>
                   </div>
                 </div>
@@ -500,7 +727,7 @@ export default function TeacherLearningNotesPage() {
               {/* 오늘 수업 학생 목록 */}
               {todayStudents.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold text-blue-600 px-1 mb-2">📅 오늘 ({todayDay}요일) 수업 {todayStudents.length}명</p>
+                  <p className="text-xs font-bold text-gray-800 px-1 mb-2">📅 오늘 ({todayDay}요일) 수업 {todayStudents.length}명</p>
                   {todayStudents.map(({ student, schedule }) => {
                     const note = getTodayNote(student.id)
                     const session = getTodaySession(student.id)
@@ -530,18 +757,63 @@ export default function TeacherLearningNotesPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-1.5 flex-wrap justify-end">
                             <button onClick={() => { setFeedbackStudent(student); setFeedbackContent(''); setShowFeedbackModal(true) }}
-                              className="px-2.5 py-1 text-xs font-semibold text-purple-600 bg-white border border-purple-200 rounded-lg">
+                              className="px-2.5 py-1 text-xs font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg">
                               💬 알림장
                             </button>
-                            <button onClick={() => openNoteModal(student)}
-                              className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
-                                note ? 'text-gray-600 bg-white border border-gray-200' : 'text-white bg-blue-600')}>
-                              {note ? '수정' : '✏️ 입력'}
-                            </button>
+                            {note && session ? (() => {
+                              const editable = canEditNote(session.session_date)
+                              return (
+                                <>
+                                  <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음날까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
+                                    className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
+                                      editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>
+                                    {editable ? '수정' : '🔒 수정'}
+                                  </button>
+                                  <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date) : alert('수업 당일과 다음날까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
+                                    className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
+                                      editable ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100 cursor-not-allowed')}>
+                                    {editable ? '삭제' : '🔒 삭제'}
+                                  </button>
+                                </>
+                              )
+                            })() : (
+                              <button onClick={() => openNoteModal(student)}
+                                className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
+                                ✏️ 입력
+                              </button>
+                            )}
                           </div>
                         </div>
+
+                        {/* 배정 교재 + 진도 미리보기 (수업일지 없을 때) */}
+                        {!note && (() => {
+                          const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
+                          if (myTBs.length === 0) return null
+                          const recentSession = sessions
+                            .filter((s) => s.student_id === student.id && s.session_date < todayStr)
+                            .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
+                          return (
+                            <div className="px-4 py-2 flex flex-wrap gap-1.5">
+                              {myTBs.map((tb) => (
+                                <span key={tb.id} className={cx('text-[10px] font-semibold px-2 py-1 rounded-full',
+                                  tb.textbook_type === '개념서' ? 'bg-yellow-50 text-yellow-700' :
+                                  tb.textbook_type === '유형서' ? 'bg-green-50 text-green-700' :
+                                  tb.textbook_type === '심화서' ? 'bg-orange-50 text-orange-700' :
+                                  'bg-purple-50 text-purple-700')}>
+                                  {tb.textbook_type} {tb.textbook_name}
+                                  {tb.grade ? ` · ${tb.grade} ${tb.semester}학기` : ''}
+                                </span>
+                              ))}
+                              {recentSession?.progress_content && (
+                                <span className="text-[10px] text-blue-500 w-full">
+                                  📖 지난 수업: {recentSession.progress_content}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
 
                         {/* 수업일지 요약 */}
                         {note && session && (
@@ -559,32 +831,36 @@ export default function TeacherLearningNotesPage() {
                               과제달성률 {note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
                             </span>
                             {note.worksheet_score != null && (
-                              <span className={cx('text-[10px] font-bold', note.worksheet_score >= 85 ? 'text-green-600' : note.worksheet_score >= 70 ? 'text-blue-600' : 'text-red-500')}>
+                              <span className={cx('text-[10px] font-bold', note.worksheet_score >= 85 ? 'text-green-600' : note.worksheet_score >= 70 ? 'text-gray-800' : 'text-red-500')}>
                                 과제성취도 {note.worksheet_score}점
                               </span>
                             )}
                             {/* 영상 시청 시간 (선생님만 표시) */}
-                            {note.video_started_at && note.video_completed_at && (() => {
-                              const start = new Date(note.video_started_at)
-                              const end = new Date(note.video_completed_at)
-                              const diffMin = Math.round((end.getTime() - start.getTime()) / 60000)
+                            {session.video_url && (() => {
+                              const urls = session.video_url.split('\n').filter(Boolean)
+                              const logs = videoWatchLogs.filter((v) => v.session_id === session.id)
+                              if (urls.length === 0) return null
+                              const totalSec = logs.reduce((sum, v) => sum + (v.watch_seconds ?? 0), 0)
+                              const totalMin = Math.floor(totalSec / 60)
+                              const remainSec = totalSec % 60
+                              const timeStr = totalSec === 0 ? '' : totalMin > 0 ? ` · ${totalMin}분${remainSec > 0 ? ` ${remainSec}초` : ''}` : ` · ${totalSec}초`
+                              const watchedCount = logs.filter((v) => (v.watch_seconds ?? 0) > 0).length
                               return (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                                  📹 영상 {diffMin}분 시청
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                  style={watchedCount === 0
+                                    ? { background: '#fee2e2', color: '#991b1b' }
+                                    : watchedCount < urls.length
+                                    ? { background: '#FAEEDA', color: '#633806' }
+                                    : { background: '#EAF3DE', color: '#27500A' }}>
+                                  영상 {watchedCount}/{urls.length}개{timeStr}
+                                  {watchedCount === 0 ? ' 미시청' : watchedCount < urls.length ? ' 일부시청' : ' 완료'}
                                 </span>
                               )
                             })()}
-                            {note.video_started_at && !note.video_completed_at && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-yellow-50 text-yellow-600 rounded-full">
-                                📹 영상 시청중
-                              </span>
-                            )}
-                            {session.video_url && !note.video_started_at && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full">
-                                📹 영상 미시청
-                              </span>
-                            )}
                             {note.memo && <span className="text-[10px] text-gray-400">📝 {note.memo}</span>}
+                            {!canEditNote(session.session_date) && (
+                              <span className="text-[10px] text-gray-300 w-full mt-1">🔒 수정기간 종료 · 관리자 문의</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -596,22 +872,53 @@ export default function TeacherLearningNotesPage() {
               {/* 오늘 수업 없는 학생 */}
               {otherStudents.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold text-gray-400 px-1 mb-2">오늘 수업 없는 학생 {otherStudents.length}명</p>
-                  {otherStudents.map((student) => (
-                    <div key={student.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-2 px-4 py-3 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 shrink-0">
-                        {student.name[0]}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-600">{student.name}</p>
-                        <p className="text-xs text-gray-400">{student.grade}</p>
-                      </div>
-                      <button onClick={() => { setFeedbackStudent(student); setFeedbackContent(''); setShowFeedbackModal(true) }}
-                        className="px-2 py-1 text-xs font-semibold text-purple-500 bg-purple-50 border border-purple-100 rounded-lg">
-                        💬 알림장
-                      </button>
-                    </div>
-                  ))}
+                  <p className="text-xs font-bold text-gray-400 px-1 mb-2">
+                    오늘 수업 없는 학생 {otherStudents.length}명
+                    <span className="ml-1.5 font-normal text-gray-300">· 클릭하면 수업일지/진도 입력 가능</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {otherStudents.map((student) => {
+                      // 최근 진도 확인
+                      const recentSession = sessions
+                        .filter((s) => s.student_id === student.id)
+                        .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
+                      const recentNote = recentSession
+                        ? notes.find((n) => n.session_id === recentSession.id)
+                        : null
+                      const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
+                      const mainTB = myTBs.find((t) => t.textbook_type === '개념서') ?? myTBs[0]
+
+                      return (
+                        <button key={student.id}
+                          onClick={() => openNoteModal(student)}
+                          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left hover:border-blue-200 hover:shadow-md transition-all w-full md:w-auto min-w-[140px]">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
+                              {student.name[0]}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-700">{student.name}</p>
+                              <p className="text-[10px] text-gray-400">{student.grade}</p>
+                            </div>
+                          </div>
+                          {/* 현재 진도 미리보기 */}
+                          {mainTB && (
+                            <div className="text-[10px] text-gray-400 truncate">
+                              📚 {mainTB.textbook_type} · {mainTB.textbook_name}
+                            </div>
+                          )}
+                          {recentSession?.progress_content && (
+                            <div className="text-[10px] text-blue-400 truncate mt-0.5">
+                              📖 {recentSession.progress_content}
+                            </div>
+                          )}
+                          {!recentSession && (
+                            <div className="text-[10px] text-gray-300 mt-0.5">수업 기록 없음</div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -624,159 +931,11 @@ export default function TeacherLearningNotesPage() {
 
         {/* ── 시간표 관리 탭 ── */}
         {/* ── 진도 현황 탭 ── */}
-        {tab === 'progress' && (
-          <div className="space-y-3">
-            {/* 학생 선택 */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <p className="text-xs font-bold text-gray-700 mb-2">학생 선택</p>
-              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                {myStudents.filter(s => s.grade.includes('초')).map(s => (
-                  <button key={s.id}
-                    onClick={() => loadProgress(s)}
-                    className={cx('px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
-                      progressStudent?.id === s.id
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-600 border-gray-200')}>
-                    {s.name}
-                    <span className="opacity-60 ml-1">{s.grade}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {progressStudent && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-800">{progressStudent.name} 진도 현황</h3>
-                    <p className="text-xs text-gray-400">{progressStudent.grade} · 개념유형 라이트</p>
-                  </div>
-                  <div className="flex gap-2 text-[10px]">
-                    {[
-                      { type: 'concept', label: '개념서', color: 'bg-yellow-400' },
-                      { type: 'practice', label: '유형서', color: 'bg-green-500' },
-                      { type: 'advanced', label: '심화서', color: 'bg-orange-500' },
-                    ].map(item => (
-                      <div key={item.type} className="flex items-center gap-1">
-                        <div className={cx('w-3 h-3 rounded', item.color)} />
-                        <span className="text-gray-500">{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {progressLoading ? (
-                  <div className="p-8 text-center">
-                    <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-50">
-                    {/* 학기별 그룹 */}
-                    {[1, 2].map(semester => {
-                      const semesterTBs = elementaryTextbooks.filter(tb => tb.semester === semester)
-                      if (semesterTBs.length === 0) return null
-                      
-                      // 단원별 그룹
-                      const chapters = [...new Set(semesterTBs.map(tb => `${tb.chapter_no}__${tb.chapter_name}`))]
-                      
-                      // 학기 전체 개념 차시만
-                      const conceptLessons = semesterTBs.filter(tb => tb.lesson_type === 'concept')
-                      const completedConcept = conceptLessons.filter(tb =>
-                        studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')
-                      ).length
-                      const conceptRate = conceptLessons.length > 0
-                        ? Math.round(completedConcept / conceptLessons.length * 100) : 0
-
-                      return (
-                        <div key={semester}>
-                          <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
-                            <p className="text-xs font-black text-gray-700">{semester}학기</p>
-                            <div className="flex items-center gap-2">
-                              <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                <div className="h-full bg-yellow-400 rounded-full"
-                                  style={{ width: `${conceptRate}%` }} />
-                              </div>
-                              <span className="text-xs font-bold text-yellow-600">{conceptRate}%</span>
-                            </div>
-                          </div>
-
-                          {chapters.map(chapterKey => {
-                            const [chNoStr, chName] = chapterKey.split('__')
-                            const chNo = parseInt(chNoStr)
-                            const chLessons = semesterTBs.filter(tb => tb.chapter_no === chNo)
-                            const conceptOnly = chLessons.filter(tb => tb.lesson_type === 'concept')
-                            
-                            return (
-                              <div key={chapterKey} className="px-4 py-3">
-                                <p className="text-xs font-bold text-gray-700 mb-2">{chName}</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {chLessons.map(tb => {
-                                    const hasConcept = studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')
-                                    const hasPractice = studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'practice')
-                                    const hasAdvanced = studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'advanced')
-                                    
-                                    const bgColor = hasAdvanced ? 'bg-orange-400 text-white border-orange-400' :
-                                      hasPractice ? 'bg-green-500 text-white border-green-500' :
-                                      hasConcept ? 'bg-yellow-400 text-gray-800 border-yellow-400' :
-                                      'bg-white text-gray-400 border-gray-200'
-                                    
-                                    const isSpecial = tb.lesson_type !== 'concept'
-
-                                    return (
-                                      <button key={tb.id}
-                                        onClick={() => {
-                                          if (!hasConcept) toggleProgress(tb.id, 'concept')
-                                          else if (!hasPractice) toggleProgress(tb.id, 'practice')
-                                          else if (!hasAdvanced) toggleProgress(tb.id, 'advanced')
-                                          else toggleProgress(tb.id, 'concept') // 전체 초기화는 불가, concept만 토글
-                                        }}
-                                        disabled={savingProgress}
-                                        className={cx('px-2 py-1 rounded-lg text-[10px] font-bold border transition-all',
-                                          bgColor,
-                                          isSpecial ? 'opacity-70' : '')}>
-                                        {tb.lesson_no}
-                                        {isSpecial && <span className="block text-[8px] leading-none opacity-70">
-                                          {tb.lesson_type === 'review' ? '마무리' :
-                                           tb.lesson_type === 'practice' ? '유형' :
-                                           tb.lesson_type === 'application' ? '응용' : '연산'}
-                                        </span>}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                                {/* 단원 진도 요약 */}
-                                <div className="flex gap-2 mt-1.5">
-                                  {conceptOnly.length > 0 && (
-                                    <span className="text-[10px] text-yellow-600">
-                                      개념 {conceptOnly.filter(tb => studentProgress.some(p => p.textbook_id === tb.id && p.textbook_type === 'concept')).length}/{conceptOnly.length}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!progressStudent && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                <p className="text-3xl mb-3">📊</p>
-                <p className="text-sm text-gray-500">초등 학생을 선택하면 진도 현황이 나와요</p>
-                <p className="text-xs text-gray-400 mt-1">차시 버튼 클릭 → 개념서(노랑) → 유형서(초록) → 심화서(주황)</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {tab === 'schedule' && (
           <div className="space-y-4">
-            <button onClick={() => setShowScheduleModal(true)}
-              className="w-full py-3 rounded-xl text-sm font-bold text-blue-600 bg-blue-50 border-2 border-dashed border-blue-200">
+            <button onClick={() => { setScheduleDays([]); setShowScheduleModal(true) }}
+              className="w-full py-3 rounded-xl text-sm font-bold text-gray-800 bg-blue-50 border-2 border-dashed border-blue-200">
               + 시간표 추가
             </button>
             {myStudents.map((student) => {
@@ -791,8 +950,8 @@ export default function TeacherLearningNotesPage() {
                       <p className="text-sm font-bold text-gray-800">{student.name}</p>
                       <p className="text-xs text-gray-400">{student.grade}</p>
                     </div>
-                    <button onClick={() => { setScheduleStudent(student); setShowScheduleModal(true) }}
-                      className="px-2.5 py-1 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg">
+                    <button onClick={() => { setScheduleStudent(student); setScheduleDays([]); setShowScheduleModal(true) }}
+                      className="px-2.5 py-1 text-xs font-semibold text-gray-800 bg-blue-50 border border-blue-200 rounded-lg">
                       + 추가
                     </button>
                   </div>
@@ -849,18 +1008,72 @@ export default function TeacherLearningNotesPage() {
                 .filter((s) => s.student_id === noteStudent.id && s.session_date < todayStr)
                 .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
               if (!prevSession) return null
+
+              // 선행 진도: 배정된 교재 중 가장 앞선 과정 계산
+              const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+              const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+              const TYPE_ORDER = ['개념서','유형서','심화서']
+              const topTB = myTBs.reduce((best, t) => {
+                if (!best) return t
+                const gA = GRADE_ORDER.indexOf(best.grade ?? '')
+                const gB = GRADE_ORDER.indexOf(t.grade ?? '')
+                if (gB > gA) return t
+                if (gB === gA) {
+                  const tA = TYPE_ORDER.indexOf(best.textbook_type)
+                  const tB = TYPE_ORDER.indexOf(t.textbook_type)
+                  if (tB > tA) return t
+                }
+                return best
+              }, null as any)
+
+              // 최근 학습지 (지난 배부된 것)
+              const recentWS = worksheets
+                .filter((w) => w.student_id === noteStudent.id)
+                .sort((a, b) => b.assigned_at?.localeCompare(a.assigned_at ?? '') ?? 0)[0]
+
               return (
-                <div className="bg-gray-50 rounded-xl px-4 py-2.5 mb-4 border border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 mb-1">지난 수업 ({prevSession.session_date})</p>
-                  {prevSession.progress_content && (
-                    <p className="text-xs text-gray-600">📖 {prevSession.progress_content}</p>
-                  )}
-                  {prevSession.hw_textbook_name && (
-                    <p className="text-xs text-gray-500 mt-0.5">📚 교재과제: {prevSession.hw_textbook_name} {prevSession.hw_textbook_page}</p>
-                  )}
-                  {prevSession.hw_worksheet_range && (
-                    <p className="text-xs text-gray-500 mt-0.5">📝 학습지: {prevSession.hw_worksheet_range}</p>
-                  )}
+                <div style={{ background: '#ffffff', borderLeft: '3px solid #d97706' }}
+                  className="rounded-xl px-4 py-3 mb-4">
+                  <p className="text-[10px] font-bold mb-2" style={{ color: '#4b5563' }}>
+                    지난 수업 · {prevSession.session_date}
+                  </p>
+                  <div className="space-y-1.5">
+                    {/* 선행 진도 표시 */}
+                    {topTB && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: '#085041', color: '#fdf8f0' }}>진도</span>
+                        <p className="text-xs flex-1" style={{ color: '#1f2937' }}>
+                          {topTB.textbook_type} · {topTB.textbook_name}
+                          {topTB.grade ? ` · ${topTB.grade} ${topTB.semester}학기` : ''}
+                          {prevSession.progress_content ? ` · ${prevSession.progress_content.replace(/^\[.*?\]\s*/, '')}` : ''}
+                        </p>
+                      </div>
+                    )}
+                    {/* 교재 과제 */}
+                    {prevSession.hw_textbook_name && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: '#92400e', color: '#fdf8f0' }}>교재</span>
+                        <p className="text-xs flex-1" style={{ color: '#1f2937' }}>
+                          {prevSession.hw_textbook_name}{prevSession.hw_textbook_page ? ` · ${prevSession.hw_textbook_page}` : ''}
+                        </p>
+                      </div>
+                    )}
+                    {/* 최근 학습지 */}
+                    {recentWS && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: '#639922', color: '#fdf8f0' }}>학습지</span>
+                        <p className="text-xs flex-1" style={{ color: '#1f2937' }}>
+                          {recentWS.grade_level} · {recentWS.unit}{recentWS.unit_name ? ` (${recentWS.unit_name})` : ''} · {recentWS.current_level}레벨
+                        </p>
+                      </div>
+                    )}
+                    {!topTB && !prevSession.hw_textbook_name && !recentWS && (
+                      <p className="text-xs" style={{ color: '#1f2937' }}>수업 기록이 없어요</p>
+                    )}
+                  </div>
                 </div>
               )
             })()}
@@ -873,8 +1086,10 @@ export default function TeacherLearningNotesPage() {
                 { key: 'hw', label: '과제배부' },
               ].map((t) => (
                 <button key={t.key} onClick={() => setNoteTab(t.key as typeof noteTab)}
-                  className={cx('px-3 py-1.5 rounded-lg text-xs font-bold border transition-all',
-                    noteTab === t.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all"
+                  style={noteTab === t.key
+                    ? { background: '#F5C4B3', color: '#712B13' }
+                    : { background: '#f3f4f6', color: '#9ca3af' }}>
                   {t.label}
                 </button>
               ))}
@@ -883,45 +1098,230 @@ export default function TeacherLearningNotesPage() {
             {/* ── 수업내용 탭 ── */}
             {noteTab === 'basic' && (
               <div className="space-y-4">
-                {/* 진도 내용 */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📖 진도 내용</label>
-                  <textarea value={noteProgress} onChange={(e) => setNoteProgress(e.target.value)}
-                    rows={2} placeholder="예: 이차방정식 - 근의 공식 / 인수분해 응용"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
+                {/* 진도 내용 - 배정된 교재 기반 선택 */}
+                {(() => {
+                  const month = new Date().getMonth() + 1
+                  const currentSem = month >= 3 && month <= 8 ? 1 : 2
 
-                {/* WISE Step */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-gray-700">🎯 W·I·S·E Step</label>
-                    <span className="text-[10px] text-gray-400">학생 설정 자동 로드</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {WISE_STEPS.map((step) => (
-                      <button key={step} onClick={() => setNoteWISE(step)}
-                        className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
-                          noteWISE === step ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
-                        <span>{step}</span>
-                        <span className="text-[9px] font-normal opacity-70">{WISE_DESC[step].split(' ')[0]}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                  const TYPE_COLOR: Record<string, { btn: string; badge: string; style?: any; badgeStyle?: any }> = {
+                    '개념서': { btn: '', badge: '', style: { background: '#EF9F27', color: '#fdf8f0', borderColor: '#EF9F27' }, badgeStyle: { background: '#FAEEDA', color: '#633806' } },
+                    '유형서': { btn: '', badge: '', style: { background: '#639922', color: '#fdf8f0', borderColor: '#639922' }, badgeStyle: { background: '#EAF3DE', color: '#27500A' } },
+                    '심화서': { btn: '', badge: '', style: { background: '#dc2626', color: '#fdf8f0', borderColor: '#dc2626' }, badgeStyle: { background: '#fee2e2', color: '#991b1b' } },
+                  }
+
+                  // 배정된 교재 목록
+                  const myTextbooks = noteStudent
+                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+                    : []
+
+                  return (
+                    <div className="space-y-2.5">
+                      <label className="block text-xs font-bold text-gray-700">진도 내용</label>
+
+                      {myTextbooks.length === 0 ? (
+                        <p className="text-xs text-gray-400 px-1">과정관리에서 교재를 먼저 배정해주세요</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {myTextbooks.map((tb) => {
+                            const tc = TYPE_COLOR[tb.textbook_type as keyof typeof TYPE_COLOR] ?? TYPE_COLOR['개념서']
+                            const isActive = noteActiveTBId === tb.id
+                            const sel = noteProgressByTB[tb.id] ?? { chapter: '', subChapters: [], conceptIds: [], lastIdx: -1 }
+
+                            // 이 교재의 개념 목록
+                            const tbConcepts = tb.grade
+                              ? concepts.filter((c) => c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true))
+                              : []
+                            const tbChapters = [...new Set(tbConcepts.map((c) => c.chapter))]
+                            const tbSubChapters = sel.chapter
+                              ? [...new Set(tbConcepts.filter((c) => c.chapter === sel.chapter).map((c) => c.sub_chapter))]
+                              : []
+                            // 심화서/연산서는 중단원까지, 개념서/유형서는 개념까지
+                            const showConcepts = tb.textbook_type === '개념서' || tb.textbook_type === '유형서'
+                            const tbConceptList = showConcepts && sel.chapter && sel.subChapters.length > 0
+                              ? tbConcepts.filter((c) => c.chapter === sel.chapter && sel.subChapters.includes(c.sub_chapter))
+                              : []
+                            const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+
+                            const updateSel = (patch: Partial<typeof sel>) => {
+                              setNoteProgressByTB((prev) => ({
+                                ...prev,
+                                [tb.id]: { ...sel, ...patch }
+                              }))
+                            }
+
+                            return (
+                              <div key={tb.id} className="rounded-xl border-2 overflow-hidden transition-all"
+                                style={{ borderColor: isActive ? tc.style?.borderColor : '#e5d5c5' }}>
+                                {/* 교재 헤더 - 클릭으로 펼치기/접기 */}
+                                <button onClick={() => setNoteActiveTBId(isActive ? '' : tb.id)}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
+                                  style={{ background: isActive ? tc.badgeStyle?.background : 'white' }}>
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded"
+                                    style={tc.style}>
+                                    {tb.textbook_type}
+                                  </span>
+                                  <span className="text-xs font-semibold flex-1" style={{ color: '#1f2937' }}>
+                                    {tb.textbook_name}
+                                  </span>
+                                  {tb.grade && (
+                                    <span className="text-[10px]" style={{ color: '#1f2937' }}>
+                                      {tb.grade}{tb.semester ? ` ${tb.semester}학기` : ''}
+                                    </span>
+                                  )}
+                                  {/* 선택된 개념 수 표시 */}
+                                  {sel.conceptIds.length > 0 && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={tc.badgeStyle}>
+                                      {sel.conceptIds.length}개 선택
+                                    </span>
+                                  )}
+                                  <span style={{ color: '#1f2937', fontSize: 10 }}>{isActive ? '▲' : '▼'}</span>
+                                </button>
+
+                                {/* 펼쳐진 선택 영역 */}
+                                {isActive && (
+                                  <div className="px-3 pb-3 space-y-2" style={{ background: '#ffffff' }}>
+                                    {tbConcepts.length === 0 ? (
+                                      <p className="text-xs text-gray-400 py-2">이 과목의 개념 DB가 없어요</p>
+                                    ) : (
+                                      <>
+                                        {/* 대단원 */}
+                                        <div className="flex gap-1.5 flex-wrap pt-2">
+                                          {tbChapters.map((ch) => (
+                                            <button key={ch}
+                                              onClick={() => updateSel({ chapter: ch, subChapters: [], conceptIds: [], lastIdx: -1 })}
+                                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                                              style={sel.chapter === ch
+                                                ? { background: '#085041', color: '#fdf8f0', borderColor: '#085041' }
+                                                : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
+                                              {ch}
+                                            </button>
+                                          ))}
+                                        </div>
+
+                                        {/* 중단원 (다중선택 가능) */}
+                                        {tbSubChapters.length > 0 && (
+                                          <div className="flex gap-1.5 flex-wrap">
+                                            {tbSubChapters.map((sub) => {
+                                              const isSubSel = sel.subChapters.includes(sub)
+                                              return (
+                                                <button key={sub}
+                                                  onClick={() => {
+                                                    const newSubs = isSubSel
+                                                      ? sel.subChapters.filter((x) => x !== sub)
+                                                      : [...sel.subChapters, sub]
+                                                    updateSel({ subChapters: newSubs, conceptIds: [], lastIdx: -1 })
+                                                  }}
+                                                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                                                  style={isSubSel
+                                                    ? { background: '#9FE1CB', color: '#fdf8f0', borderColor: '#d97706' }
+                                                    : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
+                                                  {sub}
+                                                </button>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+
+                                        {/* 개념 목록 */}
+                                        {tbConceptList.length > 0 && (
+                                          <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-white">
+                                            <div className="px-3 py-1.5 border-b border-gray-100 flex items-center justify-between"
+                                              style={{ background: '#ffffff' }}>
+                                              <span className="text-[10px] text-gray-400">Shift+클릭으로 범위 선택</span>
+                                              {sel.conceptIds.length > 0 && (
+                                                <button onClick={() => updateSel({ conceptIds: [], lastIdx: -1 })}
+                                                  className="text-[10px] text-gray-400 hover:text-red-400">전체 해제</button>
+                                              )}
+                                            </div>
+                                            {tbConceptList.map((c, idx) => {
+                                              const selected = sel.conceptIds.includes(c.id)
+                                              const existingCheck = noteStudent
+                                                ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id)
+                                                : null
+                                              const fullyDone = existingCheck && existingCheck.check_count >= targetCount
+                                              const alreadyDone = existingCheck && existingCheck.check_count > 0
+
+                                              return (
+                                                <button key={c.id}
+                                                  onClick={(e) => {
+                                                    if (e.shiftKey && sel.lastIdx !== -1) {
+                                                      const start = Math.min(sel.lastIdx, idx)
+                                                      const end = Math.max(sel.lastIdx, idx)
+                                                      const rangeIds = tbConceptList.slice(start, end + 1).map((x) => x.id)
+                                                      updateSel({ conceptIds: [...new Set([...sel.conceptIds, ...rangeIds])] })
+                                                    } else {
+                                                      updateSel({
+                                                        conceptIds: sel.conceptIds.includes(c.id)
+                                                          ? sel.conceptIds.filter((x) => x !== c.id)
+                                                          : [...sel.conceptIds, c.id],
+                                                        lastIdx: idx
+                                                      })
+                                                    }
+                                                  }}
+                                                  className={cx('w-full flex items-center gap-2.5 px-3 py-2.5 text-left border-b border-gray-50 last:border-0 transition-all',
+                                                    selected ? 'bg-amber-50' : fullyDone ? 'bg-white' : 'hover:bg-white')}>
+                                                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                                                    style={selected ? tc.badgeStyle :
+                                                      fullyDone ? tc.badgeStyle :
+                                                      alreadyDone ? { background: '#e5d5c5', color: '#1f2937' } :
+                                                      { background: '#f3f4f6', color: '#9ca3af' }}>
+                                                    {selected ? '✓' : fullyDone ? '✓' : alreadyDone ? '~' : c.concept_order}
+                                                  </span>
+                                                  <span className={cx('text-xs flex-1',
+                                                    selected ? 'text-gray-800 font-semibold' :
+                                                    fullyDone ? 'text-gray-400 line-through' : 'text-gray-600')}>
+                                                    {c.concept_name}
+                                                  </span>
+                                                  {alreadyDone && !selected && (
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                                                      style={fullyDone ? tc.badgeStyle : { background: '#ffffff', color: '#4b5563' }}>
+                                                      {fullyDone ? '완료' : `${existingCheck.check_count}회`}
+                                                    </span>
+                                                  )}
+                                                </button>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+
+                                        {/* 선택 요약 */}
+                                        {sel.conceptIds.length > 0 && (
+                                          <div className="px-3 py-2 rounded-xl text-xs font-semibold"
+                                            style={tc.badgeStyle}>
+                                            {sel.chapter}{sel.subChapters.length > 0 ? ` · ${sel.subChapters.join(' + ')}` : ''}{tbConceptList.length > 0 ? ' ·' : ''}{' '}
+                                            {tbConceptList.filter((c) => sel.conceptIds.includes(c.id)).map((c) => c.concept_name).join(', ')}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* 출결 */}
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">출결</label>
                   <div className="flex gap-2">
-                    {['정시', '지각', '결석'].map((att) => (
-                      <button key={att} onClick={() => setNoteAttendance(att)}
-                        className={cx('flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all',
-                          noteAttendance === att
-                            ? att === '정시' ? 'bg-green-600 text-white border-green-600'
-                            : att === '지각' ? 'bg-yellow-500 text-white border-yellow-500'
-                            : 'bg-red-500 text-white border-red-500'
-                            : 'bg-white text-gray-600 border-gray-200')}>
-                        {att === '정시' ? '✅ 정시' : att === '지각' ? '⚠️ 지각' : '❌ 결석'}
+                    {[
+                      { key: '정시', icon: 'ti-circle-check' },
+                      { key: '지각', icon: 'ti-clock-exclamation' },
+                      { key: '결석', icon: 'ti-x' },
+                    ].map((att) => (
+                      <button key={att.key} onClick={() => setNoteAttendance(att.key)}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5"
+                        style={noteAttendance === att.key
+                          ? { background: '#F5C4B3', color: '#712B13' }
+                          : { background: '#f3f4f6', color: '#9ca3af' }}>
+                        <i className={`ti ${att.icon}`} style={{ fontSize: 15 }} />
+                        {att.key}
                       </button>
                     ))}
                   </div>
@@ -933,9 +1333,10 @@ export default function TeacherLearningNotesPage() {
                   <div className="grid grid-cols-4 gap-2">
                     {ACHIEVEMENT_OPTIONS.map((opt) => (
                       <button key={opt.value} onClick={() => setNoteAchievement(opt.value)}
-                        className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all',
-                          noteAchievement === opt.value ? opt.bg : 'bg-white text-gray-600 border-gray-200',
-                          noteAchievement === opt.value ? opt.color : '')}>
+                        className="py-2.5 rounded-xl text-sm font-black transition-all"
+                        style={noteAchievement === opt.value
+                          ? { background: '#F5C4B3', color: '#712B13' }
+                          : { background: '#f3f4f6', color: '#9ca3af' }}>
                         {opt.label}
                       </button>
                     ))}
@@ -948,13 +1349,10 @@ export default function TeacherLearningNotesPage() {
                   <div className="flex gap-1.5 flex-wrap">
                     {[0, 30, 50, 70, 90, 100].map((pct) => (
                       <button key={pct} onClick={() => setNoteScorePct(pct)}
-                        className={cx('px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all',
-                          noteScorePct === pct
-                            ? pct >= 90 ? 'bg-green-600 text-white border-green-600'
-                            : pct >= 70 ? 'bg-blue-600 text-white border-blue-600'
-                            : pct >= 50 ? 'bg-yellow-500 text-white border-yellow-500'
-                            : 'bg-red-500 text-white border-red-500'
-                            : 'bg-white text-gray-600 border-gray-200')}>
+                        className="px-3 py-2 rounded-xl text-sm font-bold transition-all"
+                        style={noteScorePct === pct
+                          ? { background: '#F5C4B3', color: '#712B13' }
+                          : { background: '#f3f4f6', color: '#9ca3af' }}>
                         {pct}%
                       </button>
                     ))}
@@ -972,16 +1370,16 @@ export default function TeacherLearningNotesPage() {
                   {noteExtraClass && (
                     <input type="text" value={noteExtraTime} onChange={(e) => setNoteExtraTime(e.target.value)}
                       placeholder="예: 오후 6시~7시"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                   )}
                 </div>
 
                 {/* 메모 */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📝 메모 <span className="text-gray-400 font-normal">(선택)</span></label>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">메모 <span className="text-gray-400 font-normal">(선택)</span></label>
                   <textarea value={noteMemo} onChange={(e) => setNoteMemo(e.target.value)}
                     rows={2} placeholder="특이사항, 다음 수업 준비사항 등"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                 </div>
               </div>
             )}
@@ -989,15 +1387,131 @@ export default function TeacherLearningNotesPage() {
             {/* ── 데일리 테스트 탭 ── */}
             {noteTab === 'daily' && (
               <div className="space-y-4">
-                <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700">
-                  💡 수업 중 진행한 데일리 테스트 결과를 입력해주세요
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">단원명 / 범위</label>
-                  <input type="text" value={dailyTestUnit} onChange={(e) => setDailyTestUnit(e.target.value)}
-                    placeholder="예: 이차방정식 근의 공식"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                </div>
+                {/* 테스트 범위 선택 - 단원만 선택 */}
+                {(() => {
+                  const myTBs = noteStudent
+                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+                    : []
+
+                  // 배정된 교재 중 첫 번째 grade 기반으로 단원 목록
+                  const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','공통수학1','공통수학2','미적분1','확률과통계','대수','기하','고1','고2','고3']
+                  const topTB = myTBs.sort((a, b) => GRADE_ORDER.indexOf(b.grade ?? '') - GRADE_ORDER.indexOf(a.grade ?? ''))[0]
+                  const allConcepts = topTB?.grade
+                    ? concepts.filter((c) => c.grade === topTB.grade && (topTB.semester ? c.semester === topTB.semester : true))
+                    : []
+                  const allChapters = [...new Set(allConcepts.map((c) => c.chapter))]
+                  const subChapters = dailyChapter
+                    ? [...new Set(allConcepts.filter((c) => c.chapter === dailyChapter).map((c) => c.sub_chapter))]
+                    : []
+                  // 선택된 중단원들의 개념 합치기
+                  const conceptList = dailyChapter && dailySubChapters.length > 0
+                    ? allConcepts.filter((c) => c.chapter === dailyChapter && dailySubChapters.includes(c.sub_chapter))
+                    : []
+
+                  return (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        테스트 범위
+                        {topTB?.grade && <span className="ml-1.5 text-[10px] font-normal text-gray-400">{topTB.grade}</span>}
+                      </label>
+                      {allConcepts.length === 0 ? (
+                        <input type="text" value={dailyTestUnit} onChange={(e) => setDailyTestUnit(e.target.value)}
+                          placeholder="예: 이차방정식 근의 공식"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+                      ) : (
+                        <div className="space-y-2">
+                          {/* 대단원 */}
+                          <div className="flex gap-1.5 flex-wrap">
+                            {allChapters.map((ch) => (
+                              <button key={ch} onClick={() => { setDailyChapter(ch); setDailySubChapters([]); setDailyConceptIds([]); setDailyLastIdx(-1) }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                                style={dailyChapter === ch
+                                  ? { background: '#085041', color: '#fdf8f0', borderColor: '#085041' }
+                                  : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
+                                {ch}
+                              </button>
+                            ))}
+                          </div>
+                          {/* 중단원 */}
+                          {subChapters.length > 0 && (
+                            <div className="flex gap-1.5 flex-wrap">
+                              {subChapters.map((sub) => {
+                                const isSubSelected = dailySubChapters.includes(sub)
+                                return (
+                                  <button key={sub} onClick={() => {
+                                    setDailySubChapters((prev) =>
+                                      prev.includes(sub) ? prev.filter((x) => x !== sub) : [...prev, sub]
+                                    )
+                                    setDailyConceptIds([])
+                                    setDailyLastIdx(-1)
+                                  }}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                                    style={isSubSelected
+                                      ? { background: '#9FE1CB', color: '#fdf8f0', borderColor: '#d97706' }
+                                      : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
+                                    {sub}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {/* 개념 선택 */}
+                          {conceptList.length > 0 && (
+                            <div className="border border-gray-200 rounded-xl overflow-hidden max-h-40 overflow-y-auto bg-white">
+                              <div className="px-3 py-1.5 border-b border-gray-100 flex items-center justify-between"
+                                style={{ background: '#ffffff' }}>
+                                <span className="text-[10px] text-gray-400">Shift+클릭 범위 선택</span>
+                                {dailyConceptIds.length > 0 && (
+                                  <button onClick={() => { setDailyConceptIds([]); setDailyLastIdx(-1) }}
+                                    className="text-[10px] text-gray-400 hover:text-red-400">해제</button>
+                                )}
+                              </div>
+                              {conceptList.map((c, idx) => {
+                                const selected = dailyConceptIds.includes(c.id)
+                                return (
+                                  <button key={c.id}
+                                    onClick={(e) => {
+                                      if (e.shiftKey && dailyLastIdx !== -1) {
+                                        const start = Math.min(dailyLastIdx, idx)
+                                        const end = Math.max(dailyLastIdx, idx)
+                                        const ids = conceptList.slice(start, end + 1).map((x) => x.id)
+                                        setDailyConceptIds((prev) => [...new Set([...prev, ...ids])])
+                                      } else {
+                                        setDailyConceptIds((prev) => selected ? prev.filter((x) => x !== c.id) : [...prev, c.id])
+                                        setDailyLastIdx(idx)
+                                      }
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left border-b border-gray-50 last:border-0 transition-all"
+                                    style={{ background: selected ? '#fdf8f0' : 'white' }}>
+                                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                                      style={selected
+                                        ? { background: '#9FE1CB', color: '#fdf8f0' }
+                                        : { background: '#f3f4f6', color: '#9ca3af' }}>
+                                      {selected ? '✓' : c.concept_order}
+                                    </span>
+                                    <span className="text-xs" style={{ color: selected ? '#3d2b1f' : '#6b7280', fontWeight: selected ? 600 : 400 }}>
+                                      {c.concept_name}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {/* 선택 요약 */}
+                          {(dailyChapter || dailyConceptIds.length > 0) && (
+                            <div className="px-3 py-2 rounded-xl text-xs font-semibold"
+                              style={{ background: '#FAEEDA', color: '#633806' }}>
+                              {dailyChapter}{dailySubChapters.length > 0 ? ` · ${dailySubChapters.join(' + ')}` : ''}
+                              {dailyConceptIds.length > 0 && ` · ${conceptList.filter((c) => dailyConceptIds.includes(c.id)).map((c) => c.concept_name).join(', ')}`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* 점수 입력 */}
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">점수</label>
                   <input type="number" min="0" max="100" value={dailyTestScore}
@@ -1006,11 +1520,13 @@ export default function TeacherLearningNotesPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
                 </div>
                 {dailyTestScore && (
-                  <div className={cx('rounded-xl p-3 text-center text-sm font-bold',
-                    parseInt(dailyTestScore) >= 90 ? 'bg-green-50 text-green-600' :
-                    parseInt(dailyTestScore) >= 70 ? 'bg-blue-50 text-blue-600' :
-                    'bg-red-50 text-red-500')}>
-                    {dailyTestScore}점 · {parseInt(dailyTestScore) >= 90 ? '우수 🎉' : parseInt(dailyTestScore) >= 70 ? '양호 👍' : '보완 필요 📚'}
+                  <div className="rounded-xl p-3 text-center text-sm font-bold"
+                    style={parseInt(dailyTestScore) >= 90
+                      ? { background: '#EAF3DE', color: '#27500A' }
+                      : parseInt(dailyTestScore) >= 70
+                      ? { background: '#FAEEDA', color: '#633806' }
+                      : { background: '#fee2e2', color: '#991b1b' }}>
+                    {dailyTestScore}점 · {parseInt(dailyTestScore) >= 90 ? '우수' : parseInt(dailyTestScore) >= 70 ? '양호' : '보완 필요'}
                   </div>
                 )}
               </div>
@@ -1023,41 +1539,202 @@ export default function TeacherLearningNotesPage() {
                   💡 과제 배부 시 학생 앱 "오늘 과제" 탭에 자동으로 표시됩니다
                 </div>
 
-                {/* 교재 과제 */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📖 교재 과제</label>
-                  <input type="text" value={hwTextbookName} onChange={(e) => setHwTextbookName(e.target.value)}
-                    placeholder="교재명 (예: 쎈B, RPM)"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 mb-2" />
-                  <input type="text" value={hwTextbookPage} onChange={(e) => setHwTextbookPage(e.target.value)}
-                    placeholder="페이지/범위 (예: p.45~52, 3단원 B유형)"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </div>
+                {/* 교재 과제 - 배정된 교재 기반 (다중 선택) */}
+                {(() => {
+                  const myTBs = noteStudent
+                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+                    : []
 
-                {/* 학습지 과제 */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📝 학습지 과제</label>
-                  <input type="text" value={hwWorksheetRange} onChange={(e) => setHwWorksheetRange(e.target.value)}
-                    placeholder="범위 (예: 이차방정식 2.1.3~2.1.5차시, 3레벨)"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </div>
+                  const TYPE_COLOR: Record<string, string> = {
+                    '개념서': 'bg-yellow-400 text-white border-yellow-400',
+                    '유형서': 'bg-green-500 text-white border-green-500',
+                    '심화서': 'bg-orange-500 text-white border-orange-500',
+                    '연산서': 'bg-purple-500 text-white border-purple-500',
+                  }
+
+                  return (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        📖 교재 과제
+                        <span className="ml-1.5 text-[10px] font-normal text-gray-400">복수 선택 가능</span>
+                      </label>
+                      {myTBs.length === 0 ? (
+                        <p className="text-xs text-gray-400">과정관리에서 교재를 먼저 배정해주세요</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {myTBs.map((tb) => {
+                            const isSelected = hwSelectedTBIds.includes(tb.id)
+                            const tbConcepts = concepts.filter((c) =>
+                              c.grade === tb.grade && c.semester === tb.semester
+                            )
+                            const tbChapters = [...new Set(tbConcepts.map((c) => c.chapter))]
+                            const selectedChapter = hwTBChapters[tb.id] || ''
+                            const tbSubChapters = selectedChapter
+                              ? [...new Set(tbConcepts.filter((c) => c.chapter === selectedChapter).map((c) => c.sub_chapter))]
+                              : []
+                            const selectedSub = hwTBSubChapters[tb.id] || ''
+                            const selectedPage = hwTBPages[tb.id] || ''
+
+                            return (
+                              <div key={tb.id} className={cx('rounded-xl border-2 overflow-hidden transition-all',
+                                isSelected ? 'border-blue-300' : 'border-gray-100')}>
+                                {/* 교재 선택 헤더 */}
+                                <button onClick={() => {
+                                  setHwSelectedTBIds((prev) =>
+                                    prev.includes(tb.id) ? prev.filter((x) => x !== tb.id) : [...prev, tb.id]
+                                  )
+                                  if (!isSelected) {
+                                    setHwTBChapters((p) => ({ ...p, [tb.id]: '' }))
+                                    setHwTBSubChapters((p) => ({ ...p, [tb.id]: '' }))
+                                    setHwTBPages((p) => ({ ...p, [tb.id]: '' }))
+                                  }
+                                }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
+                                  <span className={cx('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                                    isSelected ? 'bg-[#9FE1CB] border-[#9FE1CB]' : 'border-gray-300')}>
+                                    {isSelected && <span className="w-2 h-2 bg-white rounded-full" />}
+                                  </span>
+                                  <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
+                                    isSelected ? TYPE_COLOR[tb.textbook_type] ?? 'bg-gray-400 text-white' : 'bg-gray-100 text-gray-500')}>
+                                    {tb.textbook_type}
+                                  </span>
+                                  <span className="text-xs font-semibold text-gray-700">{tb.textbook_name}</span>
+                                  {tb.grade && <span className="text-[10px] text-gray-400 ml-auto">{tb.grade} {tb.semester}학기</span>}
+                                </button>
+
+                                {/* 선택된 경우 세부 입력 */}
+                                {isSelected && (
+                                  <div className="px-3 pb-3 space-y-2 bg-blue-50/30">
+                                    {/* 대단원 */}
+                                    {tbChapters.length > 0 && (
+                                      <div className="flex gap-1.5 flex-wrap">
+                                        {tbChapters.map((ch) => (
+                                          <button key={ch} onClick={() => {
+                                            setHwTBChapters((p) => ({ ...p, [tb.id]: ch }))
+                                            setHwTBSubChapters((p) => ({ ...p, [tb.id]: '' }))
+                                          }}
+                                            className={cx('px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all',
+                                              selectedChapter === ch ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
+                                            {ch}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* 중단원 */}
+                                    {selectedChapter && tbSubChapters.length > 0 && (
+                                      <div className="flex gap-1.5 flex-wrap">
+                                        {tbSubChapters.map((sub) => (
+                                          <button key={sub} onClick={() =>
+                                            setHwTBSubChapters((p) => ({ ...p, [tb.id]: sub }))}
+                                            className={cx('px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all',
+                                              selectedSub === sub ? 'bg-[#F5C4B3] text-white border-[#F5C4B3]' : 'bg-white text-gray-600 border-gray-200')}>
+                                            {sub}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* 페이지 입력 */}
+                                    <input type="text" value={selectedPage}
+                                      onChange={(e) => setHwTBPages((p) => ({ ...p, [tb.id]: e.target.value }))}
+                                      placeholder="페이지/범위 (예: p.45~52)"
+                                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* 학습지 과제 - 학습지관리탭 연동 */}
+                {(() => {
+                  const myWSList = noteStudent
+                    ? worksheets.filter((w) =>
+                        w.student_id === noteStudent.id &&
+                        (w.status === 'assigned' || w.status === 'similar_assigned')
+                      )
+                    : []
+
+                  return (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        📝 학습지 과제
+                        <span className="ml-1.5 text-[10px] font-normal text-gray-400">학습지관리탭과 자동연동</span>
+                      </label>
+                      {myWSList.length === 0 ? (
+                        <p className="text-xs text-gray-400">학습지관리탭에서 배정된 학습지가 없어요</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {myWSList.map((ws) => (
+                            <button key={ws.id} onClick={() => setHwSelectedWSId(ws.id === hwSelectedWSId ? '' : ws.id)}
+                              className={cx('w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all',
+                                hwSelectedWSId === ws.id ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200')}>
+                              <span className={cx('w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0',
+                                hwSelectedWSId === ws.id ? 'bg-[#9FE1CB] border-[#9FE1CB]' : 'border-gray-300')}>
+                                {hwSelectedWSId === ws.id && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-800">
+                                  {ws.grade_level} · {ws.unit}{ws.unit_name ? ` (${ws.unit_name})` : ''} · {ws.current_level}레벨
+                                </p>
+                                {ws.worksheet_type === 'similar' && (
+                                  <span className="text-[10px] text-[#712B13] font-bold">오답유사</span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* 영상 과제 */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📹 영상 과제 링크</label>
-                  <input type="url" value={hwVideoUrl} onChange={(e) => setHwVideoUrl(e.target.value)}
-                    placeholder="https://youtube.com/..."
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  {hwVideoUrl && (
-                    <p className="text-xs text-green-600 mt-1">✓ 학생이 영상 시작/완료 버튼을 사용할 수 있어요</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-gray-700">영상 과제 링크</label>
+                    <button onClick={() => setHwVideoUrls((prev) => [...prev, ''])}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
+                      style={{ background: '#ffffff', color: '#4b5563', border: '1px solid #9FE1CB60' }}>
+                      + 추가
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {hwVideoUrls.map((url, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input type="url" value={url}
+                          onChange={(e) => {
+                            const next = [...hwVideoUrls]
+                            next[idx] = e.target.value
+                            setHwVideoUrls(next)
+                          }}
+                          placeholder="https://youtube.com/..."
+                          className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                        {hwVideoUrls.length > 1 && (
+                          <button onClick={() => setHwVideoUrls((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-gray-400 hover:text-red-400 text-lg shrink-0">✕</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {hwVideoUrls.some((u) => u.trim()) && (
+                    <p className="text-xs mt-1" style={{ color: '#639922' }}>
+                      영상 {hwVideoUrls.filter((u) => u.trim()).length}개 · 학생 시청 시간이 선생님에게만 표시돼요
+                    </p>
                   )}
                 </div>
               </div>
             )}
 
             <button onClick={handleSaveNote} disabled={savingNote}
-              className="w-full mt-6 py-3.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-              {savingNote ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : '📓 수업일지 저장'}
+              className="w-full mt-6 py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: '#F5C4B3', color: '#712B13' }}>
+              {savingNote ? <><span className="w-4 h-4 border-2 border-[#712B13]/30 border-t-[#712B13] rounded-full animate-spin" />저장 중...</> : <><i className="ti ti-device-floppy" style={{ fontSize: 17 }} /> 수업일지 저장</>}
             </button>
           </div>
         </div>
@@ -1082,21 +1759,134 @@ export default function TeacherLearningNotesPage() {
                 <p className="text-xs text-purple-500">{feedbackStudent.grade}</p>
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">간단 메모 <span className="text-red-400">*</span></label>
-              <textarea value={feedbackContent} onChange={(e) => setFeedbackContent(e.target.value)}
-                rows={3} placeholder="예: 과제 대충해옴. 자세가 안좋음. 남아서 추가로 마저 고치고 감"
-                autoFocus
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500" />
-            </div>
-            <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-600">
-              💡 저장하면 AI가 자동으로 학부모용 알림장 4문장을 생성해요
+            {/* 카테고리별 문장 선택 */}
+            {(() => {
+              const PHRASES: Record<string, string[]> = {
+                '수업태도': [
+                  '오늘 수업 태도가 매우 좋았습니다.',
+                  '집중력이 좋고 적극적으로 참여했습니다.',
+                  '오늘따라 집중력이 조금 떨어졌습니다.',
+                  '자세가 바르지 않아 주의를 주었습니다.',
+                  '졸음을 참으며 수업에 임했습니다.',
+                  '친구들과 잡담이 많아 지적하였습니다.',
+                  '질문을 적극적으로 하며 수업에 참여했습니다.',
+                  '이해가 빠르고 반응이 좋았습니다.',
+                ],
+                '과제': [
+                  '과제를 성실하게 완료해 왔습니다.',
+                  '과제를 꼼꼼하게 잘 해왔습니다.',
+                  '과제를 해오지 않아 수업 중 진행했습니다.',
+                  '과제 완성도가 아쉬워 보완을 지시했습니다.',
+                  '과제량이 많았음에도 잘 완료했습니다.',
+                  '오답 수정을 제대로 하지 않아 다시 지도했습니다.',
+                  '과제 중 틀린 부분을 함께 확인하고 정리했습니다.',
+                  '다음 수업까지 미완성 과제를 마저 완료하도록 했습니다.',
+                ],
+                '진도': [
+                  '오늘 진도를 잘 이해하고 따라왔습니다.',
+                  '새로운 개념을 빠르게 습득했습니다.',
+                  '개념 이해에 시간이 걸려 추가 설명을 진행했습니다.',
+                  '응용문제에서 어려움을 느껴 반복 학습이 필요합니다.',
+                  '기초 개념 복습 후 새 단원을 시작했습니다.',
+                  '오늘 배운 내용을 잘 정리하도록 지도했습니다.',
+                  '계산 실수가 잦아 꼼꼼히 확인하도록 지도했습니다.',
+                  '심화 문제까지 훌륭하게 소화했습니다.',
+                ],
+                '칭찬': [
+                  '오늘 수업이 매우 인상적이었습니다.',
+                  '열심히 노력하는 모습이 보기 좋습니다.',
+                  '실력이 눈에 띄게 향상되고 있습니다.',
+                  '포기하지 않고 끝까지 풀어내는 끈기가 훌륭합니다.',
+                  '꼼꼼하고 성실한 학습 태도를 칭찬합니다.',
+                  '복습을 충실히 한 것이 느껴집니다.',
+                  '이해력이 뛰어나 수업 진행이 매우 즐거웠습니다.',
+                  '오늘 최선을 다한 모습이 대견합니다.',
+                ],
+                '당부': [
+                  '복습을 꼭 해주시기 바랍니다.',
+                  '오늘 배운 개념을 한 번 더 읽어보도록 해주세요.',
+                  '다음 수업 전까지 예습을 부탁드립니다.',
+                  '규칙적인 수면으로 컨디션 관리를 부탁드립니다.',
+                  '핸드폰 사용 시간을 줄여주시면 좋겠습니다.',
+                  '수업 중 필기 습관을 길러주시기 바랍니다.',
+                  '부족한 부분은 개념부터 다시 정리해 주세요.',
+                  '꾸준한 학습 습관이 중요합니다.',
+                ],
+                '기타': [
+                  '오늘 컨디션이 좋지 않아 보여 걱정이 되었습니다.',
+                  '추가 수업을 통해 부족한 부분을 보완했습니다.',
+                  '다음 시험을 위해 집중적으로 준비 중입니다.',
+                  '오늘 시험 결과를 함께 분석하고 대책을 세웠습니다.',
+                  '학원 결석 시 미리 연락 부탁드립니다.',
+                  '궁금한 점은 언제든지 연락 주세요.',
+                  '앞으로도 잘 지도하겠습니다.',
+                  '지속적인 관심과 격려 부탁드립니다.',
+                ],
+              }
+              const categories = Object.keys(PHRASES)
+
+              return (
+                <div className="space-y-3">
+                  {/* 카테고리 탭 */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {categories.map((cat) => (
+                      <button key={cat} onClick={() => setFeedbackCategory(cat)}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                        style={feedbackCategory === cat
+                          ? { background: '#085041', color: '#fdf8f0', borderColor: '#085041' }
+                          : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 문장 버튼 */}
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                    {PHRASES[feedbackCategory]?.map((phrase) => {
+                      const isSelected = feedbackContent.includes(phrase)
+                      return (
+                        <button key={phrase}
+                          onClick={() => {
+                            if (isSelected) {
+                              setFeedbackContent((prev) => prev.split('\n').filter((s) => s.trim() !== phrase.trim()).join('\n').trim())
+                            } else {
+                              setFeedbackContent((prev) => prev ? prev + '\n' + phrase : phrase)
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl text-xs border transition-all text-left"
+                          style={isSelected
+                            ? { background: '#FAEEDA', color: '#633806', borderColor: '#d97706', fontWeight: 600 }
+                            : { background: '#f9f9f9', color: '#374151', borderColor: '#e5e7eb' }}>
+                          {isSelected ? '✓ ' : ''}{phrase}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* 미리보기 + 직접입력 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-gray-700">작성 내용</label>
+                      {feedbackContent && (
+                        <button onClick={() => setFeedbackContent('')}
+                          className="text-[10px] text-gray-400 hover:text-red-400">전체 지우기</button>
+                      )}
+                    </div>
+                    <textarea value={feedbackContent} onChange={(e) => setFeedbackContent(e.target.value)}
+                      rows={3} placeholder="위 문장을 클릭하거나 직접 입력하세요"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#F5C4B3]" />
+                  </div>
+                </div>
+              )
+            })()}
+            <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-gray-800">
+              저장하면 AI가 자동으로 학부모용 알림장 4문장을 생성해요
             </div>
             <div className="flex gap-2">
               <button onClick={() => setShowFeedbackModal(false)}
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveFeedback} disabled={!feedbackContent.trim() || savingFeedback}
-                className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+                className="flex-1 py-3 bg-[#F5C4B3] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                 {savingFeedback
                   ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />AI 알림장 생성 중...</>
                   : '✨ 저장 + AI 알림장 생성'}
@@ -1127,7 +1917,7 @@ export default function TeacherLearningNotesPage() {
                 <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-xl">
                   {myStudents.map((s) => (
                     <button key={s.id} onClick={() => setScheduleStudent(s)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0 text-sm font-semibold text-gray-800">
+                      className="w-full text-left px-3 py-2.5 hover:bg-white border-b border-gray-50 last:border-0 text-sm font-semibold text-gray-800">
                       {s.name} <span className="text-xs text-gray-400 font-normal">{s.grade}</span>
                     </button>
                   ))}
@@ -1135,12 +1925,21 @@ export default function TeacherLearningNotesPage() {
               )}
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">요일</label>
+              <label className="block text-xs font-bold text-gray-700 mb-2">
+                요일 <span className="text-gray-400 font-normal">(복수 선택 가능)</span>
+                {scheduleDays.length > 0 && (
+                  <span className="ml-2 text-gray-800 font-bold">{scheduleDays.join('·')}요일</span>
+                )}
+              </label>
               <div className="flex gap-1.5">
                 {DAYS.map((d) => (
-                  <button key={d} onClick={() => setScheduleDay(d)}
+                  <button key={d} onClick={() => {
+                    setScheduleDays((prev) =>
+                      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+                    )
+                  }}
                     className={cx('flex-1 py-2 rounded-lg text-sm font-bold border transition-all',
-                      scheduleDay === d ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                      scheduleDays.includes(d) ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
                     {d}
                   </button>
                 ))}
@@ -1152,7 +1951,7 @@ export default function TeacherLearningNotesPage() {
                 {TIMES.map((t) => (
                   <button key={t} onClick={() => setScheduleTime(t)}
                     className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                      scheduleTime === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                      scheduleTime === t ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
                     {t}
                   </button>
                 ))}
@@ -1164,15 +1963,15 @@ export default function TeacherLearningNotesPage() {
                 {[1, 1.5, 2, 2.5, 3, 3.5, 4].map((p) => (
                   <button key={p} onClick={() => setSchedulePeriods(p)}
                     className={cx('flex-1 py-2 rounded-xl text-sm font-bold border transition-all',
-                      schedulePeriods === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                      schedulePeriods === p ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
                     {p}교시
                   </button>
                 ))}
               </div>
             </div>
-            <button onClick={handleSaveSchedule} disabled={!scheduleStudent || savingSchedule}
-              className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-              {savingSchedule ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : '저장하기'}
+            <button onClick={handleSaveSchedule} disabled={!scheduleStudent || scheduleDays.length === 0 || savingSchedule}
+              className="w-full py-3.5 bg-[#9FE1CB] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {savingSchedule ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : scheduleDays.length > 0 ? `${scheduleDays.join('·')}요일 저장하기` : '요일을 선택하세요'}
             </button>
           </div>
         </div>

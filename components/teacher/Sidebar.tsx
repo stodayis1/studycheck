@@ -9,18 +9,13 @@ function cx(...classes: (string|boolean|undefined|null)[]) {
 }
 
 const NAV_ITEMS = [
-  { href:'/teacher/dashboard',      label:'대시보드',    icon:'⊞' },
-  { href:'/teacher/learning-notes', label:'학습관리',    icon:'📓' },
-  { href:'/teacher/students',       label:'학생관리',    icon:'◎' },
-  { href:'/teacher/assignments',    label:'레벨학습지',  icon:'📝' },
-  { href:'/teacher/submissions',    label:'제출현황',    icon:'◐' },
-  { href:'/teacher/exams',          label:'평가관리',    icon:'🏆' },
-  { href:'/teacher/reports',        label:'보고서',      icon:'◈' },
-]
-
-const ADMIN_NAV_ITEMS = [
-  ...NAV_ITEMS,
-  { href:'/teacher/admin',          label:'관리자',      icon:'🔴' },
+  { href: '/teacher/dashboard',      label: '대시보드',   icon: 'ti-layout-dashboard' },
+  { href: '/teacher/students',       label: '학생관리',   icon: 'ti-users' },
+  { href: '/teacher/learning-notes', label: '학습관리',   icon: 'ti-notebook' },
+  { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
+  { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
+  { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
+  { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
 ]
 
 export function TeacherSidebar() {
@@ -30,72 +25,113 @@ export function TeacherSidebar() {
   return (
     <>
       {/* 데스크톱 사이드바 */}
-      <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-100 min-h-screen sticky top-0">
-        <div className="px-4 py-4 border-b border-gray-100 flex flex-col items-center gap-2">
-          <img src="/logo.png" alt="수학의지혜" className="h-12 object-contain"
+      <aside className="hidden md:flex flex-col w-56 min-h-screen sticky top-0"
+        style={{ background: '#F0FBF7', borderRight: '1px solid #e5e7eb' }}>
+
+        {/* 로고 */}
+        <div className="px-5 py-5 flex flex-col items-center gap-1.5"
+          style={{ borderBottom: '1px solid #e5e7eb' }}>
+          <img src="/logo.png" alt="수학의지혜" className="h-11 object-contain"
             onError={(e) => { e.currentTarget.style.display='none' }} />
-          <p className="text-[10px] text-gray-400 font-medium text-center">수업일지 · 진도관리</p>
+          <p className="text-[10px] font-medium tracking-wide" style={{ color: '#9ca3af' }}>
+            학원관리 시스템
+          </p>
         </div>
+
+        {/* 네비게이션 */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {(currentUser?.role === 'admin' ? ADMIN_NAV_ITEMS : NAV_ITEMS).map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href+'/')
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link key={item.href} href={item.href}
-                className={cx('flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
-                  isActive ? 'bg-[#1a2f5e] text-white' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700')}>
-                <span className="text-base leading-none">{item.icon}</span>
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={isActive ? {
+                  background: '#9FE1CB',
+                  color: '#085041',
+                  fontWeight: 600,
+                  borderLeft: '3px solid #085041',
+                } : {
+                  color: '#6b7280',
+                  borderLeft: '3px solid transparent',
+                }}>
+                <i className={`ti ${item.icon}`} style={{ fontSize: 16 }} />
                 {item.label}
               </Link>
             )
           })}
         </nav>
-        <div className="flex justify-center px-4 pb-2">
-          <img src="/character.png" alt="캐릭터" className="h-24 object-contain"
+
+        {/* 캐릭터 */}
+        <div className="flex justify-center px-4 pb-1">
+          <img src="/character.png" alt="캐릭터" className="h-20 object-contain"
             onError={(e) => { e.currentTarget.style.display='none' }} />
         </div>
-        {/* 관리자 모드 토글 */}
-        {currentUser?.role === 'admin' && (
-          <div className="px-3 pb-2">
-            <button onClick={toggleAdminMode}
-              className={cx('w-full py-2 rounded-xl text-xs font-bold border transition-all',
-                adminMode
-                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                  : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100')}>
-              {adminMode ? '🔴 관리자 모드' : '🔵 강사 모드'}
-              <span className="block text-[9px] font-normal opacity-60 mt-0.5">
-                {adminMode ? '강사 모드로 전환' : '관리자 모드로 전환'}
-              </span>
-            </button>
-          </div>
-        )}
-        <div className="px-4 py-3 border-t border-gray-100">
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-8 h-8 bg-[#1a2f5e] rounded-full flex items-center justify-center text-sm font-semibold text-white">
+
+        {/* 유저 정보 */}
+        <div className="px-4 py-3" style={{ borderTop: '1px solid #e5e7eb' }}>
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+              style={{ background: '#9FE1CB', color: '#085041' }}>
               {currentUser?.name?.[0] ?? 'T'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-gray-800 truncate">{currentUser?.name}</p>
-              <p className="text-[10px] text-gray-400 truncate">{currentUser?.email}</p>
+              <p className="text-xs font-semibold truncate" style={{ color: '#1f2937' }}>
+                {currentUser?.name}
+              </p>
+              <p className="text-[10px] truncate" style={{ color: '#9ca3af' }}>
+                {currentUser?.email}
+              </p>
             </div>
           </div>
+
+          {currentUser?.role === 'admin' && (
+            <button onClick={toggleAdminMode}
+              className="w-full text-xs py-1.5 rounded-xl mb-1.5 font-semibold transition-all flex items-center justify-center gap-1.5"
+              style={adminMode
+                ? { background: '#085041', color: 'white' }
+                : { background: '#F5C4B3', color: '#712B13' }}>
+              <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 13 }} />
+              {adminMode ? '관리자 모드' : '강사 모드'}
+            </button>
+          )}
+
           <button onClick={signOut}
-            className="w-full text-xs text-gray-400 hover:text-gray-600 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+            className="w-full text-xs py-1.5 rounded-xl transition-all flex items-center justify-center gap-1.5"
+            style={{ color: '#9ca3af' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f3f4f6' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}>
+            <i className="ti ti-logout" style={{ fontSize: 13 }} />
             로그아웃
           </button>
         </div>
       </aside>
 
+      {/* 모바일 관리자 토글 */}
+      {currentUser?.role === 'admin' && (
+        <div className="md:hidden fixed bottom-16 right-3 z-50">
+          <button onClick={toggleAdminMode}
+            className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
+            style={adminMode
+              ? { background: '#085041', color: 'white', border: '1px solid #085041' }
+              : { background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>
+            <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 11 }} />
+            {adminMode ? '관리자' : '강사'}
+          </button>
+        </div>
+      )}
+
       {/* 모바일 하단 탭 */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40"
+        style={{ background: '#F0FBF7', borderTop: '1px solid #e5e7eb' }}>
         <div className="flex h-16 max-w-lg mx-auto">
-          {NAV_ITEMS.slice(0,5).map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href+'/')
+          {NAV_ITEMS.slice(0, 5).map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link key={item.href} href={item.href}
-                className={cx('flex-1 flex flex-col items-center justify-center gap-1 transition-colors',
-                  isActive ? 'text-[#1a2f5e]' : 'text-gray-400')}>
-                <span className="text-lg leading-none">{item.icon}</span>
-                <span className="text-[9px] font-medium">{item.label}</span>
+                className="flex-1 flex flex-col items-center justify-center gap-1 transition-colors"
+                style={{ color: isActive ? '#085041' : '#9ca3af' }}>
+                <i className={`ti ${item.icon}`} style={{ fontSize: 20 }} />
+                <span style={{ fontSize: 9, fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
               </Link>
             )
           })}

@@ -72,9 +72,12 @@ export default function AdminPage() {
   const [selectedGroup, setSelectedGroup] = useState('전체')
 
   useEffect(() => {
-    if (!isAdmin()) { router.push('/teacher/dashboard'); return }
-    fetchData()
-  }, [])
+    if (currentUser && currentUser.role !== 'admin') {
+      router.push('/teacher/dashboard')
+      return
+    }
+    if (currentUser) fetchData()
+  }, [currentUser])
 
   async function fetchData() {
     setLoading(true)
@@ -177,6 +180,23 @@ export default function AdminPage() {
     <div>
       <Header title="관리자" subtitle={`전체 학생 ${students.length}명`} />
       <div className="px-4 py-4 space-y-4 md:px-6">
+
+        {/* 담당강사 미배정 학생 알림 */}
+        {(() => {
+          const unassigned = students.filter(s => !s.teacher_name || s.teacher_name.trim() === '')
+          if (unassigned.length === 0) return null
+          return (
+            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+              <span className="text-red-500 text-lg shrink-0">⚠️</span>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-red-700">담당강사 미배정 학생 {unassigned.length}명</p>
+                <p className="text-xs text-red-400 mt-0.5">
+                  {unassigned.map(s => s.name).join(', ')}
+                </p>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 강사별 요약 카드 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

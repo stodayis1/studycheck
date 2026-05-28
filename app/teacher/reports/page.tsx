@@ -34,27 +34,87 @@ const GRADE_GROUPS = [
   { label: '고등', grades: ['고1','고2','고3'] },
 ]
 
+interface Concept {
+  id: string
+  grade: string
+  semester: number
+  chapter: string
+  sub_chapter: string
+  concept_order: number
+  concept_name: string
+}
+
+interface StudentTextbook {
+  id: string
+  student_id: string
+  textbook_name: string
+  textbook_type: string
+  grade: string | null
+  semester: number | null
+  status: string
+}
+
+interface ProgressCheck {
+  id: string
+  student_id: string
+  concept_id: string
+  check_count: number
+}
+
+interface Exam {
+  id: string
+  student_id: string
+  exam_type: string
+  exam_date: string
+  title: string | null
+  unit: string | null
+  unit_name: string | null
+  level: number | null
+  score: number | null
+  total_score: number
+  memo: string | null
+}
+
+const EXAM_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
+  '입학테스트': { color: '#085041', bg: '#F0FBF7', dot: '#9FE1CB' },
+  '진단평가':   { color: '#633806', bg: '#FAEEDA', dot: '#EF9F27' },
+  '코어테스트': { color: '#27500A', bg: '#EAF3DE', dot: '#639922' },
+  '학교시험':   { color: '#1e3a5f', bg: '#EFF6FF', dot: '#3b82f6' },
+}
+
 export default function TeacherReportsPage() {
   const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
+  const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [searchText, setSearchText] = useState('')
   const [selectedGroup, setSelectedGroup] = useState('초등')
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
   const [selectedTeacher, setSelectedTeacher] = useState<string | null>(null)
+  const [concepts, setConcepts] = useState<Concept[]>([])
+  const [studentTextbooks, setStudentTextbooks] = useState<StudentTextbook[]>([])
+  const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
 
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: studentData }, { data: worksheetData }] = await Promise.all([
+    const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, { data: pcData }, { data: examData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }),
+      supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
+      supabase.from('student_textbooks').select('*'),
+      supabase.from('progress_checks').select('*'),
+      supabase.from('exams').select('*').order('exam_date', { ascending: true }),
     ])
     if (studentData) setStudents(studentData)
     if (worksheetData) setWorksheets(worksheetData)
+    if (conceptData) setConcepts(conceptData)
+    if (tbData) setStudentTextbooks(tbData)
+    if (pcData) setProgressChecks(pcData)
+    if (examData) setExams(examData)
     setLoading(false)
   }
 
@@ -101,16 +161,16 @@ export default function TeacherReportsPage() {
   }
 
   function getCellStyle(record: WorksheetRecord | null) {
-    if (!record) return { bg: 'bg-gray-50', text: '-', textColor: 'text-gray-300' }
-    if (record.status === 'assigned') return { bg: 'bg-white border border-blue-200', text: '진행중', textColor: 'text-blue-600' }
-    if (record.status === 'similar_assigned' || record.status === 'similar_submitted') return { bg: 'bg-purple-50 border border-purple-200', text: '오답유사', textColor: 'text-purple-600' }
+    if (!record) return { bg: 'bg-white', text: '-', textColor: 'text-gray-300' }
+    if (record.status === 'assigned') return { bg: 'bg-white border border-blue-200', text: '진행중', textColor: 'text-gray-800' }
+    if (record.status === 'similar_assigned' || record.status === 'similar_submitted') return { bg: 'bg-purple-50 border border-purple-200', text: '오답유사', textColor: 'text-[#712B13]' }
     if (record.status === 'submitted') return { bg: 'bg-orange-50 border border-orange-200', text: '채점대기', textColor: 'text-orange-500' }
     if (record.score != null) {
       if (record.score >= 85) return { bg: 'bg-green-100', text: `${record.score}점`, textColor: 'text-green-700' }
       if (record.score >= 80) return { bg: 'bg-yellow-100', text: `${record.score}점`, textColor: 'text-yellow-700' }
       return { bg: 'bg-red-100', text: `${record.score}점`, textColor: 'text-red-600' }
     }
-    return { bg: 'bg-gray-50', text: '-', textColor: 'text-gray-300' }
+    return { bg: 'bg-white', text: '-', textColor: 'text-gray-300' }
   }
 
   // ── 중등용: 단원/차시별 1차/오답유사 점수 ──
@@ -144,7 +204,7 @@ export default function TeacherReportsPage() {
   }
 
   function scoreBg(score: number | null) {
-    if (score == null) return 'bg-gray-50'
+    if (score == null) return 'bg-white'
     if (score >= 85) return 'bg-green-50'
     if (score >= 80) return 'bg-yellow-50'
     return 'bg-red-50'
@@ -158,7 +218,7 @@ export default function TeacherReportsPage() {
   const middleUnitGroups = selectedStudent && isMiddleOrHigh ? getMiddleUnitGroups(selectedStudent.id) : []
 
   return (
-    <div>
+    <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header title="보고서" subtitle="학생별 학습 현황" />
       <div className="px-4 py-4 space-y-4 md:px-6">
 
@@ -180,7 +240,7 @@ export default function TeacherReportsPage() {
                   <button key={g.label}
                     onClick={() => { setSelectedGroup(g.label); setSelectedGrade(null); setSelectedStudent(null) }}
                     className={cx('flex-1 py-2 rounded-xl text-sm font-bold border transition-all',
-                      selectedGroup === g.label ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
+                      selectedGroup === g.label ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
                     {g.label}
                     <span className={cx('ml-1 text-xs', selectedGroup === g.label ? 'text-blue-200' : 'text-gray-400')}>
                       {count}명
@@ -214,13 +274,13 @@ export default function TeacherReportsPage() {
               <div className="flex gap-1.5 flex-wrap">
                 <button onClick={() => setSelectedTeacher(null)}
                   className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
-                    selectedTeacher === null ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200')}>
+                    selectedTeacher === null ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-500 border-gray-200')}>
                   👩‍🏫 전체
                 </button>
                 {teachers.map((t) => (
                   <button key={t} onClick={() => setSelectedTeacher(t)}
                     className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
-                      selectedTeacher === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200')}>
+                      selectedTeacher === t ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-500 border-gray-200')}>
                     {t}
                   </button>
                 ))}
@@ -229,7 +289,7 @@ export default function TeacherReportsPage() {
 
             <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
               placeholder="이름 또는 학교로 검색"
-              className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
 
             <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
               {filteredStudents.length === 0 ? (
@@ -240,9 +300,9 @@ export default function TeacherReportsPage() {
                   return (
                     <button key={s.id} onClick={() => setSelectedStudent(s)}
                       className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
-                        selectedStudent?.id === s.id ? 'bg-blue-600 text-white border-blue-600' :
+                        selectedStudent?.id === s.id ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' :
                         hasRecord ? 'bg-white text-gray-700 border-gray-300 hover:border-blue-300' :
-                        'bg-gray-50 text-gray-400 border-gray-100')}>
+                        'bg-white text-gray-400 border-gray-100')}>
                       {s.name}
                       {s.teacher_name && <span className="ml-1 opacity-50 text-[10px]">{s.teacher_name}</span>}
                     </button>
@@ -275,6 +335,205 @@ export default function TeacherReportsPage() {
               </span>
             </div>
 
+            {/* ── 교재 진도 보고서 ── */}
+            {(() => {
+              const myTBs = studentTextbooks.filter((t) => t.student_id === selectedStudent.id)
+              if (myTBs.length === 0) return null
+
+              const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+              const TYPE_ORDER: Record<string, number> = { '개념서': 0, '유형서': 1, '심화서': 2, '연산서': 3 }
+              const TYPE_STYLE: Record<string, { dot: string; fill: string; text: string; label: string }> = {
+                '개념서': { dot: '#EF9F27', fill: '#FAEEDA', text: '#633806', label: '개념' },
+                '유형서': { dot: '#639922', fill: '#EAF3DE', text: '#27500A', label: '유형' },
+                '심화서': { dot: '#dc2626', fill: '#fee2e2', text: '#991b1b', label: '심화' },
+                '연산서': { dot: '#7c3aed', fill: '#ede9fe', text: '#5b21b6', label: '연산' },
+              }
+
+              return (
+                <div className="border-b border-gray-100">
+                  <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: "#fafafa", borderBottom: "1px solid #f0f0f0" }}><div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FAECE7" }}><i className="ti ti-books" style={{ fontSize: 14, color: "#993C1D" }} /></div><span className="text-sm font-bold" style={{ color: "#1f2937" }}>교재 진도 현황</span></div>
+                  <div className="px-4 py-4 space-y-4">
+                    {myTBs
+                      .sort((a, b) => {
+                        const gA = GRADE_ORDER.indexOf(a.grade ?? '')
+                        const gB = GRADE_ORDER.indexOf(b.grade ?? '')
+                        if (gA !== gB) return gA - gB
+                        return (TYPE_ORDER[a.textbook_type] ?? 9) - (TYPE_ORDER[b.textbook_type] ?? 9)
+                      })
+                      .map((tb) => {
+                        if (!tb.grade) return null
+                        const tbConcepts = concepts.filter(
+                          (c) => c.grade === tb.grade && c.semester === tb.semester
+                        )
+                        if (tbConcepts.length === 0) return null
+
+                        const myChecks = progressChecks.filter((p) => p.student_id === selectedStudent.id)
+                        const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+
+                        const checkedConcepts = tbConcepts.filter((c) =>
+                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= targetCount)
+                        )
+                        const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                        const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
+
+                        // 대단원별 그룹
+                        const chapters = [...new Set(tbConcepts.map((c) => c.chapter))]
+
+                        return (
+                          <div key={tb.id}>
+                            {/* 헤더 */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                                style={{ background: style.dot, color: '#fff' }}>
+                                {style.label}
+                              </span>
+                              <span className="text-xs font-bold" style={{ color: '#1f2937' }}>
+                                {tb.textbook_name}
+                              </span>
+                              <span className="text-[10px]" style={{ color: '#1f2937' }}>
+                                {tb.grade} {tb.semester}학기
+                              </span>
+                              <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>
+                                {rate}%
+                              </span>
+                            </div>
+
+                            {/* 진도율 바 */}
+                            <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
+                              <div className="h-1.5 rounded-full transition-all"
+                                style={{ width: `${rate}%`, background: style.dot }} />
+                            </div>
+
+                            {/* 대단원별 정방형 격자 */}
+                            <div className="space-y-2">
+                              {chapters.map((ch) => {
+                                const chConcepts = tbConcepts.filter((c) => c.chapter === ch)
+                                return (
+                                  <div key={ch}>
+                                    <p className="text-[10px] mb-1" style={{ color: '#1f2937' }}>{ch}</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {chConcepts.map((c) => {
+                                        const check = myChecks.find((p) => p.concept_id === c.id)
+                                        const done = check && check.check_count >= targetCount
+                                        const partial = check && check.check_count > 0 && check.check_count < targetCount
+                                        return (
+                                          <div key={c.id}
+                                            title={c.concept_name}
+                                            style={{
+                                              width: 16, height: 16,
+                                              borderRadius: 3,
+                                              background: done ? style.dot : partial ? style.fill : '#f3f0ea',
+                                              border: `1px solid ${done ? style.dot : partial ? style.dot + '80' : '#e5d5c5'}`,
+                                              cursor: 'default',
+                                              flexShrink: 0,
+                                            }} />
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            {/* 범례 */}
+                            <div className="flex gap-3 mt-2">
+                              <div className="flex items-center gap-1">
+                                <div style={{ width:10, height:10, borderRadius:2, background: style.dot }} />
+                                <span className="text-[9px]" style={{ color: '#1f2937' }}>완료</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <div style={{ width:10, height:10, borderRadius:2, background: style.fill, border: `1px solid ${style.dot}80` }} />
+                                <span className="text-[9px]" style={{ color: '#1f2937' }}>진행중</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <div style={{ width:10, height:10, borderRadius:2, background: '#f3f0ea', border: '1px solid #9FE1CB60' }} />
+                                <span className="text-[9px]" style={{ color: '#1f2937' }}>미진도</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* ── 학습지 현황 (최근 6개월) ── */}
+            {(() => {
+              const sixMonthsAgo = new Date()
+              sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+              const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0]
+
+              const recentWS = worksheets.filter((w) =>
+                w.student_id === selectedStudent.id &&
+                w.assigned_at >= sixMonthsAgoStr
+              )
+              if (recentWS.length === 0) return null
+
+              const scored = recentWS.filter((w) => w.score != null)
+              const avgScore = scored.length > 0
+                ? Math.round(scored.reduce((s, w) => s + (w.score ?? 0), 0) / scored.length)
+                : null
+              const passedCount = recentWS.filter((w) => w.status === 'passed').length
+              const passRate = Math.round(passedCount / recentWS.length * 100)
+
+              // 레벨별 분포
+              const levelMap: Record<number, number> = {}
+              recentWS.forEach((w) => { levelMap[w.current_level] = (levelMap[w.current_level] ?? 0) + 1 })
+              const levels = Object.entries(levelMap).sort((a, b) => Number(a[0]) - Number(b[0]))
+              const maxCount = Math.max(...levels.map(([, c]) => c))
+
+              // 최고 레벨
+              const maxLevel = Math.max(...recentWS.map((w) => w.current_level))
+
+              return (
+                <div className="border-b border-gray-100">
+                  <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
+                      <i className="ti ti-file-text" style={{ fontSize: 14, color: '#993C1D' }} />
+                    </div>
+                    <span className="text-sm font-bold" style={{ color: '#1f2937' }}>학습지 현황</span>
+                    <span className="text-[10px] text-gray-400 ml-1">최근 6개월</span>
+                  </div>
+                  <div className="px-4 py-4">
+                  {/* 요약 카드 */}
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
+                      <p className="text-[10px] text-gray-400 mb-0.5">총 학습지</p>
+                      <p className="text-base font-bold text-gray-800">{recentWS.length}<span className="text-[10px] font-normal text-gray-400 ml-0.5">개</span></p>
+                    </div>
+                    <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
+                      <p className="text-[10px] text-gray-400 mb-0.5">통과율</p>
+                      <p className="text-base font-bold text-gray-800">{passRate}<span className="text-[10px] font-normal text-gray-400 ml-0.5">%</span></p>
+                    </div>
+                    <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
+                      <p className="text-[10px] text-gray-400 mb-0.5">평균점수</p>
+                      <p className="text-base font-bold text-gray-800">{avgScore ?? '-'}<span className="text-[10px] font-normal text-gray-400 ml-0.5">점</span></p>
+                    </div>
+                  </div>
+
+                  {/* 레벨별 분포 막대 */}
+                  <p className="text-[10px] text-gray-400 mb-2">레벨별 분포 <span className="ml-1 font-semibold text-gray-600">최고 {maxLevel}레벨</span></p>
+                  <div className="flex items-end gap-2 h-10">
+                    {levels.map(([level, count]) => {
+                      const barH = Math.max(4, Math.round((count / maxCount) * 36))
+                      const lv = Number(level)
+                      const barColor = lv >= 4 ? '#F5C4B3' : '#D3D1C7'
+                      const textColor = lv >= 4 ? '#993C1D' : '#6b7280'
+                      return (
+                        <div key={level} className="flex-1 flex flex-col items-center justify-end gap-0.5">
+                          <span className="text-[9px] font-bold" style={{ color: textColor }}>{count}</span>
+                          <div className="w-full rounded-t-sm" style={{ height: barH, background: barColor }} />
+                          <span className="text-[9px] text-gray-400">{level}레벨</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* ── 중등/고등 보고서 ── */}
             {isMiddleOrHigh ? (
               middleUnitGroups.length === 0 ? (
@@ -304,7 +563,7 @@ export default function TeacherReportsPage() {
                           </div>
                           <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0',
                             isDone ? 'bg-green-100 text-green-600' :
-                            latest?.status === 'assigned' ? 'bg-blue-100 text-blue-600' :
+                            latest?.status === 'assigned' ? 'bg-blue-100 text-gray-800' :
                             latest?.status === 'submitted' ? 'bg-orange-100 text-orange-500' :
                             'bg-gray-100 text-gray-400')}>
                             {isDone ? '완료' : latest?.status === 'assigned' ? '진행중' : latest?.status === 'submitted' ? '채점대기' : '-'}
@@ -367,7 +626,7 @@ export default function TeacherReportsPage() {
                       return (
                         <table className="w-full text-xs border-collapse">
                           <thead>
-                            <tr className="bg-gray-50">
+                            <tr className="bg-white">
                               <th className="px-3 py-2.5 text-left text-gray-500 font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[80px]">단원</th>
                               <th className="px-3 py-2.5 text-left text-gray-500 font-semibold border-b border-r border-gray-100 whitespace-nowrap min-w-[120px]">단원명</th>
                               {usedLevels.map((l) => (
@@ -381,7 +640,7 @@ export default function TeacherReportsPage() {
                           </thead>
                           <tbody>
                             {studentUnits.map(({ grade_level, unit, unit_name }, idx) => (
-                              <tr key={idx} className="hover:bg-gray-50/50">
+                              <tr key={idx} className="hover:bg-white/50">
                                 <td className="px-3 py-2.5 border-b border-r border-gray-100">
                                   <p className="font-bold text-gray-800">{unit}</p>
                                   <p className="text-gray-400 text-[10px]">{grade_level}</p>
@@ -410,8 +669,8 @@ export default function TeacherReportsPage() {
                       { bg: 'bg-green-100', text: 'text-green-700', label: '85점↑ 통과' },
                       { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '80~84점' },
                       { bg: 'bg-red-100', text: 'text-red-600', label: '80점↓ 재도전' },
-                      { bg: 'bg-white border border-blue-200', text: 'text-blue-600', label: '진행중' },
-                      { bg: 'bg-purple-50 border border-purple-200', text: 'text-purple-600', label: '오답유사' },
+                      { bg: 'bg-white border border-blue-200', text: 'text-gray-800', label: '진행중' },
+                      { bg: 'bg-purple-50 border border-purple-200', text: 'text-[#712B13]', label: '오답유사' },
                     ].map((item) => (
                       <div key={item.label} className="flex items-center gap-1">
                         <div className={cx('w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold', item.bg, item.text)}>점</div>
@@ -430,6 +689,143 @@ export default function TeacherReportsPage() {
             <p className="text-xs text-gray-400 mt-1">초등: 레벨별 진단표 · 중등: 단원/차시별 1차/오답유사 점수</p>
           </div>
         )}
+
+        {/* ── 평가 이력 섹션 ── */}
+        {selectedStudent && (() => {
+          const studentExams = exams.filter((e) => e.student_id === selectedStudent.id)
+          if (studentExams.length === 0) return null
+
+          const examTypes = ['입학테스트', '진단평가', '코어테스트', '학교시험'] as const
+
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
+                  <i className="ti ti-chart-bar" style={{ fontSize: 14, color: '#993C1D' }} />
+                </div>
+                <span className="text-sm font-bold" style={{ color: '#1f2937' }}>평가 이력</span>
+              </div>
+
+              <div className="divide-y divide-gray-50">
+                {examTypes.map((type) => {
+                  const typeExams = studentExams
+                    .filter((e) => e.exam_type === type)
+                    .sort((a, b) => a.exam_date.localeCompare(b.exam_date))
+                  if (typeExams.length === 0) return null
+
+                  const cfg = EXAM_CONFIG[type]
+                  // 점수 퍼센트 계산
+                  const scored = typeExams.filter((e) => e.score != null)
+                  const pct = (e: Exam) => e.total_score > 0 ? Math.round((e.score ?? 0) / e.total_score * 100) : null
+
+                  return (
+                    <div key={type} className="px-4 py-4">
+                      {/* 타입 헤더 */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                          style={{ background: '#FAECE7', color: '#993C1D' }}>
+                          {type}
+                        </span>
+                        <span className="text-[10px] text-gray-400">{typeExams.length}회</span>
+                        {scored.length > 0 && (
+                          <span className="text-[10px] text-gray-400 ml-auto">
+                            평균 {Math.round(scored.reduce((s, e) => s + (pct(e) ?? 0), 0) / scored.length)}%
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 막대그래프 */}
+                      {scored.length > 0 && (
+                        <div className="mb-3">
+                          <div className="flex items-end gap-1.5 h-16">
+                            {typeExams.map((e, i) => {
+                              const p = pct(e)
+                              if (p == null) return (
+                                <div key={e.id} className="flex-1 flex flex-col items-center justify-end gap-1">
+                                  <div className="w-full rounded-t-sm" style={{ height: 4, background: '#f3f4f6' }} />
+                                </div>
+                              )
+                              const barH = Math.max(4, Math.round(p * 0.44))
+                              const isCoreMain = type === '코어테스트' && e.title === '본고사'
+                              const barColor = isCoreMain ? '#F5C4B3' : '#D3D1C7'
+                              return (
+                                <div key={e.id} className="flex-1 flex flex-col items-center justify-end gap-1">
+                                  <span className="text-[9px] font-bold" style={{ color: isCoreMain ? '#993C1D' : '#6b7280' }}>{p}%</span>
+                                  <div className="w-full rounded-t-sm transition-all"
+                                    style={{ height: barH, background: barColor, opacity: 0.85 }} />
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {/* x축 날짜 + 회차 */}
+                          <div className="flex gap-1.5 mt-1">
+                            {typeExams.map((e) => (
+                              <div key={e.id} className="flex-1 text-center">
+                                <span className="text-[9px] text-gray-400 block">
+                                  {e.exam_date.slice(5).replace('-', '/')}
+                                </span>
+                                {type === '코어테스트' && e.title && (
+                                  <span className="text-[8px] font-bold"
+                                    style={{ color: e.title === '본고사' ? '#639922' : '#EF9F27' }}>
+                                    {e.title === '본고사' ? '본' : e.title === '예비 1회' ? '예1' : '예2'}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 상세 목록 */}
+                      <div className="space-y-1.5">
+                        {typeExams.map((e) => {
+                          const p = pct(e)
+                          const isCoreMain = type === '코어테스트' && e.title === '본고사'
+                          const isCorePrep = type === '코어테스트' && e.title?.startsWith('예비')
+                          const scoreColor = p == null ? '#9ca3af' : p >= 85 ? '#27500A' : p >= 70 ? '#633806' : '#991b1b'
+                          const scoreBg = p == null ? '#f3f4f6' : p >= 85 ? '#EAF3DE' : p >= 70 ? '#FAEEDA' : '#fee2e2'
+                          return (
+                            <div key={e.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                              style={{ background: isCoreMain ? '#EAF3DE' : '#fafafa', border: isCoreMain ? '1px solid #c0dd97' : 'none' }}>
+                              <span className="text-[10px] text-gray-400 w-12 shrink-0">{e.exam_date.slice(5).replace('-', '/')}</span>
+                              {/* 코어테스트 회차 배지 */}
+                              {type === '코어테스트' && e.title && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                                  style={isCoreMain
+                                    ? { background: '#639922', color: 'white' }
+                                    : { background: '#FAEEDA', color: '#633806' }}>
+                                  {e.title}
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-700 flex-1 truncate">
+                                {e.unit ?? (!isCoreMain && !isCorePrep ? e.title : null) ?? type}
+                                {e.unit_name ? <span className="text-gray-400"> · {e.unit_name}</span> : null}
+                              </span>
+                              {e.level != null && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                                  style={{ background: '#f3f4f6', color: '#6b7280' }}>
+                                  Lv.{e.level}
+                                </span>
+                              )}
+                              {e.score != null ? (
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0"
+                                  style={{ background: scoreBg, color: scoreColor }}>
+                                  {e.score}/{e.total_score} ({p}%)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-gray-400 shrink-0">미채점</span>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

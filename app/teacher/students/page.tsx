@@ -169,7 +169,7 @@ export default function TeacherStudentsPage() {
   }
 
   return (
-    <div>
+    <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header
         title="학생관리"
         action={
@@ -178,7 +178,7 @@ export default function TeacherStudentsPage() {
               className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg">
               📥 엑셀 업로드
             </button>
-            <button className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg">
+            <button className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
               + 학생 등록
             </button>
           </div>
@@ -214,7 +214,7 @@ export default function TeacherStudentsPage() {
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-100">
+                    <thead className="bg-white border-b border-gray-100">
                       <tr>
                         {['이름','학교','학년','수업시간','담임강사','보호자'].map((h) => (
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{h}</th>
@@ -254,7 +254,7 @@ export default function TeacherStudentsPage() {
         {/* 검색 */}
         <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
           placeholder="학생 이름 또는 학교로 검색"
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
 
         {/* 학생 목록 */}
         <SectionCard title="전체 학생" subtitle={loading ? '불러오는 중...' : `총 ${filtered.length}명`}>
@@ -267,7 +267,7 @@ export default function TeacherStudentsPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map((student) => (
-                <div key={student.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-gray-50">
+                <div key={student.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-white">
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                     {student.name[0]}
                   </div>
@@ -302,7 +302,7 @@ export default function TeacherStudentsPage() {
                       })) : [])
                       setShowEditModal(true)
                     }}
-                      className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
+                      className="px-2.5 py-1.5 text-xs font-semibold text-gray-800 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
                     <button onClick={() => handleDelete(student.id!, student.name)}
                       className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
                   </div>
@@ -332,7 +332,7 @@ export default function TeacherStudentsPage() {
                   <button key={g} onClick={() => setEditStudent({ ...editStudent, textbook_grade: g })}
                     className={cx('flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all',
                       editStudent.textbook_grade === g
-                        ? g === 'A' ? 'bg-blue-600 text-white border-blue-600'
+                        ? g === 'A' ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]'
                           : g === 'B' ? 'bg-green-600 text-white border-green-600'
                           : 'bg-orange-500 text-white border-orange-500'
                         : 'bg-white text-gray-500 border-gray-200')}>
@@ -362,7 +362,7 @@ export default function TeacherStudentsPage() {
                     onClick={() => setEditStudent({ ...editStudent, wise_step: step })}
                     className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
                       editStudent.wise_step === step
-                        ? 'bg-blue-600 text-white border-blue-600'
+                        ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]'
                         : 'bg-white text-gray-600 border-gray-200')}>
                     <span>{step}</span>
                     <span className="text-[9px] font-normal opacity-70">{sub}</span>
@@ -370,7 +370,7 @@ export default function TeacherStudentsPage() {
                 ))}
               </div>
               {editStudent.wise_step && (
-                <p className="text-xs text-blue-600 mt-1.5 font-semibold">
+                <p className="text-xs text-gray-800 mt-1.5 font-semibold">
                   ✓ 수업일지 입력 시 {editStudent.wise_step} 단계가 자동 표시됩니다
                 </p>
               )}
@@ -391,7 +391,7 @@ export default function TeacherStudentsPage() {
                   value={String(editStudent[key as keyof Student] ?? '')}
                   onChange={(e) => setEditStudent({ ...editStudent, [key]: e.target.value })}
                   placeholder={placeholder}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
               </div>
             ))}
 
@@ -401,7 +401,7 @@ export default function TeacherStudentsPage() {
                 <label className="text-xs font-semibold text-gray-600">수업 시간표</label>
                 <button
                   onClick={() => setEditSchedules([...editSchedules, { day: '월', time: '16:00', periods: 2 }])}
-                  className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                  className="text-xs font-bold text-gray-800 bg-blue-50 px-2 py-1 rounded-lg">
                   + 추가
                 </button>
               </div>
@@ -456,7 +456,7 @@ export default function TeacherStudentsPage() {
               <button onClick={() => setShowEditModal(false)}
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveEdit}
-                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl">저장</button>
+                className="flex-1 py-3 bg-[#9FE1CB] text-white font-bold rounded-xl">저장</button>
             </div>
           </div>
         </div>

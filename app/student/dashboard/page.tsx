@@ -53,17 +53,36 @@ interface StudentTextbook {
   concept_id: string | null
   textbook_name: string
   textbook_type: string
+  grade: string | null
+  semester: number | null
   status: string
   memo: string | null
   assigned_at: string
 }
 
+interface Concept {
+  id: string
+  grade: string
+  semester: number
+  chapter: string
+  sub_chapter: string
+  concept_name: string
+  concept_order: number
+}
+
+interface ProgressCheck {
+  id: string
+  student_id: string
+  concept_id: string
+  check_count: number
+}
+
 const WS_STATUS: Record<string, { label: string; color: string; bg: string }> = {
-  assigned:          { label: '과제중',   color: 'text-blue-600',   bg: 'bg-blue-50' },
-  submitted:         { label: '제출완료', color: 'text-orange-500', bg: 'bg-orange-50' },
-  similar_assigned:  { label: '오답유사', color: 'text-purple-600', bg: 'bg-purple-50' },
-  similar_submitted: { label: '유사제출', color: 'text-pink-500',   bg: 'bg-pink-50' },
-  passed:            { label: '완료✓',   color: 'text-green-600',  bg: 'bg-green-50' },
+  assigned:          { label: '과제중',   color: 'text-gray-500',  bg: 'bg-gray-100' },
+  submitted:         { label: '제출완료', color: 'text-[#712B13]', bg: 'bg-[#FFF5F2]' },
+  similar_assigned:  { label: '오답유사', color: 'text-[#712B13]', bg: 'bg-[#FFF5F2]' },
+  similar_submitted: { label: '유사제출', color: 'text-[#712B13]', bg: 'bg-[#FFF5F2]' },
+  passed:            { label: '완료',     color: 'text-[#712B13]', bg: 'bg-[#F5C4B3]' },
 }
 
 export default function StudentDashboardPage() {
@@ -73,6 +92,8 @@ export default function StudentDashboardPage() {
   const [todayNote, setTodayNote] = useState<LearningNote | null>(null)
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
+  const [concepts, setConcepts] = useState<Concept[]>([])
+  const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [loading, setLoading] = useState(true)
   const [studentId, setStudentId] = useState<string | null>(null)
 
@@ -85,12 +106,10 @@ export default function StudentDashboardPage() {
         if (!stored) { router.push('/auth/login'); return }
         const session = JSON.parse(stored)
         setStudentId(session.id)
-
         const { data: studentData } = await supabase
           .from('students').select('*').eq('id', session.id).single()
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
-
         await fetchData(session.id)
       } catch { router.push('/auth/login') }
       setLoading(false)
@@ -99,31 +118,65 @@ export default function StudentDashboardPage() {
   }, [])
 
   async function fetchData(sid: string) {
-    const [{ data: ssData }, { data: wsData }, { data: tbData }] = await Promise.all([
+    const [{ data: ssData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', sid).eq('session_date', todayStr).single(),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).not('status', 'in', '("passed")').order('assigned_at', { ascending: false }),
       supabase.from('student_textbooks').select('*').eq('student_id', sid).not('status', 'in', '("checked")').order('assigned_at', { ascending: false }),
+      supabase.from('concepts').select('*').order('concept_order'),
+      supabase.from('progress_checks').select('*').eq('student_id', sid),
     ])
-
     if (ssData) {
       setTodaySession(ssData)
-      // 오늘 배움노트
       const { data: noteData } = await supabase
         .from('learning_notes').select('*').eq('session_id', ssData.id).single()
       if (noteData) setTodayNote(noteData)
     }
     if (wsData) setWorksheets(wsData)
     if (tbData) setTextbooks(tbData)
+    if (cData) setConcepts(cData)
+    if (pcData) setProgressChecks(pcData)
   }
 
-  // 영상 시작
-  async function handleVideoStart() {
+  // 오늘 진도 텍스트 생성 (교재별)
+  function buildProgressText(tb: StudentTextbook): string | null {
+    if (!tb.grade) return null
+    const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+    const tbConcepts = concepts.filter(c =>
+      c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true)
+    )
+    // 오늘 수업에서 진도 나간 개념 (progress_checks 기준)
+    const todayChecked = progressChecks.filter(p =>
+      p.check_count >= targetCount &&
+      tbConcepts.some(c => c.id === p.concept_id)
+    )
+    if (todayChecked.length === 0) return null
+
+    const checkedConcepts = tbConcepts
+      .filter(c => todayChecked.some(p => p.concept_id === c.id))
+      .sort((a, b) => a.concept_order - b.concept_order)
+
+    if (tb.textbook_type === '개념서') {
+      // 개념서: 교재명 · 대단원-중단원-첫개념~마지막개념
+      const first = checkedConcepts[0]
+      const last = checkedConcepts[checkedConcepts.length - 1]
+      const chNum = first.chapter.match(/^(\d+)/)?.[1] ??
+        ({ 'Ⅰ':'1','Ⅱ':'2','Ⅲ':'3','Ⅳ':'4','Ⅴ':'5','Ⅵ':'6' } as Record<string,string>)[first.chapter[0]] ?? '?'
+      const subNum = first.sub_chapter.match(/^(\d+)/)?.[1] ?? '?'
+      const range = first.concept_name === last.concept_name
+        ? first.concept_name
+        : `${first.concept_name}~${last.concept_name}`
+      return `${chNum}-${subNum} ${range}`
+    } else {
+      // 유형서/심화서: 대단원명
+      const chapters = [...new Set(checkedConcepts.map(c => c.chapter))]
+      return chapters.join(', ')
+    }
+  }
+
+  async function handleVideoOpen(videoUrl: string, idx: number) {
     if (!todaySession || !studentId) return
     const now = new Date().toISOString()
-    if (todayNote) {
-      await supabase.from('learning_notes').update({ video_started_at: now }).eq('id', todayNote.id)
-      setTodayNote({ ...todayNote, video_started_at: now })
-    } else {
+    if (!todayNote) {
       const { data } = await supabase.from('learning_notes').insert({
         student_id: studentId, session_id: todaySession.id,
         attendance: '정시', worksheet_submitted: false,
@@ -131,11 +184,40 @@ export default function StudentDashboardPage() {
         video_started_at: now,
       }).select().single()
       if (data) setTodayNote(data)
+    } else if (!todayNote.video_started_at) {
+      await supabase.from('learning_notes').update({ video_started_at: now }).eq('id', todayNote.id)
+      setTodayNote({ ...todayNote, video_started_at: now })
     }
-    window.open(todaySession.video_url!, '_blank')
+    const { data: existingLog } = await supabase
+      .from('video_watch_logs').select('id, watch_seconds')
+      .eq('student_id', studentId).eq('session_id', todaySession.id).eq('video_url', videoUrl).single()
+    if (!existingLog) {
+      await supabase.from('video_watch_logs').insert({
+        student_id: studentId, session_id: todaySession.id,
+        video_url: videoUrl, watch_seconds: 0, started_at: now, last_active_at: now,
+      })
+    } else {
+      await supabase.from('video_watch_logs').update({ last_active_at: now }).eq('id', existingLog.id)
+    }
+    const startTime = Date.now()
+    const videoWindow = window.open(videoUrl, '_blank')
+    const checkClosed = setInterval(async () => {
+      if (videoWindow?.closed) {
+        clearInterval(checkClosed)
+        const watchedSec = Math.round((Date.now() - startTime) / 1000)
+        const { data: log } = await supabase
+          .from('video_watch_logs').select('id, watch_seconds')
+          .eq('student_id', studentId).eq('session_id', todaySession!.id).eq('video_url', videoUrl).single()
+        if (log) {
+          await supabase.from('video_watch_logs').update({
+            watch_seconds: (log.watch_seconds ?? 0) + watchedSec,
+            last_active_at: new Date().toISOString(),
+          }).eq('id', log.id)
+        }
+      }
+    }, 1000)
   }
 
-  // 영상 완료
   async function handleVideoComplete() {
     if (!todayNote || !studentId) return
     const now = new Date().toISOString()
@@ -145,229 +227,392 @@ export default function StudentDashboardPage() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <span className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <span className="w-8 h-8 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
   if (!student) return null
 
-  const isElementary = student.grade.includes('초')
-  const hasVideoTask = !!todaySession?.video_url
+  const videoUrls = todaySession?.video_url
+    ? todaySession.video_url.split('\n').filter(Boolean)
+    : []
+  const hasVideoTask = videoUrls.length > 0
   const videoStarted = !!todayNote?.video_started_at
   const videoCompleted = !!todayNote?.video_completed_at
 
+  // 오늘 배부된 과제 섹션 표시 여부
+  const hasTodayTask = todaySession && (
+    todaySession.progress_content ||
+    todaySession.hw_textbook_name ||
+    todaySession.hw_worksheet_range ||
+    todaySession.daily_test_unit
+  )
+
+  // hw_textbook_page를 교재별로 파싱 (슬래시 구분)
+  const hwPageMap: Record<string, string> = {}
+  if (todaySession?.hw_textbook_page) {
+    todaySession.hw_textbook_page.split('/').forEach(part => {
+      const trimmed = part.trim()
+      // "교재명 · 단원 · p.xx" 형식에서 교재명 추출
+      const bookName = trimmed.split('·')[0]?.trim()
+      if (bookName) hwPageMap[bookName] = trimmed
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="오늘 과제" subtitle={`${student.name} 학생`} />
+      <Header title="오늘 학습" subtitle={`${student.name} 학생`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 
         {/* 학생 프로필 */}
-        <div className="bg-gradient-to-r from-[#1a2f5e] to-blue-500 rounded-2xl p-4 text-white flex items-center gap-4">
-          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-            <span className="text-xl font-black">{student.name[0]}</span>
+        <div className="rounded-2xl p-4 flex items-center gap-4" style={{ background: '#FAECE7' }}>
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: '#F5C4B3' }}>
+            <span className="text-xl font-black" style={{ color: '#712B13' }}>{student.name[0]}</span>
           </div>
           <div>
-            <p className="font-black text-base">{student.name}</p>
-            <p className="text-blue-100 text-xs">{student.school} · {student.grade}</p>
-            <p className="text-blue-200 text-xs mt-0.5">{todayStr} 과제</p>
+            <p className="font-black text-base" style={{ color: '#712B13' }}>{student.name}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#993C1D' }}>{student.school} · {student.grade}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#993C1D', opacity: 0.7 }}>{todayStr}</p>
           </div>
         </div>
 
-        {/* 수업 과제 (선생님이 수업일지에서 배부한 것) */}
-        {todaySession && (todaySession.hw_textbook_name || todaySession.hw_worksheet_range) && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-              <span className="text-base">📋</span>
-              <h3 className="text-sm font-bold text-gray-800">오늘 배부된 과제</h3>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {/* 진도 내용 */}
-              {todaySession.progress_content && (
-                <div className="px-4 py-3">
-                  <p className="text-xs text-gray-400 mb-0.5">오늘 진도</p>
-                  <p className="text-sm font-semibold text-gray-700">{todaySession.progress_content}</p>
-                </div>
-              )}
-              {/* 교재 과제 */}
-              {todaySession.hw_textbook_name && (
-                <div className="px-4 py-3 flex items-center gap-3">
-                  <span className="text-xl">📖</span>
-                  <div>
-                    <p className="text-xs text-gray-400">교재 과제</p>
-                    <p className="text-sm font-bold text-gray-800">{todaySession.hw_textbook_name}</p>
-                    {todaySession.hw_textbook_page && (
-                      <p className="text-xs text-gray-500 mt-0.5">{todaySession.hw_textbook_page}</p>
-                    )}
-                  </div>
-                </div>
-              )}
-              {/* 학습지 과제 */}
-              {todaySession.hw_worksheet_range && (
-                <div className="px-4 py-3 flex items-center gap-3">
-                  <span className="text-xl">📝</span>
-                  <div>
-                    <p className="text-xs text-gray-400">학습지 과제</p>
-                    <p className="text-sm font-bold text-gray-800">{todaySession.hw_worksheet_range}</p>
-                  </div>
-                </div>
-              )}
-              {/* 데일리 테스트 결과 */}
-              {todaySession.daily_test_unit && (
-                <div className="px-4 py-3 flex items-center gap-3">
-                  <span className="text-xl">📊</span>
-                  <div>
-                    <p className="text-xs text-gray-400">데일리 테스트</p>
-                    <p className="text-sm font-bold text-gray-800">{todaySession.daily_test_unit}</p>
-                    {todaySession.daily_test_score != null && (
-                      <p className={cx('text-sm font-black mt-0.5',
-                        todaySession.daily_test_score >= 90 ? 'text-green-600' :
-                        todaySession.daily_test_score >= 70 ? 'text-blue-600' : 'text-red-500')}>
-                        {todaySession.daily_test_score}점
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* ── 오늘 학습 내용 및 과제 ── */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
-        {/* 영상 과제 */}
-        {hasVideoTask && (
-          <div className={cx('rounded-2xl p-4 border-2',
-            videoCompleted ? 'bg-green-50 border-green-200' :
-            videoStarted ? 'bg-blue-50 border-blue-200' :
-            'bg-white border-gray-100 shadow-sm')}>
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-2xl">📹</span>
-              <div className="flex-1">
-                <p className="text-sm font-bold text-gray-900">영상 과제</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {videoCompleted ? '✅ 시청 완료!' :
-                   videoStarted ? '▶ 시청 중...' :
-                   '아직 시청 안 했어요'}
-                </p>
+          {/* 메인 헤더 */}
+          <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #efefef' }}>
+            <i className="ti ti-notebook" style={{ fontSize: 16, color: '#993C1D' }} />
+            <h3 className="text-sm font-bold text-gray-700">오늘 학습 내용 및 과제</h3>
+          </div>
+
+          {/* ─── 학습 내용 서브헤더 ─── */}
+          <div className="px-4 py-2 flex items-center gap-1.5" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+            <i className="ti ti-books" style={{ fontSize: 13, color: '#F5C4B3' }} />
+            <span className="text-xs font-bold" style={{ color: '#993C1D' }}>학습 내용</span>
+          </div>
+
+          {/* 오늘 진도 */}
+          {(() => {
+            const myTBs = textbooks.filter(t => t.grade)
+            const progressLines = myTBs
+              .map(tb => ({ tb, text: buildProgressText(tb) }))
+              .filter(x => x.text)
+            const hasFallback = progressLines.length === 0 && todaySession?.progress_content
+            if (progressLines.length === 0 && !hasFallback) {
+              return (
+                <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-50">
+                  <span className="text-[10px] text-gray-300">오늘 진도</span>
+                  <span className="text-xs text-gray-300">— 기록 없음</span>
+                </div>
+              )
+            }
+            return (
+              <div className="px-4 py-3 border-b border-gray-50">
+                <p className="text-[10px] text-gray-400 mb-2">오늘 진도</p>
+                {hasFallback ? (
+                  <p className="text-sm font-bold text-gray-800">{todaySession!.progress_content}</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {progressLines.map(({ tb, text }) => (
+                      <div key={tb.id}>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                            style={{ background: '#FAECE7', color: '#993C1D' }}>
+                            {tb.textbook_type === '개념서' ? '개념' : tb.textbook_type === '유형서' ? '유형' : '심화'}
+                          </span>
+                          <span className="text-[11px] text-gray-400">{tb.textbook_name}</span>
+                        </div>
+                        <p className="text-sm font-bold text-gray-800">{text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {videoCompleted && (
-                <span className="text-xs font-bold px-2 py-1 bg-green-100 text-green-700 rounded-full">완료</span>
+            )
+          })()}
+
+          {/* 데일리 테스트 */}
+          {todaySession?.daily_test_unit ? (
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-gray-400 mb-0.5">데일리 테스트</p>
+                <p className="text-sm font-bold text-gray-800">{todaySession.daily_test_unit}</p>
+              </div>
+              {todaySession.daily_test_score != null && (
+                <span className="text-sm font-black" style={{
+                  color: todaySession.daily_test_score >= 90 ? '#27500A' :
+                  todaySession.daily_test_score >= 70 ? '#633806' : '#991b1b' }}>
+                  {todaySession.daily_test_score}점
+                </span>
               )}
             </div>
-            <div className="flex gap-2">
-              {!videoStarted ? (
-                <button onClick={handleVideoStart}
-                  className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm">
-                  ▶ 영상 시작하기
-                </button>
-              ) : !videoCompleted ? (
-                <>
-                  <button onClick={() => window.open(todaySession!.video_url!, '_blank')}
-                    className="flex-1 py-3 bg-blue-100 text-blue-600 font-bold rounded-xl text-sm">
-                    ▶ 다시 보기
-                  </button>
-                  <button onClick={handleVideoComplete}
-                    className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl text-sm">
-                    ✅ 시청 완료
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => window.open(todaySession!.video_url!, '_blank')}
-                  className="flex-1 py-3 bg-gray-100 text-gray-500 font-bold rounded-xl text-sm">
-                  다시 보기
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 학습지 과제 */}
-        {worksheets.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          ) : (
             <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-              <span className="text-base">📝</span>
-              <h3 className="text-sm font-bold text-gray-800">레벨학습지 과제</h3>
-              <span className="text-xs text-gray-400 ml-auto">{worksheets.length}개</span>
+              <span className="text-[10px] text-gray-300">데일리 테스트</span>
+              <span className="text-xs text-gray-300">— 기록 없음</span>
             </div>
-            <div className="divide-y divide-gray-50">
-              {worksheets.map((w) => {
-                const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
-                return (
-                  <div key={w.id} className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className={cx('text-xs font-bold px-2 py-0.5 rounded-full', cfg.bg, cfg.color)}>
-                        {cfg.label}
-                      </span>
-                      {w.worksheet_type === 'similar' && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-md">오답유사</span>
-                      )}
-                      <span className={cx('text-xs font-black ml-auto', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>
-                        {w.current_level}레벨
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-gray-800">
-                      {w.grade_level} {w.unit}
-                      {w.unit_name && <span className="font-normal text-gray-500"> · {w.unit_name}</span>}
-                    </p>
-                    {w.memo && <p className="text-xs text-blue-500 mt-0.5">{w.memo}</p>}
-                    {w.score != null && (
-                      <p className={cx('text-sm font-black mt-1',
-                        w.score >= 85 ? 'text-green-600' : w.score >= 80 ? 'text-yellow-600' : 'text-red-500')}>
-                        {w.score}점
-                      </p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* 교재 과제 */}
-        {textbooks.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-              <span className="text-base">📖</span>
-              <h3 className="text-sm font-bold text-gray-800">교재 과제</h3>
-              <span className="text-xs text-gray-400 ml-auto">{textbooks.length}개</span>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {textbooks.map((t) => (
-                <div key={t.id} className="px-4 py-3 flex items-center gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
-                        t.textbook_type === '개념서' ? 'bg-blue-100 text-blue-700' :
-                        t.textbook_type === '유형서' ? 'bg-green-100 text-green-700' :
-                        t.textbook_type === '심화서' ? 'bg-orange-100 text-orange-700' :
-                        'bg-purple-100 text-purple-700')}>
-                        {t.textbook_type}
-                      </span>
-                      <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                        t.status === 'submitted' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-600')}>
-                        {t.status === 'submitted' ? '제출완료' : '과제중'}
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-gray-800">{t.textbook_name}</p>
-                    {t.memo && <p className="text-xs text-gray-400 mt-0.5">{t.memo}</p>}
+          {/* ─── 오늘 과제 서브헤더 ─── */}
+          <div className="px-4 py-2 flex items-center gap-1.5" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderTop: '1px solid #efefef' }}>
+            <i className="ti ti-clipboard-check" style={{ fontSize: 13, color: '#F5C4B3' }} />
+            <span className="text-xs font-bold" style={{ color: '#993C1D' }}>오늘 과제</span>
+          </div>
+
+          {/* 교재 과제 */}
+          {todaySession?.hw_textbook_name ? (() => {
+            const bookNames = todaySession.hw_textbook_name.split(',').map(s => s.trim())
+            return (
+              <div className="border-b border-gray-50">
+                <div className="px-4 pt-3 pb-1">
+                  <p className="text-[10px] text-gray-400 mb-2">교재 과제</p>
+                  <div className="space-y-2">
+                    {bookNames.map((name, i) => {
+                      const pageEntry = todaySession.hw_textbook_page
+                        ? todaySession.hw_textbook_page.split('/').find(p => p.includes(name))
+                        : null
+                      const pageOnly = pageEntry ? pageEntry.split('·').slice(-1)[0]?.trim() : null
+                      return (
+                        <div key={i} className="flex items-center justify-between">
+                          <p className="text-sm font-bold text-gray-800">{name}</p>
+                          {pageOnly && <p className="text-xs text-gray-400">{pageOnly}</p>}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
-              ))}
+                <div className="h-3" />
+              </div>
+            )
+          })() : (
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+              <span className="text-[10px] text-gray-300">교재 과제</span>
+              <span className="text-xs text-gray-300">— 없음</span>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* 학습지 과제 */}
+          {todaySession?.hw_worksheet_range ? (
+            <div className="px-4 py-3 border-b border-gray-50">
+              <p className="text-[10px] text-gray-400 mb-1">학습지 과제</p>
+              <p className="text-sm font-bold text-gray-800">{todaySession.hw_worksheet_range}</p>
+            </div>
+          ) : (
+            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+              <span className="text-[10px] text-gray-300">학습지 과제</span>
+              <span className="text-xs text-gray-300">— 없음</span>
+            </div>
+          )}
+
+          {/* 영상 과제 */}
+          {hasVideoTask ? (
+            <div>
+              <div className="px-4 pt-3 pb-1">
+                <p className="text-[10px] text-gray-400 mb-2">영상 과제 <span className="text-gray-300">{videoUrls.length}개</span></p>
+                <div className="space-y-2">
+                  {videoUrls.map((url, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                        style={{ background: '#FAECE7', color: '#993C1D' }}>{idx + 1}</div>
+                      <p className="text-xs text-gray-400 flex-1 truncate">{url}</p>
+                      <button onClick={() => handleVideoOpen(url, idx)}
+                        className="px-3 py-1 rounded-lg text-xs font-bold shrink-0"
+                        style={{ background: '#F5C4B3', color: '#712B13' }}>
+                        보기
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {videoStarted && (
+                <div className="px-4 py-2 flex justify-end">
+                  {!videoCompleted ? (
+                    <button onClick={handleVideoComplete}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                      style={{ background: '#F5C4B3', color: '#712B13' }}>
+                      모두 시청 완료
+                    </button>
+                  ) : (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full"
+                      style={{ background: '#F5C4B3', color: '#712B13' }}>시청 완료</span>
+                  )}
+                </div>
+              )}
+              <div className="h-2" />
+            </div>
+          ) : (
+            <div className="px-4 py-3 flex items-center gap-2">
+              <span className="text-[10px] text-gray-300">영상 과제</span>
+              <span className="text-xs text-gray-300">— 없음</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── 학습지 현황 (최근 6개월) ── */}
+        {(() => {
+          const sixMonthsAgo = new Date()
+          sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+          const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0]
+          const recentWS = worksheets.filter((w) => w.assigned_at >= sixMonthsAgoStr)
+          if (recentWS.length === 0) return null
+          const scored = recentWS.filter((w) => w.score != null)
+          const avgScore = scored.length > 0
+            ? Math.round(scored.reduce((s, w) => s + (w.score ?? 0), 0) / scored.length)
+            : null
+          const passedCount = recentWS.filter((w) => w.status === 'passed').length
+          const passRate = Math.round(passedCount / recentWS.length * 100)
+          const levelMap: Record<number, number> = {}
+          recentWS.forEach((w) => { levelMap[w.current_level] = (levelMap[w.current_level] ?? 0) + 1 })
+          const levels = Object.entries(levelMap).sort((a, b) => Number(a[0]) - Number(b[0]))
+          const maxCount = Math.max(...levels.map(([, c]) => c))
+          const maxLevel = Math.max(...recentWS.map((w) => w.current_level))
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
+                  <i className="ti ti-file-text" style={{ fontSize: 14, color: '#993C1D' }} />
+                </div>
+                <span className="text-sm font-bold text-gray-800">학습지 현황</span>
+                <span className="text-[10px] text-gray-400 ml-1">최근 6개월</span>
+              </div>
+              <div className="px-4 py-4">
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
+                    <p className="text-[10px] text-gray-400 mb-0.5">총 학습지</p>
+                    <p className="text-base font-bold text-gray-800">{recentWS.length}<span className="text-[10px] font-normal text-gray-400 ml-0.5">개</span></p>
+                  </div>
+                  <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
+                    <p className="text-[10px] text-gray-400 mb-0.5">통과율</p>
+                    <p className="text-base font-bold text-gray-800">{passRate}<span className="text-[10px] font-normal text-gray-400 ml-0.5">%</span></p>
+                  </div>
+                  <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
+                    <p className="text-[10px] text-gray-400 mb-0.5">평균점수</p>
+                    <p className="text-base font-bold text-gray-800">{avgScore ?? '-'}<span className="text-[10px] font-normal text-gray-400 ml-0.5">점</span></p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 mb-2">레벨별 분포 <span className="ml-1 font-semibold text-gray-600">최고 {maxLevel}레벨</span></p>
+                <div className="flex items-end gap-2 h-10">
+                  {levels.map(([level, count]) => {
+                    const barH = Math.max(4, Math.round((count / maxCount) * 36))
+                    const lv = Number(level)
+                    const barColor = lv >= 4 ? '#F5C4B3' : '#D3D1C7'
+                    const textColor = lv >= 4 ? '#993C1D' : '#6b7280'
+                    return (
+                      <div key={level} className="flex-1 flex flex-col items-center justify-end gap-0.5">
+                        <span className="text-[9px] font-bold" style={{ color: textColor }}>{count}</span>
+                        <div className="w-full rounded-t-sm" style={{ height: barH, background: barColor }} />
+                        <span className="text-[9px] text-gray-400">{level}레벨</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── 교재 진도 현황 ── */}
+        {(() => {
+          const TYPE_ORDER: Record<string, number> = { '개념서': 0, '유형서': 1, '심화서': 2, '연산서': 3 }
+          const TYPE_STYLE: Record<string, { dot: string; fill: string; label: string }> = {
+            '개념서': { dot: '#EF9F27', fill: '#FAEEDA', label: '개념' },
+            '유형서': { dot: '#639922', fill: '#EAF3DE', label: '유형' },
+            '심화서': { dot: '#dc2626', fill: '#fee2e2', label: '심화' },
+            '연산서': { dot: '#7c3aed', fill: '#ede9fe', label: '연산' },
+          }
+          const myTBs = textbooks.filter(t => t.grade)
+          if (myTBs.length === 0) return null
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
+                  <i className="ti ti-books" style={{ fontSize: 14, color: '#993C1D' }} />
+                </div>
+                <span className="text-sm font-bold text-gray-800">교재 진도 현황</span>
+              </div>
+              <div className="px-4 py-4 space-y-5">
+                {myTBs
+                  .sort((a, b) => (TYPE_ORDER[a.textbook_type] ?? 9) - (TYPE_ORDER[b.textbook_type] ?? 9))
+                  .map((tb) => {
+                    if (!tb.grade) return null
+                    const tbConcepts = concepts.filter(c => c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true))
+                    if (tbConcepts.length === 0) return null
+                    const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+                    const checkedConcepts = tbConcepts.filter(c =>
+                      progressChecks.some(p => p.concept_id === c.id && p.check_count >= targetCount)
+                    )
+                    const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                    const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
+                    const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
+                    return (
+                      <div key={tb.id}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: style.dot, color: '#fff' }}>
+                            {style.label}
+                          </span>
+                          <span className="text-xs font-bold text-gray-800">{tb.textbook_name}</span>
+                          <span className="text-[10px] text-gray-400">{tb.grade} {tb.semester}학기</span>
+                          <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
+                          <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
+                        </div>
+                        <div className="space-y-2">
+                          {chapters.map((ch) => {
+                            const chConcepts = tbConcepts.filter(c => c.chapter === ch)
+                            return (
+                              <div key={ch}>
+                                <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {chConcepts.map((c) => {
+                                    const check = progressChecks.find(p => p.concept_id === c.id)
+                                    const done = check && check.check_count >= targetCount
+                                    const partial = check && check.check_count > 0 && check.check_count < targetCount
+                                    return (
+                                      <div key={c.id} title={c.concept_name} style={{
+                                        width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                                        background: done ? style.dot : partial ? style.fill : '#f3f0ea',
+                                        border: `1px solid ${done ? style.dot : partial ? style.dot + '80' : '#e5d5c5'}`,
+                                      }} />
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="flex gap-3 mt-2">
+                          <div className="flex items-center gap-1">
+                            <div style={{ width:10, height:10, borderRadius:2, background: style.dot }} />
+                            <span className="text-[9px] text-gray-500">완료</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div style={{ width:10, height:10, borderRadius:2, background: style.fill, border: `1px solid ${style.dot}80` }} />
+                            <span className="text-[9px] text-gray-500">진행중</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div style={{ width:10, height:10, borderRadius:2, background: '#f3f0ea', border: '1px solid #e5d5c5' }} />
+                            <span className="text-[9px] text-gray-500">미진도</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 과제 없음 */}
-        {!hasVideoTask && worksheets.length === 0 && textbooks.length === 0 && !todaySession?.hw_textbook_name && !todaySession?.hw_worksheet_range && (
+        {!todaySession && !hasVideoTask && worksheets.length === 0 && textbooks.length === 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-            <p className="text-4xl mb-3">🎉</p>
-            <p className="text-sm font-bold text-gray-600">오늘 과제가 없어요!</p>
-            <p className="text-xs text-gray-400 mt-1">선생님이 과제를 배정하면 여기에 나타나요</p>
+            <i className="ti ti-circle-check" style={{ fontSize: 36, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
+            <p className="text-sm font-bold text-gray-600">오늘 수업 내용이 없어요</p>
+            <p className="text-xs text-gray-400 mt-1">선생님이 수업일지를 작성하면 여기에 나타나요</p>
           </div>
         )}
 
-        <p className="text-center text-xs text-gray-300 pb-2">
-          배움노트는 학원에서 작성해주세요 📓
-        </p>
       </div>
     </div>
   )
