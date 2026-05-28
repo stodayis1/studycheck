@@ -115,6 +115,7 @@ export default function TeacherLearningNotesPage() {
   // 개념DB 기반 진도 선택
   const [concepts, setConcepts] = useState<any[]>([])
   const [studentTextbooks, setStudentTextbooks] = useState<any[]>([])
+  const [examPreps, setExamPreps] = useState<any[]>([])
   // 교재별 독립 진도 선택 (tbId → { chapter, subChapters, conceptIds, lastIdx })
   const [noteProgressByTB, setNoteProgressByTB] = useState<Record<string, {
     chapter: string; subChapters: string[]; conceptIds: string[]; lastIdx: number
@@ -179,7 +180,7 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, { data: pcData }, { data: vwData }] = await Promise.all([
+    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, { data: pcData }, { data: vwData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('schedules').select('*').eq('is_active', true),
       supabase.from('class_sessions').select('*').order('session_date', { ascending: false }),
@@ -191,6 +192,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('progress_checks').select('*'),
       supabase.from('video_watch_logs').select('*'),
+      supabase.from('student_exam_prep').select('*, inner_enough(*)').eq('status', 'assigned').neq('status', 'done'),
     ])
     if (sData) setStudents(sData)
     if (scData) setSchedules(scData)
@@ -203,6 +205,7 @@ export default function TeacherLearningNotesPage() {
     if (catLNData) setLNCatalog(catLNData)
     if (pcData) setProgressChecks(pcData)
     if (vwData) setVideoWatchLogs(vwData)
+    if (epData) setExamPreps(epData)
     setLoading(false)
   }
 
@@ -289,7 +292,8 @@ export default function TeacherLearningNotesPage() {
     setNoteSession(session ?? null)
     setNoteTab('basic')
     setNoteProgress(session?.progress_content ?? session?.today_textbook_name ?? '')
-    setNoteProgressByTB({})
+    // 기존 세션이 있으면 진도 데이터 초기화하지 않음 (탭 전환 시 유지)
+    if (!session) setNoteProgressByTB({})
     setNoteActiveTBId('')
     setNoteProgressType('개념서')
     setNoteProgressChapter('')
@@ -301,10 +305,10 @@ export default function TeacherLearningNotesPage() {
     setHwTBSubChapters({})
     setHwTBPages({})
     setHwSelectedWSId('')
-    setNoteAchievement(100)
-    setNoteScorePct(100)
-    setNoteExtraClass(false)
-    setNoteExtraTime('')
+    setNoteAchievement(note?.achievement ?? 100)
+    setNoteScorePct(note?.score_pct ?? 100)
+    setNoteExtraClass(note?.extra_class ?? false)
+    setNoteExtraTime(note?.extra_time ?? '')
     setNoteMemo(note?.memo ?? '')
     setDailyTestUnit(session?.daily_test_unit ?? '')
     setDailyTestScore(session?.daily_test_score?.toString() ?? '')
@@ -415,9 +419,23 @@ export default function TeacherLearningNotesPage() {
     }
 
     if (!sessionId) {
-      const { data: newSession } = await supabase.from('class_sessions')
-        .insert(sessionData).select().single()
-      sessionId = newSession?.id
+      // 같은 날짜에 이미 session이 있으면 그걸 사용 (중복 방지)
+      const { data: existingSession } = await supabase
+        .from('class_sessions')
+        .select('id')
+        .eq('student_id', noteStudent.id)
+        .eq('session_date', todayStr)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      if (existingSession) {
+        sessionId = existingSession.id
+        await supabase.from('class_sessions').update(sessionData).eq('id', sessionId)
+      } else {
+        const { data: newSession } = await supabase.from('class_sessions')
+          .insert(sessionData).select().single()
+        sessionId = newSession?.id
+      }
     } else {
       await supabase.from('class_sessions').update(sessionData).eq('id', sessionId)
     }
@@ -485,10 +503,9 @@ export default function TeacherLearningNotesPage() {
       await supabase.from('learning_notes').insert(noteData)
     }
 
-    setShowNoteModal(false)
-    setNoteStudent(null)
     setSavingNote(false)
     fetchData()
+    // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
   }
 
   async function handleSaveFeedback() {
@@ -1042,7 +1059,7 @@ export default function TeacherLearningNotesPage() {
                     {topTB && (
                       <div className="flex items-start gap-2">
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
-                          style={{ background: '#085041', color: '#fdf8f0' }}>진도</span>
+                          style={{ background: '#F5C4B3', color: '#712B13' }}>진도</span>
                         <p className="text-xs flex-1" style={{ color: '#1f2937' }}>
                           {topTB.textbook_type} · {topTB.textbook_name}
                           {topTB.grade ? ` · ${topTB.grade} ${topTB.semester}학기` : ''}
@@ -1088,8 +1105,8 @@ export default function TeacherLearningNotesPage() {
                 <button key={t.key} onClick={() => setNoteTab(t.key as typeof noteTab)}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all"
                   style={noteTab === t.key
-                    ? { background: '#F5C4B3', color: '#712B13' }
-                    : { background: '#f3f4f6', color: '#9ca3af' }}>
+                    ? { background: '#F5C4B3', color: '#712B13', borderColor: '#F5C4B3' }
+                    : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
                   {t.label}
                 </button>
               ))}
@@ -1135,8 +1152,8 @@ export default function TeacherLearningNotesPage() {
                             const tbSubChapters = sel.chapter
                               ? [...new Set(tbConcepts.filter((c) => c.chapter === sel.chapter).map((c) => c.sub_chapter))]
                               : []
-                            // 심화서/연산서는 중단원까지, 개념서/유형서는 개념까지
-                            const showConcepts = tb.textbook_type === '개념서' || tb.textbook_type === '유형서'
+                            // 모든 교재 타입 개념까지 선택 가능
+                            const showConcepts = tb.textbook_type === '개념서' || tb.textbook_type === '유형서' || tb.textbook_type === '심화서'
                             const tbConceptList = showConcepts && sel.chapter && sel.subChapters.length > 0
                               ? tbConcepts.filter((c) => c.chapter === sel.chapter && sel.subChapters.includes(c.sub_chapter))
                               : []
@@ -1192,7 +1209,7 @@ export default function TeacherLearningNotesPage() {
                                               onClick={() => updateSel({ chapter: ch, subChapters: [], conceptIds: [], lastIdx: -1 })}
                                               className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
                                               style={sel.chapter === ch
-                                                ? { background: '#085041', color: '#fdf8f0', borderColor: '#085041' }
+                                                ? { background: '#F5C4B3', color: '#712B13', borderColor: '#F5C4B3' }
                                                 : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
                                               {ch}
                                             </button>
@@ -1381,6 +1398,83 @@ export default function TeacherLearningNotesPage() {
                     rows={2} placeholder="특이사항, 다음 수업 준비사항 등"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                 </div>
+
+                {/* 시험대비 (이너프원) */}
+                {(() => {
+                  if (!noteStudent) return null
+                  const myPreps = examPreps.filter(ep => ep.student_id === noteStudent.id)
+                  if (myPreps.length === 0) return (
+                    <div className="rounded-xl px-4 py-3" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                      <p className="text-xs font-bold text-gray-500 mb-1 flex items-center gap-1.5">
+                        <i className="ti ti-pencil-check" style={{ fontSize: 13, color: '#9ca3af' }} />
+                        시험대비 (이너프원)
+                      </p>
+                      <p className="text-[11px] text-gray-400">배정된 시험대비 교재가 없어요</p>
+                    </div>
+                  )
+
+                  return (
+                    <div>
+                      <p className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                        <i className="ti ti-pencil-check" style={{ fontSize: 13, color: '#993C1D' }} />
+                        시험대비 진도 (이너프원)
+                      </p>
+                      <div className="space-y-2">
+                        {myPreps.map(ep => {
+                          const ie = ep.inner_enough
+                          if (!ie) return null
+                          // 단계 계산: 문항수 / 30 올림, 최소 1
+                          const totalSteps = Math.max(1, Math.round(ie.problem_count / 30))
+                          const currentStep = ep.progress_step ?? 0
+                          const pct = totalSteps === 1
+                            ? (currentStep >= 1 ? 100 : 0)
+                            : Math.round(currentStep / totalSteps * 100)
+
+                          return (
+                            <div key={ep.id} className="rounded-xl px-3 py-3"
+                              style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold text-gray-800 truncate">{ie.unit_name}</p>
+                                  <p className="text-[10px] text-gray-400">{ie.sub_unit_name} · {ie.problem_count}문항</p>
+                                </div>
+                                <span className="text-xs font-black shrink-0" style={{
+                                  color: pct >= 100 ? '#27500A' : pct > 0 ? '#993C1D' : '#9ca3af'
+                                }}>{pct}%</span>
+                              </div>
+                              {/* 진도 읽기전용 표시 */}
+                              <div className="flex gap-1.5">
+                                {Array.from({ length: totalSteps + 1 }).map((_, step) => {
+                                  const stepPct = totalSteps === 1
+                                    ? (step === 0 ? 0 : 100)
+                                    : Math.round(step / totalSteps * 100)
+                                  const isActive = currentStep === step
+                                  return (
+                                    <div key={step}
+                                      className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center"
+                                      style={isActive
+                                        ? { background: '#F5C4B3', color: '#712B13' }
+                                        : step < currentStep
+                                        ? { background: '#EAF3DE', color: '#27500A' }
+                                        : { background: '#f3f4f6', color: '#9ca3af' }}>
+                                      {stepPct}%
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                <i className="ti ti-lock" style={{ fontSize: 10 }} /> 시험대비 관리에서 업데이트
+                              </p>
+                              {ep.exam_date && (
+                                <p className="text-[10px] text-gray-400 mt-1.5">시험일 {ep.exam_date}</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
@@ -1426,7 +1520,7 @@ export default function TeacherLearningNotesPage() {
                               <button key={ch} onClick={() => { setDailyChapter(ch); setDailySubChapters([]); setDailyConceptIds([]); setDailyLastIdx(-1) }}
                                 className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
                                 style={dailyChapter === ch
-                                  ? { background: '#085041', color: '#fdf8f0', borderColor: '#085041' }
+                                  ? { background: '#F5C4B3', color: '#712B13', borderColor: '#F5C4B3' }
                                   : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
                                 {ch}
                               </button>
@@ -1731,10 +1825,14 @@ export default function TeacherLearningNotesPage() {
               </div>
             )}
 
+
+            {/* 저장 버튼 - 모든 탭에서 표시 */}
             <button onClick={handleSaveNote} disabled={savingNote}
-              className="w-full mt-6 py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full mt-4 py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: '#F5C4B3', color: '#712B13' }}>
-              {savingNote ? <><span className="w-4 h-4 border-2 border-[#712B13]/30 border-t-[#712B13] rounded-full animate-spin" />저장 중...</> : <><i className="ti ti-device-floppy" style={{ fontSize: 17 }} /> 수업일지 저장</>}
+              {savingNote
+                ? <><span className="w-4 h-4 border-2 border-[#712B13]/30 border-t-[#712B13] rounded-full animate-spin" />저장 중...</>
+                : <><i className="ti ti-device-floppy" style={{ fontSize: 17 }} /> 수업일지 저장</>}
             </button>
           </div>
         </div>
@@ -1833,7 +1931,7 @@ export default function TeacherLearningNotesPage() {
                       <button key={cat} onClick={() => setFeedbackCategory(cat)}
                         className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all"
                         style={feedbackCategory === cat
-                          ? { background: '#085041', color: '#fdf8f0', borderColor: '#085041' }
+                          ? { background: '#F5C4B3', color: '#712B13', borderColor: '#F5C4B3' }
                           : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
                         {cat}
                       </button>

@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
   { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
+  { href: '/teacher/exam-prep', label: '시험대비', icon: 'ti-pencil-check' },
   { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
 ]
 
@@ -38,8 +39,22 @@ export function TeacherSidebar() {
           </p>
         </div>
 
+        {/* 관리자/강사 모드 토글 - 상단 네비 위 */}
+        {currentUser?.role === 'admin' && (
+          <div className="px-3 pt-3 pb-1">
+            <button onClick={toggleAdminMode}
+              className="w-full text-xs py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-1.5"
+              style={adminMode
+                ? { background: '#085041', color: 'white' }
+                : { background: '#F5C4B3', color: '#712B13' }}>
+              <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 13 }} />
+              {adminMode ? '관리자 모드' : '강사 모드'}
+            </button>
+          </div>
+        )}
+
         {/* 네비게이션 */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
+        <nav className="flex-1 px-3 py-2 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
@@ -84,17 +99,6 @@ export function TeacherSidebar() {
             </div>
           </div>
 
-          {currentUser?.role === 'admin' && (
-            <button onClick={toggleAdminMode}
-              className="w-full text-xs py-1.5 rounded-xl mb-1.5 font-semibold transition-all flex items-center justify-center gap-1.5"
-              style={adminMode
-                ? { background: '#085041', color: 'white' }
-                : { background: '#F5C4B3', color: '#712B13' }}>
-              <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 13 }} />
-              {adminMode ? '관리자 모드' : '강사 모드'}
-            </button>
-          )}
-
           <button onClick={signOut}
             className="w-full text-xs py-1.5 rounded-xl transition-all flex items-center justify-center gap-1.5"
             style={{ color: '#9ca3af' }}
@@ -106,9 +110,9 @@ export function TeacherSidebar() {
         </div>
       </aside>
 
-      {/* 모바일 관리자 토글 */}
+      {/* 모바일 관리자 토글 - 상단 고정 */}
       {currentUser?.role === 'admin' && (
-        <div className="md:hidden fixed bottom-16 right-3 z-50">
+        <div className="md:hidden fixed top-3 right-3 z-50">
           <button onClick={toggleAdminMode}
             className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
             style={adminMode

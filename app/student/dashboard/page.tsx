@@ -90,12 +90,16 @@ export default function StudentDashboardPage() {
   const [student, setStudent] = useState<StudentInfo | null>(null)
   const [todaySession, setTodaySession] = useState<ClassSession | null>(null)
   const [todayNote, setTodayNote] = useState<LearningNote | null>(null)
+  const [sessions, setSessions] = useState<ClassSession[]>([])
+  const [notes, setNotes] = useState<LearningNote[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [loading, setLoading] = useState(true)
   const [studentId, setStudentId] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [examPreps, setExamPreps] = useState<any[]>([])
 
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -118,23 +122,46 @@ export default function StudentDashboardPage() {
   }, [])
 
   async function fetchData(sid: string) {
+    // 최근 14일치 날짜 범위
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+    const fromStr = fourteenDaysAgo.toISOString().split('T')[0]
+
     const [{ data: ssData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }] = await Promise.all([
-      supabase.from('class_sessions').select('*').eq('student_id', sid).eq('session_date', todayStr).single(),
+      supabase.from('class_sessions').select('*').eq('student_id', sid)
+        .gte('session_date', fromStr).order('session_date', { ascending: false }),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).not('status', 'in', '("passed")').order('assigned_at', { ascending: false }),
       supabase.from('student_textbooks').select('*').eq('student_id', sid).not('status', 'in', '("checked")').order('assigned_at', { ascending: false }),
       supabase.from('concepts').select('*').order('concept_order'),
       supabase.from('progress_checks').select('*').eq('student_id', sid),
     ])
-    if (ssData) {
-      setTodaySession(ssData)
+    if (ssData && ssData.length > 0) {
+      setSessions(ssData)
+      setTodaySession(ssData.find(s => s.session_date === todayStr) ?? null)
+      const ids = ssData.map(s => s.id)
       const { data: noteData } = await supabase
-        .from('learning_notes').select('*').eq('session_id', ssData.id).single()
-      if (noteData) setTodayNote(noteData)
+        .from('learning_notes').select('*').in('session_id', ids)
+      if (noteData) setNotes(noteData)
     }
     if (wsData) setWorksheets(wsData)
     if (tbData) setTextbooks(tbData)
     if (cData) setConcepts(cData)
     if (pcData) setProgressChecks(pcData)
+
+    // 시험대비 (이너프원) - 4주 이내 시험 있는 것만
+    const today = new Date()
+    const fourWeeksLater = new Date(today)
+    fourWeeksLater.setDate(today.getDate() + 35)
+    const maxDate = fourWeeksLater.toISOString().split('T')[0]
+    const todayDate = today.toISOString().split('T')[0]
+    const { data: epData } = await supabase
+      .from('student_exam_prep')
+      .select('*, inner_enough(*)')
+      .eq('student_id', sid)
+      .or(`exam_date.is.null,and(exam_date.lte.${maxDate},exam_date.gte.${todayDate})`)
+      .neq('status', 'done')
+      .order('exam_date', { ascending: true, nullsFirst: false })
+    if (epData) setExamPreps(epData)
   }
 
   // 오늘 진도 텍스트 생성 (교재별)
@@ -259,6 +286,9 @@ export default function StudentDashboardPage() {
     })
   }
 
+  const DAYS = ['일','월','화','수','목','금','토']
+  const selectedSession = sessions.find(s => s.session_date === (selectedDate ?? sessions[0]?.session_date))
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header title="오늘 학습" subtitle={`${student.name} 학생`} />
@@ -273,246 +303,291 @@ export default function StudentDashboardPage() {
           <div>
             <p className="font-black text-base" style={{ color: '#712B13' }}>{student.name}</p>
             <p className="text-xs mt-0.5" style={{ color: '#993C1D' }}>{student.school} · {student.grade}</p>
-            <p className="text-xs mt-0.5" style={{ color: '#993C1D', opacity: 0.7 }}>{todayStr}</p>
           </div>
         </div>
 
-        {/* ── 오늘 학습 내용 및 과제 ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-
-          {/* 메인 헤더 */}
-          <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #efefef' }}>
-            <i className="ti ti-notebook" style={{ fontSize: 16, color: '#993C1D' }} />
-            <h3 className="text-sm font-bold text-gray-700">오늘 학습 내용 및 과제</h3>
-          </div>
-
-          {/* ─── 학습 내용 서브헤더 ─── */}
-          <div className="px-4 py-2 flex items-center gap-1.5" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
-            <i className="ti ti-books" style={{ fontSize: 13, color: '#F5C4B3' }} />
-            <span className="text-xs font-bold" style={{ color: '#993C1D' }}>학습 내용</span>
-          </div>
-
-          {/* 오늘 진도 */}
-          {(() => {
-            const myTBs = textbooks.filter(t => t.grade)
-            const progressLines = myTBs
-              .map(tb => ({ tb, text: buildProgressText(tb) }))
-              .filter(x => x.text)
-            const hasFallback = progressLines.length === 0 && todaySession?.progress_content
-            if (progressLines.length === 0 && !hasFallback) {
+        {/* 날짜 탭 */}
+        {sessions.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {sessions.map(session => {
+              const d = new Date(session.session_date)
+              const isToday = session.session_date === todayStr
+              const isSelected = (selectedDate ?? sessions[0]?.session_date) === session.session_date
               return (
-                <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-50">
-                  <span className="text-[10px] text-gray-300">오늘 진도</span>
-                  <span className="text-xs text-gray-300">— 기록 없음</span>
-                </div>
+                <button key={session.session_date}
+                  onClick={() => setSelectedDate(session.session_date)}
+                  className="flex flex-col items-center px-3 py-2 rounded-xl shrink-0 transition-all"
+                  style={isSelected
+                    ? { background: '#F5C4B3', color: '#712B13' }
+                    : { background: 'white', color: '#9ca3af', border: '1px solid #f0f0f0' }}>
+                  <span className="text-[10px] font-semibold">{DAYS[d.getDay()]}요일</span>
+                  <span className="text-sm font-black">{d.getMonth()+1}/{d.getDate()}</span>
+                  {isToday && (
+                    <span className="text-[9px] font-bold mt-0.5" style={{ color: isSelected ? '#712B13' : '#993C1D' }}>오늘</span>
+                  )}
+                </button>
               )
-            }
-            return (
-              <div className="px-4 py-3 border-b border-gray-50">
-                <p className="text-[10px] text-gray-400 mb-2">오늘 진도</p>
-                {hasFallback ? (
-                  <p className="text-sm font-bold text-gray-800">{todaySession!.progress_content}</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {progressLines.map(({ tb, text }) => (
-                      <div key={tb.id}>
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                            style={{ background: '#FAECE7', color: '#993C1D' }}>
-                            {tb.textbook_type === '개념서' ? '개념' : tb.textbook_type === '유형서' ? '유형' : '심화'}
-                          </span>
-                          <span className="text-[11px] text-gray-400">{tb.textbook_name}</span>
-                        </div>
-                        <p className="text-sm font-bold text-gray-800">{text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-
-          {/* 데일리 테스트 */}
-          {todaySession?.daily_test_unit ? (
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-400 mb-0.5">데일리 테스트</p>
-                <p className="text-sm font-bold text-gray-800">{todaySession.daily_test_unit}</p>
-              </div>
-              {todaySession.daily_test_score != null && (
-                <span className="text-sm font-black" style={{
-                  color: todaySession.daily_test_score >= 90 ? '#27500A' :
-                  todaySession.daily_test_score >= 70 ? '#633806' : '#991b1b' }}>
-                  {todaySession.daily_test_score}점
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-              <span className="text-[10px] text-gray-300">데일리 테스트</span>
-              <span className="text-xs text-gray-300">— 기록 없음</span>
-            </div>
-          )}
-
-          {/* ─── 오늘 과제 서브헤더 ─── */}
-          <div className="px-4 py-2 flex items-center gap-1.5" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderTop: '1px solid #efefef' }}>
-            <i className="ti ti-clipboard-check" style={{ fontSize: 13, color: '#F5C4B3' }} />
-            <span className="text-xs font-bold" style={{ color: '#993C1D' }}>오늘 과제</span>
+            })}
           </div>
+        )}
 
-          {/* 교재 과제 */}
-          {todaySession?.hw_textbook_name ? (() => {
-            const bookNames = todaySession.hw_textbook_name.split(',').map(s => s.trim())
-            return (
-              <div className="border-b border-gray-50">
-                <div className="px-4 pt-3 pb-1">
-                  <p className="text-[10px] text-gray-400 mb-2">교재 과제</p>
-                  <div className="space-y-2">
+        {/* 선택된 날짜 과제 카드 */}
+        {selectedSession ? (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* 학습 내용 서브헤더 */}
+            {(selectedSession.progress_content || buildProgressText(textbooks.filter(t => t.grade)[0])) && (
+              <div>
+                <div className="px-4 py-2 flex items-center gap-1.5" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                  <i className="ti ti-books" style={{ fontSize: 13, color: '#F5C4B3' }} />
+                  <span className="text-xs font-bold" style={{ color: '#993C1D' }}>학습 내용</span>
+                </div>
+                <div className="px-4 py-3">
+                  {(() => {
+                    const myTBs = textbooks.filter(t => t.grade)
+                    const progressLines = myTBs.map(tb => ({ tb, text: buildProgressText(tb) })).filter(x => x.text)
+                    if (progressLines.length > 0) {
+                      return (
+                        <div className="space-y-2">
+                          {progressLines.map(({ tb, text }) => (
+                            <div key={tb.id} className="flex items-start gap-2">
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 mt-0.5"
+                                style={{ background: '#FAECE7', color: '#993C1D' }}>
+                                {tb.textbook_type === '개념서' ? '개념' : tb.textbook_type === '유형서' ? '유형' : '심화'}
+                              </span>
+                              <div>
+                                <p className="text-[11px] text-gray-400">{tb.textbook_name}</p>
+                                <p className="text-sm font-bold text-gray-800">{text}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    }
+                    return <p className="text-sm font-semibold text-gray-800">{selectedSession.progress_content}</p>
+                  })()}
+                  {selectedSession.daily_test_unit && (
+                    <div className="mt-2.5 flex items-center gap-2 pt-2" style={{ borderTop: '1px solid #f5f5f5' }}>
+                      <span className="text-[10px] text-gray-400">데일리 테스트</span>
+                      <span className="text-xs font-semibold text-gray-700">{selectedSession.daily_test_unit}</span>
+                      {selectedSession.daily_test_score != null && (
+                        <span className="text-xs font-black ml-auto" style={{
+                          color: selectedSession.daily_test_score >= 90 ? '#27500A' :
+                          selectedSession.daily_test_score >= 70 ? '#633806' : '#991b1b'
+                        }}>{selectedSession.daily_test_score}점</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 오늘 과제 서브헤더 */}
+            <div className="px-4 py-2 flex items-center gap-1.5"
+              style={{ background: '#fafafa', borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0' }}>
+              <i className="ti ti-clipboard-check" style={{ fontSize: 13, color: '#F5C4B3' }} />
+              <span className="text-xs font-bold" style={{ color: '#993C1D' }}>과제</span>
+            </div>
+
+            {/* 교재 과제 */}
+            {selectedSession.hw_textbook_name ? (() => {
+              const bookNames = selectedSession.hw_textbook_name!.split(',').map(s => s.trim())
+              return (
+                <div className="px-4 py-3 border-b border-gray-50">
+                  <p className="text-[10px] text-gray-400 mb-1.5">교재 과제</p>
+                  <div className="space-y-1.5">
                     {bookNames.map((name, i) => {
-                      const pageEntry = todaySession.hw_textbook_page
-                        ? todaySession.hw_textbook_page.split('/').find(p => p.includes(name))
+                      const pageEntry = selectedSession.hw_textbook_page
+                        ? selectedSession.hw_textbook_page.split('/').find(p => p.includes(name))
                         : null
                       const pageOnly = pageEntry ? pageEntry.split('·').slice(-1)[0]?.trim() : null
                       return (
                         <div key={i} className="flex items-center justify-between">
                           <p className="text-sm font-bold text-gray-800">{name}</p>
-                          {pageOnly && <p className="text-xs text-gray-400">{pageOnly}</p>}
+                          {pageOnly && <span className="text-xs text-gray-400">{pageOnly}</span>}
                         </div>
                       )
                     })}
                   </div>
                 </div>
-                <div className="h-3" />
+              )
+            })() : (
+              <div className="px-4 py-3 border-b border-gray-50">
+                <span className="text-[10px] text-gray-300">교재 과제 — 없음</span>
               </div>
-            )
-          })() : (
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-              <span className="text-[10px] text-gray-300">교재 과제</span>
-              <span className="text-xs text-gray-300">— 없음</span>
-            </div>
-          )}
+            )}
 
-          {/* 학습지 과제 */}
-          {todaySession?.hw_worksheet_range ? (
-            <div className="px-4 py-3 border-b border-gray-50">
-              <p className="text-[10px] text-gray-400 mb-1">학습지 과제</p>
-              <p className="text-sm font-bold text-gray-800">{todaySession.hw_worksheet_range}</p>
-            </div>
-          ) : (
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
-              <span className="text-[10px] text-gray-300">학습지 과제</span>
-              <span className="text-xs text-gray-300">— 없음</span>
-            </div>
-          )}
+            {/* 학습지 과제 */}
+            {selectedSession.hw_worksheet_range ? (
+              <div className="px-4 py-3 border-b border-gray-50">
+                <p className="text-[10px] text-gray-400 mb-1">학습지 과제</p>
+                <p className="text-sm font-bold text-gray-800">{selectedSession.hw_worksheet_range}</p>
+              </div>
+            ) : (
+              <div className="px-4 py-3 border-b border-gray-50">
+                <span className="text-[10px] text-gray-300">학습지 과제 — 없음</span>
+              </div>
+            )}
 
-          {/* 영상 과제 */}
-          {hasVideoTask ? (
-            <div>
-              <div className="px-4 pt-3 pb-1">
-                <p className="text-[10px] text-gray-400 mb-2">영상 과제 <span className="text-gray-300">{videoUrls.length}개</span></p>
-                <div className="space-y-2">
-                  {videoUrls.map((url, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                        style={{ background: '#FAECE7', color: '#993C1D' }}>{idx + 1}</div>
-                      <p className="text-xs text-gray-400 flex-1 truncate">{url}</p>
-                      <button onClick={() => handleVideoOpen(url, idx)}
-                        className="px-3 py-1 rounded-lg text-xs font-bold shrink-0"
-                        style={{ background: '#F5C4B3', color: '#712B13' }}>
-                        보기
-                      </button>
-                    </div>
-                  ))}
+            {/* 영상 과제 */}
+            {(() => {
+              const videoUrls = selectedSession.video_url
+                ? selectedSession.video_url.split('\n').filter(Boolean)
+                : []
+              const isToday = selectedSession.session_date === todayStr
+              if (videoUrls.length === 0) return (
+                <div className="px-4 py-3">
+                  <span className="text-[10px] text-gray-300">영상 과제 — 없음</span>
                 </div>
-              </div>
-              {videoStarted && (
-                <div className="px-4 py-2 flex justify-end">
-                  {!videoCompleted ? (
-                    <button onClick={handleVideoComplete}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                      style={{ background: '#F5C4B3', color: '#712B13' }}>
-                      모두 시청 완료
-                    </button>
-                  ) : (
-                    <span className="text-xs font-bold px-3 py-1 rounded-full"
-                      style={{ background: '#F5C4B3', color: '#712B13' }}>시청 완료</span>
+              )
+              return (
+                <div className="px-4 py-3">
+                  <p className="text-[10px] text-gray-400 mb-2">영상 과제 {videoUrls.length}개</p>
+                  <div className="space-y-2">
+                    {videoUrls.map((url, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                          style={{ background: '#FAECE7', color: '#993C1D' }}>{idx + 1}</div>
+                        <p className="text-xs text-gray-400 flex-1 truncate">{url}</p>
+                        <button onClick={() => handleVideoOpen(url, idx)}
+                          className="px-3 py-1 rounded-lg text-xs font-bold shrink-0"
+                          style={{ background: '#F5C4B3', color: '#712B13' }}>보기</button>
+                      </div>
+                    ))}
+                  </div>
+                  {isToday && todayNote?.video_started_at && (
+                    <div className="mt-2 flex justify-end">
+                      {!todayNote.video_completed_at ? (
+                        <button onClick={handleVideoComplete}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                          style={{ background: '#F5C4B3', color: '#712B13' }}>모두 시청 완료</button>
+                      ) : (
+                        <span className="text-xs font-bold px-3 py-1 rounded-full"
+                          style={{ background: '#F5C4B3', color: '#712B13' }}>시청 완료</span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-              <div className="h-2" />
-            </div>
-          ) : (
-            <div className="px-4 py-3 flex items-center gap-2">
-              <span className="text-[10px] text-gray-300">영상 과제</span>
-              <span className="text-xs text-gray-300">— 없음</span>
-            </div>
-          )}
-        </div>
+              )
+            })()}
 
-        {/* ── 학습지 현황 (최근 6개월) ── */}
-        {(() => {
-          const sixMonthsAgo = new Date()
-          sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-          const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0]
-          const recentWS = worksheets.filter((w) => w.assigned_at >= sixMonthsAgoStr)
-          if (recentWS.length === 0) return null
-          const scored = recentWS.filter((w) => w.score != null)
-          const avgScore = scored.length > 0
-            ? Math.round(scored.reduce((s, w) => s + (w.score ?? 0), 0) / scored.length)
-            : null
-          const passedCount = recentWS.filter((w) => w.status === 'passed').length
-          const passRate = Math.round(passedCount / recentWS.length * 100)
-          const levelMap: Record<number, number> = {}
-          recentWS.forEach((w) => { levelMap[w.current_level] = (levelMap[w.current_level] ?? 0) + 1 })
-          const levels = Object.entries(levelMap).sort((a, b) => Number(a[0]) - Number(b[0]))
-          const maxCount = Math.max(...levels.map(([, c]) => c))
-          const maxLevel = Math.max(...recentWS.map((w) => w.current_level))
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+            <i className="ti ti-circle-check" style={{ fontSize: 36, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
+            <p className="text-sm font-bold text-gray-600">최근 수업 기록이 없어요</p>
+          </div>
+        )}
+
+        {/* 시험대비 현황 카드 - 독립 표시 (4주 이내 시험) */}
+        {examPreps.length > 0 && (() => {
+          const nearestExam = examPreps[0]
+          const diffDays = Math.ceil((new Date(nearestExam.exam_date).getTime() - new Date().setHours(0,0,0,0)) / 86400000)
           return (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
-                  <i className="ti ti-file-text" style={{ fontSize: 14, color: '#993C1D' }} />
-                </div>
-                <span className="text-sm font-bold text-gray-800">학습지 현황</span>
-                <span className="text-[10px] text-gray-400 ml-1">최근 6개월</span>
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden"
+              style={{ borderColor: '#F5C4B3' }}>
+              <div className="px-4 py-3 flex items-center gap-2"
+                style={{ background: '#FFF5F2', borderBottom: '1px solid #f0f0f0' }}>
+                <i className="ti ti-pencil-check" style={{ fontSize: 16, color: '#993C1D' }} />
+                <h3 className="text-sm font-bold" style={{ color: '#712B13' }}>시험대비 현황</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto"
+                  style={{ background: '#F5C4B3', color: '#712B13' }}>
+                  D-{diffDays} · {nearestExam.exam_date}
+                </span>
               </div>
-              <div className="px-4 py-4">
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
-                    <p className="text-[10px] text-gray-400 mb-0.5">총 학습지</p>
-                    <p className="text-base font-bold text-gray-800">{recentWS.length}<span className="text-[10px] font-normal text-gray-400 ml-0.5">개</span></p>
-                  </div>
-                  <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
-                    <p className="text-[10px] text-gray-400 mb-0.5">통과율</p>
-                    <p className="text-base font-bold text-gray-800">{passRate}<span className="text-[10px] font-normal text-gray-400 ml-0.5">%</span></p>
-                  </div>
-                  <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
-                    <p className="text-[10px] text-gray-400 mb-0.5">평균점수</p>
-                    <p className="text-base font-bold text-gray-800">{avgScore ?? '-'}<span className="text-[10px] font-normal text-gray-400 ml-0.5">점</span></p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-gray-400 mb-2">레벨별 분포 <span className="ml-1 font-semibold text-gray-600">최고 {maxLevel}레벨</span></p>
-                <div className="flex items-end gap-2 h-10">
-                  {levels.map(([level, count]) => {
-                    const barH = Math.max(4, Math.round((count / maxCount) * 36))
-                    const lv = Number(level)
-                    const barColor = lv >= 4 ? '#F5C4B3' : '#D3D1C7'
-                    const textColor = lv >= 4 ? '#993C1D' : '#6b7280'
-                    return (
-                      <div key={level} className="flex-1 flex flex-col items-center justify-end gap-0.5">
-                        <span className="text-[9px] font-bold" style={{ color: textColor }}>{count}</span>
-                        <div className="w-full rounded-t-sm" style={{ height: barH, background: barColor }} />
-                        <span className="text-[9px] text-gray-400">{level}레벨</span>
+              <div className="divide-y divide-gray-50">
+                {examPreps
+          .sort((a: any, b: any) => {
+            const isSpecialA = ['전범위','복합'].includes(a.inner_enough?.unit_name ?? '')
+            const isSpecialB = ['전범위','복합'].includes(b.inner_enough?.unit_name ?? '')
+            if (isSpecialA && !isSpecialB) return 1
+            if (!isSpecialA && isSpecialB) return -1
+            return (a.inner_enough?.unit_no ?? '').localeCompare(b.inner_enough?.unit_no ?? '', 'ko', { numeric: true })
+          })
+              .map((ep: any) => {
+                  const ie = ep.inner_enough
+                  if (!ie) return null
+                  const totalSteps = ep.total_steps || 1
+                  const pct = Math.round((ep.progress_step || 0) / totalSteps * 100)
+                  return (
+                    <div key={ep.id} className="px-4 py-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div>
+                          <p className="text-xs font-bold text-gray-800">{ie.unit_name}</p>
+                          <p className="text-[10px] text-gray-400">{ie.sub_unit_name} · {ie.problem_count}문항</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {ep.score != null && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                              style={{
+                                background: ep.score >= 90 ? '#EAF3DE' : ep.score >= 70 ? '#FAEEDA' : '#fee2e2',
+                                color: ep.score >= 90 ? '#27500A' : ep.score >= 70 ? '#633806' : '#991b1b'
+                              }}>{ep.score}점</span>
+                          )}
+                          <span className="text-xs font-black"
+                            style={{ color: pct >= 100 ? '#27500A' : pct > 0 ? '#993C1D' : '#9ca3af' }}>
+                            {pct}%
+                          </span>
+                        </div>
                       </div>
-                    )
-                  })}
-                </div>
+                      <div className="h-1.5 rounded-full" style={{ background: '#f3f4f6' }}>
+                        <div className="h-1.5 rounded-full transition-all"
+                          style={{ width: `${pct}%`, background: pct >= 100 ? '#639922' : '#EF9F27' }} />
+                      </div>
+                      <div className="flex gap-1 mt-1.5">
+                        {Array.from({ length: totalSteps }).map((_, i) => (
+                          <div key={i} className="flex-1 h-1 rounded-full"
+                            style={{ background: i < (ep.progress_step || 0) ? '#639922' : '#f3f4f6' }} />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )
         })()}
 
-        {/* ── 교재 진도 현황 ── */}
+        {/* 레벨 학습지 전체 현황 */}
+        {worksheets.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #efefef' }}>
+              <i className="ti ti-file-text" style={{ fontSize: 16, color: '#993C1D' }} />
+              <h3 className="text-sm font-bold text-gray-700">레벨 학습지 전체 현황</h3>
+              <span className="text-xs text-gray-400 ml-auto">{worksheets.length}개</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {worksheets.map((w) => {
+                const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
+                return (
+                  <div key={w.id} className="px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span className={cx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.color)}>{cfg.label}</span>
+                      {w.worksheet_type === 'similar' && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                          style={{ background: '#FFF5F2', color: '#712B13' }}>오답유사</span>
+                      )}
+                      <span className="text-[10px] font-semibold ml-auto" style={{ color: '#9ca3af' }}>{w.current_level}레벨</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-bold text-gray-900">
+                        {w.grade_level} {w.unit}
+                        {w.unit_name && <span className="text-xs font-normal text-gray-400 ml-1">{w.unit_name}</span>}
+                      </p>
+                      {w.score != null && (
+                        <span className="text-sm font-black shrink-0" style={{
+                          color: w.score >= 85 ? '#27500A' : w.score >= 70 ? '#633806' : '#991b1b'
+                        }}>{w.score}점</span>
+                      )}
+                    </div>
+                    {w.memo && <p className="text-[10px] mt-0.5" style={{ color: '#9ca3af' }}>{w.memo}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 교재 진도 현황 */}
         {(() => {
           const TYPE_ORDER: Record<string, number> = { '개념서': 0, '유형서': 1, '심화서': 2, '연산서': 3 }
           const TYPE_STYLE: Record<string, { dot: string; fill: string; label: string }> = {
@@ -532,9 +607,8 @@ export default function StudentDashboardPage() {
                 <span className="text-sm font-bold text-gray-800">교재 진도 현황</span>
               </div>
               <div className="px-4 py-4 space-y-5">
-                {myTBs
-                  .sort((a, b) => (TYPE_ORDER[a.textbook_type] ?? 9) - (TYPE_ORDER[b.textbook_type] ?? 9))
-                  .map((tb) => {
+                {myTBs.sort((a, b) => (TYPE_ORDER[a.textbook_type] ?? 9) - (TYPE_ORDER[b.textbook_type] ?? 9))
+                  .map(tb => {
                     if (!tb.grade) return null
                     const tbConcepts = concepts.filter(c => c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true))
                     if (tbConcepts.length === 0) return null
@@ -548,9 +622,7 @@ export default function StudentDashboardPage() {
                     return (
                       <div key={tb.id}>
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: style.dot, color: '#fff' }}>
-                            {style.label}
-                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: style.dot, color: '#fff' }}>{style.label}</span>
                           <span className="text-xs font-bold text-gray-800">{tb.textbook_name}</span>
                           <span className="text-[10px] text-gray-400">{tb.grade} {tb.semester}학기</span>
                           <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
@@ -559,13 +631,13 @@ export default function StudentDashboardPage() {
                           <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
                         </div>
                         <div className="space-y-2">
-                          {chapters.map((ch) => {
+                          {chapters.map(ch => {
                             const chConcepts = tbConcepts.filter(c => c.chapter === ch)
                             return (
                               <div key={ch}>
                                 <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
                                 <div className="flex flex-wrap gap-1">
-                                  {chConcepts.map((c) => {
+                                  {chConcepts.map(c => {
                                     const check = progressChecks.find(p => p.concept_id === c.id)
                                     const done = check && check.check_count >= targetCount
                                     const partial = check && check.check_count > 0 && check.check_count < targetCount
@@ -582,20 +654,6 @@ export default function StudentDashboardPage() {
                             )
                           })}
                         </div>
-                        <div className="flex gap-3 mt-2">
-                          <div className="flex items-center gap-1">
-                            <div style={{ width:10, height:10, borderRadius:2, background: style.dot }} />
-                            <span className="text-[9px] text-gray-500">완료</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div style={{ width:10, height:10, borderRadius:2, background: style.fill, border: `1px solid ${style.dot}80` }} />
-                            <span className="text-[9px] text-gray-500">진행중</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div style={{ width:10, height:10, borderRadius:2, background: '#f3f0ea', border: '1px solid #e5d5c5' }} />
-                            <span className="text-[9px] text-gray-500">미진도</span>
-                          </div>
-                        </div>
                       </div>
                     )
                   })}
@@ -603,15 +661,6 @@ export default function StudentDashboardPage() {
             </div>
           )
         })()}
-
-        {/* 과제 없음 */}
-        {!todaySession && !hasVideoTask && worksheets.length === 0 && textbooks.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-            <i className="ti ti-circle-check" style={{ fontSize: 36, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
-            <p className="text-sm font-bold text-gray-600">오늘 수업 내용이 없어요</p>
-            <p className="text-xs text-gray-400 mt-1">선생님이 수업일지를 작성하면 여기에 나타나요</p>
-          </div>
-        )}
 
       </div>
     </div>
