@@ -45,6 +45,7 @@ interface Concept {
   grade: string
   semester: number
   chapter: string
+  sub_chapter?: string
   concept_order: number
   concept_name: string
 }
