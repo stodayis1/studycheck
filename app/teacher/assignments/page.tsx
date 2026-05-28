@@ -1246,8 +1246,8 @@ export default function TeacherAssignmentsPage() {
                         <div>
                           <label className="block text-xs font-bold text-gray-700 mb-2">중단원 <span className="text-[10px] font-normal text-gray-400">복수 선택 가능</span></label>
                           <div className="flex gap-1.5 flex-wrap">
-                            {subChapters.map((sub) => (
-                              <button key={sub} onClick={() => setWsSubChapters((prev) => prev.includes(sub) ? prev.filter((x) => x !== sub) : [...prev, sub])}
+                            {subChapters.filter(Boolean).map((sub) => (
+                              <button key={sub} onClick={() => setWsSubChapters((prev) => prev.includes(sub as string) ? prev.filter((x) => x !== sub) : [...prev, sub as string])}
                                 className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
                                 style={wsSubChapters.includes(sub)
                                   ? { background: '#F5C4B3', color: '#712B13' }
