@@ -112,7 +112,7 @@ function formatUnit(gradeLevel: string, unit: string, unitName: string) {
 
 export default function TeacherAssignmentsPage() {
   const { currentUser, isAdmin } = useAuth()
-  const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status'>('worksheet')
+const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'textbook'>('worksheet')
   const [unitStatusStudent, setUnitStatusStudent] = useState<any | null>(null)
   const [subTab, setSubTab] = useState<'ws' | 'tb'>('ws')
   const [students, setStudents] = useState<Student[]>([])
