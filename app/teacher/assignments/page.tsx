@@ -1226,7 +1226,7 @@ export default function TeacherAssignmentsPage() {
                   const gradeConcepts = concepts.filter((c) => c.grade === wsConceptGrade)
                   const chapters = [...new Set(gradeConcepts.map((c) => c.chapter))]
                   const subChapters = wsChapters.length > 0
-                    ? [...new Set(gradeConcepts.filter((c) => wsChapters.includes(c.chapter)).map((c) => c.sub_chapter))]
+                    ? [...new Set(gradeConcepts.filter((c) => wsChapters.includes(c.chapter)).map((c) => c.sub_chapter).filter((s): s is string => !!s))]
                     : []
                   return (
                     <>
