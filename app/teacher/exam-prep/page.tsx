@@ -64,6 +64,7 @@ export default function TeacherExamPrepPage() {
   const [assignments, setAssignments] = useState<StudentExamPrep[]>([])
   const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>([])
   const [loading, setLoading] = useState(true)
+  const [scheduleSchools, setScheduleSchools] = useState<string[]>([])
   const [searchText, setSearchText] = useState('')
   const [viewTab, setViewTab] = useState<'assign' | 'status' | 'schedule'>('assign')
   const [statusStudent, setStatusStudent] = useState<Student | null>(null)
@@ -72,6 +73,7 @@ export default function TeacherExamPrepPage() {
   const [showModal, setShowModal] = useState(false)
   const [selStudent, setSelStudent] = useState<Student | null>(null)
   const [selLevel, setSelLevel] = useState('')
+  const [selHighRange, setSelHighRange] = useState('')
   const [selUnitIds, setSelUnitIds] = useState<string[]>([])
   const [examDate, setExamDate] = useState('')
   const [assigning, setAssigning] = useState(false)
@@ -101,7 +103,11 @@ export default function TeacherExamPrepPage() {
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
       supabase.from('exam_schedule').select('*').order('exam_date'),
     ])
-    if (sData) setStudents(sData)
+    if (sData) {
+      setStudents(sData)
+      const uniqueSchools = [...new Set((sData as any[]).map((s: any) => s.school).filter(Boolean))].sort() as string[]
+      setScheduleSchools(uniqueSchools)
+    }
     if (ieData) setInnerEnough(ieData)
     if (aData) setAssignments(aData as StudentExamPrep[])
     if (esData) setExamSchedules(esData)
@@ -126,17 +132,42 @@ export default function TeacherExamPrepPage() {
     return m ? m[0] : ''
   }
 
+  function isHighSchool(student: Student) {
+    return student.grade.includes('고')
+  }
+
+  // 고등 공통 범위 목록
+  const highRanges = [...new Set(innerEnough
+    .filter(ie => ie.school_name.startsWith('공통_'))
+    .map(ie => ie.school_name))]
+
   const availableLevels = selStudent
-    ? [...new Set(innerEnough
-        .filter(ie => ie.school_name === getSchoolName(selStudent) && ie.grade === getSchoolGrade(selStudent))
-        .map(ie => ie.level))]
+    ? isHighSchool(selStudent)
+      ? selHighRange
+        ? [...new Set(innerEnough.filter(ie => ie.school_name === selHighRange).map(ie => ie.level))]
+        : []
+      : [...new Set(innerEnough
+          .filter(ie => ie.school_name === getSchoolName(selStudent) && ie.grade === getSchoolGrade(selStudent))
+          .map(ie => ie.level))]
     : []
 
   const availableUnits = selStudent && selLevel
-    ? innerEnough.filter(ie =>
-        ie.school_name === getSchoolName(selStudent) &&
-        ie.grade === getSchoolGrade(selStudent) &&
-        ie.level === selLevel)
+    ? innerEnough
+        .filter(ie =>
+          isHighSchool(selStudent)
+            ? ie.school_name === selHighRange && ie.level === selLevel
+            : ie.school_name === getSchoolName(selStudent) &&
+              ie.grade === getSchoolGrade(selStudent) &&
+              ie.level === selLevel
+        )
+        .sort((a, b) => {
+          // 전범위/복합 맨 뒤
+          const isSpecialA = ['전범위','복합'].includes(a.unit_name)
+          const isSpecialB = ['전범위','복합'].includes(b.unit_name)
+          if (isSpecialA && !isSpecialB) return 1
+          if (!isSpecialA && isSpecialB) return -1
+          return (a.unit_no ?? '').localeCompare(b.unit_no ?? '', 'ko', { numeric: true })
+        })
     : []
 
   const unitGroups = availableUnits.reduce((acc, ie) => {
@@ -158,7 +189,7 @@ export default function TeacherExamPrepPage() {
         status: 'assigned', progress_step: 0, total_steps: totalSteps,
       })
     }
-    setShowModal(false); setSelStudent(null); setSelLevel(''); setSelUnitIds([]); setExamDate('')
+    setShowModal(false); setSelStudent(null); setSelLevel(''); setSelUnitIds([]); setSelHighRange(''); setExamDate('')
     setAssigning(false); fetchAll()
   }
 
@@ -609,13 +640,13 @@ export default function TeacherExamPrepPage() {
                     <p className="text-xs" style={{ color: '#993C1D' }}>
                       {getSchoolName(selStudent)} {getSchoolGrade(selStudent)}학년
                     </p>
-                    <button onClick={() => { setSelStudent(null); setSelLevel(''); setSelUnitIds([]) }}
+                    <button onClick={() => { setSelStudent(null); setSelLevel(''); setSelUnitIds([]); setSelHighRange('') }}
                       className="text-gray-400"><i className="ti ti-x" /></button>
                   </div>
                 ) : (
                   <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
                     {filteredStudents.map(s => (
-                      <button key={s.id} onClick={() => { setSelStudent(s); setSelLevel(''); setSelUnitIds([]) }}
+                      <button key={s.id} onClick={() => { setSelStudent(s); setSelLevel(''); setSelUnitIds([]); setSelHighRange(''); setSelHighRange(''); setSelHighRange('') }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                           style={{ background: '#FAECE7', color: '#993C1D' }}>{s.name[0]}</div>
@@ -630,10 +661,34 @@ export default function TeacherExamPrepPage() {
                 )}
               </div>
 
-              {/* 레벨 */}
-              {selStudent && (
+              {/* 고등 범위 선택 */}
+              {selStudent && isHighSchool(selStudent) && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">반(레벨) *</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">시험 범위 *</label>
+                  <div className="flex flex-col gap-2">
+                    {highRanges.map(range => {
+                      const label = range.replace('공통_', '')
+                      return (
+                        <button key={range}
+                          onClick={() => { setSelHighRange(range); setSelLevel(''); setSelUnitIds([]) }}
+                          className="px-4 py-2.5 rounded-xl text-sm font-bold transition-all text-left"
+                          style={selHighRange === range
+                            ? { background: '#F5C4B3', color: '#712B13' }
+                            : { background: '#f3f4f6', color: '#9ca3af' }}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 레벨 */}
+              {selStudent && (!isHighSchool(selStudent) || selHighRange) && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    반(레벨) * {isHighSchool(selStudent) && <span className="font-normal text-gray-400">S=상위반 · B=기본반</span>}
+                  </label>
                   {availableLevels.length === 0 ? (
                     <p className="text-xs text-red-400">해당 학교/학년 데이터가 없어요</p>
                   ) : (
@@ -816,17 +871,20 @@ export default function TeacherExamPrepPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학교 *</label>
-              <div className="flex gap-2 flex-wrap">
-                {schools.map(s => (
-                  <button key={s} onClick={() => setSchSchool(s)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                    style={schSchool === s
-                      ? { background: '#F5C4B3', color: '#712B13' }
-                      : { background: '#f3f4f6', color: '#6b7280' }}>
-                    {s}
-                  </button>
-                ))}
-              </div>
+              <select value={schSchool} onChange={e => setSchSchool(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none">
+                <option value="">학교 선택</option>
+                <optgroup label="중학교">
+                  {scheduleSchools.filter(s => s.endsWith('중') || s.includes('중학교')).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="고등학교">
+                  {scheduleSchools.filter(s => s.endsWith('고') || s.includes('고등학교')).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학년 *</label>

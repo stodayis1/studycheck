@@ -534,9 +534,9 @@ export default function TeacherCurriculumPage() {
                           <div className="flex-1 min-w-0">
                             <span className="text-xs font-bold text-gray-700">{t.textbook_type}</span>
                             <span className="text-xs text-gray-500 ml-1.5">{t.textbook_name}</span>
-                            {t.grade && (
+                            {t.textbook_grade && (
                               <span className="text-[10px] text-gray-400 ml-1.5">
-                                {t.grade} {t.semester ? `${t.semester}학기` : ''}
+                                {t.textbook_grade} {t.semester ? `${t.semester}학기` : ''}
                               </span>
                             )}
                           </div>
