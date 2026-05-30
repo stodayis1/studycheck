@@ -15,7 +15,9 @@ const NAV_ITEMS = [
   { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
   { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
-  { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
+  { href: '/teacher/work-status',     label: '업무현황',   icon: 'ti-briefcase' },
+  { href: '/teacher/exam-prep',        label: '시험배정',   icon: 'ti-clipboard-list' },
+  { href: '/teacher/reports',          label: '보고서',     icon: 'ti-chart-bar' },
 ]
 
 export function TeacherSidebar() {
