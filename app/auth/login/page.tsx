@@ -105,7 +105,7 @@ export default function LoginPage() {
             </label>
             <input type="text" value={loginId}
               onChange={(e) => { setLoginId(e.target.value); if (mode !== 'teacher') checkDuplicate(e.target.value) }}
-              placeholder={mode === 'teacher' ? 'teacher@test.com' : '예) 윤수지'}
+              placeholder={mode === 'teacher' ? '이메일을 입력하세요' : '예) 윤수지'}
               className="w-full px-4 py-3 rounded-xl border text-sm focus:outline-none transition-all"
               style={{ borderColor: '#e5e7eb' }}
               onFocus={e => e.target.style.borderColor = '#9FE1CB'}
@@ -185,7 +185,7 @@ export default function LoginPage() {
               <span className="text-[10px]" style={{ color: '#d1d5db' }}>테스트 계정</span>
               <div className="flex-1 h-px" style={{ background: '#f3f4f6' }} />
             </div>
-            <button onClick={() => { setLoginId('teacher@test.com'); setPassword('test1234') }}
+            <button onClick={async () => { setLoginId('test@test.com'); setPassword('test1234'); await new Promise(r => setTimeout(r, 100)); const { error } = await supabase.auth.signInWithPassword({ email: 'test@test.com', password: 'test1234' }); if (!error) router.push('/teacher/dashboard'); }}
               className="w-full py-2.5 rounded-xl text-xs font-semibold border transition-all"
               style={{ background: '#F0FBF7', color: '#085041', borderColor: '#9FE1CB40' }}>
               <i className="ti ti-chalkboard mr-1.5" style={{ fontSize: 13 }} />
