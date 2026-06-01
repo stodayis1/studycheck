@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
@@ -15,14 +16,19 @@ const NAV_ITEMS = [
   { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
   { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
-  { href: '/teacher/work-status',     label: '업무현황',   icon: 'ti-briefcase' },
-  { href: '/teacher/exam-prep',        label: '시험배정',   icon: 'ti-clipboard-list' },
-  { href: '/teacher/reports',          label: '보고서',     icon: 'ti-chart-bar' },
+  { href: '/teacher/work-status',    label: '업무현황',   icon: 'ti-briefcase' },
+  { href: '/teacher/exam-prep',      label: '시험배정',   icon: 'ti-clipboard-list' },
+  { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
 ]
+
+// 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
+const MOBILE_MAIN = NAV_ITEMS.slice(0, 4)
+const MOBILE_MORE = NAV_ITEMS.slice(4)
 
 export function TeacherSidebar() {
   const pathname = usePathname()
   const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
+  const [moreOpen, setMoreOpen] = useState(false)
 
   return (
     <>
@@ -125,11 +131,38 @@ export function TeacherSidebar() {
         </div>
       )}
 
+      {/* 모바일 더보기 시트 */}
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0 z-50" onClick={() => setMoreOpen(false)}>
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.3)' }} />
+          <div className="absolute bottom-16 left-0 right-0 rounded-t-2xl p-4 pb-6"
+            style={{ background: 'white', boxShadow: '0 -4px 24px rgba(0,0,0,0.1)' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: '#e5e7eb' }} />
+            <div className="grid grid-cols-4 gap-3">
+              {MOBILE_MORE.map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)}
+                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl transition-all"
+                    style={isActive
+                      ? { background: '#9FE1CB', color: '#085041' }
+                      : { background: '#f9fafb', color: '#6b7280' }}>
+                    <i className={`ti ${item.icon}`} style={{ fontSize: 22 }} />
+                    <span style={{ fontSize: 11, fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 모바일 하단 탭 */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40"
         style={{ background: '#F0FBF7', borderTop: '1px solid #e5e7eb' }}>
         <div className="flex h-16 max-w-lg mx-auto">
-          {NAV_ITEMS.slice(0, 5).map((item) => {
+          {MOBILE_MAIN.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link key={item.href} href={item.href}
@@ -140,6 +173,13 @@ export function TeacherSidebar() {
               </Link>
             )
           })}
+          {/* 더보기 버튼 */}
+          <button onClick={() => setMoreOpen(true)}
+            className="flex-1 flex flex-col items-center justify-center gap-1 transition-colors"
+            style={{ color: moreOpen ? '#085041' : '#9ca3af' }}>
+            <i className="ti ti-dots" style={{ fontSize: 20 }} />
+            <span style={{ fontSize: 9, fontWeight: moreOpen ? 600 : 400 }}>더보기</span>
+          </button>
         </div>
       </nav>
     </>
