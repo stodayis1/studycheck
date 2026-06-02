@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'StudyCheck — 학원 과제 관리',
-  description: '선생님, 학생, 학부모를 위한 과제 관리 플랫폼',
+  title: '수학의지혜 StudyCheck',
+  description: '수학의지혜 통합 관리 플랫폼',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -13,6 +13,28 @@ export const metadata: Metadata = {
   icons: {
     icon: '/icon-192.png',
     apple: '/apple-icon.png',
+  },
+  openGraph: {
+    title: '수학의지혜 StudyCheck',
+    description: '수학의지혜 통합 관리 플랫폼',
+    url: 'https://studycheck-five.vercel.app',
+    siteName: '수학의지혜 StudyCheck',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1080,
+        height: 1080,
+        alt: '수학의지혜 StudyCheck',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '수학의지혜 StudyCheck',
+    description: '수학의지혜 통합 관리 플랫폼',
+    images: ['/og-image.png'],
   },
 }
 

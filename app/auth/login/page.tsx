@@ -74,7 +74,7 @@ export default function LoginPage() {
       {/* 로고 */}
       <div className="mb-8 text-center">
         <img src="/logo.png" alt="수학의지혜" className="h-48 object-contain mb-3 mx-auto" />
-        <p className="text-sm font-medium" style={{ color: '#9ca3af' }}>학원 통합 관리 플랫폼</p>
+        <p className="text-sm font-medium" style={{ color: '#9ca3af' }}>학생·학부모·선생님을 위한 학원 통합 관리 플랫폼</p>
       </div>
 
       {/* 카드 */}
