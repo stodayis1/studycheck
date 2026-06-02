@@ -73,7 +73,8 @@ export default function LoginPage() {
 
       {/* 로고 */}
       <div className="mb-8 text-center">
-        <img src="/logo.png" alt="수학의지혜" className="h-48 object-contain mb-3 mx-auto" />
+        <img src="/logo.png" alt="수학의지혜" className="h-48 object-contain mb-2 mx-auto" />
+        <h1 className="text-3xl font-extrabold mb-1.5" style={{ color: '#085041', letterSpacing: '-0.5px' }}>StudyCheck</h1>
         <p className="text-sm font-medium" style={{ color: '#9ca3af' }}>학생·학부모·선생님을 위한 학원 통합 관리 플랫폼</p>
       </div>
 
