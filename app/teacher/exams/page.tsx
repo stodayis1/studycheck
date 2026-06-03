@@ -158,42 +158,35 @@ export default function TeacherExamsPage() {
     if (!modalStudent) return
     setSaving(true)
 
-    // 단원별 입력이 있는 경우 (진단평가/코어테스트/입학테스트)
-    const hasUnitEntries = Object.entries(unitEntries).some(([, v]) => v.score)
-    if (hasUnitEntries) {
-      const myTBs = studentTextbooks.filter((t) => t.student_id === modalStudent.id)
-      const topTB = myTBs[0]
-      const gradeConcepts = topTB?.grade ? concepts.filter((c) => c.grade === topTB.grade) : []
-      const chapters = [...new Set(gradeConcepts.map((c) => c.chapter))]
-      // key 형식: "대단원" (초등) or "대단원__중단원" (중고등)
-      const rows = Object.entries(unitEntries)
-        .filter(([, v]) => v.score)
-        .map(([key, v]) => {
-          const [unit, unitName] = key.includes('__') ? key.split('__') : [key, null]
-          return {
-            student_id: modalStudent.id,
-            exam_type: tab,
-            exam_date: examDate,
-            title: examTitle || null,
-            unit,
-            unit_name: unitName || null,
-            level: v.level ?? null,
-            score: parseFloat(v.score ?? '0'),
-            total_score: parseFloat(examTotalScore) || 100,
-            memo: v.memo || examMemo || null,
-            teacher_name: currentUser?.name ?? null,
-          }
-        })
-      if (rows.length > 0) await supabase.from('exams').insert(rows)
-    } else if (examScore) {
-      // 단순 전체 점수 입력
+    // 선택한 범위 키 계산 (초등=대단원 / 중고등=중단원, 없으면 대단원)
+    const myTBs0 = studentTextbooks.filter((t) => t.student_id === modalStudent.id)
+    const grade0 = myTBs0[0]?.grade ?? ''
+    const isElem0 = grade0.includes('초')
+    let selectedRangeKeys: string[] = []
+    if (isElem0) {
+      selectedRangeKeys = activeUnitTabs
+    } else {
+      const subKeys = activeSubTabs
+      // 중단원 선택 안 된 대단원은 대단원 자체를 범위로
+      const unitsWithSub = new Set(subKeys.map((k) => k.split('__')[0]))
+      const unitsOnly = activeUnitTabs.filter((u) => !unitsWithSub.has(u))
+      selectedRangeKeys = [...subKeys, ...unitsOnly]
+    }
+
+    // 선택한 단원 범위를 문자열로 합침
+    const rangeUnits = selectedRangeKeys.length > 0
+      ? selectedRangeKeys.map((k) => k.includes('__') ? k.split('__')[1] : k).join(', ')
+      : (examUnitName || null)
+
+    if (examScore) {
+      // 평가 1개 = 점수 1개 (단원은 범위 표시용)
       await supabase.from('exams').insert({
         student_id: modalStudent.id,
         exam_type: tab,
         exam_date: examDate,
         title: examTitle || null,
         unit: examUnit || null,
-        unit_name: examUnitName || null,
+        unit_name: rangeUnits,
         level: examLevel,
         score: parseFloat(examScore),
         total_score: parseFloat(examTotalScore) || 100,
@@ -583,149 +576,113 @@ export default function TeacherExamsPage() {
 
               // 초등 여부 확인
               const isElementary = topTB?.grade?.includes('초') ?? false
-              // 탭 키: 초등=대단원, 중고등=대단원+중단원
-              const getTabKey = (ch: string, sub?: string) => sub ? `${ch}__${sub}` : ch
-              const filledCount = Object.keys(unitEntries).filter((k) => unitEntries[k]?.score).length
+              const getTabKey = (ch, sub) => sub ? ch + '__' + sub : ch
+
+              // 선택 범위 키 (초등=대단원 / 중고등=중단원, 없으면 대단원)
+              let selectedRangeKeys: string[] = []
+              if (isElementary) {
+                selectedRangeKeys = activeUnitTabs
+              } else {
+                const unitsWithSub = new Set(activeSubTabs.map((k) => k.split('__')[0]))
+                const unitsOnly = activeUnitTabs.filter((u) => !unitsWithSub.has(u))
+                selectedRangeKeys = [...activeSubTabs, ...unitsOnly]
+              }
 
               return (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-gray-700">단원별 입력 <span className="font-normal text-gray-400">(대단원 복수 선택 가능)</span></label>
-                    {filledCount > 0 && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: cfg.bg, color: cfg.color }}>
-                        {filledCount}개 입력됨
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    시험 범위 <span className="font-normal text-gray-400">(대단원 복수 선택 가능 · 점수는 평가당 1개)</span>
+                  </label>
 
                   {/* 대단원 다중선택 */}
-                  <div className="flex gap-1 flex-wrap mb-3 max-h-24 overflow-y-auto">
+                  <div className="flex gap-1 flex-wrap mb-2 max-h-24 overflow-y-auto">
                     {chapters.map((ch) => {
-                      const hasData = isElementary
-                        ? !!unitEntries[getTabKey(ch)]?.score
-                        : Object.keys(unitEntries).some((k) => k.startsWith(ch + '__') && unitEntries[k]?.score)
                       const isActive = activeUnitTabs.includes(ch)
                       return (
-                        <button key={ch} onClick={() => {
+                        <button key={ch} type="button" onClick={() => {
                           setActiveUnitTabs((prev) => prev.includes(ch) ? prev.filter((x) => x !== ch) : [...prev, ch])
                         }}
-                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all relative"
+                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all"
                           style={isActive
                             ? { background: cfg.badge, color: cfg.color, borderColor: cfg.badge }
-                            : hasData
-                            ? { background: cfg.bg, color: cfg.color, borderColor: cfg.badge + '80' }
                             : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                          {isElementary ? ch : ch.replace(/^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨ]/, (m: string) => ({'Ⅰ':'1','Ⅱ':'2','Ⅲ':'3','Ⅳ':'4','Ⅴ':'5','Ⅵ':'6','Ⅶ':'7','Ⅷ':'8','Ⅸ':'9'}[m] ?? m)).slice(0,6)}
-                          {hasData && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold"
-                            style={{ background: cfg.badge, color: cfg.color }}>✓</span>}
+                          {ch.slice(0, 14)}
                         </button>
                       )
                     })}
                   </div>
 
-                  {/* 초등: 선택된 대단원마다 입력 패널 */}
-                  {isElementary && activeUnitTabs.map((ch) => (
-                    <div key={ch} className="mb-2">
-                      <ElementaryEntryPanel
-                        unitKey={getTabKey(ch)}
-                        unitLabel={ch}
-                        entry={unitEntries[getTabKey(ch)] ?? { level: null, score: '', memo: '' }}
-                        examTotalScore={examTotalScore}
-                        tab={tab}
-                        cfg={cfg}
-                        onChange={(patch: any) => setUnitEntries((prev) => ({ ...prev, [getTabKey(ch)]: { ...(prev[getTabKey(ch)] ?? { level: null, score: '', memo: '' }), ...patch } }))}
-                        scoreBg={scoreBg} scoreColor={scoreColor} pct={pct}
-                      />
-                    </div>
-                  ))}
-
-                  {/* 중고등: 선택된 대단원마다 중단원 선택 + 입력 패널 */}
+                  {/* 중고등: 선택된 대단원마다 중단원 범위 선택 */}
                   {!isElementary && activeUnitTabs.map((ch) => {
-                    const subChapters = [...new Set(gradeConcepts.filter((c) => c.chapter === ch).map((c) => c.sub_chapter).filter(Boolean))]
-                    const selectedSubs = activeSubTabs.filter((s) => subChapters.includes(s))
+                    const subChapters = [...new Set(gradeConcepts.filter((cc) => cc.chapter === ch).map((cc) => cc.sub_chapter).filter(Boolean))]
+                    if (subChapters.length === 0) return null
                     return (
-                      <div key={ch} className="mb-3 rounded-xl p-2.5" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
-                        <p className="text-xs font-bold mb-2" style={{ color: cfg.color }}>{ch}</p>
-                        {/* 중단원 선택 */}
-                        {subChapters.length > 0 ? (
-                          <div className="flex gap-1 flex-wrap mb-2">
-                            {subChapters.map((sub) => {
-                              const key = getTabKey(ch, sub as string)
-                              const hasData = !!unitEntries[key]?.score
-                              const isSelected = activeSubTabs.includes(sub as string)
-                              return (
-                                <button key={sub as string}
-                                  onClick={() => setActiveSubTabs((prev) => prev.includes(sub as string) ? prev.filter((x) => x !== sub) : [...prev, sub as string])}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all relative"
-                                  style={isSelected
-                                    ? { background: '#d97706', color: 'white', borderColor: '#d97706' }
-                                    : hasData
-                                    ? { background: '#FAEEDA', color: '#633806', borderColor: '#EF9F27' }
-                                    : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                                  {(sub as string).replace(/^\d+\.\s*/, '').slice(0, 12)}
-                                  {hasData && (
-                                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full text-[7px] flex items-center justify-center font-bold"
-                                      style={{ background: '#EF9F27', color: 'white' }}>✓</span>
-                                  )}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-gray-400 mb-1">중단원 정보 없음</p>
-                        )}
-                        {/* 선택된 중단원 입력 패널 */}
-                        {selectedSubs.length > 0 && (
-                          <div className="space-y-2">
-                            {selectedSubs.map((sub) => {
-                              const key = getTabKey(ch, sub)
-                              const curEntry = unitEntries[key] ?? { level: null, score: '', memo: '' }
-                              const updateEntry = (patch: any) => setUnitEntries((prev) => ({ ...prev, [key]: { ...(prev[key] ?? { level: null, score: '', memo: '' }), ...patch } }))
-                              return (
-                                <div key={key} className="rounded-xl p-3 space-y-2.5" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
-                                  <div className="flex items-center justify-between">
-                                    <p className="text-xs font-bold" style={{ color: cfg.color }}>{sub}</p>
-                                    <button onClick={() => setActiveSubTabs((prev) => prev.filter((x) => x !== sub))}
-                                      className="text-[10px] text-gray-400 hover:text-red-400">✕ 제거</button>
-                                  </div>
-                                  {tab === '진단평가' && (
-                                    <div className="flex gap-1 flex-wrap">
-                                      {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6].map((l) => (
-                                        <button key={l} onClick={() => updateEntry({ level: curEntry.level === l ? null : l })}
-                                          className="px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all"
-                                          style={curEntry.level === l
-                                            ? { background: '#EF9F27', color: 'white', borderColor: '#EF9F27' }
-                                            : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                                          {l}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <div className="flex gap-2 items-center">
-                                    <input type="number" min="0" value={curEntry.score}
-                                      onChange={(e) => updateEntry({ score: e.target.value })}
-                                      placeholder="점수"
-                                      className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none text-center font-bold" />
-                                    <span className="text-gray-400 text-xs shrink-0">/ {examTotalScore}</span>
-                                    {curEntry.score && (
-                                      <span className="text-xs font-bold px-2 py-1 rounded-lg shrink-0"
-                                        style={{ background: scoreBg(parseFloat(curEntry.score), parseFloat(examTotalScore)||100), color: scoreColor(parseFloat(curEntry.score), parseFloat(examTotalScore)||100) }}>
-                                        {pct(parseFloat(curEntry.score), parseFloat(examTotalScore)||100)}%
-                                      </span>
-                                    )}
-                                  </div>
-                                  <input value={curEntry.memo} onChange={(e) => updateEntry({ memo: e.target.value })}
-                                    placeholder="메모 (선택)"
-                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none" />
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
+                      <div key={ch} className="mb-2 pl-1">
+                        <p className="text-[10px] font-semibold text-gray-500 mb-1">{ch}</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {subChapters.map((sub) => {
+                            const key = getTabKey(ch, sub)
+                            const isSel = activeSubTabs.includes(key)
+                            return (
+                              <button key={key} type="button"
+                                onClick={() => setActiveSubTabs((prev) => prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key])}
+                                className="px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all"
+                                style={isSel
+                                  ? { background: '#d97706', color: 'white', borderColor: '#d97706' }
+                                  : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                                {sub.replace(/^\d+\.\s*/, '').slice(0, 12)}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     )
                   })}
+
+                  {/* 선택한 범위 요약 */}
+                  {selectedRangeKeys.length > 0 && (
+                    <div className="mt-2 rounded-xl px-3 py-2" style={{ background: cfg.bg }}>
+                      <p className="text-[10px] font-semibold" style={{ color: cfg.color }}>
+                        선택 범위: {selectedRangeKeys.map((k) => k.includes('__') ? k.split('__')[1] : k).join(', ')}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 진단평가 레벨 (평가당 1개) */}
+                  {tab === '진단평가' && (
+                    <div className="mt-3">
+                      <label className="block text-[10px] font-semibold text-gray-500 mb-1.5">레벨</label>
+                      <div className="flex gap-1 flex-wrap">
+                        {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6].map((l) => (
+                          <button key={l} type="button" onClick={() => setExamLevel(examLevel === l ? null : l)}
+                            className="px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all"
+                            style={examLevel === l
+                              ? { background: '#EF9F27', color: 'white', borderColor: '#EF9F27' }
+                              : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 점수 (평가당 1개) */}
+                  <div className="mt-3">
+                    <label className="block text-[10px] font-semibold text-gray-500 mb-1.5">점수</label>
+                    <div className="flex gap-2 items-center">
+                      <input type="number" min="0" value={examScore}
+                        onChange={(e) => setExamScore(e.target.value)}
+                        placeholder="점수"
+                        className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none text-center font-bold" />
+                      <span className="text-gray-400 text-xs shrink-0">/ {examTotalScore}</span>
+                      {examScore && (
+                        <span className="text-xs font-bold px-2 py-1 rounded-lg shrink-0"
+                          style={{ background: scoreBg(parseFloat(examScore), parseFloat(examTotalScore)||100), color: scoreColor(parseFloat(examScore), parseFloat(examTotalScore)||100) }}>
+                          {pct(parseFloat(examScore), parseFloat(examTotalScore)||100)}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )
             })()}
@@ -773,7 +730,7 @@ export default function TeacherExamsPage() {
             <div className="flex gap-2">
               <button onClick={() => setShowModal(false)}
                 className="flex-1 py-3 rounded-xl text-sm font-bold bg-gray-100 text-gray-600">취소</button>
-              <button onClick={handleSave} disabled={!modalStudent || (!examScore && !Object.values(unitEntries).some((v) => v.score)) || saving}
+              <button onClick={handleSave} disabled={!modalStudent || !examScore || saving}
                 className="flex-1 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ background: cfg.badge, color: cfg.color }}>
                 {saving
