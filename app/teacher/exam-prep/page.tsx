@@ -72,6 +72,7 @@ export default function TeacherExamPrepPage() {
   // 배정 모달
   const [showModal, setShowModal] = useState(false)
   const [selStudent, setSelStudent] = useState<Student | null>(null)
+  const [bulkMode, setBulkMode] = useState(false)  // 같은 조건 학생 전체 일괄 배정
   const [selLevel, setSelLevel] = useState('')
   const [selHighRange, setSelHighRange] = useState('')
   const [selUnitIds, setSelUnitIds] = useState<string[]>([])
@@ -179,17 +180,32 @@ export default function TeacherExamPrepPage() {
   async function handleAssign() {
     if (!selStudent || selUnitIds.length === 0) return
     setAssigning(true)
-    for (const id of selUnitIds) {
-      const ie = innerEnough.find(i => i.id === id)
-      const totalSteps = ie ? Math.max(1, Math.round(ie.problem_count / 30)) : 1
-      await supabase.from('student_exam_prep').insert({
-        student_id: selStudent.id, inner_enough_id: id,
-        exam_date: examDate || null,
-        assigned_by: currentUser?.name,
-        status: 'assigned', progress_step: 0, total_steps: totalSteps,
-      })
+
+    // 일괄 모드: 같은 학교+학년의 학생 전체, 아니면 선택 학생 1명
+    let targetStudents = [selStudent]
+    if (bulkMode) {
+      targetStudents = students.filter(s =>
+        getSchoolName(s) === getSchoolName(selStudent!) &&
+        getSchoolGrade(s) === getSchoolGrade(selStudent!)
+      )
     }
-    setShowModal(false); setSelStudent(null); setSelLevel(''); setSelUnitIds([]); setSelHighRange(''); setExamDate('')
+
+    for (const stu of targetStudents) {
+      for (const id of selUnitIds) {
+        const ie = innerEnough.find(i => i.id === id)
+        const totalSteps = ie ? Math.max(1, Math.round(ie.problem_count / 30)) : 1
+        // 이미 배정된 단원은 건너뛰기 (중복 방지)
+        const already = assignments?.some?.(ep => ep.student_id === stu.id && ep.inner_enough_id === id)
+        if (already) continue
+        await supabase.from('student_exam_prep').insert({
+          student_id: stu.id, inner_enough_id: id,
+          exam_date: examDate || null,
+          assigned_by: currentUser?.name,
+          status: 'assigned', progress_step: 0, total_steps: totalSteps,
+        })
+      }
+    }
+    setShowModal(false); setSelStudent(null); setSelLevel(''); setSelUnitIds([]); setSelHighRange(''); setExamDate(''); setBulkMode(false)
     setAssigning(false); fetchAll()
   }
 
@@ -315,8 +331,8 @@ export default function TeacherExamPrepPage() {
               <p className="text-[11px] text-gray-400 mb-2 px-1">
                 <i className="ti ti-info-circle" style={{ fontSize: 11 }} /> 백분율(%)은 완성률 · 점수는 성취도를 나타냅니다
               </p>
-              {/* 반응형 그리드 (모바일 1 / 태블릿 2 / PC 3) */}
-              <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+              {/* 3열 그리드 */}
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
                 {grouped.map(({ student, preps }) => {
                   const totalPct = Math.round(preps.reduce((sum, a) => sum + Math.round((a.progress_step||0)/(a.total_steps||1)*100), 0) / preps.length)
                   const doneCount = preps.filter(a => a.status === 'done').length
@@ -415,8 +431,8 @@ export default function TeacherExamPrepPage() {
                                   </div>
                                 </div>
                                 <p className="text-[10px] text-gray-400 mb-1.5">{ie?.sub_unit_name} · {ie?.problem_count}문항</p>
-                                {/* 진도 단계 버튼 */}
-                                <div className="flex gap-1">
+                                {/* 진도 단계 버튼 (줄바꿈) */}
+                                <div className="flex flex-wrap gap-1">
                                   {Array.from({ length: totalSteps + 1 }).map((_, step) => {
                                     const stepPct = totalSteps === 1
                                       ? (step === 0 ? 0 : 100)
@@ -430,12 +446,12 @@ export default function TeacherExamPrepPage() {
                                             .update({ progress_step: step, status }).eq('id', a.id)
                                           fetchAll()
                                         }}
-                                        className="flex-1 py-1 rounded-md text-[10px] font-bold transition-all"
-                                        style={isActive
+                                        className="py-1 rounded-md text-[10px] font-bold transition-all"
+                                        style={{ minWidth: '38px', flexGrow: 1, ...(isActive
                                           ? { background: '#F5C4B3', color: '#712B13' }
                                           : step < (a.progress_step || 0)
                                           ? { background: '#EAF3DE', color: '#27500A' }
-                                          : { background: '#f3f4f6', color: '#9ca3af' }}>
+                                          : { background: '#f3f4f6', color: '#9ca3af' }) }}>
                                         {stepPct}%
                                       </button>
                                     )
@@ -615,7 +631,7 @@ export default function TeacherExamPrepPage() {
       {/* 배정 모달 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
-          onClick={() => setShowModal(false)}>
+          onClick={() => { setShowModal(false); setBulkMode(false) }}>
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}>
             <div className="px-6 pt-6 pb-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f0f0f0' }}>
@@ -623,7 +639,7 @@ export default function TeacherExamPrepPage() {
                 <i className="ti ti-book" style={{ fontSize: 18, color: '#993C1D' }} />
                 <h3 className="text-base font-bold text-gray-900">시험대비 교재 배정</h3>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-gray-400">
+              <button onClick={() => { setShowModal(false); setBulkMode(false) }} className="text-gray-400">
                 <i className="ti ti-x" style={{ fontSize: 18 }} />
               </button>
             </div>
@@ -708,6 +724,30 @@ export default function TeacherExamPrepPage() {
               )}
 
               {/* 단원 */}
+              {/* 일괄 배정 옵션 */}
+              {selLevel && selStudent && (
+                <button onClick={() => setBulkMode(!bulkMode)}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl transition-all text-left"
+                  style={bulkMode
+                    ? { background: '#FFF5F2', border: '1.5px solid #F5C4B3' }
+                    : { background: '#fafafa', border: '1.5px solid #f0f0f0' }}>
+                  <div className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                    style={{ background: bulkMode ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                    {bulkMode && <i className="ti ti-check" style={{ fontSize: 11, color: '#712B13' }} />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold" style={{ color: bulkMode ? '#712B13' : '#374151' }}>
+                      같은 학교·학년 학생에게 일괄 배정
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#9ca3af' }}>
+                      {bulkMode
+                        ? `${getSchoolName(selStudent)} ${getSchoolGrade(selStudent)}학년 전체에게 같은 단원을 배정해요 (이미 배정된 건 건너뜀)`
+                        : '체크하면 선택한 단원을 같은 조건 학생 모두에게 한번에 배정해요'}
+                    </p>
+                  </div>
+                </button>
+              )}
+
               {selLevel && Object.keys(unitGroups).length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -720,10 +760,10 @@ export default function TeacherExamPrepPage() {
                       {selUnitIds.length === availableUnits.length ? '전체 해제' : '전체 선택'}
                     </button>
                   </div>
-                  <div className="space-y-3 max-h-72 overflow-y-auto rounded-xl" style={{ border: '1px solid #f3f4f6', padding: '8px' }}>
+                  <div className="space-y-3">
                     {Object.entries(unitGroups).map(([unitName, units]) => (
                       <div key={unitName}>
-                        <p className="text-xs font-bold text-gray-600 mb-1.5 sticky top-0 bg-white py-1" style={{ zIndex: 1 }}>{unitName}</p>
+                        <p className="text-xs font-bold text-gray-600 mb-1.5">{unitName}</p>
                         <div className="space-y-1.5">
                           {units.map(ie => {
                             const isChecked = selUnitIds.includes(ie.id)
@@ -808,7 +848,7 @@ export default function TeacherExamPrepPage() {
                 style={{ background: '#F5C4B3', color: '#712B13' }}>
                 {assigning
                   ? <><span className="w-4 h-4 border-2 border-[#712B13]/30 border-t-[#712B13] rounded-full animate-spin" />배정 중...</>
-                  : <><i className="ti ti-clipboard-check" style={{ fontSize: 16 }} />{selUnitIds.length}개 단원 배정</>}
+                  : <><i className="ti ti-clipboard-check" style={{ fontSize: 16 }} />{bulkMode ? `전체 학생에게 ${selUnitIds.length}개 단원 일괄 배정` : `${selUnitIds.length}개 단원 배정`}</>}
               </button>
             </div>
           </div>
