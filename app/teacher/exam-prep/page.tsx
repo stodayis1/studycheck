@@ -315,8 +315,8 @@ export default function TeacherExamPrepPage() {
               <p className="text-[11px] text-gray-400 mb-2 px-1">
                 <i className="ti ti-info-circle" style={{ fontSize: 11 }} /> 백분율(%)은 완성률 · 점수는 성취도를 나타냅니다
               </p>
-              {/* 3열 그리드 */}
-              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+              {/* 반응형 그리드 (모바일 1 / 태블릿 2 / PC 3) */}
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
                 {grouped.map(({ student, preps }) => {
                   const totalPct = Math.round(preps.reduce((sum, a) => sum + Math.round((a.progress_step||0)/(a.total_steps||1)*100), 0) / preps.length)
                   const doneCount = preps.filter(a => a.status === 'done').length
@@ -720,10 +720,10 @@ export default function TeacherExamPrepPage() {
                       {selUnitIds.length === availableUnits.length ? '전체 해제' : '전체 선택'}
                     </button>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-72 overflow-y-auto rounded-xl" style={{ border: '1px solid #f3f4f6', padding: '8px' }}>
                     {Object.entries(unitGroups).map(([unitName, units]) => (
                       <div key={unitName}>
-                        <p className="text-xs font-bold text-gray-600 mb-1.5">{unitName}</p>
+                        <p className="text-xs font-bold text-gray-600 mb-1.5 sticky top-0 bg-white py-1" style={{ zIndex: 1 }}>{unitName}</p>
                         <div className="space-y-1.5">
                           {units.map(ie => {
                             const isChecked = selUnitIds.includes(ie.id)
