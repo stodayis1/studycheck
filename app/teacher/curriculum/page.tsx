@@ -92,6 +92,8 @@ export default function TeacherCurriculumPage() {
 
   const [showTBModal, setShowTBModal] = useState(false)
   const [tbStudent, setTbStudent] = useState<Student | null>(null)
+  const [tbMultiMode, setTbMultiMode] = useState(false)
+  const [tbStudentIds, setTbStudentIds] = useState<string[]>([])
   const [tbCourseGroup, setTbCourseGroup] = useState<'초등' | '중등' | '고등'>('초등')
   const [tbGrade, setTbGrade] = useState('초4')
   const [tbSemester, setTbSemester] = useState(1)
@@ -161,33 +163,40 @@ export default function TeacherCurriculumPage() {
   }
 
   async function handleTBAssign() {
-    if (!tbStudent || !tbName) return
+    if (!tbName) return
+    // 대상 학생 결정: 다중모드면 체크된 학생들, 아니면 단일 학생
+    const targetIds = tbMultiMode ? tbStudentIds : (tbStudent ? [tbStudent.id] : [])
+    if (targetIds.length === 0) return
     setTbAssigning(true)
 
-    // 같은 학생+교재종류 이미 있으면 확인
-    const existing = textbooks.find(
-      (t) => t.student_id === tbStudent.id && t.textbook_type === tbType
-    )
-    if (existing) {
-      if (!confirm(`${tbStudent.name} 학생에게 이미 ${tbType}(${existing.textbook_name})가 배정되어 있어요.\n새 교재로 교체할까요?`)) {
-        setTbAssigning(false)
-        return
+    for (const sid of targetIds) {
+      const stu = students.find(s => s.id === sid)
+      // 같은 학생+교재종류 이미 있으면 교체 (다중모드는 묻지 않고 교체)
+      const existing = textbooks.find(
+        (t) => t.student_id === sid && t.textbook_type === tbType
+      )
+      if (existing) {
+        if (!tbMultiMode) {
+          if (!confirm(`${stu?.name ?? '이'} 학생에게 이미 ${tbType}(${existing.textbook_name})가 배정되어 있어요.\n새 교재로 교체할까요?`)) {
+            setTbAssigning(false)
+            return
+          }
+        }
+        await supabase.from('student_textbooks').delete().eq('id', existing.id)
       }
-      await supabase.from('student_textbooks').delete().eq('id', existing.id)
+      await supabase.from('student_textbooks').insert({
+        student_id: sid,
+        concept_id: null,
+        textbook_name: tbName,
+        textbook_type: tbType,
+        grade: tbGrade,
+        semester: tbSemester,
+        status: 'assigned',
+        memo: tbMemo || null,
+      })
     }
-
-    await supabase.from('student_textbooks').insert({
-      student_id: tbStudent.id,
-      concept_id: null,
-      textbook_name: tbName,
-      textbook_type: tbType,
-      grade: tbGrade,
-      semester: tbSemester,
-      status: 'assigned',
-      memo: tbMemo || null,
-    })
     setShowTBModal(false)
-    setTbStudent(null); ; setTbName(''); setTbMemo('')
+    setTbStudent(null); setTbStudentIds([]); setTbMultiMode(false); setTbName(''); setTbMemo('')
     setTbAssigning(false)
     fetchData()
   }
@@ -634,18 +643,57 @@ export default function TeacherCurriculumPage() {
       {/* 병행교재 배정 모달 */}
       {showTBModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
-          onClick={() => setShowTBModal(false)}>
+          onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]) }}>
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900">📚 과정 및 교재 배정</h3>
-              <button onClick={() => setShowTBModal(false)} className="text-gray-400">✕</button>
+              <button onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]) }} className="text-gray-400">✕</button>
             </div>
 
             {/* 학생 선택 */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">학생 <span className="text-red-400">*</span></label>
-              {tbStudent ? (
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-gray-700">학생 <span className="text-red-400">*</span></label>
+                <button onClick={() => { setTbMultiMode(!tbMultiMode); setTbStudent(null); setTbStudentIds([]) }}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all"
+                  style={tbMultiMode
+                    ? { background: '#9FE1CB', color: '#085041' }
+                    : { background: '#f3f4f6', color: '#6b7280' }}>
+                  {tbMultiMode ? '✓ 여러 명 선택중' : '여러 명 선택'}
+                </button>
+              </div>
+
+              {/* 다중 선택 모드 */}
+              {tbMultiMode ? (
+                <div>
+                  {tbStudentIds.length > 0 && (
+                    <p className="text-[11px] font-semibold text-green-700 mb-1.5">{tbStudentIds.length}명 선택됨</p>
+                  )}
+                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl">
+                    {filteredStudents.map((s) => {
+                      const checked = tbStudentIds.includes(s.id)
+                      return (
+                        <button key={s.id} onClick={() => {
+                          setTbStudentIds(prev => checked ? prev.filter(id => id !== s.id) : [...prev, s.id])
+                        }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-gray-50 last:border-0 text-left"
+                          style={{ background: checked ? '#F0FBF7' : 'white' }}>
+                          <div className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                            style={{ background: checked ? '#9FE1CB' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                            {checked && <i className="ti ti-check" style={{ fontSize: 11, color: '#085041' }} />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-gray-800">{s.name}</p>
+                            <p className="text-xs text-gray-400">{s.grade} · {s.teacher_name}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1.5">선택한 학생들에게 아래 교재가 동일하게 배정돼요</p>
+                </div>
+              ) : tbStudent ? (
                 <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border-2 border-green-300 rounded-xl">
                   <p className="text-sm font-bold text-green-800 flex-1">{tbStudent.name} · {tbStudent.grade}</p>
                   <button onClick={() => setTbStudent(null)} className="text-green-400">✕</button>
@@ -658,7 +706,6 @@ export default function TeacherCurriculumPage() {
                       if (s.grade.includes('초')) { setTbCourseGroup('초등'); setTbGrade(s.grade.replace('학년','').trim()) }
                       else if (s.grade.includes('중')) { setTbCourseGroup('중등'); setTbGrade(s.grade.includes('1') ? '중1' : s.grade.includes('2') ? '중2' : '중3') }
                       else if (s.grade.includes('고')) { setTbCourseGroup('고등'); setTbGrade('공통수학1') }
-                      
                     }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-green-50 border-b border-gray-50 last:border-0">
                       <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">{s.name[0]}</div>
@@ -773,9 +820,9 @@ export default function TeacherCurriculumPage() {
             )}
 
             <button onClick={handleTBAssign}
-              disabled={!tbStudent || !tbName || tbAssigning}
+              disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || !tbName || tbAssigning}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-              {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : '📚 교재 배정하기'}
+              {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : (tbMultiMode ? `📚 ${tbStudentIds.length}명에게 교재 배정하기` : '📚 교재 배정하기')}
             </button>
           </div>
         </div>
