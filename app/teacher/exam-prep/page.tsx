@@ -332,7 +332,7 @@ export default function TeacherExamPrepPage() {
                 <i className="ti ti-info-circle" style={{ fontSize: 11 }} /> 백분율(%)은 완성률 · 점수는 성취도를 나타냅니다
               </p>
               {/* 3열 그리드 */}
-              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
                 {grouped.map(({ student, preps }) => {
                   const totalPct = Math.round(preps.reduce((sum, a) => sum + Math.round((a.progress_step||0)/(a.total_steps||1)*100), 0) / preps.length)
                   const doneCount = preps.filter(a => a.status === 'done').length
