@@ -223,6 +223,22 @@ export default function TeacherLearningNotesPage() {
     setProgressLoading(false)
   }
 
+  async function updateExamPrepStep(prepId: string, newStep: number) {
+    // 시험대비 진도 업데이트 (학습일지에서 직접 입력)
+    const { error } = await supabase
+      .from('student_exam_prep')
+      .update({ progress_step: newStep })
+      .eq('id', prepId)
+    if (!error) {
+      // 화면 즉시 반영
+      setExamPreps(prev => prev.map(ep =>
+        ep.id === prepId ? { ...ep, progress_step: newStep } : ep
+      ))
+    } else {
+      alert('진도 저장에 실패했어요: ' + error.message)
+    }
+  }
+
   async function toggleProgress(textbookId: string, type: string) {
     if (!progressStudent) return
     setSavingProgress(true)
@@ -1442,7 +1458,7 @@ export default function TeacherLearningNotesPage() {
                                   color: pct >= 100 ? '#27500A' : pct > 0 ? '#993C1D' : '#9ca3af'
                                 }}>{pct}%</span>
                               </div>
-                              {/* 진도 읽기전용 표시 */}
+                              {/* 진도 입력 (클릭 가능) */}
                               <div className="flex gap-1.5">
                                 {Array.from({ length: totalSteps + 1 }).map((_, step) => {
                                   const stepPct = totalSteps === 1
@@ -1450,20 +1466,21 @@ export default function TeacherLearningNotesPage() {
                                     : Math.round(step / totalSteps * 100)
                                   const isActive = currentStep === step
                                   return (
-                                    <div key={step}
-                                      className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center"
+                                    <button key={step}
+                                      onClick={() => updateExamPrepStep(ep.id, step)}
+                                      className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-all active:scale-95"
                                       style={isActive
                                         ? { background: '#F5C4B3', color: '#712B13' }
                                         : step < currentStep
                                         ? { background: '#EAF3DE', color: '#27500A' }
                                         : { background: '#f3f4f6', color: '#9ca3af' }}>
                                       {stepPct}%
-                                    </div>
+                                    </button>
                                   )
                                 })}
                               </div>
                               <p className="text-[10px] text-gray-400 mt-1">
-                                <i className="ti ti-lock" style={{ fontSize: 10 }} /> 시험대비 관리에서 업데이트
+                                <i className="ti ti-hand-finger" style={{ fontSize: 10 }} /> 눌러서 진도 입력 (시험대비 관리와 자동 연동)
                               </p>
                               {ep.exam_date && (
                                 <p className="text-[10px] text-gray-400 mt-1.5">시험일 {ep.exam_date}</p>
