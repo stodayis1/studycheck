@@ -96,18 +96,47 @@ export default function TeacherReportsPage() {
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [studentTextbooks, setStudentTextbooks] = useState<StudentTextbook[]>([])
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
+  const [examPreps, setExamPreps] = useState<any[]>([])
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
+  // 권한 체크: 관리자는 전부, 강사는 본인 입력분만
+  function canDelete(teacherName: string | null | undefined) {
+    if (isAdmin()) return true
+    return teacherName === currentUser?.name
+  }
+
+  // 평가 기록 삭제
+  async function deleteExam(examId: string) {
+    if (!confirm('이 평가 기록을 삭제할까요? 되돌릴 수 없어요.')) return
+    setDeleting(examId)
+    const { error } = await supabase.from('exams').delete().eq('id', examId)
+    if (!error) setExams((prev) => prev.filter((e) => e.id !== examId))
+    else alert('삭제 실패: ' + error.message)
+    setDeleting(null)
+  }
+
+  // 학습지 기록 삭제
+  async function deleteWorksheet(wsId: string) {
+    if (!confirm('이 학습지 기록을 삭제할까요? 되돌릴 수 없어요.')) return
+    setDeleting(wsId)
+    const { error } = await supabase.from('student_worksheets').delete().eq('id', wsId)
+    if (!error) setWorksheets((prev) => prev.filter((w) => w.id !== wsId))
+    else alert('삭제 실패: ' + error.message)
+    setDeleting(null)
+  }
+
   async function fetchData() {
     setLoading(true)
-    const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, { data: pcData }, { data: examData }] = await Promise.all([
+    const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, { data: pcData }, { data: examData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*'),
       supabase.from('progress_checks').select('*'),
       supabase.from('exams').select('*').order('exam_date', { ascending: true }),
+      supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
     ])
     if (studentData) setStudents(studentData)
     if (worksheetData) setWorksheets(worksheetData)
@@ -115,6 +144,7 @@ export default function TeacherReportsPage() {
     if (tbData) setStudentTextbooks(tbData)
     if (pcData) setProgressChecks(pcData)
     if (examData) setExams(examData)
+    if (epData) setExamPreps(epData)
     setLoading(false)
   }
 
@@ -568,6 +598,19 @@ export default function TeacherReportsPage() {
                             'bg-gray-100 text-gray-400')}>
                             {isDone ? '완료' : latest?.status === 'assigned' ? '진행중' : latest?.status === 'submitted' ? '채점대기' : '-'}
                           </span>
+                          {isAdmin() && (
+                            <button
+                              onClick={() => {
+                                if (!confirm(`"${unit}" 단원의 학습지 기록 ${mainRecords.length + similarRecords.length}개를 모두 삭제할까요? 되돌릴 수 없어요.`)) return
+                                const ids = [...mainRecords, ...similarRecords].map((r) => r.id)
+                                Promise.all(ids.map((id) => supabase.from('student_worksheets').delete().eq('id', id)))
+                                  .then(() => setWorksheets((prev) => prev.filter((w) => !ids.includes(w.id))))
+                              }}
+                              className="shrink-0 text-gray-300 hover:text-red-500 transition-colors"
+                              title="이 단원 기록 삭제">
+                              <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                            </button>
+                          )}
                         </div>
 
                         {/* 레벨 + 점수 */}
@@ -689,6 +732,69 @@ export default function TeacherReportsPage() {
             <p className="text-xs text-gray-400 mt-1">초등: 레벨별 진단표 · 중등: 단원/차시별 1차/오답유사 점수</p>
           </div>
         )}
+
+        {/* ── 시험대비(이너프원) 섹션 ── */}
+        {selectedStudent && (() => {
+          const myPreps = examPreps.filter((ep) => ep.student_id === selectedStudent.id)
+          if (myPreps.length === 0) return null
+          return (
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#F5C4B3' }}>
+              <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #f0f0f0' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C4B3' }}>
+                  <i className="ti ti-pencil-check" style={{ fontSize: 14, color: '#712B13' }} />
+                </div>
+                <span className="text-sm font-bold" style={{ color: '#712B13' }}>시험대비 현황</span>
+                <span className="text-[10px] text-gray-400 ml-auto">{myPreps.length}개 단원</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {myPreps
+                  .sort((a, b) => {
+                    const sA = ['전범위','복합'].includes(a.inner_enough?.unit_name ?? '')
+                    const sB = ['전범위','복합'].includes(b.inner_enough?.unit_name ?? '')
+                    if (sA && !sB) return 1
+                    if (!sA && sB) return -1
+                    return (a.inner_enough?.unit_no ?? '').localeCompare(b.inner_enough?.unit_no ?? '', 'ko', { numeric: true })
+                  })
+                  .map((ep) => {
+                    const ie = ep.inner_enough
+                    if (!ie) return null
+                    const totalSteps = ep.total_steps || 1
+                    const pct = Math.round((ep.progress_step || 0) / totalSteps * 100)
+                    return (
+                      <div key={ep.id} className="px-4 py-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-gray-800 truncate">{ie.unit_name}</p>
+                            <p className="text-[10px] text-gray-400 truncate">{ie.sub_unit_name} · {ie.problem_count}문항{ep.exam_date ? ` · 시험일 ${ep.exam_date}` : ''}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {ep.score != null && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                style={{ background: ep.score >= 90 ? '#EAF3DE' : ep.score >= 70 ? '#FAEEDA' : '#fee2e2', color: ep.score >= 90 ? '#27500A' : ep.score >= 70 ? '#633806' : '#991b1b' }}>{ep.score}점</span>
+                            )}
+                            <span className="text-xs font-black" style={{ color: pct >= 100 ? '#27500A' : pct > 0 ? '#993C1D' : '#9ca3af' }}>{pct}%</span>
+                            {isAdmin() && (
+                              <button onClick={async () => {
+                                if (!confirm(`"${ie.unit_name}" 시험대비 배정을 삭제할까요?`)) return
+                                const { error } = await supabase.from('student_exam_prep').delete().eq('id', ep.id)
+                                if (!error) setExamPreps((prev) => prev.filter((x) => x.id !== ep.id))
+                              }}
+                                className="text-gray-300 hover:text-red-500 transition-colors" title="삭제">
+                                <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full" style={{ background: '#f3f4f6' }}>
+                          <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: pct >= 100 ? '#639922' : '#EF9F27' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── 평가 이력 섹션 ── */}
         {selectedStudent && (() => {
@@ -814,6 +920,13 @@ export default function TeacherReportsPage() {
                                 </span>
                               ) : (
                                 <span className="text-[10px] text-gray-400 shrink-0">미채점</span>
+                              )}
+                              {canDelete(e.teacher_name) && (
+                                <button onClick={() => deleteExam(e.id)} disabled={deleting === e.id}
+                                  className="shrink-0 text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                                  title="삭제">
+                                  <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                                </button>
                               )}
                             </div>
                           )
