@@ -503,7 +503,6 @@ export default function TeacherCurriculumPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="text-[11px] font-bold text-red-500 px-2 py-1 bg-red-50 rounded">[디버그] 시험배정 데이터: {examPreps.length}개 로드됨</div>
             {filteredStudents.map((student) => {
               const studentTBs = textbooks.filter((t) => t.student_id === student.id)
               // 시험대비 교재: 시험일 1주일 후까지만 표시
