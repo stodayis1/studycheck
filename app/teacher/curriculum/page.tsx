@@ -68,6 +68,7 @@ export default function TeacherCurriculumPage() {
   const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
+  const [examPreps, setExamPreps] = useState<any[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
   const [gradeGroup, setGradeGroup] = useState('전체')
@@ -106,18 +107,20 @@ export default function TeacherCurriculumPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: tData }, { data: cData }, { data: pData }, { data: catData }] = await Promise.all([
+    const [{ data: sData }, { data: tData }, { data: cData }, { data: pData }, { data: catData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('progress_checks').select('*'),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
+      supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: false }),
     ])
     if (sData) setStudents(sData)
     if (tData) setTextbooks(tData)
     if (cData) setConcepts(cData)
     if (pData) setProgressChecks(pData)
     if (catData) setCatalog(catData)
+    if (epData) setExamPreps(epData)
     setLoading(false)
   }
 
@@ -500,8 +503,18 @@ export default function TeacherCurriculumPage() {
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="text-[11px] font-bold text-red-500 px-2 py-1 bg-red-50 rounded">[디버그] 시험배정 데이터: {examPreps.length}개 로드됨</div>
             {filteredStudents.map((student) => {
               const studentTBs = textbooks.filter((t) => t.student_id === student.id)
+              // 시험대비 교재: 시험일 1주일 후까지만 표시
+              const now = new Date()
+              const myExamPreps = examPreps.filter((ep) => {
+                if (ep.student_id !== student.id) return false
+                if (!ep.exam_date) return true
+                const examEnd = new Date(ep.exam_date)
+                examEnd.setDate(examEnd.getDate() + 7)
+                return now <= examEnd
+              })
               const activeTBs = studentTBs.filter((t) => t.status !== 'checked')
               const tbByType = activeTBs.reduce((acc, t) => {
                 if (!acc[t.textbook_type]) acc[t.textbook_type] = []
@@ -532,7 +545,7 @@ export default function TeacherCurriculumPage() {
                   </div>
 
                   {/* 배정된 교재 목록 - 수정/삭제 가능 */}
-                  {studentTBs.length > 0 ? (
+                  {(studentTBs.length > 0 || myExamPreps.length > 0) ? (
                     <div className="space-y-1.5">
                       {studentTBs.map((t) => (
                         <div key={t.id} className={cx('flex items-center gap-2 px-3 py-2 rounded-xl border',
@@ -553,6 +566,21 @@ export default function TeacherCurriculumPage() {
                             className="text-[10px] text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-all shrink-0">
                             삭제
                           </button>
+                        </div>
+                      ))}
+                      {/* 시험대비 교재 (시험배정 자동 연동, 시험일 1주일 후 자동 사라짐) */}
+                      {myExamPreps.map((ep) => (
+                        <div key={'ep-' + ep.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border"
+                          style={{ background: '#FFF5F2', borderColor: '#F5C4B3' }}>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-bold" style={{ color: '#712B13' }}>시험대비</span>
+                            <span className="text-xs text-gray-500 ml-1.5">{ep.inner_enough?.unit_name ?? '이너프원'}</span>
+                            {ep.exam_date && (
+                              <span className="text-[10px] text-gray-400 ml-1.5">시험일 {ep.exam_date}</span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-semibold px-2 py-1 rounded-lg shrink-0"
+                            style={{ background: '#F5C4B3', color: '#712B13' }}>시험배정</span>
                         </div>
                       ))}
                     </div>
