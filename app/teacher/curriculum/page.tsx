@@ -62,13 +62,16 @@ interface TextbookCatalog {
 
 const GRADE_GROUPS = ['전체', '초등', '중등', '고등']
 const HIGH_SUBJECTS = ['공통수학1', '공통수학2', '미적분1', '확률과통계', '대수', '기하']
-const TB_TYPES = ['개념서', '유형서', '심화서', '연산서']
+const TB_TYPES = ['개념서', '유형서', '심화서', '연산서', '시험대비교재']
 
 export default function TeacherCurriculumPage() {
   const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [examPreps, setExamPreps] = useState<any[]>([])
+  const [innerEnough, setInnerEnough] = useState<any[]>([])
+  const [tbIeIds, setTbIeIds] = useState<string[]>([])
+  const [tbExamDate, setTbExamDate] = useState('')
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
   const [gradeGroup, setGradeGroup] = useState('전체')
@@ -107,13 +110,14 @@ export default function TeacherCurriculumPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: tData }, { data: cData }, { data: pData }, { data: catData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, { data: tData }, { data: cData }, { data: pData }, { data: catData }, { data: epData }, { data: ieData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('progress_checks').select('*'),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: false }),
+      supabase.from('inner_enough').select('*').order('unit_no'),
     ])
     if (sData) setStudents(sData)
     if (tData) setTextbooks(tData)
@@ -121,6 +125,7 @@ export default function TeacherCurriculumPage() {
     if (pData) setProgressChecks(pData)
     if (catData) setCatalog(catData)
     if (epData) setExamPreps(epData)
+    if (ieData) setInnerEnough(ieData)
     setLoading(false)
   }
 
@@ -166,6 +171,32 @@ export default function TeacherCurriculumPage() {
   }
 
   async function handleTBAssign() {
+    // 시험대비교재 분기: student_exam_prep에 배정
+    if (tbType === '시험대비교재') {
+      const targetIds = tbMultiMode ? tbStudentIds : (tbStudent ? [tbStudent.id] : [])
+      if (targetIds.length === 0 || tbIeIds.length === 0) return
+      setTbAssigning(true)
+      for (const sid of targetIds) {
+        for (const ieId of tbIeIds) {
+          const ie = innerEnough.find((i) => i.id === ieId)
+          const totalSteps = ie ? Math.max(1, Math.round(ie.problem_count / 30)) : 1
+          const already = examPreps.some((ep) => ep.student_id === sid && ep.inner_enough_id === ieId)
+          if (already) continue
+          await supabase.from('student_exam_prep').insert({
+            student_id: sid, inner_enough_id: ieId,
+            exam_date: tbExamDate || null,
+            assigned_by: currentUser?.name,
+            status: 'assigned', progress_step: 0, total_steps: totalSteps,
+          })
+        }
+      }
+      setShowTBModal(false)
+      setTbStudent(null); setTbStudentIds([]); setTbMultiMode(false); setTbIeIds([]); setTbExamDate(''); setTbType('개념서')
+      setTbAssigning(false)
+      fetchData()
+      return
+    }
+
     if (!tbName) return
     // 대상 학생 결정: 다중모드면 체크된 학생들, 아니면 단일 학생
     const targetIds = tbMultiMode ? tbStudentIds : (tbStudent ? [tbStudent.id] : [])
@@ -757,7 +788,7 @@ export default function TeacherCurriculumPage() {
                   <button key={group} onClick={() => {
                     setTbCourseGroup(group)
                     setTbGrade(group === '초등' ? '초4' : group === '중등' ? '중1' : '공통수학1')
-                    setTbType('개념서'); setTbName('')
+                    setTbType('개념서'); setTbName(''); setTbIeIds([]); setTbExamDate('')
                   }}
                     className={cx('flex-1 py-2 rounded-xl text-sm font-bold border transition-all',
                       tbCourseGroup === group ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-500 border-gray-200')}>
@@ -816,38 +847,81 @@ export default function TeacherCurriculumPage() {
               </div>
             </div>
 
-            {/* ④ 교재명 - DB 기반 */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">
-                ④ 교재명
-                {catalog.filter((c) => c.school_level === tbCourseGroup && c.textbook_type === tbType).length === 0 && (
-                  <span className="ml-2 text-[10px] text-orange-500 font-normal">등록된 교재 없음 — 관리자에게 추가 요청하세요</span>
-                )}
-              </label>
-              <div className="flex gap-2 flex-wrap">
-                {catalog
-                  .filter((c) => c.school_level === tbCourseGroup && c.textbook_type === tbType)
-                  .map((c) => (
-                    <button key={c.id} onClick={() => setTbName(c.textbook_name)}
-                      className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                        tbName === c.textbook_name ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>
-                      {c.textbook_name}
-                    </button>
-                  ))}
+            {/* ④ 교재 선택 - 분기: 시험대비교재는 이너프원, 나머지는 카탈로그 */}
+            {tbType === '시험대비교재' ? (
+              <>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    ④ 이너프원 단원 선택 <span className="text-gray-400 font-normal">(여러 개 선택 가능)</span>
+                  </label>
+                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl">
+                    {innerEnough.filter((ie) => {
+                      // 학생 학년에 맞춰 필터
+                      if (!tbStudent && tbStudentIds.length === 0) return true
+                      const stu = tbStudent ?? students.find((s) => tbStudentIds.includes(s.id))
+                      if (!stu) return true
+                      return !ie.grade || ie.grade === stu.grade
+                    }).map((ie) => {
+                      const checked = tbIeIds.includes(ie.id)
+                      return (
+                        <button key={ie.id} onClick={() => setTbIeIds((prev) => checked ? prev.filter((x) => x !== ie.id) : [...prev, ie.id])}
+                          className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-50 last:border-0 text-left"
+                          style={{ background: checked ? '#FFF5F2' : 'white' }}>
+                          <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                            style={{ background: checked ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                            {checked && <i className="ti ti-check" style={{ fontSize: 10, color: '#712B13' }} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800">{ie.unit_name}</p>
+                            <p className="text-[10px] text-gray-400">{ie.sub_unit_name} · {ie.problem_count}문항</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                    {innerEnough.length === 0 && <p className="px-3 py-4 text-xs text-gray-400 text-center">이너프원 단원이 없어요</p>}
+                  </div>
+                  {tbIeIds.length > 0 && <p className="text-[11px] font-semibold text-orange-600 mt-1.5">{tbIeIds.length}개 단원 선택됨</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">⑤ 시험일 <span className="text-gray-400 font-normal">(선택 - 1주일 후 자동 숨김)</span></label>
+                  <input type="date" value={tbExamDate} onChange={(e) => setTbExamDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+                </div>
+              </>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2">
+                  ④ 교재명
+                  {catalog.filter((c) => c.school_level === tbCourseGroup && c.textbook_type === tbType).length === 0 && (
+                    <span className="ml-2 text-[10px] text-orange-500 font-normal">등록된 교재 없음 — 관리자에게 추가 요청하세요</span>
+                  )}
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {catalog
+                    .filter((c) => c.school_level === tbCourseGroup && c.textbook_type === tbType)
+                    .map((c) => (
+                      <button key={c.id} onClick={() => setTbName(c.textbook_name)}
+                        className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                          tbName === c.textbook_name ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>
+                        {c.textbook_name}
+                      </button>
+                    ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* 선택 요약 */}
-            {tbStudent && tbName && (
+            {tbStudent && (tbName || (tbType === '시험대비교재' && tbIeIds.length > 0)) && (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
                 <p className="text-xs font-bold text-green-800">
-                  {tbStudent.name} · {tbGrade}{tbCourseGroup !== '고등' ? ` ${tbSemester}학기` : ''} · {tbType} · {tbName}
+                  {tbStudent.name} · {tbGrade}{tbCourseGroup !== '고등' ? ` ${tbSemester}학기` : ''} · {tbType}{tbType === '시험대비교재' ? ` (${tbIeIds.length}개 단원)` : ` · ${tbName}`}
                 </p>
               </div>
             )}
 
             <button onClick={handleTBAssign}
-              disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || !tbName || tbAssigning}
+              disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || (tbType === '시험대비교재' ? tbIeIds.length === 0 : !tbName) || tbAssigning}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
               {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : (tbMultiMode ? `📚 ${tbStudentIds.length}명에게 교재 배정하기` : '📚 교재 배정하기')}
             </button>
