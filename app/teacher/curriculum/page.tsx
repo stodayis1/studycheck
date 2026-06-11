@@ -855,13 +855,7 @@ export default function TeacherCurriculumPage() {
                     ④ 이너프원 단원 선택 <span className="text-gray-400 font-normal">(여러 개 선택 가능)</span>
                   </label>
                   <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl">
-                    {innerEnough.filter((ie) => {
-                      // 학생 학년에 맞춰 필터
-                      if (!tbStudent && tbStudentIds.length === 0) return true
-                      const stu = tbStudent ?? students.find((s) => tbStudentIds.includes(s.id))
-                      if (!stu) return true
-                      return !ie.grade || ie.grade === stu.grade
-                    }).map((ie) => {
+                    {innerEnough.map((ie) => {
                       const checked = tbIeIds.includes(ie.id)
                       return (
                         <button key={ie.id} onClick={() => setTbIeIds((prev) => checked ? prev.filter((x) => x !== ie.id) : [...prev, ie.id])}
