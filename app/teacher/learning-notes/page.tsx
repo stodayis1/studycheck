@@ -150,6 +150,9 @@ export default function TeacherLearningNotesPage() {
   const [hwVideoUrls, setHwVideoUrls] = useState<string[]>([''])
   // 교재 과제 - 배정된 교재 기반 (다중 선택)
   const [hwSelectedTBIds, setHwSelectedTBIds] = useState<string[]>([])
+  const [hwSelectedEPIds, setHwSelectedEPIds] = useState<string[]>([])  // 시험대비 선택
+  const [hwEPPages, setHwEPPages] = useState<Record<string, string>>({})  // 시험대비별 페이지
+  const [hwMemo, setHwMemo] = useState('')  // 과제 메모
   const [hwTBChapters, setHwTBChapters] = useState<Record<string, string>>({})
   const [hwTBSubChapters, setHwTBSubChapters] = useState<Record<string, string>>({})
   const [hwTBPages, setHwTBPages] = useState<Record<string, string>>({})
@@ -192,7 +195,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('progress_checks').select('*'),
       supabase.from('video_watch_logs').select('*'),
-      supabase.from('student_exam_prep').select('*, inner_enough(*)').eq('status', 'assigned').neq('status', 'done'),
+      supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
     ])
     if (sData) setStudents(sData)
     if (scData) setSchedules(scData)
@@ -321,6 +324,9 @@ export default function TeacherLearningNotesPage() {
     setHwTBSubChapters({})
     setHwTBPages({})
     setHwSelectedWSId('')
+    setHwSelectedEPIds([])
+    setHwEPPages({})
+    setHwMemo('')
     setNoteAchievement(note?.achievement ?? 100)
     setNoteScorePct(note?.score_pct ?? 100)
     setNoteExtraClass(note?.extra_class ?? false)
@@ -403,24 +409,35 @@ export default function TeacherLearningNotesPage() {
       })(),
       daily_test_score: dailyTestScore ? parseInt(dailyTestScore) : null,
       hw_textbook_name: (() => {
-        if (hwSelectedTBIds.length > 0) {
-          return hwSelectedTBIds.map((id) => {
-            const tb = studentTextbooks.find((t) => t.id === id)
-            return tb ? tb.textbook_name : ''
-          }).filter(Boolean).join(', ')
-        }
+        const tbNames = hwSelectedTBIds.map((id) => {
+          const tb = studentTextbooks.find((t) => t.id === id)
+          return tb ? tb.textbook_name : ''
+        }).filter(Boolean)
+        const epNames = hwSelectedEPIds.map((id) => {
+          const ep = examPreps.find((e) => e.id === id)
+          return ep ? `시험대비(${ep.inner_enough?.unit_name ?? ''})` : ''
+        }).filter(Boolean)
+        const all = [...tbNames, ...epNames]
+        if (all.length > 0) return all.join(', ')
         return hwTextbookName || null
       })(),
       hw_textbook_page: (() => {
-        if (hwSelectedTBIds.length > 0) {
-          return hwSelectedTBIds.map((id) => {
-            const tb = studentTextbooks.find((t) => t.id === id)
-            const ch = hwTBChapters[id] || ''
-            const sub = hwTBSubChapters[id] || ''
-            const page = hwTBPages[id] || ''
-            return [tb?.textbook_name, ch, sub, page].filter(Boolean).join(' · ')
-          }).filter(Boolean).join(' / ')
-        }
+        const tbParts = hwSelectedTBIds.map((id) => {
+          const tb = studentTextbooks.find((t) => t.id === id)
+          const ch = hwTBChapters[id] || ''
+          const sub = hwTBSubChapters[id] || ''
+          const page = hwTBPages[id] || ''
+          return [tb?.textbook_name, ch, sub, page].filter(Boolean).join(' · ')
+        }).filter(Boolean)
+        const epParts = hwSelectedEPIds.map((id) => {
+          const ep = examPreps.find((e) => e.id === id)
+          if (!ep) return ''
+          const page = hwEPPages[id] || ''
+          return [`시험대비: ${ep.inner_enough?.unit_name ?? ''}`, page].filter(Boolean).join(' · ')
+        }).filter(Boolean)
+        const memoPart = hwMemo ? `📝 ${hwMemo}` : ''
+        const allParts = [...tbParts, ...epParts, memoPart].filter(Boolean)
+        if (allParts.length > 0) return allParts.join(' / ')
         return hwTextbookPage || null
       })(),
       hw_worksheet_range: (() => {
@@ -1838,6 +1855,69 @@ export default function TeacherLearningNotesPage() {
                       영상 {hwVideoUrls.filter((u) => u.trim()).length}개 · 학생 시청 시간이 선생님에게만 표시돼요
                     </p>
                   )}
+                </div>
+
+                {/* 시험대비 과제 - 시험배정 자동연동 */}
+                {(() => {
+                  const now = new Date()
+                  const myEPs = noteStudent ? examPreps.filter((ep) => {
+                    if (ep.student_id !== noteStudent.id) return false
+                    if (!ep.exam_date) return true
+                    const examEnd = new Date(ep.exam_date)
+                    examEnd.setDate(examEnd.getDate() + 7)
+                    return now <= examEnd
+                  }) : []
+                  if (myEPs.length === 0) return null
+                  return (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        🎯 시험대비 과제
+                        <span className="ml-1.5 text-[10px] font-normal text-gray-400">시험배정 자동연동 · 복수 선택 가능</span>
+                      </label>
+                      <div className="space-y-2">
+                        {myEPs.map((ep) => {
+                          const isSelected = hwSelectedEPIds.includes(ep.id)
+                          const selPage = hwEPPages[ep.id] || ''
+                          return (
+                            <div key={ep.id} className={cx('rounded-xl border-2 overflow-hidden transition-all',
+                              isSelected ? 'border-orange-300' : 'border-gray-100')}>
+                              <button onClick={() => {
+                                setHwSelectedEPIds((prev) => prev.includes(ep.id) ? prev.filter((x) => x !== ep.id) : [...prev, ep.id])
+                                if (!isSelected) setHwEPPages((p) => ({ ...p, [ep.id]: '' }))
+                              }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
+                                <span className={cx('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                                  isSelected ? 'bg-[#F5C4B3] border-[#F5C4B3]' : 'border-gray-300')}>
+                                  {isSelected && <span className="w-2 h-2 bg-white rounded-full" />}
+                                </span>
+                                <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-md',
+                                  isSelected ? 'bg-[#F5C4B3] text-[#712B13]' : 'bg-gray-100 text-gray-500')}>시험대비</span>
+                                <span className="text-xs font-semibold text-gray-700">{ep.inner_enough?.unit_name ?? '이너프원'}</span>
+                                {ep.exam_date && <span className="text-[10px] text-gray-400 ml-auto">시험일 {ep.exam_date}</span>}
+                              </button>
+                              {isSelected && (
+                                <div className="px-3 pb-3 bg-orange-50/30">
+                                  <input type="text" value={selPage}
+                                    onChange={(e) => setHwEPPages((p) => ({ ...p, [ep.id]: e.target.value }))}
+                                    placeholder="페이지/범위 (예: p.45~52)"
+                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* 메모 (과제 배부) */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">📝 메모</label>
+                  <textarea value={hwMemo} onChange={(e) => setHwMemo(e.target.value)}
+                    placeholder="과제 관련 메모 (선택)"
+                    rows={2}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
                 </div>
               </div>
             )}
