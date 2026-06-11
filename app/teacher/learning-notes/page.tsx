@@ -51,6 +51,10 @@ interface LearningNote {
   memo: string | null
   video_started_at: string | null
   video_completed_at: string | null
+  achievement?: number | null
+  score_pct?: number | null
+  extra_class?: boolean | null
+  extra_time?: string | null
 }
 
 interface Feedback {
