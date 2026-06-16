@@ -109,6 +109,7 @@ export default function ParentDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null)
   const [examPreps, setExamPreps] = useState<any[]>([])
+  const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week')
 
   useEffect(() => {
@@ -122,7 +123,7 @@ export default function ParentDashboardPage() {
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
 
-        const [{ data: scData }, { data: ssData }, { data: nData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }] = await Promise.all([
+        const [{ data: scData }, { data: ssData }, { data: nData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }] = await Promise.all([
           supabase.from('schedules').select('*').eq('student_id', session.id).eq('is_active', true),
           supabase.from('class_sessions').select('*').eq('student_id', session.id).order('session_date', { ascending: false }),
           supabase.from('learning_notes').select('*').eq('student_id', session.id),
@@ -130,6 +131,7 @@ export default function ParentDashboardPage() {
           supabase.from('student_textbooks').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
           supabase.from('concepts').select('*').order('concept_order'),
           supabase.from('progress_checks').select('*').eq('student_id', session.id),
+          supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(20),
         ])
         if (scData) setSchedules(scData)
         if (ssData) setSessions(ssData)
@@ -138,6 +140,7 @@ export default function ParentDashboardPage() {
         if (tbData) setTextbooks(tbData)
         if (cData) setConcepts(cData)
         if (pcData) setProgressChecks(pcData)
+        if (fbData) setFeedbacks(fbData)
 
         // 시험대비 - NULL이거나 4주 이내 시험
         const maxDate = new Date(Date.now() + 35*86400000).toISOString().split('T')[0]
@@ -356,6 +359,54 @@ export default function ParentDashboardPage() {
             </div>
           )}
         </div>
+
+        {/* 알림장(피드백) — 선생님이 작성한 메시지 */}
+        {feedbacks.length > 0 && (
+          <div className="bg-white rounded-2xl border-2 shadow-sm overflow-hidden" style={{ borderColor: '#F5C4B3' }}>
+            <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #f5d6cc' }}>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C4B3' }}>
+                <i className="ti ti-message-circle" style={{ fontSize: 14, color: '#712B13' }} />
+              </div>
+              <span className="text-sm font-bold" style={{ color: '#712B13' }}>선생님 알림장</span>
+              <span className="text-[10px] ml-auto" style={{ color: '#993C1D' }}>{feedbacks.length}개</span>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#fde4dc' }}>
+              {feedbacks.map((fb) => {
+                // ai_message 필드에 JSON.stringify({ images: [...] }) 형태로 저장됨
+                let images: string[] = []
+                if (fb.ai_message) {
+                  try {
+                    const parsed = JSON.parse(fb.ai_message)
+                    if (parsed && Array.isArray(parsed.images)) images = parsed.images
+                  } catch {}
+                }
+                const dateStr = new Date(fb.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+                return (
+                  <div key={fb.id} className="px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] font-semibold" style={{ color: '#993C1D' }}>
+                        <i className="ti ti-user" style={{ fontSize: 11, marginRight: 4 }} />
+                        {fb.teacher_name ?? '선생님'}
+                      </p>
+                      <p className="text-[10px] text-gray-400">{dateStr}</p>
+                    </div>
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{fb.content}</p>
+                    {images.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-3">
+                        {images.map((url, idx) => (
+                          <a key={idx} href={url} target="_blank" rel="noopener noreferrer"
+                            className="block w-24 h-24 rounded-xl overflow-hidden border border-gray-200">
+                            <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 레벨학습지 현황 — 보고서와 동일 */}
         {recentWS.length > 0 && (
