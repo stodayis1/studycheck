@@ -170,6 +170,9 @@ export default function TeacherLearningNotesPage() {
 
   // 피드백 모달
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [feedbackImages, setFeedbackImages] = useState<File[]>([])
+  const [feedbackImagePreviews, setFeedbackImagePreviews] = useState<string[]>([])
+  const [uploadingImages, setUploadingImages] = useState(false)
   const [feedbackStudent, setFeedbackStudent] = useState<Student | null>(null)
   const [feedbackContent, setFeedbackContent] = useState('')
   const [feedbackCategory, setFeedbackCategory] = useState('수업태도')
@@ -549,53 +552,37 @@ export default function TeacherLearningNotesPage() {
     if (!feedbackStudent || !feedbackContent.trim()) return
     setSavingFeedback(true)
 
-    const studentSessions = sessions.filter((s) => s.student_id === feedbackStudent.id)
-    const studentNotes = notes.filter((n) => studentSessions.some((s) => s.id === n.session_id))
-    const recentNotes = studentNotes.slice(0, 3)
-    const recentSubmitRate = recentNotes.length > 0
-      ? Math.round(recentNotes.filter((n) => n.worksheet_submitted).length / recentNotes.length * 100) : 0
-    const recentSession = studentSessions[0]
-    const recentNote = recentSession ? notes.find((n) => n.session_id === recentSession.id) : null
-
-    let aiMessage = null
-    try {
-      const response = await fetch('/api/generate-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentName: feedbackStudent.name,
-          studentGrade: feedbackStudent.grade,
-          date: recentSession?.session_date ?? todayStr,
-          textbookName: recentSession?.today_textbook_name,
-          chapter: recentSession?.today_chapter,
-          attendance: recentNote?.attendance,
-          worksheetSubmitted: recentNote?.worksheet_submitted ?? false,
-          worksheetScore: recentNote?.worksheet_score,
-          textbookSubmitted: recentNote?.textbook_submitted ?? false,
-          textbookPage: recentNote?.textbook_page,
-          workbookDone: recentNote?.workbook_done ?? false,
-          videoCompleted: !!recentNote?.video_completed_at,
-          videoStarted: !!recentNote?.video_started_at,
-          teacherMemo: feedbackContent.trim(),
-          recentSubmitRate,
-          recentSessions: recentNotes.length,
-        }),
-      })
-      const data = await response.json()
-      aiMessage = data.message ?? null
-    } catch { console.error('AI 생성 실패') }
+    // 사진 업로드 → URL 배열 수집
+    const imageUrls: string[] = []
+    if (feedbackImages.length > 0) {
+      setUploadingImages(true)
+      for (const file of feedbackImages) {
+        const ext = file.name.split('.').pop() ?? 'jpg'
+        const fileName = `${feedbackStudent.id}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`
+        const { error: upErr } = await supabase.storage.from('feedback-images').upload(fileName, file)
+        if (!upErr) {
+          const { data: pub } = supabase.storage.from('feedback-images').getPublicUrl(fileName)
+          if (pub?.publicUrl) imageUrls.push(pub.publicUrl)
+        } else {
+          console.error('사진 업로드 실패:', upErr)
+        }
+      }
+      setUploadingImages(false)
+    }
 
     await supabase.from('feedbacks').insert({
       student_id: feedbackStudent.id,
       teacher_name: currentUser?.name,
       content: feedbackContent.trim(),
-      ai_message: aiMessage,
+      ai_message: imageUrls.length > 0 ? JSON.stringify({ images: imageUrls }) : null,
       is_read: false,
     })
 
     setShowFeedbackModal(false)
     setFeedbackStudent(null)
     setFeedbackContent('')
+    setFeedbackImages([])
+    setFeedbackImagePreviews([])
     setSavingFeedback(false)
     fetchData()
   }
@@ -2078,17 +2065,55 @@ export default function TeacherLearningNotesPage() {
                 </div>
               )
             })()}
-            <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-gray-800">
-              저장하면 AI가 자동으로 학부모용 알림장 4문장을 생성해요
+            {/* 사진 첨부 */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">📷 사진 첨부 <span className="font-normal text-gray-400">(선택 · 최대 5장)</span></label>
+              <div className="flex gap-2 flex-wrap">
+                {feedbackImagePreviews.map((url, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-gray-200">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button type="button" onClick={() => {
+                      setFeedbackImages((prev) => prev.filter((_, i) => i !== idx))
+                      setFeedbackImagePreviews((prev) => prev.filter((_, i) => i !== idx))
+                    }}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {feedbackImages.length < 5 && (
+                  <label className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-[#F5C4B3] transition-colors">
+                    <i className="ti ti-plus text-gray-400" style={{ fontSize: 22 }} />
+                    <span className="text-[10px] text-gray-400 mt-0.5">사진 추가</span>
+                    <input type="file" accept="image/*" multiple className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? [])
+                        const remaining = 5 - feedbackImages.length
+                        const toAdd = files.slice(0, remaining)
+                        setFeedbackImages((prev) => [...prev, ...toAdd])
+                        toAdd.forEach((file) => {
+                          const reader = new FileReader()
+                          reader.onload = () => setFeedbackImagePreviews((prev) => [...prev, reader.result as string])
+                          reader.readAsDataURL(file)
+                        })
+                        e.target.value = ''
+                      }} />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-orange-50 rounded-xl px-4 py-3 text-xs" style={{ color: '#712B13' }}>
+              저장하면 학부모 화면에 알림장이 표시돼요
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowFeedbackModal(false)}
+              <button onClick={() => { setShowFeedbackModal(false); setFeedbackImages([]); setFeedbackImagePreviews([]) }}
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveFeedback} disabled={!feedbackContent.trim() || savingFeedback}
                 className="flex-1 py-3 bg-[#F5C4B3] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                 {savingFeedback
-                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />AI 알림장 생성 중...</>
-                  : '✨ 저장 + AI 알림장 생성'}
+                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />{uploadingImages ? '사진 업로드 중...' : '저장 중...'}</>
+                  : '💬 알림장 저장'}
               </button>
             </div>
           </div>
