@@ -175,6 +175,8 @@ export default function TeacherLearningNotesPage() {
   const [uploadingImages, setUploadingImages] = useState(false)
   const [feedbackStudent, setFeedbackStudent] = useState<Student | null>(null)
   const [feedbackContent, setFeedbackContent] = useState('')
+  const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null)
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
   const [feedbackCategory, setFeedbackCategory] = useState('수업태도')
   const [savingFeedback, setSavingFeedback] = useState(false)
 
@@ -548,12 +550,46 @@ export default function TeacherLearningNotesPage() {
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
   }
 
+  async function openFeedbackModal(student: Student) {
+    setFeedbackStudent(student)
+    setFeedbackContent('')
+    setFeedbackImages([])
+    setFeedbackImagePreviews([])
+    setExistingImageUrls([])
+    setEditingFeedbackId(null)
+
+    // 오늘 작성한 알림장이 있으면 불러와서 수정 모드
+    const startOfDay = todayStr + 'T00:00:00'
+    const endOfDay = todayStr + 'T23:59:59'
+    const { data } = await supabase.from('feedbacks')
+      .select('*')
+      .eq('student_id', student.id)
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (data) {
+      setEditingFeedbackId(data.id)
+      setFeedbackContent(data.content || '')
+      // 기존 사진 URL 파싱
+      if (data.ai_message) {
+        try {
+          const parsed = JSON.parse(data.ai_message)
+          if (parsed && Array.isArray(parsed.images)) setExistingImageUrls(parsed.images)
+        } catch {}
+      }
+    }
+    setShowFeedbackModal(true)
+  }
+
   async function handleSaveFeedback() {
     if (!feedbackStudent || !feedbackContent.trim()) return
     setSavingFeedback(true)
 
-    // 사진 업로드 → URL 배열 수집
-    const imageUrls: string[] = []
+    // 새로 추가한 사진 업로드
+    const newImageUrls: string[] = []
     if (feedbackImages.length > 0) {
       setUploadingImages(true)
       for (const file of feedbackImages) {
@@ -562,7 +598,7 @@ export default function TeacherLearningNotesPage() {
         const { error: upErr } = await supabase.storage.from('feedback-images').upload(fileName, file)
         if (!upErr) {
           const { data: pub } = supabase.storage.from('feedback-images').getPublicUrl(fileName)
-          if (pub?.publicUrl) imageUrls.push(pub.publicUrl)
+          if (pub?.publicUrl) newImageUrls.push(pub.publicUrl)
         } else {
           console.error('사진 업로드 실패:', upErr)
         }
@@ -570,19 +606,35 @@ export default function TeacherLearningNotesPage() {
       setUploadingImages(false)
     }
 
-    await supabase.from('feedbacks').insert({
-      student_id: feedbackStudent.id,
-      teacher_name: currentUser?.name,
-      content: feedbackContent.trim(),
-      ai_message: imageUrls.length > 0 ? JSON.stringify({ images: imageUrls }) : null,
-      is_read: false,
-    })
+    // 기존 사진 + 새 사진 합치기 (existingImageUrls는 X 눌러 삭제한 것 빼고 남은 것)
+    const allImages = [...existingImageUrls, ...newImageUrls]
+    const aiMessageValue = allImages.length > 0 ? JSON.stringify({ images: allImages }) : null
+
+    if (editingFeedbackId) {
+      // 수정 모드 - UPDATE
+      await supabase.from('feedbacks').update({
+        content: feedbackContent.trim(),
+        ai_message: aiMessageValue,
+        teacher_name: currentUser?.name,
+      }).eq('id', editingFeedbackId)
+    } else {
+      // 신규 - INSERT
+      await supabase.from('feedbacks').insert({
+        student_id: feedbackStudent.id,
+        teacher_name: currentUser?.name,
+        content: feedbackContent.trim(),
+        ai_message: aiMessageValue,
+        is_read: false,
+      })
+    }
 
     setShowFeedbackModal(false)
     setFeedbackStudent(null)
     setFeedbackContent('')
     setFeedbackImages([])
     setFeedbackImagePreviews([])
+    setExistingImageUrls([])
+    setEditingFeedbackId(null)
     setSavingFeedback(false)
     fetchData()
   }
@@ -799,7 +851,7 @@ export default function TeacherLearningNotesPage() {
                             </div>
                           </div>
                           <div className="flex gap-1.5 flex-wrap justify-end">
-                            <button onClick={() => { setFeedbackStudent(student); setFeedbackContent(''); setShowFeedbackModal(true) }}
+                            <button onClick={() => openFeedbackModal(student)}
                               className="px-2.5 py-1 text-xs font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg">
                               💬 알림장
                             </button>
@@ -1933,7 +1985,7 @@ export default function TeacherLearningNotesPage() {
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">💬 학부모 알림장 작성</h3>
+              <h3 className="text-base font-bold text-gray-900">💬 학부모 알림장 {editingFeedbackId ? '수정' : '작성'}</h3>
               <button onClick={() => setShowFeedbackModal(false)} className="text-gray-400">✕</button>
             </div>
             <div className="bg-purple-50 rounded-xl px-4 py-3 flex items-center gap-3">
@@ -2069,6 +2121,17 @@ export default function TeacherLearningNotesPage() {
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">📷 사진 첨부 <span className="font-normal text-gray-400">(선택 · 최대 5장)</span></label>
               <div className="flex gap-2 flex-wrap">
+                {/* 기존에 저장된 사진들 */}
+                {existingImageUrls.map((url, idx) => (
+                  <div key={'ex-'+idx} className="relative w-20 h-20 rounded-xl overflow-hidden border-2" style={{ borderColor: '#9FE1CB' }}>
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button type="button" onClick={() => setExistingImageUrls((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center">
+                      ✕
+                    </button>
+                    <span className="absolute bottom-0 left-0 right-0 text-[9px] text-white text-center py-0.5" style={{ background: 'rgba(8,80,65,0.7)' }}>기존</span>
+                  </div>
+                ))}
                 {feedbackImagePreviews.map((url, idx) => (
                   <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-gray-200">
                     <img src={url} alt="" className="w-full h-full object-cover" />
@@ -2107,13 +2170,13 @@ export default function TeacherLearningNotesPage() {
               저장하면 학부모 화면에 알림장이 표시돼요
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { setShowFeedbackModal(false); setFeedbackImages([]); setFeedbackImagePreviews([]) }}
+              <button onClick={() => { setShowFeedbackModal(false); setFeedbackImages([]); setFeedbackImagePreviews([]); setExistingImageUrls([]); setEditingFeedbackId(null) }}
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveFeedback} disabled={!feedbackContent.trim() || savingFeedback}
                 className="flex-1 py-3 bg-[#F5C4B3] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                 {savingFeedback
                   ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />{uploadingImages ? '사진 업로드 중...' : '저장 중...'}</>
-                  : '💬 알림장 저장'}
+                  : (editingFeedbackId ? '💬 알림장 수정' : '💬 알림장 저장')}
               </button>
             </div>
           </div>
