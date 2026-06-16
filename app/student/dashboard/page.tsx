@@ -244,9 +244,9 @@ export default function StudentDashboardPage() {
       // 개념서: 교재명 · 대단원-중단원-첫개념~마지막개념
       const first = checkedConcepts[0]
       const last = checkedConcepts[checkedConcepts.length - 1]
-      const chNum = first.chapter.match(/^(\d+)/)?.[1] ??
-        ({ 'Ⅰ':'1','Ⅱ':'2','Ⅲ':'3','Ⅳ':'4','Ⅴ':'5','Ⅵ':'6' } as Record<string,string>)[first.chapter[0]] ?? '?'
-      const subNum = first.sub_chapter.match(/^(\d+)/)?.[1] ?? '?'
+      const chNum = first.chapter?.match(/^(\d+)/)?.[1] ??
+        (first.chapter ? ({ 'Ⅰ':'1','Ⅱ':'2','Ⅲ':'3','Ⅳ':'4','Ⅴ':'5','Ⅵ':'6' } as Record<string,string>)[first.chapter[0]] : null) ?? '?'
+      const subNum = first.sub_chapter?.match(/^(\d+)/)?.[1] ?? '?'
       const range = first.concept_name === last.concept_name
         ? first.concept_name
         : `${first.concept_name}~${last.concept_name}`
