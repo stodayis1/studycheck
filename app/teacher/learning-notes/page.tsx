@@ -245,7 +245,7 @@ export default function TeacherLearningNotesPage() {
   // 연산서 진도 업데이트 (0/20/40/60/80/100)
   async function updateCalcProgress(textbookId: string, percent: number) {
     const { error } = await supabase.from('student_textbooks')
-      .update({ progress_percent: percent, updated_at: new Date().toISOString() })
+      .update({ progress_percent: percent })
       .eq('id', textbookId)
     if (error) {
       alert('진도 저장 실패: ' + error.message)
