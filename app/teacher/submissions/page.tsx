@@ -80,7 +80,9 @@ export default function TeacherSubmissionsPage() {
   // 담당 학생만
   const myStudents = students.filter((s) => {
     if (isAdmin()) return true
-    return s.teacher_name === currentUser?.name
+    if (!currentUser?.name || !s.teacher_name) return false
+    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    return teachers.includes(currentUser.name)
   })
 
   const myStudentIds = new Set(myStudents.map((s) => s.id))

@@ -115,7 +115,12 @@ export default function TeacherExamPrepPage() {
     setLoading(false)
   }
 
-  const myStudents = students.filter(s => isAdmin() ? true : s.teacher_name === currentUser?.name)
+  const myStudents = students.filter((s) => {
+    if (isAdmin()) return true
+    if (!currentUser?.name || !s.teacher_name) return false
+    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    return teachers.includes(currentUser.name)
+  })
   const filteredStudents = myStudents.filter(s =>
     searchText === '' || s.name.includes(searchText) || s.school?.includes(searchText)
   )

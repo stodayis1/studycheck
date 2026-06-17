@@ -271,7 +271,13 @@ export default function TeacherLearningNotesPage() {
     setSavingProgress(false)
   }
 
-  const myStudents = students.filter((s) => isAdmin() ? true : s.teacher_name === currentUser?.name)
+  const myStudents = students.filter((s) => {
+    if (isAdmin()) return true
+    if (!currentUser?.name || !s.teacher_name) return false
+    // 콤마/공백으로 구분된 여러 강사명에서 본인 이름 찾기
+    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    return teachers.includes(currentUser.name)
+  })
   const todayDayIndex = new Date().getDay()
   const dayMap: Record<number, string> = { 1:'월',2:'화',3:'수',4:'목',5:'금',6:'토',0:'일' }
   const todayDay = dayMap[todayDayIndex]

@@ -50,7 +50,9 @@ export default function TeacherStudentsPage() {
   // 담당 학생 필터
   const myStudents = students.filter((s) => {
     if (isAdmin()) return true
-    return s.teacher_name === currentUser?.name
+    if (!currentUser?.name || !s.teacher_name) return false
+    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    return teachers.includes(currentUser.name)
   })
 
   const filtered = myStudents.filter((s) =>

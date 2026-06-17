@@ -149,11 +149,16 @@ export default function TeacherReportsPage() {
   }
 
   const currentGrades = GRADE_GROUPS.find((g) => g.label === selectedGroup)?.grades ?? []
-  const teachers = [...new Set(students.map((s) => s.teacher_name).filter(Boolean))].sort()
+  const teachers = [...new Set(
+    students.flatMap((s) => (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).filter(Boolean))
+  )].sort()
 
-  const myStudents = students.filter((s) =>
-    isAdmin() ? true : s.teacher_name === currentUser?.name
-  )
+  const myStudents = students.filter((s) => {
+    if (isAdmin()) return true
+    if (!currentUser?.name || !s.teacher_name) return false
+    const ts = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    return ts.includes(currentUser.name)
+  })
 
   const filteredStudents = myStudents.filter((s) => {
     const gradeMatch = currentGrades.some((g) =>
@@ -162,7 +167,9 @@ export default function TeacherReportsPage() {
       s.grade?.includes('고')
     )
     const gradeFilterMatch = selectedGrade ? s.grade === selectedGrade : true
-    const teacherMatch = selectedTeacher ? s.teacher_name === selectedTeacher : true
+    const teacherMatch = selectedTeacher
+      ? ((s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).includes(selectedTeacher))
+      : true
     const searchMatch = s.name.includes(searchText) || s.school?.includes(searchText)
     return gradeMatch && gradeFilterMatch && teacherMatch && searchMatch
   })

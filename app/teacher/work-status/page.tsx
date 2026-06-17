@@ -105,7 +105,11 @@ export default function TeacherWorkStatusPage() {
 
   // 강사별 오늘 현황
   const teacherTodayStatus = teachers.map(t => {
-    const myStudents = todayStudents.filter(s => s.teacher_name === t.name)
+    const myStudents = todayStudents.filter((s) => {
+      if (!s.teacher_name) return false
+      const teachers = s.teacher_name.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
+      return teachers.includes(t.name)
+    })
     const written = myStudents.filter(s => todayWritten.some(w => w.student_id === s.id))
     const unwritten = myStudents.filter(s => !todayWritten.some(w => w.student_id === s.id))
     return { teacher: t, total: myStudents.length, written: written.length, unwritten, myStudents }
@@ -121,7 +125,11 @@ export default function TeacherWorkStatusPage() {
 
   // 이번주 수업일지 작성률
   const weeklyStats = teachers.map(t => {
-    const myStudents = students.filter(s => s.teacher_name === t.name)
+    const myStudents = students.filter((s) => {
+      if (!s.teacher_name) return false
+      const teachers = s.teacher_name.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
+      return teachers.includes(t.name)
+    })
     const myScheduledDays = [...new Set(
       schedules.filter(sc => myStudents.some(s => s.id === sc.student_id)).map(sc => sc.day_of_week)
     )]
