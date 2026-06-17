@@ -242,8 +242,7 @@ export default function TeacherLearningNotesPage() {
     setProgressLoading(false)
   }
 
-  async function updateExamPrepStep(prepId: string, newStep: number) {
-    // 연산서 진도 업데이트 (0/20/40/60/80/100)
+  // 연산서 진도 업데이트 (0/20/40/60/80/100)
   async function updateCalcProgress(textbookId: string, percent: number) {
     const { error } = await supabase.from('student_textbooks')
       .update({ progress_percent: percent, updated_at: new Date().toISOString() })
@@ -256,6 +255,7 @@ export default function TeacherLearningNotesPage() {
   }
 
   // 시험대비 진도 업데이트 (학습일지에서 직접 입력)
+  async function updateExamPrepStep(prepId: string, newStep: number) {
     const { error } = await supabase
       .from('student_exam_prep')
       .update({ progress_step: newStep })
