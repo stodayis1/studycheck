@@ -23,7 +23,7 @@ export default function TeacherDashboardPage() {
     const todayDay = DAYS[new Date().getDay()]
     const todayStr = new Date().toISOString().split('T')[0]
     let q = supabase.from('students').select('id').eq('is_active', true)
-    if (!isAdmin()) q = q.eq('teacher_name', currentUser?.name)
+    if (!isAdmin() && currentUser?.name) q = q.ilike('teacher_name', `%${currentUser.name}%`)
     const { data: myStudents } = await q
     const myIds = new Set(myStudents?.map((s: any) => s.id) ?? [])
     const { data: todaySch } = await supabase.from('schedules').select('student_id').eq('day_of_week', todayDay).eq('is_active', true)
