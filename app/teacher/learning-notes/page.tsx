@@ -177,6 +177,12 @@ export default function TeacherLearningNotesPage() {
   const [feedbackContent, setFeedbackContent] = useState('')
   const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null)
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
+  const [feedbackReplies, setFeedbackReplies] = useState<any[]>([])
+  const [replyContent, setReplyContent] = useState('')
+  const [replyImages, setReplyImages] = useState<File[]>([])
+  const [replyImagePreviews, setReplyImagePreviews] = useState<string[]>([])
+  const [sendingReply, setSendingReply] = useState(false)
+  const [deletingReplyId, setDeletingReplyId] = useState<string | null>(null)
   const [feedbackCategory, setFeedbackCategory] = useState('수업태도')
   const [savingFeedback, setSavingFeedback] = useState(false)
 
@@ -586,8 +592,98 @@ export default function TeacherLearningNotesPage() {
           if (parsed && Array.isArray(parsed.images)) setExistingImageUrls(parsed.images)
         } catch {}
       }
+      // 답장 스레드 불러오기
+      const { data: replies } = await supabase
+        .from('feedback_replies')
+        .select('*')
+        .eq('feedback_id', data.id)
+        .order('created_at', { ascending: true })
+      setFeedbackReplies(replies || [])
+    } else {
+      setFeedbackReplies([])
     }
+    setReplyContent('')
+    setReplyImages([])
+    setReplyImagePreviews([])
     setShowFeedbackModal(true)
+  }
+
+  // 선생님 답장 보내기
+  async function handleSendTeacherReply() {
+    if (!editingFeedbackId || (!replyContent.trim() && replyImages.length === 0)) return
+    setSendingReply(true)
+
+    // 사진 업로드
+    const imageUrls: string[] = []
+    for (const file of replyImages) {
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const fileName = `replies/${editingFeedbackId}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`
+      const { error: upErr } = await supabase.storage.from('feedback-images').upload(fileName, file)
+      if (!upErr) {
+        const { data: pub } = supabase.storage.from('feedback-images').getPublicUrl(fileName)
+        if (pub?.publicUrl) imageUrls.push(pub.publicUrl)
+      }
+    }
+
+    const { data: newReply } = await supabase.from('feedback_replies').insert({
+      feedback_id: editingFeedbackId,
+      sender_type: 'teacher',
+      sender_name: currentUser?.name,
+      content: replyContent.trim() || '(사진)',
+      images: imageUrls.length > 0 ? imageUrls : null,
+      is_read: false,
+    }).select().single()
+
+    if (newReply) {
+      setFeedbackReplies((prev) => [...prev, newReply])
+      setReplyContent('')
+      setReplyImages([])
+      setReplyImagePreviews([])
+    }
+    setSendingReply(false)
+  }
+
+  // 답장 삭제 (관리자 또는 본인이 작성한 것)
+  async function handleDeleteReply(replyId: string, senderType: string, senderName: string | null) {
+    const canDelete = isAdmin() || (senderType === 'teacher' && senderName === currentUser?.name)
+    if (!canDelete) {
+      alert('이 답장은 삭제 권한이 없어요')
+      return
+    }
+    if (!confirm('이 답장을 삭제할까요?')) return
+    setDeletingReplyId(replyId)
+    const { error } = await supabase.from('feedback_replies').delete().eq('id', replyId)
+    if (!error) {
+      setFeedbackReplies((prev) => prev.filter((r) => r.id !== replyId))
+    } else {
+      alert('삭제 실패: ' + error.message)
+    }
+    setDeletingReplyId(null)
+  }
+
+  // 알림장 자체 삭제 (관리자 또는 작성한 선생님)
+  async function handleDeleteFeedback() {
+    if (!editingFeedbackId) return
+    // 권한 체크: 알림장의 teacher_name 확인
+    const { data: fb } = await supabase.from('feedbacks').select('teacher_name').eq('id', editingFeedbackId).maybeSingle()
+    const canDelete = isAdmin() || (fb?.teacher_name === currentUser?.name)
+    if (!canDelete) {
+      alert('이 알림장은 삭제 권한이 없어요')
+      return
+    }
+    if (!confirm('이 알림장과 답장을 모두 삭제할까요? 되돌릴 수 없어요.')) return
+
+    // 답장 먼저 삭제 (외래키 cascade가 있다면 자동이지만 안전하게)
+    await supabase.from('feedback_replies').delete().eq('feedback_id', editingFeedbackId)
+    await supabase.from('feedbacks').delete().eq('id', editingFeedbackId)
+
+    setShowFeedbackModal(false)
+    setFeedbackStudent(null)
+    setFeedbackContent('')
+    setEditingFeedbackId(null)
+    setExistingImageUrls([])
+    setFeedbackReplies([])
+    fetchData()
   }
 
   async function handleSaveFeedback() {
@@ -1992,7 +2088,14 @@ export default function TeacherLearningNotesPage() {
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900">💬 학부모 알림장 {editingFeedbackId ? '수정' : '작성'}</h3>
-              <button onClick={() => setShowFeedbackModal(false)} className="text-gray-400">✕</button>
+              <div className="flex items-center gap-2">
+                {editingFeedbackId && (
+                  <button onClick={handleDeleteFeedback} className="text-[11px] text-red-500 hover:text-red-700 px-2 py-1 rounded-lg hover:bg-red-50 transition-all flex items-center gap-1">
+                    <i className="ti ti-trash" style={{ fontSize: 12 }} /> 삭제
+                  </button>
+                )}
+                <button onClick={() => setShowFeedbackModal(false)} className="text-gray-400">✕</button>
+              </div>
             </div>
             <div className="bg-purple-50 rounded-xl px-4 py-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-purple-200 flex items-center justify-center text-sm font-bold text-purple-700">
@@ -2171,6 +2274,111 @@ export default function TeacherLearningNotesPage() {
                 )}
               </div>
             </div>
+
+            {/* 답장 스레드 (수정 모드일 때만) */}
+            {editingFeedbackId && (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2">💬 대화 {feedbackReplies.length > 0 && <span className="font-normal text-gray-400">({feedbackReplies.length}개)</span>}</label>
+                {feedbackReplies.length > 0 && (
+                  <div className="space-y-2 mb-3 max-h-64 overflow-y-auto rounded-xl p-2.5" style={{ background: '#f9fafb', border: '1px solid #f3f4f6' }}>
+                    {feedbackReplies.map((rp) => {
+                      const isTeacher = rp.sender_type === 'teacher'
+                      const rpImages: string[] = Array.isArray(rp.images) ? rp.images : []
+                      const rpDate = new Date(rp.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      const canDeleteReply = isAdmin() || (isTeacher && rp.sender_name === currentUser?.name)
+                      return (
+                        <div key={rp.id} className={isTeacher ? 'flex justify-end' : 'flex justify-start'}>
+                          <div className="max-w-[85%]">
+                            <div className={`flex items-center gap-1.5 mb-1 ${isTeacher ? 'justify-end' : 'justify-start'}`}>
+                              <p className="text-[10px] text-gray-400">
+                                {isTeacher ? (rp.sender_name ?? '선생님') : `${rp.sender_name ?? '학생'} (학생)`} · {rpDate}
+                              </p>
+                              {canDeleteReply && (
+                                <button onClick={() => handleDeleteReply(rp.id, rp.sender_type, rp.sender_name)}
+                                  disabled={deletingReplyId === rp.id}
+                                  className="text-[10px] text-gray-300 hover:text-red-500 disabled:opacity-40"
+                                  title="삭제">
+                                  <i className="ti ti-trash" style={{ fontSize: 10 }} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="rounded-2xl px-3 py-2"
+                              style={isTeacher
+                                ? { background: '#F5C4B3', color: '#712B13' }
+                                : { background: 'white', color: '#374151', border: '1px solid #e5e7eb' }}>
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{rp.content}</p>
+                              {rpImages.length > 0 && (
+                                <div className="flex gap-1.5 flex-wrap mt-2">
+                                  {rpImages.map((url, i) => (
+                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                      className="block w-16 h-16 rounded-lg overflow-hidden border border-white/50">
+                                      <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* 선생님 답장 입력 */}
+                <div className="rounded-xl p-2.5" style={{ background: '#FFF5F2', border: '1px solid #f5d6cc' }}>
+                  <textarea value={replyContent}
+                    onChange={(e) => setReplyContent(e.target.value)}
+                    placeholder="학생에게 답장 쓰기..."
+                    rows={2}
+                    className="w-full px-2 py-1.5 rounded-lg text-sm bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#F5C4B3] resize-none" />
+
+                  {replyImagePreviews.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap mt-2">
+                      {replyImagePreviews.map((url, idx) => (
+                        <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-200">
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => {
+                            setReplyImages((prev) => prev.filter((_, i) => i !== idx))
+                            setReplyImagePreviews((prev) => prev.filter((_, i) => i !== idx))
+                          }}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mt-2">
+                    {replyImages.length < 3 ? (
+                      <label className="text-[11px] font-semibold cursor-pointer px-2 py-1 rounded-lg flex items-center gap-1"
+                        style={{ background: 'white', color: '#6b7280', border: '1px solid #e5e7eb' }}>
+                        <i className="ti ti-camera" style={{ fontSize: 13 }} /> 사진
+                        <input type="file" accept="image/*" multiple className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? [])
+                            const remaining = 3 - replyImages.length
+                            const toAdd = files.slice(0, remaining)
+                            setReplyImages((prev) => [...prev, ...toAdd])
+                            toAdd.forEach((file) => {
+                              const reader = new FileReader()
+                              reader.onload = () => setReplyImagePreviews((prev) => [...prev, reader.result as string])
+                              reader.readAsDataURL(file)
+                            })
+                            e.target.value = ''
+                          }} />
+                      </label>
+                    ) : <span className="text-[10px] text-gray-400">사진 최대 3장</span>}
+
+                    <button onClick={handleSendTeacherReply}
+                      disabled={(!replyContent.trim() && replyImages.length === 0) || sendingReply}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-40 flex items-center gap-1"
+                      style={{ background: '#F5C4B3', color: '#712B13' }}>
+                      {sendingReply ? '전송 중...' : '✉️ 답장 보내기'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="bg-orange-50 rounded-xl px-4 py-3 text-xs" style={{ color: '#712B13' }}>
               저장하면 학부모 화면에 알림장이 표시돼요
