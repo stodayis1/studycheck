@@ -18,6 +18,7 @@ interface Student {
 interface StudentTextbook {
   id: string
   student_id: string
+  progress_percent?: number | null
   concept_id: string | null
   textbook_name: string
   textbook_type: string
@@ -149,6 +150,20 @@ export default function TeacherCurriculumPage() {
       if (nextCount === 0) return prev.filter((p) => !(p.student_id === studentId && p.concept_id === conceptId))
       return prev.map((p) => p.student_id === studentId && p.concept_id === conceptId ? { ...p, check_count: nextCount } : p)
     })
+    setUpdatingProgress(null)
+  }
+
+  // 연산서 진도 업데이트 (0/20/40/60/80/100)
+  async function handleCalcProgress(textbookId: string, percent: number) {
+    setUpdatingProgress(`calc_${textbookId}_${percent}`)
+    const { error } = await supabase.from('student_textbooks')
+      .update({ progress_percent: percent, updated_at: new Date().toISOString() })
+      .eq('id', textbookId)
+    if (!error) {
+      setTextbooks((prev) => prev.map((t) => t.id === textbookId ? { ...t, progress_percent: percent } : t))
+    } else {
+      alert('진도 저장 실패: ' + error.message)
+    }
     setUpdatingProgress(null)
   }
 
@@ -419,6 +434,48 @@ export default function TeacherCurriculumPage() {
                     ))}
                   </div>
                 </div>
+
+                {/* 연산서 진도 (별도 % 5단계) */}
+                {(() => {
+                  const calcBooks = textbooks.filter((t) => t.student_id === selectedProgressStudent.id && t.textbook_type === '연산서' && t.status !== 'checked')
+                  if (calcBooks.length === 0) return null
+                  return (
+                    <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ background: '#FFF0EE', color: '#712B13' }}>연산서</span>
+                        <span className="text-xs font-bold text-gray-700">달성률</span>
+                      </div>
+                      {calcBooks.map((tb) => {
+                        const pct = tb.progress_percent ?? 0
+                        return (
+                          <div key={tb.id} className="border border-gray-100 rounded-xl p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-semibold text-gray-800">{tb.textbook_name}</p>
+                              <span className="text-sm font-bold" style={{ color: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }}>{pct}%</span>
+                            </div>
+                            <div className="bg-gray-100 rounded-full h-2 mb-3">
+                              <div className="h-2 rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, background: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }} />
+                            </div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[0, 20, 40, 60, 80, 100].map((v) => {
+                                const isActive = pct === v
+                                const isUpdating = updatingProgress === `calc_${tb.id}_${v}`
+                                return (
+                                  <button key={v} onClick={() => handleCalcProgress(tb.id, v)} disabled={isUpdating}
+                                    className={cx('flex-1 min-w-[44px] px-2 py-1.5 rounded-lg text-xs font-bold border transition-all disabled:opacity-50',
+                                      isActive ? 'bg-[#F5C4B3] text-white border-[#F5C4B3]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#F5C4B3]')}>
+                                    {v}%
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
 
                 {/* 학기 탭 */}
                 <div className="flex gap-2">
