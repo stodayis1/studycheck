@@ -39,8 +39,20 @@ export default function TeacherDashboardPage() {
     }
     const { data: wsData } = await supabase.from('student_worksheets').select('student_id, status').in('status', ['submitted', 'similar_submitted'])
     const pendingScore = (wsData ?? []).filter((w: any) => myIds.has(w.student_id)).length
-    const { data: fbData } = await supabase.from('feedbacks').select('student_id, ai_message').is('ai_message', null)
-    const pendingShare = (fbData ?? []).filter((f: any) => myIds.has(f.student_id)).length
+    // 학부모 공유 대기: 오늘 수업 세션이 있는데 알림장(feedbacks)을 아직 안 쓴 학생 수
+    let pendingShare = 0
+    const myTodayStudentIds = Array.from(new Set(mySessions.map((s: any) => s.student_id)))
+    if (myTodayStudentIds.length > 0) {
+      const todayStart = todayStr + 'T00:00:00'
+      const todayEnd = todayStr + 'T23:59:59'
+      const { data: todayFbData } = await supabase.from('feedbacks')
+        .select('student_id')
+        .in('student_id', myTodayStudentIds)
+        .gte('created_at', todayStart)
+        .lte('created_at', todayEnd)
+      const wroteToday = new Set((todayFbData ?? []).map((f: any) => f.student_id))
+      pendingShare = myTodayStudentIds.filter((sid: string) => !wroteToday.has(sid)).length
+    }
     const { data: allWS } = await supabase.from('student_worksheets').select('student_id, status').not('status', 'in', '("passed")')
     const { data: allTB } = await supabase.from('student_textbooks').select('student_id').eq('status', 'assigned')
     const activeWorksheets = (allWS ?? []).filter((w: any) => myIds.has(w.student_id)).length
