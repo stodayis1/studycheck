@@ -243,7 +243,19 @@ export default function TeacherLearningNotesPage() {
   }
 
   async function updateExamPrepStep(prepId: string, newStep: number) {
-    // 시험대비 진도 업데이트 (학습일지에서 직접 입력)
+    // 연산서 진도 업데이트 (0/20/40/60/80/100)
+  async function updateCalcProgress(textbookId: string, percent: number) {
+    const { error } = await supabase.from('student_textbooks')
+      .update({ progress_percent: percent, updated_at: new Date().toISOString() })
+      .eq('id', textbookId)
+    if (error) {
+      alert('진도 저장 실패: ' + error.message)
+      return
+    }
+    setStudentTextbooks((prev) => prev.map((t) => t.id === textbookId ? { ...t, progress_percent: percent } : t))
+  }
+
+  // 시험대비 진도 업데이트 (학습일지에서 직접 입력)
     const { error } = await supabase
       .from('student_exam_prep')
       .update({ progress_step: newStep })
@@ -1377,7 +1389,34 @@ export default function TeacherLearningNotesPage() {
                                 {/* 펼쳐진 선택 영역 */}
                                 {isActive && (
                                   <div className="px-3 pb-3 space-y-2" style={{ background: '#ffffff' }}>
-                                    {tbConcepts.length === 0 ? (
+                                    {tb.textbook_type === '연산서' ? (
+                                      // 연산서: 5단계 % 버튼만 표시
+                                      <div className="pt-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-xs font-bold text-gray-700">달성률</span>
+                                          <span className="text-sm font-bold" style={{ color: (tb.progress_percent ?? 0) >= 80 ? '#22c55e' : (tb.progress_percent ?? 0) >= 40 ? '#3b82f6' : '#f59e0b' }}>
+                                            {tb.progress_percent ?? 0}%
+                                          </span>
+                                        </div>
+                                        <div className="bg-gray-100 rounded-full h-2 mb-3">
+                                          <div className="h-2 rounded-full transition-all duration-500"
+                                            style={{ width: `${tb.progress_percent ?? 0}%`, background: (tb.progress_percent ?? 0) >= 80 ? '#22c55e' : (tb.progress_percent ?? 0) >= 40 ? '#3b82f6' : '#f59e0b' }} />
+                                        </div>
+                                        <div className="flex gap-1.5 flex-wrap">
+                                          {[0, 20, 40, 60, 80, 100].map((v) => {
+                                            const isActiveP = (tb.progress_percent ?? 0) === v
+                                            return (
+                                              <button key={v} onClick={() => updateCalcProgress(tb.id, v)}
+                                                className={cx('flex-1 min-w-[44px] px-2 py-1.5 rounded-lg text-xs font-bold border transition-all',
+                                                  isActiveP ? 'bg-[#F5C4B3] text-white border-[#F5C4B3]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#F5C4B3]')}>
+                                                {v}%
+                                              </button>
+                                            )
+                                          })}
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 mt-2">달성률을 선택하면 바로 저장돼요</p>
+                                      </div>
+                                    ) : tbConcepts.length === 0 ? (
                                       <p className="text-xs text-gray-400 py-2">이 과목의 개념 DB가 없어요</p>
                                     ) : (
                                       <>

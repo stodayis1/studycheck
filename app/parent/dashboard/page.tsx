@@ -80,6 +80,7 @@ interface StudentTextbook {
   id: string
   textbook_name: string
   textbook_type: string
+  progress_percent?: number | null
   grade: string | null
   semester: number | null
   status: string
@@ -538,12 +539,30 @@ export default function ParentDashboardPage() {
               <h3 className="text-sm font-bold text-gray-700">병행교재 현황</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(activeTBByType).map(([type, tb]) => (
-                <div key={type} className="px-3 py-2.5 rounded-xl text-xs" style={{ background: '#FAECE7', border: '1px solid #F5C4B380' }}>
-                  <p className="font-bold" style={{ color: '#993C1D' }}>{type}</p>
-                  <p className="mt-0.5 text-[11px] text-gray-600">{tb.textbook_name}</p>
-                </div>
-              ))}
+              {Object.entries(activeTBByType).map(([type, tb]) => {
+                const isCalc = type === '연산서'
+                const pct = tb.progress_percent ?? 0
+                return (
+                  <div key={type} className={isCalc ? 'w-full px-3 py-2.5 rounded-xl text-xs' : 'px-3 py-2.5 rounded-xl text-xs'}
+                    style={{ background: '#FAECE7', border: '1px solid #F5C4B380' }}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold" style={{ color: '#993C1D' }}>{type}</p>
+                        <p className="mt-0.5 text-[11px] text-gray-600">{tb.textbook_name}</p>
+                      </div>
+                      {isCalc && (
+                        <span className="text-sm font-bold" style={{ color: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }}>{pct}%</span>
+                      )}
+                    </div>
+                    {isCalc && (
+                      <div className="bg-white rounded-full h-1.5 mt-2 overflow-hidden">
+                        <div className="h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%`, background: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

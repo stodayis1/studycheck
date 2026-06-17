@@ -53,6 +53,7 @@ interface StudentTextbook {
   concept_id: string | null
   textbook_name: string
   textbook_type: string
+  progress_percent?: number | null
   grade: string | null
   semester: number | null
   status: string
@@ -817,7 +818,9 @@ export default function StudentDashboardPage() {
                     const checkedConcepts = tbConcepts.filter(c =>
                       progressChecks.some(p => p.concept_id === c.id && p.check_count >= targetCount)
                     )
-                    const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                    // 연산서는 progress_percent 사용, 나머지는 개념 체크 기반
+                    const isCalc = tb.textbook_type === '연산서'
+                    const rate = isCalc ? (tb.progress_percent ?? 0) : Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
                     const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
                     return (
@@ -831,6 +834,9 @@ export default function StudentDashboardPage() {
                         <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
                           <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
                         </div>
+                        {isCalc ? (
+                          <p className="text-[10px] text-gray-400">달성률 기준으로 표시돼요</p>
+                        ) : (
                         <div className="space-y-2">
                           {chapters.map(ch => {
                             const chConcepts = tbConcepts.filter(c => c.chapter === ch)
@@ -855,6 +861,7 @@ export default function StudentDashboardPage() {
                             )
                           })}
                         </div>
+                        )}
                       </div>
                     )
                   })}
