@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/teacher/dashboard',      label: '대시보드',   icon: 'ti-layout-dashboard' },
   { href: '/teacher/students',       label: '학생관리',   icon: 'ti-users' },
   { href: '/teacher/learning-notes', label: '학습관리',   icon: 'ti-notebook' },
+  { href: '/teacher/my-records',     label: '내 기록',     icon: 'ti-history' },
   { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
   { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
