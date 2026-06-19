@@ -78,6 +78,8 @@ export default function TeacherMyRecordsPage() {
 
   const [tab, setTab] = useState<'feedback' | 'note'>('feedback')
   const [studentFilter, setStudentFilter] = useState<string>('all')
+  const [studentSearch, setStudentSearch] = useState('')
+  const [showStudentDropdown, setShowStudentDropdown] = useState(false)
   const [startDate, setStartDate] = useState(daysAgoStr(7))
   const [endDate, setEndDate] = useState(todayStr())
 
@@ -122,6 +124,10 @@ export default function TeacherMyRecordsPage() {
   }, [students, currentUser, isAdmin])
 
   const myStudents = students.filter((s) => myStudentIds.has(s.id))
+  const searchedStudents = myStudents.filter((s) =>
+    s.name.includes(studentSearch) || s.school?.includes(studentSearch)
+  )
+  const selectedStudent = studentFilter !== 'all' ? myStudents.find((s) => s.id === studentFilter) : null
   const studentMap = useMemo(() => {
     const m = new Map<string, Student>()
     students.forEach((s) => m.set(s.id, s))
@@ -199,16 +205,49 @@ export default function TeacherMyRecordsPage() {
       <div className="p-4 space-y-4 max-w-3xl mx-auto pb-24">
         {/* 필터 */}
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
-          <div>
+          <div className="relative">
             <label className="block text-xs font-bold text-gray-700 mb-1.5">학생</label>
-            <select value={studentFilter} onChange={(e) => setStudentFilter(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': '#9FE1CB' } as React.CSSProperties}>
-              <option value="all">전체 학생</option>
-              {myStudents.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.school} {s.grade})</option>
-              ))}
-            </select>
+            {selectedStudent ? (
+              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl"
+                style={{ background: '#F0FBF7', border: '1px solid #9FE1CB' }}>
+                <span className="text-sm font-bold flex-1" style={{ color: '#085041' }}>
+                  {selectedStudent.name} <span className="text-xs font-normal text-gray-500">({selectedStudent.school} {selectedStudent.grade})</span>
+                </span>
+                <button onClick={() => { setStudentFilter('all'); setStudentSearch('') }}
+                  className="text-gray-400 text-sm px-1">✕</button>
+              </div>
+            ) : (
+              <>
+                <input type="text" value={studentSearch}
+                  onChange={(e) => { setStudentSearch(e.target.value); setShowStudentDropdown(true) }}
+                  onFocus={() => setShowStudentDropdown(true)}
+                  placeholder="학생 이름 검색 (비워두면 전체)"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                  style={{ '--tw-ring-color': '#9FE1CB' } as React.CSSProperties} />
+                {showStudentDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowStudentDropdown(false)} />
+                    <div className="absolute left-0 right-0 mt-1.5 max-h-56 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg z-20">
+                      <button onClick={() => { setStudentFilter('all'); setStudentSearch(''); setShowStudentDropdown(false) }}
+                        className="w-full text-left px-3.5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 border-b border-gray-50">
+                        전체 학생
+                      </button>
+                      {searchedStudents.length === 0 && (
+                        <p className="px-3.5 py-3 text-xs text-gray-400">검색 결과가 없어요</p>
+                      )}
+                      {searchedStudents.map((s) => (
+                        <button key={s.id}
+                          onClick={() => { setStudentFilter(s.id); setStudentSearch(''); setShowStudentDropdown(false) }}
+                          className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                          <span className="font-semibold text-gray-900">{s.name}</span>
+                          <span className="text-xs text-gray-400 ml-1.5">{s.school} {s.grade}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
