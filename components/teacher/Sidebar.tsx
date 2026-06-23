@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
@@ -22,6 +23,8 @@ const NAV_ITEMS = [
   { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
 ]
 
+const BULK_ITEM = { href: '/teacher/bulk-progress', label: '진도일괄입력', icon: 'ti-list-check' }
+
 // 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
 const MOBILE_MAIN = NAV_ITEMS.slice(0, 4)
 const MOBILE_MORE = NAV_ITEMS.slice(4)
@@ -30,6 +33,20 @@ export function TeacherSidebar() {
   const pathname = usePathname()
   const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
+  const [bulkEnabled, setBulkEnabled] = useState(false)
+
+  useEffect(() => {
+    async function fetchBulkSetting() {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'bulk_progress_enabled').single()
+      if (data) setBulkEnabled(data.value === true || data.value === 'true')
+    }
+    fetchBulkSetting()
+  }, [])
+
+  const showBulk = isAdmin() || bulkEnabled
+
+  const desktopNavItems = showBulk ? [...NAV_ITEMS, BULK_ITEM] : NAV_ITEMS
+  const mobileMoreItems = showBulk ? [...MOBILE_MORE, BULK_ITEM] : MOBILE_MORE
 
   return (
     <>
@@ -47,7 +64,7 @@ export function TeacherSidebar() {
           </p>
         </div>
 
-        {/* 관리자/강사 모드 토글 - 상단 네비 위 */}
+        {/* 관리자/강사 모드 토글 */}
         {currentUser?.role === 'admin' && (
           <div className="px-3 pt-3 pb-1">
             <button onClick={toggleAdminMode}
@@ -63,8 +80,9 @@ export function TeacherSidebar() {
 
         {/* 네비게이션 */}
         <nav className="flex-1 px-3 py-2 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {desktopNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const isBulk = item.href === '/teacher/bulk-progress'
             return (
               <Link key={item.href} href={item.href}
                 className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
@@ -73,6 +91,11 @@ export function TeacherSidebar() {
                   color: '#085041',
                   fontWeight: 600,
                   borderLeft: '3px solid #085041',
+                } : isBulk ? {
+                  color: '#6b7280',
+                  borderLeft: '3px solid transparent',
+                  borderTop: '1px dashed #e5e7eb',
+                  marginTop: 4,
                 } : {
                   color: '#6b7280',
                   borderLeft: '3px solid transparent',
@@ -141,7 +164,7 @@ export function TeacherSidebar() {
             onClick={(e) => e.stopPropagation()}>
             <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: '#e5e7eb' }} />
             <div className="grid grid-cols-4 gap-3">
-              {MOBILE_MORE.map((item) => {
+              {mobileMoreItems.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
                 return (
                   <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)}
