@@ -1194,42 +1194,53 @@ export default function TeacherReportsPage() {
 
                       {/* 막대그래프 */}
                       {scored.length > 0 && (
-                        <div className="mb-3">
-                          <div className="flex items-end gap-1.5 h-16">
-                            {typeExams.map((e, i) => {
-                              const p = pct(e)
-                              if (p == null) return (
-                                <div key={e.id} className="flex-1 flex flex-col items-center justify-end gap-1">
-                                  <div className="w-full rounded-t-sm" style={{ height: 4, background: '#f3f4f6' }} />
-                                </div>
-                              )
-                              const barH = Math.max(4, Math.round(p * 0.44))
-                              const isCoreMain = type === '코어테스트' && e.title === '본고사'
-                              const barColor = isCoreMain ? '#F5C4B3' : '#D3D1C7'
-                              return (
-                                <div key={e.id} className="flex-1 flex flex-col items-center justify-end gap-1">
-                                  <span className="text-[9px] font-bold" style={{ color: isCoreMain ? '#993C1D' : '#6b7280' }}>{p}%</span>
-                                  <div className="w-full rounded-t-sm transition-all"
-                                    style={{ height: barH, background: barColor, opacity: 0.85 }} />
-                                </div>
-                              )
-                            })}
-                          </div>
-                          {/* x축 날짜 + 회차 */}
-                          <div className="flex gap-1.5 mt-1">
-                            {typeExams.map((e) => (
-                              <div key={e.id} className="flex-1 text-center">
-                                <span className="text-[9px] text-gray-400 block">
-                                  {e.exam_date.slice(5).replace('-', '/')}
-                                </span>
-                                {type === '코어테스트' && e.title && (
-                                  <span className="text-[8px] font-bold"
-                                    style={{ color: e.title === '본고사' ? '#639922' : '#EF9F27' }}>
-                                    {e.title === '본고사' ? '본' : e.title === '예비 1회' ? '예1' : '예2'}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
+                        <div className="mb-3 rounded-xl p-3" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                          <div className="flex items-end gap-2" style={{ height: 80 }}>
+                            {/* 세로축 점수 라벨 */}
+                            <div className="flex flex-col justify-between h-full shrink-0" style={{ width: 24 }}>
+                              <span className="text-[9px] text-gray-400 text-right">100</span>
+                              <span className="text-[9px] text-gray-400 text-right">50</span>
+                              <span className="text-[9px] text-gray-400 text-right">0</span>
+                            </div>
+                            {/* 막대들 */}
+                            <div className="flex-1 flex items-end gap-2 h-full relative">
+                              {/* 기준선 */}
+                              <div className="absolute w-full" style={{ bottom: '85%', borderTop: '1px dashed #e5e7eb', zIndex: 0 }} />
+                              <div className="absolute w-full" style={{ bottom: '50%', borderTop: '1px dashed #f0f0f0', zIndex: 0 }} />
+                              {typeExams.map((e) => {
+                                const p = pct(e)
+                                const isCoreMain = type === '코어테스트' && e.title === '본고사'
+                                const barColor = p == null ? '#f3f4f6' : p >= 85 ? '#9FE1CB' : p >= 70 ? '#FAEEDA' : '#F5C4B3'
+                                const textColor = p == null ? '#9ca3af' : p >= 85 ? '#085041' : p >= 70 ? '#633806' : '#993C1D'
+                                const barH = p == null ? 4 : Math.max(6, Math.round(p * 0.72))
+                                const xLabel = e.unit
+                                  ? (e.unit.length > 6 ? e.unit.slice(0, 6) + '…' : e.unit)
+                                  : (type === '코어테스트' && e.title
+                                    ? (e.title === '본고사' ? '본고사' : e.title === '예비 1회' ? '예비1' : '예비2')
+                                    : e.exam_date.slice(5).replace('-', '/'))
+                                return (
+                                  <div key={e.id} className="flex-1 flex flex-col items-center justify-end gap-1" style={{ zIndex: 1 }}>
+                                    {p != null && (
+                                      <span className="text-[9px] font-black" style={{ color: textColor }}>{p}%</span>
+                                    )}
+                                    <div className="w-full rounded-t-lg transition-all"
+                                      style={{ height: barH, background: barColor, border: isCoreMain ? '2px solid #9FE1CB' : 'none' }} />
+                                    <div className="text-center" style={{ maxWidth: '100%' }}>
+                                      <span className="text-[9px] text-gray-500 block truncate font-medium">{xLabel}</span>
+                                      {e.level != null && (
+                                        <span className="text-[8px]" style={{ color: '#9ca3af' }}>Lv.{e.level}</span>
+                                      )}
+                                      {type === '코어테스트' && e.title && !e.unit && (
+                                        <span className="text-[8px] font-bold"
+                                          style={{ color: e.title === '본고사' ? '#085041' : '#EF9F27' }}>
+                                          {e.title === '본고사' ? '본' : e.title === '예비 1회' ? '예1' : '예2'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
                         </div>
                       )}
