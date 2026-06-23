@@ -224,9 +224,29 @@ export default function TeacherCurriculumPage() {
     fetchData()
   }
 
-  // 교재 삭제
+  // 교재 완료
+  async function handleCompleteTB(id: string) {
+    if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
+    await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
+    fetchData()
+  }
+
+  // 교재 중단
+  async function handlePauseTB(id: string) {
+    if (!confirm('이 교재를 중단 처리할까요? 나중에 다시 진행중으로 되돌릴 수 있어요.')) return
+    await supabase.from('student_textbooks').update({ status: 'paused' }).eq('id', id)
+    fetchData()
+  }
+
+  // 교재 재개 (중단 → 진행중)
+  async function handleResumeTB(id: string) {
+    await supabase.from('student_textbooks').update({ status: 'assigned' }).eq('id', id)
+    fetchData()
+  }
+
+  // 교재 완전 삭제 (완료/중단 교재만)
   async function handleDeleteTB(id: string) {
-    if (!confirm('이 교재 배정을 삭제할까요?')) return
+    if (!confirm('이 교재 기록을 완전히 삭제할까요? 되돌릴 수 없어요.')) return
     await supabase.from('student_textbooks').delete().eq('id', id)
     fetchData()
   }
@@ -576,7 +596,7 @@ export default function TeacherCurriculumPage() {
                 examEnd.setDate(examEnd.getDate() + 7)
                 return now <= examEnd
               })
-              const activeTBs = studentTBs.filter((t) => t.status !== 'checked')
+              const activeTBs = studentTBs.filter((t) => t.status === 'assigned')
               const tbByType = activeTBs.reduce((acc, t) => {
                 if (!acc[t.textbook_type]) acc[t.textbook_type] = []
                 acc[t.textbook_type].push(t)
@@ -608,7 +628,8 @@ export default function TeacherCurriculumPage() {
                   {/* 배정된 교재 목록 - 수정/삭제 가능 */}
                   {(studentTBs.length > 0 || myExamPreps.length > 0) ? (
                     <div className="space-y-1.5">
-                      {studentTBs.map((t) => (
+                      {/* 진행중 교재 */}
+                      {studentTBs.filter(t => t.status === 'assigned').map((t) => (
                         <div key={t.id} className={cx('flex items-center gap-2 px-3 py-2 rounded-xl border',
                           t.textbook_type === '개념서' ? 'bg-yellow-50 border-yellow-200' :
                           t.textbook_type === '유형서' ? 'bg-green-50 border-green-200' :
@@ -617,11 +638,54 @@ export default function TeacherCurriculumPage() {
                           <div className="flex-1 min-w-0">
                             <span className="text-xs font-bold text-gray-700">{t.textbook_type}</span>
                             <span className="text-xs text-gray-500 ml-1.5">{t.textbook_name}</span>
-                            {t.textbook_grade && (
+                            {t.grade && (
                               <span className="text-[10px] text-gray-400 ml-1.5">
-                                {t.textbook_grade} {t.semester ? `${t.semester}학기` : ''}
+                                {t.grade} {t.semester ? `${t.semester}학기` : ''}
                               </span>
                             )}
+                          </div>
+                          <button onClick={() => handleCompleteTB(t.id)}
+                            className="text-[10px] px-2 py-1 rounded-lg transition-all shrink-0"
+                            style={{ background: '#F0FBF7', color: '#085041' }}>
+                            완료
+                          </button>
+                          <button onClick={() => handlePauseTB(t.id)}
+                            className="text-[10px] px-2 py-1 rounded-lg transition-all shrink-0"
+                            style={{ background: '#FAEEDA', color: '#633806' }}>
+                            중단
+                          </button>
+                        </div>
+                      ))}
+                      {/* 중단 교재 */}
+                      {studentTBs.filter(t => t.status === 'paused').map((t) => (
+                        <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border"
+                          style={{ background: '#f9fafb', borderColor: '#e5e7eb' }}>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5"
+                              style={{ background: '#e5e7eb', color: '#6b7280' }}>중단</span>
+                            <span className="text-xs font-bold text-gray-500">{t.textbook_type}</span>
+                            <span className="text-xs text-gray-400 ml-1.5">{t.textbook_name}</span>
+                          </div>
+                          <button onClick={() => handleResumeTB(t.id)}
+                            className="text-[10px] px-2 py-1 rounded-lg transition-all shrink-0"
+                            style={{ background: '#9FE1CB', color: '#085041' }}>
+                            재개
+                          </button>
+                          <button onClick={() => handleDeleteTB(t.id)}
+                            className="text-[10px] text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-all shrink-0">
+                            삭제
+                          </button>
+                        </div>
+                      ))}
+                      {/* 완료 교재 */}
+                      {studentTBs.filter(t => t.status === 'completed').map((t) => (
+                        <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border"
+                          style={{ background: '#F0FBF7', borderColor: '#9FE1CB' }}>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5"
+                              style={{ background: '#9FE1CB', color: '#085041' }}>완료</span>
+                            <span className="text-xs font-bold text-gray-600">{t.textbook_type}</span>
+                            <span className="text-xs text-gray-400 ml-1.5">{t.textbook_name}</span>
                           </div>
                           <button onClick={() => handleDeleteTB(t.id)}
                             className="text-[10px] text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-all shrink-0">
