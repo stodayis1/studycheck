@@ -246,6 +246,43 @@ export default function TeacherAssignmentsPage() {
     setWsAssigning(false); fetchData()
   }
 
+  async function handleTwinAssign() {
+    if (!twinStudent || twinSelectedConcepts.length === 0) return
+    setTwinAssigning(true)
+    const selectedC = twinConcepts.filter(c => twinSelectedConcepts.includes(c.id))
+    const unitName = selectedC.map(c => c.concept_name).join(', ')
+    const chapterName = [...new Set(selectedC.map(c => c.chapter))].join(' + ')
+    await supabase.from('student_worksheets').insert({
+      student_id: twinStudent.id,
+      subject: '수학',
+      grade_level: twinStudent.grade,
+      unit: chapterName,
+      unit_name: unitName,
+      current_level: 1,
+      status: 'assigned',
+      worksheet_type: 'twin',
+      memo: twinRound,
+    })
+    setTwinStudent(null)
+    setTwinSelectedConcepts([])
+    setTwinTextbookId('')
+    setTwinConcepts([])
+    setTwinRound('1차')
+    setTwinAssigning(false)
+    setShowWSModal(false)
+    fetchData()
+  }
+
+  async function loadTwinConcepts(textbookId: string, grade: string, semester: number) {
+    const { data } = await supabase.from('concepts')
+      .select('*')
+      .eq('grade', grade)
+      .eq('semester', semester)
+      .order('concept_order')
+    setTwinConcepts(data ?? [])
+    setTwinSelectedConcepts([])
+  }
+
   async function handleSubmitted(id: string, currentStatus: string) {
     const nextStatus = currentStatus === 'similar_assigned' ? 'similar_submitted' : 'submitted'
     await supabase.from('student_worksheets').update({ status: nextStatus, submitted_at: new Date().toISOString() }).eq('id', id)
@@ -532,6 +569,10 @@ export default function TeacherAssignmentsPage() {
                                 {w.worksheet_type === 'similar' && (
                                   <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded"
                                     style={{ background: '#FFF5F2', color: '#712B13' }}>오답</span>
+                                )}
+                                {w.worksheet_type === 'twin' && (
+                                  <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded"
+                                    style={{ background: '#EFF6FF', color: '#1e3a5f' }}>쌍둥이 {w.memo}</span>
                                 )}
                               </td>
                               <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{student?.grade ?? '-'}</td>
@@ -1066,13 +1107,141 @@ export default function TeacherAssignmentsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <i className="ti ti-file-text" style={{ fontSize: 18, color: '#993C1D' }} />
-                <h3 className="text-base font-bold text-gray-900">레벨학습지 배정</h3>
+                <h3 className="text-base font-bold text-gray-900">학습지 배정</h3>
               </div>
               <button onClick={() => setShowWSModal(false)} className="text-gray-400">
                 <i className="ti ti-x" style={{ fontSize: 18 }} />
               </button>
             </div>
 
+            {/* 학습지 종류 탭 */}
+            <div className="flex gap-2">
+              {([['level','레벨학습지'],['twin','쌍둥이학습지']] as const).map(([type, label]) => (
+                <button key={type} onClick={() => { setWsType(type); setTwinStudent(null); setTwinSelectedConcepts([]) }}
+                  className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
+                  style={wsType === type ? { background: '#F5C4B3', color: '#712B13' } : { background: '#f3f4f6', color: '#9ca3af' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {wsType === 'twin' ? (
+              <>
+                {/* 쌍둥이 학습지 UI */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">학생 <span className="text-red-400">*</span></label>
+                  {twinStudent ? (
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: '#FAECE7', border: '2px solid #F5C4B3' }}>
+                      <p className="text-sm font-bold flex-1" style={{ color: '#712B13' }}>{twinStudent.name} · {twinStudent.grade}</p>
+                      <button onClick={() => { setTwinStudent(null); setTwinConcepts([]); setTwinSelectedConcepts([]) }} className="text-gray-400"><i className="ti ti-x" /></button>
+                    </div>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
+                      {myStudents.filter(s => s.grade.includes('중') || s.grade.includes('고')).map(s => (
+                        <button key={s.id} onClick={() => setTwinStudent(s)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#FAECE7', color: '#993C1D' }}>{s.name[0]}</div>
+                          <div className="flex-1 text-left">
+                            <p className="text-sm font-semibold text-gray-800">{s.name}</p>
+                            <p className="text-xs text-gray-400">{s.grade} · {s.teacher_name}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {twinStudent && (() => {
+                  const studentTBs = textbooks.filter(t => t.student_id === twinStudent.id && t.status === 'assigned' && t.textbook_type !== '연산서')
+                  return (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-2">교재 선택</label>
+                        <div className="flex flex-wrap gap-2">
+                          {studentTBs.map(tb => (
+                            <button key={tb.id} onClick={() => { setTwinTextbookId(tb.id); loadTwinConcepts(tb.id, tb.grade ?? '', tb.semester ?? 1) }}
+                              className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
+                              style={twinTextbookId === tb.id ? { background: '#712B13', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
+                              {tb.textbook_name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {twinConcepts.length > 0 && (() => {
+                        const chapters = [...new Set(twinConcepts.map(c => c.chapter))]
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-xs font-bold text-gray-700">개념 범위 선택 <span className="text-gray-400 font-normal">복수 선택 가능</span></label>
+                              <button onClick={() => setTwinSelectedConcepts(twinSelectedConcepts.length === twinConcepts.length ? [] : twinConcepts.map(c => c.id))}
+                                className="text-[10px] px-2 py-1 rounded-lg" style={{ background: '#f3f4f6', color: '#6b7280' }}>
+                                {twinSelectedConcepts.length === twinConcepts.length ? '전체 해제' : '전체 선택'}
+                              </button>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {chapters.map(ch => {
+                                const chConcepts = twinConcepts.filter(c => c.chapter === ch)
+                                const allSelected = chConcepts.every(c => twinSelectedConcepts.includes(c.id))
+                                return (
+                                  <div key={ch}>
+                                    <button onClick={() => {
+                                      const ids = chConcepts.map(c => c.id)
+                                      if (allSelected) setTwinSelectedConcepts(prev => prev.filter(id => !ids.includes(id)))
+                                      else setTwinSelectedConcepts(prev => [...new Set([...prev, ...ids])])
+                                    }} className="w-full text-left px-2 py-1.5 rounded-lg mb-1 flex items-center gap-2"
+                                      style={{ background: allSelected ? '#FAECE7' : '#fafafa', border: '1px solid #f0f0f0' }}>
+                                      <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                                        style={{ background: allSelected ? '#F5C4B3' : '#e5e7eb' }}>
+                                        {allSelected && <i className="ti ti-check" style={{ fontSize: 10, color: '#712B13' }} />}
+                                      </div>
+                                      <span className="text-xs font-bold text-gray-700">{ch}</span>
+                                    </button>
+                                    <div className="flex flex-wrap gap-1.5 ml-2">
+                                      {chConcepts.map(c => {
+                                        const sel = twinSelectedConcepts.includes(c.id)
+                                        return (
+                                          <button key={c.id} onClick={() => setTwinSelectedConcepts(prev => sel ? prev.filter(id => id !== c.id) : [...prev, c.id])}
+                                            className="px-2 py-1 rounded-lg text-[11px] font-medium transition-all"
+                                            style={sel ? { background: '#F5C4B3', color: '#712B13' } : { background: '#f3f4f6', color: '#6b7280' }}>
+                                            {c.concept_name}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </>
+                  )
+                })()}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">차수</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {(['1차','2차','오답','오답유사'] as const).map(r => (
+                      <button key={r} onClick={() => setTwinRound(r)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                        style={twinRound === r ? { background: '#712B13', color: 'white' } : { background: '#f3f4f6', color: '#6b7280' }}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button onClick={handleTwinAssign}
+                  disabled={!twinStudent || twinSelectedConcepts.length === 0 || twinAssigning}
+                  className="w-full py-3 rounded-2xl text-sm font-bold transition-all"
+                  style={!twinStudent || twinSelectedConcepts.length === 0 ? { background: '#f3f4f6', color: '#9ca3af' } : { background: '#712B13', color: 'white' }}>
+                  {twinAssigning ? '배정 중...' : `쌍둥이학습지 배정 ${twinSelectedConcepts.length > 0 ? `(${twinSelectedConcepts.length}개 개념)` : ''}`}
+                </button>
+              </>
+            ) : (
+              <>
             {/* 개별/일괄 탭 */}
             <div className="flex gap-2">
               {[{ key: false, label: '개별 배정', icon: 'ti-user' }, { key: true, label: '일괄 배정', icon: 'ti-users' }].map((m) => (
@@ -1292,6 +1461,8 @@ export default function TeacherAssignmentsPage() {
                 ? <><span className="w-4 h-4 border-2 border-[#712B13]/30 border-t-[#712B13] rounded-full animate-spin" />배정 중...</>
                 : <><i className="ti ti-file-text" style={{ fontSize: 16 }} />{bulkMode ? `${bulkStudentIds.length}명 일괄 배정` : '레벨학습지 배정하기'}</>}
             </button>
+              </>
+            )}
           </div>
         </div>
       )}
