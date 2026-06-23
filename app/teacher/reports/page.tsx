@@ -1192,58 +1192,101 @@ export default function TeacherReportsPage() {
                         )}
                       </div>
 
-                      {/* 막대그래프 */}
-                      {scored.length > 0 && (
-                        <div className="mb-3 rounded-xl p-3" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
-                          <div className="flex items-end gap-2" style={{ height: 80 }}>
-                            {/* 세로축 점수 라벨 */}
-                            <div className="flex flex-col justify-between h-full shrink-0" style={{ width: 24 }}>
-                              <span className="text-[9px] text-gray-400 text-right">100</span>
-                              <span className="text-[9px] text-gray-400 text-right">50</span>
-                              <span className="text-[9px] text-gray-400 text-right">0</span>
-                            </div>
-                            {/* 막대들 */}
-                            <div className="flex-1 flex items-end gap-2 h-full relative">
-                              {/* 기준선 */}
-                              <div className="absolute w-full" style={{ bottom: '85%', borderTop: '1px dashed #e5e7eb', zIndex: 0 }} />
-                              <div className="absolute w-full" style={{ bottom: '50%', borderTop: '1px dashed #f0f0f0', zIndex: 0 }} />
-                              {typeExams.map((e) => {
-                                const p = pct(e)
-                                const isCoreMain = type === '코어테스트' && e.title === '본고사'
-                                const barColor = p == null ? '#f3f4f6' : p >= 85 ? '#9FE1CB' : p >= 70 ? '#FAEEDA' : '#F5C4B3'
-                                const textColor = p == null ? '#9ca3af' : p >= 85 ? '#085041' : p >= 70 ? '#633806' : '#993C1D'
-                                const barH = p == null ? 4 : Math.max(6, Math.round(p * 0.72))
-                                const xLabel = e.unit
-                                  ? (e.unit.length > 6 ? e.unit.slice(0, 6) + '…' : e.unit)
-                                  : (type === '코어테스트' && e.title
-                                    ? (e.title === '본고사' ? '본고사' : e.title === '예비 1회' ? '예비1' : '예비2')
-                                    : e.exam_date.slice(5).replace('-', '/'))
+                      {/* 성적 추이 + 막대그래프 */}
+                      {scored.length > 0 && (() => {
+                        const chartW = 400
+                        const chartH = 120
+                        const padL = 28, padR = 8, padT = 20, padB = 36
+                        const innerW = chartW - padL - padR
+                        const innerH = chartH - padT - padB
+                        const n = typeExams.length
+                        const barW = Math.min(32, (innerW / n) * 0.55)
+                        const gap = innerW / n
+                        const scoredPts = typeExams.map(e => pct(e))
+                        const avgPct = Math.round(scored.reduce((s, e) => s + (pct(e) ?? 0), 0) / scored.length)
+
+                        return (
+                          <div className="mb-3 rounded-xl overflow-hidden" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                            <svg viewBox={`0 0 ${chartW} ${chartH}`} width="100%" style={{ display: 'block' }}>
+                              {/* 기준선 y=100,85,50 */}
+                              {[100, 85, 50].map(v => {
+                                const y = padT + innerH - (v / 100) * innerH
                                 return (
-                                  <div key={e.id} className="flex-1 flex flex-col items-center justify-end gap-1" style={{ zIndex: 1 }}>
-                                    {p != null && (
-                                      <span className="text-[9px] font-black" style={{ color: textColor }}>{p}%</span>
-                                    )}
-                                    <div className="w-full rounded-t-lg transition-all"
-                                      style={{ height: barH, background: barColor, border: isCoreMain ? '2px solid #9FE1CB' : 'none' }} />
-                                    <div className="text-center" style={{ maxWidth: '100%' }}>
-                                      <span className="text-[9px] text-gray-500 block truncate font-medium">{xLabel}</span>
-                                      {e.level != null && (
-                                        <span className="text-[8px]" style={{ color: '#9ca3af' }}>Lv.{e.level}</span>
-                                      )}
-                                      {type === '코어테스트' && e.title && !e.unit && (
-                                        <span className="text-[8px] font-bold"
-                                          style={{ color: e.title === '본고사' ? '#085041' : '#EF9F27' }}>
-                                          {e.title === '본고사' ? '본' : e.title === '예비 1회' ? '예1' : '예2'}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+                                  <g key={v}>
+                                    <line x1={padL} y1={y} x2={chartW - padR} y2={y}
+                                      stroke={v === 85 ? '#9FE1CB' : '#e5e7eb'} strokeWidth={v === 85 ? 1 : 0.7} strokeDasharray={v === 85 ? '4 3' : '3 3'} />
+                                    <text x={padL - 3} y={y + 3} textAnchor="end" fontSize={8} fill="#9ca3af">{v}</text>
+                                  </g>
                                 )
                               })}
-                            </div>
+
+                              {/* 막대 */}
+                              {typeExams.map((e, i) => {
+                                const p = scoredPts[i]
+                                const cx = padL + gap * i + gap / 2
+                                const isCoreMain = type === '코어테스트' && e.title === '본고사'
+                                const barColor = p == null ? '#e5e7eb' : p >= 85 ? '#9FE1CB' : p >= 70 ? '#FAEEDA' : '#F5C4B3'
+                                const barH2 = p == null ? 4 : (p / 100) * innerH
+                                const barY = padT + innerH - barH2
+                                const textColor = p == null ? '#9ca3af' : p >= 85 ? '#085041' : p >= 70 ? '#633806' : '#993C1D'
+                                const xLabel = e.unit
+                                  ? (e.unit.length > 5 ? e.unit.slice(0, 5) + '…' : e.unit)
+                                  : type === '코어테스트' && e.title
+                                    ? (e.title === '본고사' ? '본고사' : e.title === '예비 1회' ? '예비1' : '예비2')
+                                    : e.exam_date.slice(5).replace('-', '/')
+                                const subLabel = e.level != null ? `Lv.${e.level}` : ''
+                                return (
+                                  <g key={e.id}>
+                                    <rect x={cx - barW / 2} y={barY} width={barW} height={barH2}
+                                      rx={3} fill={barColor}
+                                      stroke={isCoreMain ? '#085041' : 'none'} strokeWidth={isCoreMain ? 1.5 : 0} />
+                                    {p != null && (
+                                      <text x={cx} y={barY - 4} textAnchor="middle" fontSize={9} fontWeight="700" fill={textColor}>{p}%</text>
+                                    )}
+                                    <text x={cx} y={padT + innerH + 12} textAnchor="middle" fontSize={8.5} fill="#4b5563" fontWeight="500">{xLabel}</text>
+                                    {subLabel && (
+                                      <text x={cx} y={padT + innerH + 24} textAnchor="middle" fontSize={8} fill="#9ca3af">{subLabel}</text>
+                                    )}
+                                  </g>
+                                )
+                              })}
+
+                              {/* 꺾은선 */}
+                              {(() => {
+                                const pts = typeExams.map((e, i) => {
+                                  const p = pct(e)
+                                  if (p == null) return null
+                                  const cx = padL + gap * i + gap / 2
+                                  const cy = padT + innerH - (p / 100) * innerH
+                                  return { cx, cy, p }
+                                }).filter(Boolean) as { cx: number; cy: number; p: number }[]
+                                if (pts.length < 2) return null
+                                const d = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.cx},${pt.cy}`).join(' ')
+                                return (
+                                  <g>
+                                    <path d={d} fill="none" stroke="#993C1D" strokeWidth={1.5} strokeDasharray="4 2" opacity={0.6} />
+                                    {pts.map((pt, i) => (
+                                      <circle key={i} cx={pt.cx} cy={pt.cy} r={3} fill="#993C1D" opacity={0.8} />
+                                    ))}
+                                  </g>
+                                )
+                              })()}
+
+                              {/* 평균선 */}
+                              {(() => {
+                                const avgY = padT + innerH - (avgPct / 100) * innerH
+                                return (
+                                  <g>
+                                    <line x1={padL} y1={avgY} x2={chartW - padR} y2={avgY}
+                                      stroke="#6b7280" strokeWidth={0.8} strokeDasharray="6 3" opacity={0.5} />
+                                    <text x={chartW - padR - 2} y={avgY - 3} textAnchor="end" fontSize={7.5} fill="#6b7280" opacity={0.7}>평균 {avgPct}%</text>
+                                  </g>
+                                )
+                              })()}
+                            </svg>
                           </div>
-                        </div>
-                      )}
+                        )
+                      })()}
 
                       {/* 상세 목록 */}
                       <div className="space-y-1.5">
