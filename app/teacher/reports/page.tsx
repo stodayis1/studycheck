@@ -336,7 +336,7 @@ export default function TeacherReportsPage() {
   async function saveAsImage() {
     if (!reportRef.current) return
     const html2canvas = (await import('html2canvas')).default
-    const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#1a1a2e' })
+    const el = reportRef.current; const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#0f3460', width: el.offsetWidth, height: el.offsetHeight, windowWidth: el.offsetWidth, windowHeight: el.offsetHeight, imageTimeout: 0, allowTaint: true })
     const url = canvas.toDataURL('image/png')
     const a = document.createElement('a')
     a.href = url
