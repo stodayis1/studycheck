@@ -548,7 +548,7 @@ export default function TeacherReportsPage() {
 
         {/* ══ 기존 학습보고서 탭 ══ */}
         {activeTab === 'report' && (
-
+          <>
         {/* 학생 선택 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-50">
@@ -1236,6 +1236,7 @@ export default function TeacherReportsPage() {
             </div>
           )
         })()}
+          </>
         )}
       </div>
     </div>
