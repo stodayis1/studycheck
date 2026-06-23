@@ -18,7 +18,7 @@ interface Textbook {
   student_id: string
   textbook_name: string
   textbook_type: string
-  textbook_grade: string
+  grade: string
   semester: string
   status: string
 }
@@ -83,7 +83,7 @@ export default function BulkProgressPage() {
     setLoading(true)
     const { data: conceptData } = await supabase.from('concepts')
       .select('*')
-      .eq('grade', tb.textbook_grade)
+      .eq('grade', tb.grade)
       .eq('semester', tb.semester)
       .order('concept_order')
     const conceptList = conceptData ?? []
