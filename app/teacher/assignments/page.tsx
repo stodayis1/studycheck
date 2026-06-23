@@ -150,6 +150,7 @@ export default function TeacherAssignmentsPage() {
   const [twinSelectedConcepts, setTwinSelectedConcepts] = useState<string[]>([])
   const [twinRound, setTwinRound] = useState<'1차' | '2차' | '오답' | '오답유사'>('1차')
   const [twinAssigning, setTwinAssigning] = useState(false)
+  const [twinSearch, setTwinSearch] = useState('')
 
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [scoreWS, setScoreWS] = useState<StudentWorksheet | null>(null)
@@ -220,6 +221,8 @@ export default function TeacherAssignmentsPage() {
     return myStudentIds.has(w.student_id) && w.status !== 'passed' && !!groupMatch &&
       (searchText === '' || getStudentName(w.student_id).includes(searchText))
   })
+  const activeLevelWS = activeWorksheets.filter(w => w.worksheet_type !== 'twin')
+  const activeTwinWS = activeWorksheets.filter(w => w.worksheet_type === 'twin')
 
   const activeTextbooks = textbooks.filter((t) =>
     myStudentIds.has(t.student_id) && t.status !== 'checked' &&
@@ -505,7 +508,7 @@ export default function TeacherAssignmentsPage() {
                 <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
                   <i className="ti ti-file-text" style={{ fontSize: 16, color: '#993C1D' }} />
                   <h3 className="text-sm font-bold text-gray-700">레벨학습지 전체 현황</h3>
-                  <span className="text-xs text-gray-400">{activeWorksheets.length}건 진행중</span>
+                  <span className="text-xs text-gray-400">{activeLevelWS.length}건 진행중</span>
                   <div className="flex items-center gap-2 ml-auto">
                       {deleteMode ? (
                         <>
@@ -530,7 +533,7 @@ export default function TeacherAssignmentsPage() {
                       )}
                   </div>
                 </div>
-                {activeWorksheets.length === 0 ? (
+                {activeLevelWS.length === 0 ? (
                   <p className="text-center text-sm text-gray-400 py-6">진행중인 레벨학습지가 없어요</p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -540,12 +543,12 @@ export default function TeacherAssignmentsPage() {
                           {deleteMode && (
                             <th className="px-2 py-2.5">
                               <button onClick={() => {
-                                if (selectedWSIds.length === activeWorksheets.length) setSelectedWSIds([])
-                                else setSelectedWSIds(activeWorksheets.map(w => w.id))
+                                if (selectedWSIds.length === activeLevelWS.length) setSelectedWSIds([])
+                                else setSelectedWSIds(activeLevelWS.map(w => w.id))
                               }}
                                 className="w-4 h-4 rounded flex items-center justify-center"
-                                style={{ background: selectedWSIds.length === activeWorksheets.length ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
-                                {selectedWSIds.length === activeWorksheets.length && <i className="ti ti-check" style={{ fontSize: 9, color: '#712B13' }} />}
+                                style={{ background: selectedWSIds.length === activeLevelWS.length ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                                {selectedWSIds.length === activeLevelWS.length && <i className="ti ti-check" style={{ fontSize: 9, color: '#712B13' }} />}
                               </button>
                             </th>
                           )}
@@ -555,7 +558,7 @@ export default function TeacherAssignmentsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {activeWorksheets.map((w) => {
+                        {activeLevelWS.map((w) => {
                           const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
                           const student = students.find((s) => s.id === w.student_id)
                           const isChecked = selectedWSIds.includes(w.id)
@@ -686,6 +689,70 @@ export default function TeacherAssignmentsPage() {
                   </div>
                 )}
               </div>
+
+              {/* 쌍둥이학습지 현황 */}
+              {activeTwinWS.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#EFF6FF', borderBottom: '1px solid #dbeafe' }}>
+                    <i className="ti ti-copy" style={{ fontSize: 16, color: '#1e3a5f' }} />
+                    <h3 className="text-sm font-bold" style={{ color: '#1e3a5f' }}>쌍둥이학습지 현황</h3>
+                    <span className="text-xs" style={{ color: '#3b82f6' }}>{activeTwinWS.length}건 진행중</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr style={{ background: '#f8faff' }}>
+                          <th className="px-3 py-2.5 text-left font-semibold text-gray-500">학생</th>
+                          <th className="px-3 py-2.5 text-left font-semibold text-gray-500">단원</th>
+                          <th className="px-3 py-2.5 text-left font-semibold text-gray-500">차수</th>
+                          <th className="px-3 py-2.5 text-left font-semibold text-gray-500">점수</th>
+                          <th className="px-3 py-2.5 text-left font-semibold text-gray-500">상태</th>
+                          <th className="px-3 py-2.5"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {activeTwinWS.map((w) => {
+                          const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
+                          return (
+                            <tr key={w.id} className="hover:bg-blue-50/30">
+                              <td className="px-3 py-2.5 font-bold text-gray-900">{getStudentName(w.student_id)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 max-w-[140px] truncate">{w.unit_name || w.unit}</td>
+                              <td className="px-3 py-2.5">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                                  style={{ background: '#EFF6FF', color: '#1e3a5f' }}>{w.memo}</span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {w.score != null
+                                  ? <span className="font-black" style={{ color: w.score >= 85 ? '#27500A' : w.score >= 80 ? '#633806' : '#991b1b' }}>{w.score}점</span>
+                                  : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={cx('font-bold', cfg.color)}>{cfg.label}</span>
+                              </td>
+                              <td className="px-3 py-2.5 whitespace-nowrap">
+                                {(w.status === 'submitted' || w.status === 'similar_submitted') && (
+                                  <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
+                                    className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                    style={{ background: '#EFF6FF', color: '#1e3a5f', border: '1px solid #bfdbfe' }}>
+                                    점수입력
+                                  </button>
+                                )}
+                                {w.status === 'assigned' && (
+                                  <button onClick={() => handleSubmitted(w.id, w.status)}
+                                    className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                    style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
+                                    제출확인
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )
         )}
@@ -1145,8 +1212,12 @@ export default function TeacherAssignmentsPage() {
                       <button onClick={() => { setTwinStudent(null); setTwinConcepts([]); setTwinSelectedConcepts([]) }} className="text-gray-400"><i className="ti ti-x" /></button>
                     </div>
                   ) : (
+                    <>
+                    <input value={twinSearch} onChange={e => setTwinSearch(e.target.value)}
+                      placeholder="이름 검색" className="w-full text-sm rounded-xl px-3 py-2 mb-2 outline-none"
+                      style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
                     <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                      {myStudents.filter(s => s.grade.includes('중') || s.grade.includes('고')).map(s => (
+                      {myStudents.filter(s => (s.grade.includes('중') || s.grade.includes('고')) && (twinSearch === '' || s.name.includes(twinSearch))).map(s => (
                         <button key={s.id} onClick={() => setTwinStudent(s)}
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#FAECE7', color: '#993C1D' }}>{s.name[0]}</div>
@@ -1157,6 +1228,7 @@ export default function TeacherAssignmentsPage() {
                         </button>
                       ))}
                     </div>
+                    </>
                   )}
                 </div>
 
