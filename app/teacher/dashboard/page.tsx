@@ -15,8 +15,25 @@ export default function TeacherDashboardPage() {
     activeWorksheets: 0, activeTextbooks: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [bulkProgressEnabled, setBulkProgressEnabled] = useState(false)
+  const [togglingBulk, setTogglingBulk] = useState(false)
 
-  useEffect(() => { if (currentUser) fetchStats() }, [currentUser])
+  useEffect(() => { if (currentUser) { fetchStats(); fetchBulkSetting() } }, [currentUser])
+
+  async function fetchBulkSetting() {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'bulk_progress_enabled').single()
+    if (data) setBulkProgressEnabled(data.value === true || data.value === 'true')
+  }
+
+  async function toggleBulkProgress() {
+    setTogglingBulk(true)
+    const newValue = !bulkProgressEnabled
+    await supabase.from('app_settings')
+      .update({ value: newValue, updated_at: new Date().toISOString() })
+      .eq('key', 'bulk_progress_enabled')
+    setBulkProgressEnabled(newValue)
+    setTogglingBulk(false)
+  }
 
   async function fetchStats() {
     setLoading(true)
@@ -39,7 +56,6 @@ export default function TeacherDashboardPage() {
     }
     const { data: wsData } = await supabase.from('student_worksheets').select('student_id, status').in('status', ['submitted', 'similar_submitted'])
     const pendingScore = (wsData ?? []).filter((w: any) => myIds.has(w.student_id)).length
-    // 학부모 공유 대기: 오늘 수업 세션이 있는데 알림장(feedbacks)을 아직 안 쓴 학생 수
     let pendingShare = 0
     const myTodayStudentIds = Array.from(new Set(mySessions.map((s: any) => s.student_id)))
     if (myTodayStudentIds.length > 0) {
@@ -107,6 +123,41 @@ export default function TeacherDashboardPage() {
         subtitle={isAdmin() ? '관리자 대시보드' : '수업일지 · 진도관리'} />
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
+
+        {/* 관리자 전용: 진도 일괄입력 토글 */}
+        {isAdmin() && (
+          <div className="rounded-2xl px-4 py-3 flex items-center justify-between"
+            style={{ background: 'white', border: '1.5px solid #e5e7eb', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                style={{ background: bulkProgressEnabled ? '#F0FBF7' : '#f3f4f6' }}>
+                <i className="ti ti-list-check" style={{ fontSize: 16, color: bulkProgressEnabled ? '#085041' : '#9ca3af' }} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-700">진도 일괄입력</p>
+                <p className="text-[10px] text-gray-400">강사 전체에게 메뉴 {bulkProgressEnabled ? '표시됨' : '숨겨짐'}</p>
+              </div>
+            </div>
+            <button
+              onClick={toggleBulkProgress}
+              disabled={togglingBulk}
+              className="relative inline-flex items-center rounded-full transition-all duration-200"
+              style={{
+                width: 44, height: 24,
+                background: bulkProgressEnabled ? '#9FE1CB' : '#d1d5db',
+                border: 'none', cursor: 'pointer',
+              }}>
+              <span
+                className="absolute rounded-full bg-white shadow transition-all duration-200"
+                style={{
+                  width: 18, height: 18,
+                  left: bulkProgressEnabled ? 22 : 3,
+                  top: 3,
+                }}
+              />
+            </button>
+          </div>
+        )}
 
         {/* 핵심 지표 카드 */}
         <div className="grid grid-cols-2 gap-3">
