@@ -858,15 +858,33 @@ export default function TeacherReportsPage() {
               const hasLevel = recentLevel.length > 0
               if (!hasLevel && !hasTwin) return null
 
-              const scored = recentLevel.filter((w) => w.score != null)
-              const avgScore = scored.length > 0 ? Math.round(scored.reduce((s, w) => s + (w.score ?? 0), 0) / scored.length) : null
+              // 레벨학습지 통계
+              const levelScored = recentLevel.filter((w) => w.score != null)
+              const levelAvg = levelScored.length > 0 ? Math.round(levelScored.reduce((s, w) => s + (w.score ?? 0), 0) / levelScored.length) : null
               const passedCount = recentLevel.filter((w) => w.status === 'passed').length
               const passRate = recentLevel.length > 0 ? Math.round(passedCount / recentLevel.length * 100) : 0
-              const levelMap: Record<number, number> = {}
-              recentLevel.forEach((w) => { levelMap[w.current_level] = (levelMap[w.current_level] ?? 0) + 1 })
-              const levels = Object.entries(levelMap).sort((a, b) => Number(a[0]) - Number(b[0]))
-              const maxCount = levels.length > 0 ? Math.max(...levels.map(([, c]) => c)) : 1
-              const maxLevel = recentLevel.length > 0 ? Math.max(...recentLevel.map((w) => w.current_level)) : 0
+
+              // 쌍둥이 통계
+              const twinScored = twinGroups.map(g => g.record).filter(r => r.score != null)
+              const twinAvg = twinScored.length > 0 ? Math.round(twinScored.reduce((s, r) => s + (r.score ?? 0), 0) / twinScored.length) : null
+
+              // 레벨학습지 단원별 요약 (unit+unit_name → 첫~마지막 개념)
+              const levelGroups = (() => {
+                const map: Record<string, WorksheetRecord[]> = {}
+                recentLevel.forEach(w => {
+                  const key = w.unit ?? ''
+                  if (!map[key]) map[key] = []
+                  map[key].push(w)
+                })
+                return Object.entries(map).map(([unit, recs]) => {
+                  const names = recs.map(r => r.unit_name ?? '').filter(Boolean)
+                  const first = names[0] ?? ''
+                  const last = names[names.length - 1] ?? ''
+                  const rangeLabel = first && first !== last ? `${first} ~ ${last}` : first
+                  const latest = recs.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())[0]
+                  return { unit, rangeLabel, record: latest, allRecs: recs }
+                })
+              })()
 
               return (
                 <div className="border-b border-gray-100">
@@ -878,40 +896,68 @@ export default function TeacherReportsPage() {
                     <span className="text-[10px] text-gray-400 ml-1">최근 6개월</span>
                   </div>
 
+                  {/* 평균 요약 카드 */}
+                  <div className="px-4 pt-4 pb-3">
+                    <div className="grid gap-2" style={{ gridTemplateColumns: hasLevel && hasTwin ? '1fr 1fr' : '1fr' }}>
+                      {hasLevel && (
+                        <div className="rounded-xl px-3 py-3" style={{ background: '#FAECE7' }}>
+                          <p className="text-[10px] font-bold mb-1 flex items-center gap-1" style={{ color: '#993C1D' }}>
+                            <i className="ti ti-chart-bar" style={{ fontSize: 10 }} />레벨학습지 평균
+                          </p>
+                          <p className="text-xl font-black" style={{ color: '#712B13' }}>
+                            {levelAvg ?? '-'}<span className="text-xs font-normal ml-0.5">점</span>
+                          </p>
+                          <p className="text-[10px] mt-1" style={{ color: '#993C1D' }}>
+                            통과율 {passRate}% <span style={{ opacity: 0.6 }}>(85점 이상 기준)</span>
+                          </p>
+                        </div>
+                      )}
+                      {hasTwin && (
+                        <div className="rounded-xl px-3 py-3" style={{ background: '#EFF6FF' }}>
+                          <p className="text-[10px] font-bold mb-1 flex items-center gap-1" style={{ color: '#1e3a5f' }}>
+                            <i className="ti ti-copy" style={{ fontSize: 10 }} />쌍둥이학습지 평균
+                          </p>
+                          <p className="text-xl font-black" style={{ color: '#1e3a5f' }}>
+                            {twinAvg ?? '-'}<span className="text-xs font-normal ml-0.5">점</span>
+                          </p>
+                          <p className="text-[10px] mt-1" style={{ color: '#1e3a5f', opacity: 0.6 }}>
+                            총 {twinGroups.length}회
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {hasLevel && hasTwin && <div style={{ borderTop: '1px solid #f0f0f0', margin: '0 16px 12px' }} />}
+
+                  {/* 레벨학습지 목록 */}
                   {hasLevel && (
-                    <div className="px-4 pt-4 pb-2">
-                      <p className="text-[10px] font-bold mb-3 flex items-center gap-1.5"
+                    <div className="px-4 pb-3">
+                      <p className="text-[10px] font-bold mb-2 flex items-center gap-1.5"
                         style={{ color: '#993C1D', background: '#FAECE7', display: 'inline-flex', padding: '3px 8px', borderRadius: 6 }}>
                         <i className="ti ti-chart-bar" style={{ fontSize: 11 }} />레벨학습지
                       </p>
-                      <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
-                          <p className="text-[10px] text-gray-400 mb-0.5">총 학습지</p>
-                          <p className="text-base font-bold text-gray-800">{recentLevel.length}<span className="text-[10px] font-normal text-gray-400 ml-0.5">개</span></p>
-                        </div>
-                        <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
-                          <p className="text-[10px] text-gray-400 mb-0.5">통과율</p>
-                          <p className="text-base font-bold text-gray-800">{passRate}<span className="text-[10px] font-normal text-gray-400 ml-0.5">%</span></p>
-                        </div>
-                        <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f3f4f6' }}>
-                          <p className="text-[10px] text-gray-400 mb-0.5">평균점수</p>
-                          <p className="text-base font-bold text-gray-800">{avgScore ?? '-'}<span className="text-[10px] font-normal text-gray-400 ml-0.5">점</span></p>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-gray-400 mb-2">레벨별 분포 <span className="ml-1 font-semibold text-gray-600">최고 {maxLevel}레벨</span></p>
-                      <div className="space-y-1.5 mb-2">
-                        {levels.map(([level, count]) => {
-                          const lv = Number(level)
-                          const pct = Math.round((count / maxCount) * 100)
-                          const barColor = lv >= 4 ? '#F5C4B3' : lv >= 2.5 ? '#9FE1CB' : '#D3D1C7'
-                          const textColor = lv >= 4 ? '#993C1D' : lv >= 2.5 ? '#085041' : '#6b7280'
+                      <div className="space-y-1.5 mt-2">
+                        {levelGroups.map(({ unit, rangeLabel, record: r }, idx) => {
+                          const scoreC = r.score == null ? '#9ca3af' : r.score >= 85 ? '#27500A' : r.score >= 80 ? '#633806' : '#991b1b'
+                          const scoreBg = r.score == null ? '#f9fafb' : r.score >= 85 ? '#EAF3DE' : r.score >= 80 ? '#FAEEDA' : '#fee2e2'
                           return (
-                            <div key={level} className="flex items-center gap-2">
-                              <span className="text-[10px] font-semibold shrink-0 w-12 text-right" style={{ color: textColor }}>{level}레벨</span>
-                              <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: '#f3f4f6' }}>
-                                <div className="h-4 rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+                            <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                              style={{ background: '#fdf8f5', border: '1px solid #F5C4B3' }}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-gray-800">
+                                  {unit}
+                                  <span className="text-[10px] font-semibold ml-1.5" style={{ color: '#993C1D' }}>{r.current_level}레벨</span>
+                                </p>
+                                {rangeLabel && <p className="text-[10px] text-gray-400 mt-0.5 truncate">({rangeLabel})</p>}
                               </div>
-                              <span className="text-[10px] font-bold shrink-0 w-4" style={{ color: textColor }}>{count}</span>
+                              <div className="px-3 py-1.5 rounded-xl text-center shrink-0" style={{ background: scoreBg, minWidth: 56 }}>
+                                {r.score != null
+                                  ? <p className="text-sm font-black" style={{ color: scoreC }}>{r.score}점</p>
+                                  : <p className="text-xs font-bold" style={{ color: r.status === 'assigned' ? '#3b82f6' : '#f97316' }}>
+                                      {r.status === 'assigned' ? '과제중' : '채점대기'}
+                                    </p>}
+                              </div>
                             </div>
                           )
                         })}
@@ -919,17 +965,17 @@ export default function TeacherReportsPage() {
                     </div>
                   )}
 
-                  {hasLevel && hasTwin && <div style={{ borderTop: '1px solid #f0f0f0', margin: '0 16px' }} />}
+                  {hasLevel && hasTwin && <div style={{ borderTop: '1px solid #f0f0f0', margin: '0 16px 12px' }} />}
 
+                  {/* 쌍둥이학습지 목록 */}
                   {hasTwin && (
-                    <div className="px-4 pt-4 pb-4">
-                      <p className="text-[10px] font-bold mb-3 flex items-center gap-1.5"
+                    <div className="px-4 pb-4">
+                      <p className="text-[10px] font-bold mb-2 flex items-center gap-1.5"
                         style={{ color: '#1e3a5f', background: '#EFF6FF', display: 'inline-flex', padding: '3px 8px', borderRadius: 6 }}>
                         <i className="ti ti-copy" style={{ fontSize: 11 }} />쌍둥이학습지
                       </p>
-                      <div className="space-y-2">
-                        {twinGroups.map(({ unit, rangeLabel, record }, idx) => {
-                          const r = record
+                      <div className="space-y-1.5 mt-2">
+                        {twinGroups.map(({ unit, rangeLabel, record: r }, idx) => {
                           const scoreC = r.score == null ? '#9ca3af' : r.score >= 85 ? '#27500A' : r.score >= 80 ? '#633806' : '#991b1b'
                           const scoreBg = r.score == null ? '#f9fafb' : r.score >= 85 ? '#EAF3DE' : r.score >= 80 ? '#FAEEDA' : '#fee2e2'
                           return (
