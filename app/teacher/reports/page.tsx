@@ -113,6 +113,15 @@ export default function TeacherReportsPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  useEffect(() => {
+    if (!selectedStudent) return
+    async function fetchStudentProgress() {
+      const { data } = await supabase.from('progress_checks').select('*').eq('student_id', selectedStudent.id)
+      if (data) setProgressChecks(data)
+    }
+    fetchStudentProgress()
+  }, [selectedStudent])
+
   // 권한 체크: 관리자는 전부, 강사는 본인 입력분만
   function canDelete(teacherName: string | null | undefined) {
     if (isAdmin()) return true
@@ -146,7 +155,7 @@ export default function TeacherReportsPage() {
       supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*'),
-      supabase.from('progress_checks').select('*'),
+      supabase.from('progress_checks').select('*').limit(10000),
       supabase.from('exams').select('*').order('exam_date', { ascending: true }),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
     ])
@@ -282,7 +291,7 @@ export default function TeacherReportsPage() {
       supabase.from('student_worksheets').select('*').eq('student_id', student.id),
       supabase.from('exams').select('*').eq('student_id', student.id).gte('exam_date', startStr).lte('exam_date', endStr),
       supabase.from('student_textbooks').select('*').eq('student_id', student.id).eq('status','assigned'),
-      supabase.from('progress_checks').select('*').eq('student_id', student.id),
+      supabase.from('progress_checks').select('*').limit(10000).eq('student_id', student.id),
     ])
 
     const sessions = sessionsData ?? []
