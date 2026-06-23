@@ -676,6 +676,10 @@ export default function TeacherReportsPage() {
               const myTBs = studentTextbooks.filter((t) => t.student_id === selectedStudent.id)
               if (myTBs.length === 0) return null
 
+              const activeTBs = myTBs.filter(t => t.status === 'assigned')
+              const completedTBs = myTBs.filter(t => t.status === 'completed')
+              const pausedTBs = myTBs.filter(t => t.status === 'paused')
+
               const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
               const TYPE_ORDER: Record<string, number> = { '개념서': 0, '유형서': 1, '심화서': 2, '연산서': 3 }
               const TYPE_STYLE: Record<string, { dot: string; fill: string; text: string; label: string }> = {
@@ -689,7 +693,8 @@ export default function TeacherReportsPage() {
                 <div className="border-b border-gray-100">
                   <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: "#fafafa", borderBottom: "1px solid #f0f0f0" }}><div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FAECE7" }}><i className="ti ti-books" style={{ fontSize: 14, color: "#993C1D" }} /></div><span className="text-sm font-bold" style={{ color: "#1f2937" }}>교재 진도 현황</span></div>
                   <div className="px-4 py-4 space-y-4">
-                    {myTBs
+                    {/* 진행중 교재 - 격자 표시 */}
+                    {activeTBs
                       .sort((a, b) => {
                         const gA = GRADE_ORDER.indexOf(a.grade ?? '')
                         const gB = GRADE_ORDER.indexOf(b.grade ?? '')
@@ -789,6 +794,38 @@ export default function TeacherReportsPage() {
                           </div>
                         )
                       })}
+                    {/* 완료 교재 - 텍스트만 */}
+                    {completedTBs.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wide">완료한 교재</p>
+                        <div className="flex flex-wrap gap-2">
+                          {completedTBs.map(tb => (
+                            <div key={tb.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl"
+                              style={{ background: '#F0FBF7', border: '1px solid #9FE1CB' }}>
+                              <i className="ti ti-circle-check" style={{ fontSize: 11, color: '#085041' }} />
+                              <span className="text-xs font-medium" style={{ color: '#085041' }}>{tb.textbook_name}</span>
+                              {tb.grade && <span className="text-[10px]" style={{ color: '#9FE1CB' }}>{tb.grade}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* 중단 교재 - 텍스트만 */}
+                    {pausedTBs.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wide">중단한 교재</p>
+                        <div className="flex flex-wrap gap-2">
+                          {pausedTBs.map(tb => (
+                            <div key={tb.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl"
+                              style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                              <i className="ti ti-pause" style={{ fontSize: 11, color: '#9ca3af' }} />
+                              <span className="text-xs font-medium text-gray-500">{tb.textbook_name}</span>
+                              {tb.grade && <span className="text-[10px] text-gray-400">{tb.grade}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
