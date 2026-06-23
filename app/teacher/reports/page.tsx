@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
@@ -98,6 +98,18 @@ export default function TeacherReportsPage() {
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
+
+  // 월간보고서 상태
+  const [activeTab, setActiveTab] = useState<'report' | 'monthly'>('report')
+  const [mStudent, setMStudent] = useState<Student | null>(null)
+  const [mSearchText, setMSearchText] = useState('')
+  const [mYear, setMYear] = useState(new Date().getFullYear())
+  const [mMonth, setMMonth] = useState(new Date().getMonth() + 1)
+  const [mComment, setMComment] = useState('')
+  const [mGenerating, setMGenerating] = useState(false)
+  const [mData, setMData] = useState<any>(null)
+  const [mLoading, setMLoading] = useState(false)
+  const reportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -254,10 +266,288 @@ export default function TeacherReportsPage() {
   const studentUnits = selectedStudent && !isMiddleOrHigh ? getStudentUnits(selectedStudent.id) : []
   const middleUnitGroups = selectedStudent && isMiddleOrHigh ? getMiddleUnitGroups(selectedStudent.id) : []
 
+
+  // ── 월간보고서 데이터 로딩 ──
+  async function loadMonthlyData(student: Student, year: number, month: number) {
+    setMLoading(true)
+    setMData(null)
+    setMComment('')
+    const startStr = `${year}-${String(month).padStart(2,'0')}-01`
+    const endDate = new Date(year, month, 0)
+    const endStr = `${year}-${String(month).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`
+
+    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }] = await Promise.all([
+      supabase.from('class_sessions').select('*').eq('student_id', student.id).gte('session_date', startStr).lte('session_date', endStr),
+      supabase.from('learning_notes').select('*'),
+      supabase.from('student_worksheets').select('*').eq('student_id', student.id),
+      supabase.from('exams').select('*').eq('student_id', student.id).gte('exam_date', startStr).lte('exam_date', endStr),
+      supabase.from('student_textbooks').select('*').eq('student_id', student.id).eq('status','assigned'),
+      supabase.from('progress_checks').select('*').eq('student_id', student.id),
+    ])
+
+    const sessions = sessionsData ?? []
+    const sessionIds = sessions.map((s: any) => s.id)
+    const notes = (notesData ?? []).filter((n: any) => sessionIds.includes(n.session_id))
+
+    const attendance = { 정시: 0, 지각: 0, 결석: 0 }
+    notes.forEach((n: any) => {
+      if (n.attendance === '정시') attendance.정시++
+      else if (n.attendance === '지각') attendance.지각++
+      else if (n.attendance === '결석') attendance.결석++
+    })
+    const totalSessions = sessions.length
+
+    const hwNotes = notes.filter((n: any) => n.attendance !== '결석')
+    const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
+    const hwRate = hwNotes.length > 0 ? Math.round(hwDone / hwNotes.length * 100) : 0
+
+    const monthWS = (wsData ?? []).filter((w: any) => w.assigned_at >= startStr && w.assigned_at <= endStr)
+    const scoredWS = monthWS.filter((w: any) => w.score != null)
+    const avgScore = scoredWS.length > 0 ? Math.round(scoredWS.reduce((s: number, w: any) => s + w.score, 0) / scoredWS.length) : null
+    const passedWS = monthWS.filter((w: any) => w.status === 'passed').length
+    const passRate = monthWS.length > 0 ? Math.round(passedWS / monthWS.length * 100) : 0
+
+    const tbs = (tbData ?? []).filter((t: any) => t.textbook_type !== '연산서')
+    const calcTbs = (tbData ?? []).filter((t: any) => t.textbook_type === '연산서')
+    const tbProgress = tbs.map((tb: any) => {
+      const tbC = concepts.filter((c: any) => c.grade === tb.grade && String(c.semester) === String(tb.semester))
+      if (tbC.length === 0) return null
+      const checked = tbC.filter((c: any) => (pcData ?? []).some((p: any) => p.concept_id === c.id && p.check_count >= 1))
+      return { name: tb.textbook_name, type: tb.textbook_type, rate: Math.round(checked.length / tbC.length * 100) }
+    }).filter(Boolean)
+    const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
+
+    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month })
+    setMLoading(false)
+  }
+
+  async function generateAIComment() {
+    if (!mData) return
+    setMGenerating(true)
+    try {
+      const prompt = `다음은 수학 학원 학생의 한 달 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회, 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
+      const res = await fetch('/api/generate-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
+      const data = await res.json()
+      setMComment(data.message ?? '')
+    } catch { setMComment('') }
+    setMGenerating(false)
+  }
+
+  async function saveAsImage() {
+    if (!reportRef.current) return
+    const html2canvas = (await import('html2canvas')).default
+    const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#1a1a2e' })
+    const url = canvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${mData?.student?.name}_${mData?.year}년${mData?.month}월_학습보고서.png`
+    a.click()
+  }
+
+  const myStudentsForMonthly = students.filter((s) => {
+    if (isAdmin()) return true
+    if (!currentUser?.name || !s.teacher_name) return false
+    return s.teacher_name.split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
+  }).filter((s) => s.name.includes(mSearchText) || s.school?.includes(mSearchText))
+
   return (
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header title="보고서" subtitle="학생별 학습 현황" />
       <div className="px-4 py-4 space-y-4 md:px-6">
+
+        {/* 탭 */}
+        <div className="flex gap-2">
+          {([['report','학습 보고서'],['monthly','월간 보고서']] as [string,string][]).map(([tab,label]) => (
+            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly')}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
+              style={activeTab === tab ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#6b7280' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ══ 월간보고서 탭 ══ */}
+        {activeTab === 'monthly' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">학생 · 월 선택</p>
+              <input value={mSearchText} onChange={e => setMSearchText(e.target.value)} placeholder="이름 검색"
+                className="w-full text-sm rounded-xl px-3 py-2 mb-3 outline-none"
+                style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
+              <div className="flex flex-wrap gap-2 mb-4 max-h-32 overflow-y-auto">
+                {myStudentsForMonthly.map(s => (
+                  <button key={s.id} onClick={() => { setMStudent(s); setMData(null); setMComment('') }}
+                    className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
+                    style={mStudent?.id === s.id ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
+                    {s.name} <span style={{ opacity: 0.5 }}>{s.grade}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 items-center">
+                <select value={mYear} onChange={e => setMYear(Number(e.target.value))}
+                  className="text-sm rounded-xl px-3 py-2 outline-none flex-1"
+                  style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                  {[2024,2025,2026].map(y => <option key={y} value={y}>{y}년</option>)}
+                </select>
+                <select value={mMonth} onChange={e => setMMonth(Number(e.target.value))}
+                  className="text-sm rounded-xl px-3 py-2 outline-none flex-1"
+                  style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                  {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+                </select>
+                <button onClick={() => mStudent && loadMonthlyData(mStudent, mYear, mMonth)}
+                  disabled={!mStudent || mLoading}
+                  className="px-4 py-2 rounded-xl text-sm font-bold"
+                  style={{ background: mStudent ? '#1a1a2e' : '#e5e7eb', color: mStudent ? 'white' : '#9ca3af' }}>
+                  {mLoading ? '로딩...' : '불러오기'}
+                </button>
+              </div>
+            </div>
+
+            {mData && (
+              <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">선생님 한 줄 평</p>
+                  <button onClick={generateAIComment} disabled={mGenerating}
+                    className="text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5"
+                    style={{ background: '#F0FBF7', color: '#085041', border: '1px solid #9FE1CB' }}>
+                    <i className="ti ti-sparkles" style={{ fontSize: 12 }} />
+                    {mGenerating ? 'AI 생성 중...' : 'AI 자동생성'}
+                  </button>
+                </div>
+                <textarea value={mComment} onChange={e => setMComment(e.target.value)}
+                  placeholder="학부모에게 전달할 한 줄 평을 입력하거나 AI 자동생성을 눌러주세요" rows={3}
+                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none resize-none"
+                  style={{ background: '#f9fafb', border: '1px solid #e5e7eb', lineHeight: 1.6 }} />
+              </div>
+            )}
+
+            {mData && (
+              <>
+                {/* 보고서 카드 (이미지 캡처 대상) */}
+                <div ref={reportRef} style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', color: 'white' }}>
+                  {/* 헤더 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>수학의지혜 · MONTHLY REPORT</div>
+                      <div style={{ fontSize: 22, fontWeight: 900 }}>{mData.student.name}</div>
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{mData.student.school} · {mData.student.grade} · {currentUser?.name} 선생님</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: '#9FE1CB', lineHeight: 1 }}>{mData.month}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>월 보고서 · {mData.year}</div>
+                    </div>
+                  </div>
+                  <div style={{ height: 1, background: 'linear-gradient(90deg, #9FE1CB, transparent)', marginBottom: 20 }} />
+
+                  {/* 출결 + 과제 */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>출결 현황</div>
+                      <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>{mData.totalSessions}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 2 }}>회</span></div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <span style={{ fontSize: 10, color: '#9FE1CB' }}>정시 {mData.attendance.정시}</span>
+                        <span style={{ fontSize: 10, color: '#FAEEDA' }}>지각 {mData.attendance.지각}</span>
+                        <span style={{ fontSize: 10, color: '#F5C4B3' }}>결석 {mData.attendance.결석}</span>
+                      </div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
+                      <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>{mData.hwRate}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 1 }}>%</span></div>
+                      <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
+                        <div style={{ height: 4, borderRadius: 4, width: `${mData.hwRate}%`, background: mData.hwRate >= 80 ? '#9FE1CB' : mData.hwRate >= 60 ? '#FAEEDA' : '#F5C4B3' }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 학습지 */}
+                  {mData.monthWS > 0 && (
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>학습지 현황</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
+                        <div><div style={{ fontSize: 18, fontWeight: 900 }}>{mData.monthWS}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>총 학습지</div></div>
+                        <div><div style={{ fontSize: 18, fontWeight: 900, color: mData.avgScore != null ? (mData.avgScore >= 85 ? '#9FE1CB' : mData.avgScore >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>{mData.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div></div>
+                        <div><div style={{ fontSize: 18, fontWeight: 900, color: mData.passRate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{mData.passRate}%</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>통과율</div></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 교재 진도 */}
+                  {(mData.tbProgress.length > 0 || mData.calcProgress.length > 0) && (
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {mData.tbProgress.map((tb: any, i: number) => (
+                          <div key={i}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{tb.rate}%</span>
+                            </div>
+                            <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
+                              <div style={{ height: 4, borderRadius: 4, width: `${tb.rate}%`, background: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
+                            </div>
+                          </div>
+                        ))}
+                        {mData.calcProgress.map((tb: any, i: number) => (
+                          <div key={`c${i}`}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name} <span style={{ color: '#c4b5fd', fontSize: 9 }}>연산</span></span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd' }}>{tb.percent}%</span>
+                            </div>
+                            <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
+                              <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: '#c4b5fd' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 평가 */}
+                  {mData.monthExams.length > 0 && (
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>평가 성적</div>
+                      {mData.monthExams.map((e: any) => {
+                        const pct = e.total_score > 0 ? Math.round(e.score / e.total_score * 100) : null
+                        return (
+                          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{e.exam_type}{e.unit ? ` · ${e.unit}` : ''}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: pct != null ? (pct >= 85 ? '#9FE1CB' : pct >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
+                              {e.score != null ? `${e.score}/${e.total_score} (${pct}%)` : '미채점'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* 한 줄 평 */}
+                  {mComment && (
+                    <div style={{ background: 'rgba(159,225,203,0.1)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.3)', marginBottom: 12 }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>선생님 코멘트</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>{mComment}</div>
+                    </div>
+                  )}
+
+                  {/* 푸터 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>수학의지혜 학원</div>
+                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{mData.year}.{String(mData.month).padStart(2,'0')}</div>
+                  </div>
+                </div>
+
+                <button onClick={saveAsImage}
+                  className="w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ background: '#1a1a2e', color: 'white' }}>
+                  <i className="ti ti-download" style={{ fontSize: 16 }} />
+                  이미지 저장 (카카오톡 전송용)
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ══ 기존 학습보고서 탭 ══ */}
+        {activeTab === 'report' && (
 
         {/* 학생 선택 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -405,9 +695,10 @@ export default function TeacherReportsPage() {
                         if (tbConcepts.length === 0) return null
 
                         const myChecks = progressChecks.filter((p) => p.student_id === selectedStudent.id)
+                        const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
 
                         const checkedConcepts = tbConcepts.filter((c) =>
-                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= 1)
+                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= targetCount)
                         )
                         const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
                         const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
@@ -450,8 +741,8 @@ export default function TeacherReportsPage() {
                                     <div className="flex flex-wrap gap-1">
                                       {chConcepts.map((c) => {
                                         const check = myChecks.find((p) => p.concept_id === c.id)
-                                        const done = check && check.check_count >= 1
-                                        const partial = false
+                                        const done = check && check.check_count >= targetCount
+                                        const partial = check && check.check_count > 0 && check.check_count < targetCount
                                         return (
                                           <div key={c.id}
                                             title={c.concept_name}
@@ -945,6 +1236,7 @@ export default function TeacherReportsPage() {
             </div>
           )
         })()}
+        )}
       </div>
     </div>
   )
