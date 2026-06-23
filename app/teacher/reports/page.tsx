@@ -233,8 +233,7 @@ export default function TeacherReportsPage() {
 
   // ── 중등용: 단원/차시별 1차/오답유사 점수 ──
   function getMiddleUnitGroups(studentId: string) {
-    const studentWS = worksheets.filter((w) => w.student_id === studentId)
-    // unit 기준으로 그룹핑
+    const studentWS = worksheets.filter((w) => w.student_id === studentId && w.worksheet_type !== 'twin')
     const unitMap: Record<string, WorksheetRecord[]> = {}
     studentWS.forEach((w) => {
       const key = `${w.unit}__${w.unit_name ?? ''}`
@@ -243,7 +242,6 @@ export default function TeacherReportsPage() {
     })
     return Object.entries(unitMap).map(([key, records]) => {
       const [unit, unit_name] = key.split('__')
-      // 1차: main, 오답유사: similar
       const mainRecords = records.filter((r) => r.worksheet_type === 'main').sort(
         (a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime()
       )
@@ -251,6 +249,27 @@ export default function TeacherReportsPage() {
         (a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime()
       )
       return { unit, unit_name, mainRecords, similarRecords, allRecords: records }
+    })
+  }
+
+  function getTwinGroups(studentId: string) {
+    const twinWS = worksheets.filter((w) => w.student_id === studentId && w.worksheet_type === 'twin')
+    // unit(대단원) 기준 그룹핑
+    const unitMap: Record<string, WorksheetRecord[]> = {}
+    twinWS.forEach((w) => {
+      const key = w.unit ?? '기타'
+      if (!unitMap[key]) unitMap[key] = []
+      unitMap[key].push(w)
+    })
+    return Object.entries(unitMap).map(([unit, records]) => {
+      // 개념명 목록에서 첫번째~마지막 (대단원명(소단원~소단원))
+      const concepts = records.map(r => r.unit_name ?? '').filter(Boolean)
+      const firstConcept = concepts[0] ?? ''
+      const lastConcept = concepts[concepts.length - 1] ?? ''
+      const rangeLabel = firstConcept === lastConcept || !lastConcept
+        ? firstConcept
+        : `${firstConcept} ~ ${lastConcept}`
+      return { unit, rangeLabel, records: records.sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime()) }
     })
   }
 
@@ -274,6 +293,7 @@ export default function TeacherReportsPage() {
 
   const studentUnits = selectedStudent && !isMiddleOrHigh ? getStudentUnits(selectedStudent.id) : []
   const middleUnitGroups = selectedStudent && isMiddleOrHigh ? getMiddleUnitGroups(selectedStudent.id) : []
+  const twinGroups = selectedStudent ? getTwinGroups(selectedStudent.id) : []
 
 
   // ── 월간보고서 데이터 로딩 ──
@@ -997,7 +1017,50 @@ export default function TeacherReportsPage() {
                   })}
                 </div>
               )
-            ) : (
+            ) : null}
+
+            {/* ── 쌍둥이학습지 현황 ── */}
+            {twinGroups.length > 0 && (
+              <div className="border-b border-gray-100">
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#EFF6FF', borderBottom: '1px solid #dbeafe' }}>
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#dbeafe' }}>
+                    <i className="ti ti-copy" style={{ fontSize: 14, color: '#1e3a5f' }} />
+                  </div>
+                  <span className="text-sm font-bold" style={{ color: '#1e3a5f' }}>쌍둥이학습지 현황</span>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {twinGroups.map(({ unit, rangeLabel, records }) => (
+                    <div key={unit} className="px-4 py-3">
+                      <p className="text-xs font-bold text-gray-800 mb-2">
+                        {unit}
+                        {rangeLabel && <span className="text-gray-400 font-normal ml-1">({rangeLabel})</span>}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {records.map((r) => {
+                          const scoreC = r.score == null ? 'text-gray-400' : r.score >= 85 ? 'text-green-600' : r.score >= 80 ? 'text-yellow-600' : 'text-red-500'
+                          const scoreBgC = r.score == null ? 'bg-white' : r.score >= 85 ? 'bg-green-50' : r.score >= 80 ? 'bg-yellow-50' : 'bg-red-50'
+                          return (
+                            <div key={r.id} className={`px-3 py-2 rounded-xl text-center min-w-[72px] ${scoreBgC}`}
+                              style={{ border: '1px solid #dbeafe' }}>
+                              <p className="text-[10px] mb-0.5" style={{ color: '#3b82f6' }}>{r.memo ?? '1차'}</p>
+                              {r.score != null ? (
+                                <p className={`text-sm font-black ${scoreC}`}>{r.score}점</p>
+                              ) : (
+                                <p className="text-xs font-bold" style={{ color: r.status === 'assigned' ? '#3b82f6' : '#f97316' }}>
+                                  {r.status === 'assigned' ? '과제중' : '채점대기'}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!isMiddleOrHigh && (
               /* ── 초등 진단표 ── */
               studentUnits.length === 0 ? (
                 <div className="p-8 text-center">

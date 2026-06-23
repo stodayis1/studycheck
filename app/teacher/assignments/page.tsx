@@ -307,7 +307,11 @@ export default function TeacherAssignmentsPage() {
     if (isNaN(score) || score < 0 || score > 100) { alert('0~100 사이 점수를 입력해주세요.'); return }
     setSavingScore(true)
     await supabase.from('student_worksheets').update({ score }).eq('id', scoreWS.id)
-    if (scoreWS.status === 'submitted') {
+
+    if (scoreWS.worksheet_type === 'twin') {
+      // 쌍둥이학습지: 점수 입력 후 무조건 scored (레벨업/재도전/완료 선택)
+      await supabase.from('student_worksheets').update({ status: 'scored' }).eq('id', scoreWS.id)
+    } else if (scoreWS.status === 'submitted') {
       if (score < 80) {
         await supabase.from('student_worksheets').update({ status: 'retry' }).eq('id', scoreWS.id)
         await supabase.from('student_worksheets').insert({
@@ -1576,7 +1580,9 @@ export default function TeacherAssignmentsPage() {
                   background: parseInt(inputScore) >= 85 ? '#EAF3DE' : parseInt(inputScore) >= 80 ? '#FAEEDA' : '#fee2e2',
                   color: parseInt(inputScore) >= 85 ? '#27500A' : parseInt(inputScore) >= 80 ? '#633806' : '#991b1b'
                 }}>
-                {parseInt(inputScore) >= 85 ? '✓ 레벨업/재도전 선택' : parseInt(inputScore) >= 80 ? '△ 레벨업/재도전 선택' : '✕ 오답유사 자동 배정'}
+                {scoreWS?.worksheet_type === 'twin'
+                  ? (parseInt(inputScore) >= 80 ? '✓ 점수 저장 후 다음 액션 선택' : '△ 점수 저장 후 다음 액션 선택')
+                  : (parseInt(inputScore) >= 85 ? '✓ 레벨업/재도전 선택' : parseInt(inputScore) >= 80 ? '△ 레벨업/재도전 선택' : '✕ 오답유사 자동 배정')}
               </div>
             )}
             <div className="flex gap-2">
