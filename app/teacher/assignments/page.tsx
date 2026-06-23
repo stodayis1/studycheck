@@ -142,6 +142,15 @@ export default function TeacherAssignmentsPage() {
   const [mwRangeStart, setMwRangeStart] = useState<MiddleWorksheet | null>(null)
   const [mwLevel, setMwLevel] = useState(2.5)
 
+  // 쌍둥이 학습지 상태
+  const [wsType, setWsType] = useState<'level' | 'twin'>('level')
+  const [twinStudent, setTwinStudent] = useState<Student | null>(null)
+  const [twinTextbookId, setTwinTextbookId] = useState('')
+  const [twinConcepts, setTwinConcepts] = useState<Concept[]>([])
+  const [twinSelectedConcepts, setTwinSelectedConcepts] = useState<string[]>([])
+  const [twinRound, setTwinRound] = useState<'1차' | '2차' | '오답' | '오답유사'>('1차')
+  const [twinAssigning, setTwinAssigning] = useState(false)
+
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [scoreWS, setScoreWS] = useState<StudentWorksheet | null>(null)
   const [inputScore, setInputScore] = useState('')
