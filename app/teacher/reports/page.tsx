@@ -958,6 +958,10 @@ export default function TeacherReportsPage() {
                                       {r.status === 'assigned' ? '과제중' : '채점대기'}
                                     </p>}
                               </div>
+                              <button onClick={() => deleteWorksheet(r.id)}
+                                className="shrink-0 text-gray-300 hover:text-red-500 transition-colors">
+                                <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                              </button>
                             </div>
                           )
                         })}
@@ -996,6 +1000,10 @@ export default function TeacherReportsPage() {
                                       {r.status === 'assigned' ? '과제중' : '채점대기'}
                                     </p>}
                               </div>
+                              <button onClick={() => deleteWorksheet(r.id)}
+                                className="shrink-0 text-gray-300 hover:text-red-500 transition-colors">
+                                <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                              </button>
                             </div>
                           )
                         })}
