@@ -8,16 +8,23 @@ const client = new Anthropic({
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const {
-      studentName, studentGrade, date,
-      textbookName, chapter, attendance,
-      worksheetSubmitted, worksheetScore,
-      textbookSubmitted, workbookDone,
-      videoCompleted, videoStarted,
-      teacherMemo, recentSubmitRate,
-    } = body
 
-    const prompt = `당신은 수학학원 선생님입니다. 학부모에게 보내는 따뜻하고 전문적인 알림장을 작성해주세요.
+    let prompt: string
+
+    // 월간보고서 한줄평: prompt 직접 전달
+    if (body.prompt) {
+      prompt = body.prompt
+    } else {
+      // 기존 알림장 AI 방식
+      const {
+        studentName, studentGrade, date,
+        textbookName, chapter, attendance,
+        worksheetSubmitted, worksheetScore,
+        videoCompleted, videoStarted,
+        teacherMemo, recentSubmitRate,
+      } = body
+
+      prompt = `당신은 수학학원 선생님입니다. 학부모에게 보내는 따뜻하고 전문적인 알림장을 작성해주세요.
 
 학생 정보:
 - 이름: ${studentName}
@@ -38,6 +45,7 @@ export async function POST(req: NextRequest) {
 - 가정에서 도움줄 수 있는 내용 포함
 - "안녕하세요" 인사로 시작하고 "감사합니다" 로 마무리
 - 마크다운 없이 순수 텍스트로만 작성`
+    }
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-5',
@@ -49,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ message: text })
   } catch (error) {
-    console.error('AI 알림장 생성 오류:', error)
+    console.error('AI 생성 오류:', error)
     return NextResponse.json({ message: null }, { status: 500 })
   }
 }

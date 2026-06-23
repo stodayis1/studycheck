@@ -424,7 +424,7 @@ export default function TeacherReportsPage() {
             {mData && (
               <>
                 {/* 보고서 카드 (이미지 캡처 대상) */}
-                <div ref={reportRef} style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', color: 'white' }}>
+                <div ref={reportRef} style={{ background: '#0f3460', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', color: 'white' }}>
                   {/* 헤더 */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                     <div>
@@ -437,7 +437,7 @@ export default function TeacherReportsPage() {
                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>월 보고서 · {mData.year}</div>
                     </div>
                   </div>
-                  <div style={{ height: 1, background: 'linear-gradient(90deg, #9FE1CB, transparent)', marginBottom: 20 }} />
+                  <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20 }} />
 
                   {/* 출결 + 과제 */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
