@@ -880,7 +880,8 @@ export default function TeacherReportsPage() {
 
                   {hasLevel && (
                     <div className="px-4 pt-4 pb-2">
-                      <p className="text-[10px] font-bold mb-3 flex items-center gap-1.5" style={{ color: '#993C1D' }}>
+                      <p className="text-[10px] font-bold mb-3 flex items-center gap-1.5"
+                        style={{ color: '#993C1D', background: '#FAECE7', display: 'inline-flex', padding: '3px 8px', borderRadius: 6 }}>
                         <i className="ti ti-chart-bar" style={{ fontSize: 11 }} />레벨학습지
                       </p>
                       <div className="grid grid-cols-3 gap-2 mb-4">
@@ -898,15 +899,19 @@ export default function TeacherReportsPage() {
                         </div>
                       </div>
                       <p className="text-[10px] text-gray-400 mb-2">레벨별 분포 <span className="ml-1 font-semibold text-gray-600">최고 {maxLevel}레벨</span></p>
-                      <div className="flex items-end gap-2 h-10 mb-2">
+                      <div className="space-y-1.5 mb-2">
                         {levels.map(([level, count]) => {
-                          const barH = Math.max(4, Math.round((count / maxCount) * 36))
                           const lv = Number(level)
+                          const pct = Math.round((count / maxCount) * 100)
+                          const barColor = lv >= 4 ? '#F5C4B3' : lv >= 2.5 ? '#9FE1CB' : '#D3D1C7'
+                          const textColor = lv >= 4 ? '#993C1D' : lv >= 2.5 ? '#085041' : '#6b7280'
                           return (
-                            <div key={level} className="flex-1 flex flex-col items-center justify-end gap-0.5">
-                              <span className="text-[9px] font-bold" style={{ color: lv >= 4 ? '#993C1D' : '#6b7280' }}>{count}</span>
-                              <div className="w-full rounded-t-sm" style={{ height: barH, background: lv >= 4 ? '#F5C4B3' : '#D3D1C7' }} />
-                              <span className="text-[9px] text-gray-400">{level}레벨</span>
+                            <div key={level} className="flex items-center gap-2">
+                              <span className="text-[10px] font-semibold shrink-0 w-12 text-right" style={{ color: textColor }}>{level}레벨</span>
+                              <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: '#f3f4f6' }}>
+                                <div className="h-4 rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+                              </div>
+                              <span className="text-[10px] font-bold shrink-0 w-4" style={{ color: textColor }}>{count}</span>
                             </div>
                           )
                         })}
@@ -918,7 +923,8 @@ export default function TeacherReportsPage() {
 
                   {hasTwin && (
                     <div className="px-4 pt-4 pb-4">
-                      <p className="text-[10px] font-bold mb-3 flex items-center gap-1.5" style={{ color: '#1e3a5f' }}>
+                      <p className="text-[10px] font-bold mb-3 flex items-center gap-1.5"
+                        style={{ color: '#1e3a5f', background: '#EFF6FF', display: 'inline-flex', padding: '3px 8px', borderRadius: 6 }}>
                         <i className="ti ti-copy" style={{ fontSize: 11 }} />쌍둥이학습지
                       </p>
                       <div className="space-y-2">
