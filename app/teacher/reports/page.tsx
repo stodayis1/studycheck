@@ -254,23 +254,17 @@ export default function TeacherReportsPage() {
 
   function getTwinGroups(studentId: string) {
     const twinWS = worksheets.filter((w) => w.student_id === studentId && w.worksheet_type === 'twin')
-    // unit(대단원) 기준 그룹핑
-    const unitMap: Record<string, WorksheetRecord[]> = {}
-    twinWS.forEach((w) => {
-      const key = w.unit ?? '기타'
-      if (!unitMap[key]) unitMap[key] = []
-      unitMap[key].push(w)
-    })
-    return Object.entries(unitMap).map(([unit, records]) => {
-      // 개념명 목록에서 첫번째~마지막 (대단원명(소단원~소단원))
-      const concepts = records.map(r => r.unit_name ?? '').filter(Boolean)
-      const firstConcept = concepts[0] ?? ''
-      const lastConcept = concepts[concepts.length - 1] ?? ''
-      const rangeLabel = firstConcept === lastConcept || !lastConcept
-        ? firstConcept
-        : `${firstConcept} ~ ${lastConcept}`
-      return { unit, rangeLabel, records: records.sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime()) }
-    })
+    // 각 레코드별로 독립 그룹 (같은 단원도 차수별로 개별 표시)
+    // unit_name은 "개념1, 개념2, ..." 형태 → 첫개념~마지막개념으로 요약
+    return twinWS
+      .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+      .map(w => {
+        const conceptList = (w.unit_name ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+        const first = conceptList[0] ?? ''
+        const last = conceptList[conceptList.length - 1] ?? ''
+        const rangeLabel = !first ? '' : first === last ? first : `${first} ~ ${last}`
+        return { unit: w.unit ?? '', rangeLabel, record: w }
+      })
   }
 
   function scoreColor(score: number | null) {
@@ -1029,33 +1023,33 @@ export default function TeacherReportsPage() {
                   <span className="text-sm font-bold" style={{ color: '#1e3a5f' }}>쌍둥이학습지 현황</span>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {twinGroups.map(({ unit, rangeLabel, records }) => (
-                    <div key={unit} className="px-4 py-3">
-                      <p className="text-xs font-bold text-gray-800 mb-2">
-                        {unit}
-                        {rangeLabel && <span className="text-gray-400 font-normal ml-1">({rangeLabel})</span>}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {records.map((r) => {
-                          const scoreC = r.score == null ? 'text-gray-400' : r.score >= 85 ? 'text-green-600' : r.score >= 80 ? 'text-yellow-600' : 'text-red-500'
-                          const scoreBgC = r.score == null ? 'bg-white' : r.score >= 85 ? 'bg-green-50' : r.score >= 80 ? 'bg-yellow-50' : 'bg-red-50'
-                          return (
-                            <div key={r.id} className={`px-3 py-2 rounded-xl text-center min-w-[72px] ${scoreBgC}`}
-                              style={{ border: '1px solid #dbeafe' }}>
-                              <p className="text-[10px] mb-0.5" style={{ color: '#3b82f6' }}>{r.memo ?? '1차'}</p>
-                              {r.score != null ? (
-                                <p className={`text-sm font-black ${scoreC}`}>{r.score}점</p>
-                              ) : (
-                                <p className="text-xs font-bold" style={{ color: r.status === 'assigned' ? '#3b82f6' : '#f97316' }}>
-                                  {r.status === 'assigned' ? '과제중' : '채점대기'}
-                                </p>
-                              )}
-                            </div>
-                          )
-                        })}
+                  {twinGroups.map(({ unit, rangeLabel, record }, idx) => {
+                    const r = record
+                    const scoreC = r.score == null ? 'text-gray-400' : r.score >= 85 ? 'text-green-600' : r.score >= 80 ? 'text-yellow-600' : 'text-red-500'
+                    const scoreBgC = r.score == null ? 'bg-white' : r.score >= 85 ? 'bg-green-50' : r.score >= 80 ? 'bg-yellow-50' : 'bg-red-50'
+                    return (
+                      <div key={idx} className="px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-800">
+                            {unit}
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded ml-1.5"
+                              style={{ background: '#EFF6FF', color: '#1e3a5f' }}>{r.memo ?? '1차'}</span>
+                          </p>
+                          {rangeLabel && <p className="text-[10px] text-gray-400 mt-0.5 truncate">({rangeLabel})</p>}
+                        </div>
+                        <div className={`px-3 py-2 rounded-xl text-center min-w-[64px] ${scoreBgC}`}
+                          style={{ border: '1px solid #dbeafe', flexShrink: 0 }}>
+                          {r.score != null ? (
+                            <p className={`text-sm font-black ${scoreC}`}>{r.score}점</p>
+                          ) : (
+                            <p className="text-xs font-bold" style={{ color: r.status === 'assigned' ? '#3b82f6' : '#f97316' }}>
+                              {r.status === 'assigned' ? '과제중' : '채점대기'}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

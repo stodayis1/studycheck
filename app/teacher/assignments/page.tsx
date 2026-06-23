@@ -717,10 +717,17 @@ export default function TeacherAssignmentsPage() {
                       <tbody className="divide-y divide-gray-50">
                         {activeTwinWS.map((w) => {
                           const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
+                          // 단원명 요약: 첫개념~마지막개념
+                          const conceptList = (w.unit_name ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+                          const first = conceptList[0] ?? ''
+                          const last = conceptList[conceptList.length - 1] ?? ''
+                          const unitDisplay = w.unit ? (first && first !== last ? `${w.unit} (${first} ~ ${last})` : w.unit) : first
                           return (
                             <tr key={w.id} className="hover:bg-blue-50/30">
                               <td className="px-3 py-2.5 font-bold text-gray-900">{getStudentName(w.student_id)}</td>
-                              <td className="px-3 py-2.5 text-gray-600 max-w-[140px] truncate">{w.unit_name || w.unit}</td>
+                              <td className="px-3 py-2.5 text-gray-600 max-w-[180px]">
+                                <span className="text-xs block truncate" title={unitDisplay}>{unitDisplay}</span>
+                              </td>
                               <td className="px-3 py-2.5">
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                                   style={{ background: '#EFF6FF', color: '#1e3a5f' }}>{w.memo}</span>
@@ -734,20 +741,40 @@ export default function TeacherAssignmentsPage() {
                                 <span className={cx('font-bold', cfg.color)}>{cfg.label}</span>
                               </td>
                               <td className="px-3 py-2.5 whitespace-nowrap">
-                                {(w.status === 'submitted' || w.status === 'similar_submitted') && (
-                                  <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
-                                    className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                                    style={{ background: '#EFF6FF', color: '#1e3a5f', border: '1px solid #bfdbfe' }}>
-                                    점수입력
+                                <div className="flex items-center gap-1">
+                                  {w.status === 'assigned' && (
+                                    <button onClick={() => handleSubmitted(w.id, w.status)}
+                                      className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                      style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
+                                      제출확인
+                                    </button>
+                                  )}
+                                  {(w.status === 'submitted' || w.status === 'similar_submitted') && (
+                                    <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
+                                      className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                      style={{ background: '#EFF6FF', color: '#1e3a5f', border: '1px solid #bfdbfe' }}>
+                                      점수입력
+                                    </button>
+                                  )}
+                                  {w.status === 'scored' && (
+                                    <div className="flex gap-1">
+                                      <button onClick={() => { supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id).then(() => fetchData()) }}
+                                        className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                        style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>
+                                        완료
+                                      </button>
+                                      <button onClick={() => { supabase.from('student_worksheets').update({ status: 'assigned' }).eq('id', w.id).then(() => fetchData()) }}
+                                        className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                        style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
+                                        재도전
+                                      </button>
+                                    </div>
+                                  )}
+                                  <button onClick={() => handleDelete(w.id)}
+                                    className="px-1.5 py-1 rounded-lg text-[10px] text-gray-300 hover:text-red-500 transition-colors">
+                                    <i className="ti ti-trash" style={{ fontSize: 12 }} />
                                   </button>
-                                )}
-                                {w.status === 'assigned' && (
-                                  <button onClick={() => handleSubmitted(w.id, w.status)}
-                                    className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                                    style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
-                                    제출확인
-                                  </button>
-                                )}
+                                </div>
                               </td>
                             </tr>
                           )
