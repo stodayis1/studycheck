@@ -24,6 +24,7 @@ const NAV_ITEMS = [
 ]
 
 const BULK_ITEM = { href: '/teacher/bulk-progress', label: '진도일괄입력', icon: 'ti-list-check' }
+const IMPORT_ITEM = { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' }
 
 // 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
 const MOBILE_MAIN = NAV_ITEMS.slice(0, 4)
@@ -45,8 +46,8 @@ export function TeacherSidebar() {
 
   const showBulk = isAdmin() || bulkEnabled
 
-  const desktopNavItems = showBulk ? [...NAV_ITEMS, BULK_ITEM] : NAV_ITEMS
-  const mobileMoreItems = showBulk ? [...MOBILE_MORE, BULK_ITEM] : MOBILE_MORE
+  const desktopNavItems = showBulk ? [...NAV_ITEMS, BULK_ITEM, IMPORT_ITEM] : [...NAV_ITEMS, IMPORT_ITEM]
+  const mobileMoreItems = showBulk ? [...MOBILE_MORE, BULK_ITEM, IMPORT_ITEM] : [...MOBILE_MORE, IMPORT_ITEM]
 
   return (
     <>
