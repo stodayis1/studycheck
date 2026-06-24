@@ -209,7 +209,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
       supabase.from('student_worksheets').select('*').not('status', 'eq', 'passed'),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
-      supabase.from('progress_checks').select('*'),
+      supabase.from('progress_checks').select('*').limit(10000),
       supabase.from('video_watch_logs').select('*'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
     ])
@@ -342,6 +342,15 @@ export default function TeacherLearningNotesPage() {
       .sort((a, b) => b.session_date.localeCompare(a.session_date))[0] ?? null
 
     setNoteStudent(student)
+    // 해당 학생 progress_checks만 다시 로딩 (1000행 limit 우회)
+    supabase.from('progress_checks').select('*').eq('student_id', student.id).then(({ data }) => {
+      if (data && data.length > 0) {
+        setProgressChecks((prev) => [
+          ...prev.filter((p) => p.student_id !== student.id),
+          ...data,
+        ])
+      }
+    })
     setNoteSession(session ?? null)
     setNoteTab('basic')
     setNoteProgress(session?.progress_content ?? session?.today_textbook_name ?? '')
