@@ -526,16 +526,15 @@ export default function TeacherLearningNotesPage() {
         if (sel.conceptIds.length === 0) continue
         const tb = myTBs.find((t) => t.id === tbId)
         if (!tb) continue
-        const checkCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
         await Promise.all(sel.conceptIds.map(async (conceptId) => {
           const { data: existing } = await supabase
             .from('progress_checks').select('id, check_count')
             .eq('student_id', noteStudent.id).eq('concept_id', conceptId).single()
           if (existing) {
-            if (existing.check_count < checkCount)
-              await supabase.from('progress_checks').update({ check_count: checkCount, updated_at: new Date().toISOString() }).eq('id', existing.id)
+            if (existing.check_count < 1)
+              await supabase.from('progress_checks').update({ check_count: 1 }).eq('id', existing.id)
           } else {
-            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: checkCount })
+            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1 })
           }
         }))
       }
@@ -546,11 +545,10 @@ export default function TeacherLearningNotesPage() {
         for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
           const tb = myTBs2.find((t) => t.id === tbId)
           if (!tb) continue
-          const checkCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
           for (const conceptId of sel.conceptIds) {
             const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId)
-            if (idx >= 0) { if (updated[idx].check_count < checkCount) updated[idx] = { ...updated[idx], check_count: checkCount } }
-            else updated.push({ id: 'temp_' + conceptId, student_id: noteStudent!.id, concept_id: conceptId, check_count: checkCount })
+            if (idx >= 0) { if (updated[idx].check_count < 1) updated[idx] = { ...updated[idx], check_count: 1 } }
+            else updated.push({ id: 'temp_' + conceptId, student_id: noteStudent!.id, concept_id: conceptId, check_count: 1 })
           }
         }
         return updated
@@ -1357,7 +1355,7 @@ export default function TeacherLearningNotesPage() {
                             const tbConceptList = showConcepts && sel.chapter && sel.subChapters.length > 0
                               ? tbConcepts.filter((c) => c.chapter === sel.chapter && sel.subChapters.includes(c.sub_chapter))
                               : []
-                            const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+
 
                             const updateSel = (patch: Partial<typeof sel>) => {
                               setNoteProgressByTB((prev) => ({
@@ -1483,8 +1481,7 @@ export default function TeacherLearningNotesPage() {
                                               const existingCheck = noteStudent
                                                 ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id)
                                                 : null
-                                              const fullyDone = existingCheck && existingCheck.check_count >= targetCount
-                                              const alreadyDone = existingCheck && existingCheck.check_count > 0
+                                              const done = existingCheck && existingCheck.check_count >= 1
 
                                               return (
                                                 <button key={c.id}
@@ -1504,23 +1501,22 @@ export default function TeacherLearningNotesPage() {
                                                     }
                                                   }}
                                                   className={cx('w-full flex items-center gap-2.5 px-3 py-2.5 text-left border-b border-gray-50 last:border-0 transition-all',
-                                                    selected ? 'bg-amber-50' : fullyDone ? 'bg-white' : 'hover:bg-white')}>
+                                                    selected ? 'bg-amber-50' : done ? 'bg-white' : 'hover:bg-white')}>
                                                   <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
                                                     style={selected ? tc.badgeStyle :
-                                                      fullyDone ? tc.badgeStyle :
-                                                      alreadyDone ? { background: '#e5d5c5', color: '#1f2937' } :
+                                                      done ? tc.badgeStyle :
                                                       { background: '#f3f4f6', color: '#9ca3af' }}>
-                                                    {selected ? '✓' : fullyDone ? '✓' : alreadyDone ? '~' : c.concept_order}
+                                                    {selected ? '✓' : done ? '✓' : c.concept_order}
                                                   </span>
                                                   <span className={cx('text-xs flex-1',
                                                     selected ? 'text-gray-800 font-semibold' :
-                                                    fullyDone ? 'text-gray-400 line-through' : 'text-gray-600')}>
+                                                    done ? 'text-gray-400 line-through' : 'text-gray-600')}>
                                                     {c.concept_name}
                                                   </span>
-                                                  {alreadyDone && !selected && (
+                                                  {done && !selected && (
                                                     <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
-                                                      style={fullyDone ? tc.badgeStyle : { background: '#ffffff', color: '#4b5563' }}>
-                                                      {fullyDone ? '완료' : `${existingCheck.check_count}회`}
+                                                      style={tc.badgeStyle}>
+                                                      완료
                                                     </span>
                                                   )}
                                                 </button>

@@ -49,7 +49,6 @@ export default function BulkProgressPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
-  const [confirmTarget, setConfirmTarget] = useState<{ conceptId: string; label: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => { if (currentUser) fetchStudents() }, [currentUser])
@@ -107,49 +106,51 @@ export default function BulkProgressPage() {
   // 대단원 목록
   const chapters = Array.from(new Set(concepts.map(c => c.chapter))).filter(Boolean)
 
-  function getConceptsUpTo(conceptId: string) {
-    const target = concepts.find(c => c.id === conceptId)
-    if (!target) return []
-    return concepts.filter(c => c.concept_order <= target.concept_order)
-  }
-
-  function getConceptsInChapterAndBefore(chapter: string) {
-    const lastInChapter = [...concepts].filter(c => c.chapter === chapter).sort((a, b) => b.concept_order - a.concept_order)[0]
-    if (!lastInChapter) return []
-    return concepts.filter(c => c.concept_order <= lastInChapter.concept_order)
-  }
-
-  async function bulkMark(toMark: Concept[], label: string) {
+  async function toggleConcept(concept: Concept) {
     if (!selectedStudent) return
-    setSaving(true)
-    // 이미 1 이상인 건 덮어쓰지 않음
-    const rows = toMark
-      .filter(c => getCheckCount(c.id) === 0)
-      .map(c => ({ student_id: selectedStudent.id, concept_id: c.id, check_count: 1 }))
-
-    if (rows.length > 0) {
-      await supabase.from('progress_checks').upsert(rows, {
-        onConflict: 'student_id,concept_id',
-        ignoreDuplicates: false,
-      })
+    const current = getCheckCount(concept.id)
+    const newCount = current >= 1 ? 0 : 1
+    if (newCount === 0) {
+      await supabase.from('progress_checks').delete()
+        .eq('student_id', selectedStudent.id).eq('concept_id', concept.id)
+    } else {
+      await supabase.from('progress_checks').upsert(
+        { student_id: selectedStudent.id, concept_id: concept.id, check_count: 1 },
+        { onConflict: 'student_id,concept_id' }
+      )
     }
-
-    // 로컬 상태 업데이트
     setProgressChecks(prev => {
-      const updated = [...prev]
-      toMark.forEach(c => {
-        const existing = updated.find(p => p.concept_id === c.id)
-        if (!existing) {
-          updated.push({ concept_id: c.id, check_count: 1 })
-        }
-        // 이미 있으면 그대로 유지
-      })
+      const updated = prev.filter(p => p.concept_id !== concept.id)
+      if (newCount > 0) updated.push({ concept_id: concept.id, check_count: newCount })
       return updated
     })
+    showToast(newCount >= 1 ? `✅ "${concept.concept_name}" 완료` : `↩ "${concept.concept_name}" 해제`)
+  }
 
+  async function toggleChapter(chapter: string) {
+    if (!selectedStudent) return
+    const chapterConcepts = concepts.filter(c => c.chapter === chapter)
+    const allDone = chapterConcepts.every(c => getCheckCount(c.id) >= 1)
+    setSaving(true)
+    if (allDone) {
+      // 전체 해제
+      await supabase.from('progress_checks').delete()
+        .eq('student_id', selectedStudent.id)
+        .in('concept_id', chapterConcepts.map(c => c.id))
+      setProgressChecks(prev => prev.filter(p => !chapterConcepts.some(c => c.id === p.concept_id)))
+      showToast(`↩ "${chapter}" 전체 해제`)
+    } else {
+      // 전체 체크
+      const rows = chapterConcepts.map(c => ({ student_id: selectedStudent.id, concept_id: c.id, check_count: 1 }))
+      await supabase.from('progress_checks').upsert(rows, { onConflict: 'student_id,concept_id' })
+      setProgressChecks(prev => {
+        const updated = prev.filter(p => !chapterConcepts.some(c => c.id === p.concept_id))
+        chapterConcepts.forEach(c => updated.push({ concept_id: c.id, check_count: 1 }))
+        return updated
+      })
+      showToast(`✅ "${chapter}" 전체 완료`)
+    }
     setSaving(false)
-    setConfirmTarget(null)
-    showToast(`✅ "${label}" 까지 완료 처리했어요`)
   }
 
   function showToast(msg: string) {
@@ -172,8 +173,8 @@ export default function BulkProgressPage() {
           style={{ background: '#FFF9E6', border: '1px solid #FAEEDA' }}>
           <i className="ti ti-info-circle mt-0.5" style={{ fontSize: 15, color: '#633806', flexShrink: 0 }} />
           <p className="text-xs" style={{ color: '#633806', lineHeight: 1.6 }}>
-            단원이나 개념을 클릭하면 <b>그 이전 모든 개념</b>이 1단계로 완료 처리됩니다.<br />
-            이미 2·3단계로 체크된 개념은 건드리지 않아요.
+            개념을 클릭하면 <b>체크/해제</b>가 토글됩니다.<br />
+            대단원 버튼은 해당 단원 전체를 일괄 체크/해제합니다.
           </p>
         </div>
 
@@ -246,10 +247,8 @@ export default function BulkProgressPage() {
                     <div key={chapter}>
                       {/* 대단원 버튼 */}
                       <button
-                        onClick={() => setConfirmTarget({
-                          conceptId: chapterConcepts[chapterConcepts.length - 1].id,
-                          label: chapter,
-                        })}
+                        onClick={() => toggleChapter(chapter)}
+                        disabled={saving}
                         className="w-full text-left px-3 py-2.5 rounded-xl mb-1.5 flex items-center justify-between transition-all"
                         style={{
                           background: allDone ? '#9FE1CB' : '#F0FBF7',
@@ -258,7 +257,7 @@ export default function BulkProgressPage() {
                         <span className="text-sm font-bold" style={{ color: '#085041' }}>{chapter}</span>
                         <span className="text-[10px] font-medium px-2 py-0.5 rounded-full"
                           style={{ background: allDone ? '#085041' : '#9FE1CB', color: allDone ? 'white' : '#085041' }}>
-                          {allDone ? '완료' : `여기까지`}
+                          {allDone ? '전체해제' : '전체체크'}
                         </span>
                       </button>
 
@@ -268,7 +267,7 @@ export default function BulkProgressPage() {
                           const cnt = getCheckCount(c.id)
                           return (
                             <button key={c.id}
-                              onClick={() => setConfirmTarget({ conceptId: c.id, label: c.concept_name })}
+                              onClick={() => toggleConcept(c)}
                               className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all"
                               style={{ background: cnt >= 1 ? '#F0FBF7' : '#fafafa', border: '1px solid #f3f4f6' }}>
                               <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
@@ -278,10 +277,10 @@ export default function BulkProgressPage() {
                               <span className="text-xs flex-1" style={{ color: cnt >= 1 ? '#085041' : '#6b7280' }}>
                                 {c.concept_name}
                               </span>
-                              {cnt >= 2 && (
+                              {cnt >= 1 && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full"
                                   style={{ background: '#085041', color: 'white' }}>
-                                  {cnt}회
+                                  완료
                                 </span>
                               )}
                             </button>
@@ -297,36 +296,7 @@ export default function BulkProgressPage() {
         )}
       </div>
 
-      {/* 확인 다이얼로그 */}
-      {confirmTarget && selectedStudent && selectedTextbook && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4"
-          onClick={() => setConfirmTarget(null)}>
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm"
-            onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-bold text-gray-800 mb-2">진도 일괄 처리</p>
-            <p className="text-xs text-gray-500 mb-4" style={{ lineHeight: 1.6 }}>
-              <b>{selectedStudent.name}</b> 학생의<br />
-              <b>{selectedTextbook.textbook_name}</b> 에서<br />
-              <b>"{confirmTarget.label}"</b> 까지<br />
-              완료로 기록됩니다. 진행할까요?
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmTarget(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium"
-                style={{ background: '#f3f4f6', color: '#6b7280' }}>
-                취소
-              </button>
-              <button
-                onClick={() => bulkMark(getConceptsUpTo(confirmTarget.conceptId), confirmTarget.label)}
-                disabled={saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold"
-                style={{ background: '#085041', color: 'white' }}>
-                {saving ? '처리 중...' : '완료 처리'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* 토스트 */}
       {toast && (
