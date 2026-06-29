@@ -133,6 +133,7 @@ export default function TeacherAssignmentsPage() {
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkStudentIds, setBulkStudentIds] = useState<string[]>([])
   const [deleteMode, setDeleteMode] = useState(false)
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [selectedWSIds, setSelectedWSIds] = useState<string[]>([])
   const [middleWorksheets, setMiddleWorksheets] = useState<MiddleWorksheet[]>([])
   const [mwSemester, setMwSemester] = useState(1)
@@ -539,159 +540,156 @@ export default function TeacherAssignmentsPage() {
                 </div>
                 {activeLevelWS.length === 0 ? (
                   <p className="text-center text-sm text-gray-400 py-6">진행중인 레벨학습지가 없어요</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr style={{ background: '#fafafa' }}>
-                          {deleteMode && (
-                            <th className="px-2 py-2.5">
-                              <button onClick={() => {
-                                if (selectedWSIds.length === activeLevelWS.length) setSelectedWSIds([])
-                                else setSelectedWSIds(activeLevelWS.map(w => w.id))
-                              }}
-                                className="w-4 h-4 rounded flex items-center justify-center"
-                                style={{ background: selectedWSIds.length === activeLevelWS.length ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
-                                {selectedWSIds.length === activeLevelWS.length && <i className="ti ti-check" style={{ fontSize: 9, color: '#712B13' }} />}
-                              </button>
-                            </th>
-                          )}
-                          {['학생명','학년','단원','레벨','점수','상태','담당','액션'].map((h) => (
-                            <th key={h} className="px-3 py-2.5 text-left font-bold text-gray-500 whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {activeLevelWS.map((w) => {
-                          const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
-                          const student = students.find((s) => s.id === w.student_id)
-                          const isChecked = selectedWSIds.includes(w.id)
-                          return (
-                            <tr key={w.id} className="hover:bg-gray-50"
-                              style={isChecked ? { background: '#FFF5F2' } : {}}>
-                              {deleteMode && (
-                                <td className="px-2 py-2.5">
-                                  <button onClick={() => setSelectedWSIds(prev =>
-                                    isChecked ? prev.filter(id => id !== w.id) : [...prev, w.id]
-                                  )}
-                                    className="w-4 h-4 rounded flex items-center justify-center"
-                                    style={{ background: isChecked ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb', flexShrink: 0 }}>
-                                    {isChecked && <i className="ti ti-check" style={{ fontSize: 9, color: '#712B13' }} />}
-                                  </button>
-                                </td>
-                              )}
-                              <td className="px-3 py-2.5 font-bold text-gray-900 whitespace-nowrap">
-                                {getStudentName(w.student_id)}
-                                {w.worksheet_type === 'similar' && (
-                                  <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded"
-                                    style={{ background: '#FFF5F2', color: '#712B13' }}>오답</span>
+                ) : (() => {
+                  // 학생별 그룹핑
+                  const studentGroups: Record<string, typeof activeLevelWS> = {}
+                  activeLevelWS.forEach(w => {
+                    if (!studentGroups[w.student_id]) studentGroups[w.student_id] = []
+                    studentGroups[w.student_id].push(w)
+                  })
+                  return (
+                    <div className="divide-y divide-gray-50">
+                      {Object.entries(studentGroups).map(([studentId, sWS]) => {
+                        const student = students.find(s => s.id === studentId)
+                        const isExpanded = expandedStudents.has(studentId)
+                        const pendingCount = sWS.filter(w => w.status === 'submitted' || w.status === 'similar_submitted').length
+                        const activeCount = sWS.filter(w => w.status === 'assigned' || w.status === 'similar_assigned').length
+                        const scoredCount = sWS.filter(w => w.status === 'scored' || w.status === 'retry').length
+                        return (
+                          <div key={studentId}>
+                            {/* 학생 헤더 (클릭으로 펼치기) */}
+                            <button
+                              onClick={() => setExpandedStudents(prev => {
+                                const next = new Set(prev)
+                                if (next.has(studentId)) next.delete(studentId)
+                                else next.add(studentId)
+                                return next
+                              })}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-all text-left"
+                              style={{ background: isExpanded ? '#FFF5F2' : 'white' }}>
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                                style={{ background: '#FAECE7', color: '#993C1D' }}>
+                                {student?.name?.[0] ?? '?'}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-gray-800">{student?.name ?? '-'}</p>
+                                <p className="text-[10px] text-gray-400">{student?.grade} · {sWS.length}개 진행중</p>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {pendingCount > 0 && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                    style={{ background: '#FAECE7', color: '#993C1D' }}>채점대기 {pendingCount}</span>
                                 )}
-                                {w.worksheet_type === 'twin' && (
-                                  <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded"
-                                    style={{ background: '#EFF6FF', color: '#1e3a5f' }}>쌍둥이 {w.memo}</span>
+                                {scoredCount > 0 && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                    style={{ background: '#FAEEDA', color: '#633806' }}>결과대기 {scoredCount}</span>
                                 )}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{student?.grade ?? '-'}</td>
-                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{formatUnit(w.grade_level, w.unit, w.unit_name)}</td>
-                              <td className="px-3 py-2.5 whitespace-nowrap">
-                                <span className="font-black" style={{ color: w.current_level >= 4 ? '#993C1D' : '#374151' }}>
-                                  {w.current_level}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2.5 whitespace-nowrap">
-                                {w.score != null ? (
-                                  <span className="font-black" style={{
-                                    color: w.score >= 85 ? '#27500A' : w.score >= 80 ? '#633806' : '#991b1b'
-                                  }}>{w.score}점</span>
-                                ) : <span className="text-gray-300">-</span>}
-                              </td>
-                              <td className="px-3 py-2.5 whitespace-nowrap">
-                                <span className={cx('font-bold', cfg.color)}>{cfg.label}</span>
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">{student?.teacher_name ?? '-'}</td>
-                              <td className="px-3 py-2.5">
-                                <div className="flex items-center gap-2">
-                                  {/* 진행바 */}
-                                  {(() => {
-                                    const steps = [
-                                      { key: 'assigned',   label: '배정' },
-                                      { key: 'submitted',  label: '제출' },
-                                      { key: 'scored',     label: '채점' },
-                                      { key: 'passed',     label: '완료' },
-                                    ]
-                                    const statusOrder: Record<string,number> = {
-                                      assigned: 0, similar_assigned: 0,
-                                      submitted: 1, similar_submitted: 1,
-                                      scored: 2, retry: 2,
-                                      passed: 3,
-                                    }
-                                    const cur = statusOrder[w.status] ?? 0
-                                    return (
-                                      <div className="flex items-center gap-0.5">
-                                        {steps.map((step, idx) => (
-                                          <div key={step.key} className="flex items-center gap-0.5">
-                                            <div className="flex flex-col items-center">
-                                              <div className="w-4 h-4 rounded-full flex items-center justify-center"
-                                                style={{
-                                                  background: idx < cur ? '#F5C4B3' : idx === cur ? '#712B13' : '#e5e7eb',
-                                                }}>
-                                                {idx < cur
-                                                  ? <i className="ti ti-check" style={{ fontSize: 8, color: '#712B13' }} />
-                                                  : <span style={{ fontSize: 7, color: idx === cur ? 'white' : '#9ca3af', fontWeight: 700 }}>{idx+1}</span>
-                                                }
-                                              </div>
-                                              <span className="text-[8px] mt-0.5 whitespace-nowrap"
-                                                style={{ color: idx === cur ? '#712B13' : idx < cur ? '#F5C4B3' : '#9ca3af', fontWeight: idx === cur ? 700 : 400 }}>
-                                                {step.label}
-                                              </span>
-                                            </div>
-                                            {idx < steps.length - 1 && (
-                                              <div className="w-4 h-px mb-3"
-                                                style={{ background: idx < cur ? '#F5C4B3' : '#e5e7eb' }} />
-                                            )}
-                                          </div>
-                                        ))}
+                                {activeCount > 0 && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                    style={{ background: '#f3f4f6', color: '#6b7280' }}>진행중 {activeCount}</span>
+                                )}
+                              </div>
+                              <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'}`}
+                                style={{ fontSize: 14, color: '#9ca3af' }} />
+                            </button>
+
+                            {/* 펼쳐진 학습지 목록 */}
+                            {isExpanded && (
+                              <div className="border-t border-gray-50">
+                                {sWS.map((w, wIdx) => {
+                                  const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
+                                  const isChecked = selectedWSIds.includes(w.id)
+                                  const isSimilar = w.worksheet_type === 'similar'
+                                  const statusOrder: Record<string,number> = {
+                                    assigned: 0, similar_assigned: 0,
+                                    submitted: 1, similar_submitted: 1,
+                                    scored: 2, retry: 2, passed: 3,
+                                  }
+                                  const cur = statusOrder[w.status] ?? 0
+                                  return (
+                                    <div key={w.id}
+                                      className="px-4 py-3 flex items-center gap-3"
+                                      style={{
+                                        background: isSimilar ? '#FFF9F8' : isChecked ? '#FFF5F2' : wIdx % 2 === 0 ? '#fafafa' : 'white',
+                                        borderLeft: isSimilar ? '3px solid #F5C4B3' : '3px solid transparent',
+                                      }}>
+                                      {deleteMode && (
+                                        <button onClick={() => setSelectedWSIds(prev =>
+                                          isChecked ? prev.filter(id => id !== w.id) : [...prev, w.id]
+                                        )}
+                                          className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                                          style={{ background: isChecked ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                                          {isChecked && <i className="ti ti-check" style={{ fontSize: 9, color: '#712B13' }} />}
+                                        </button>
+                                      )}
+                                      {/* 단원 + 레벨 */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                          {isSimilar && (
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                                              style={{ background: '#FFF5F2', color: '#712B13' }}>오답유사</span>
+                                          )}
+                                          <span className="text-xs font-semibold text-gray-800 truncate">
+                                            {formatUnit(w.grade_level, w.unit, w.unit_name)}
+                                          </span>
+                                          <span className="text-[10px] font-black shrink-0"
+                                            style={{ color: w.current_level >= 4 ? '#993C1D' : '#6b7280' }}>
+                                            Lv.{w.current_level}
+                                          </span>
+                                        </div>
                                       </div>
-                                    )
-                                  })()}
-                                  {/* 액션 버튼 */}
-                                  <div className="flex gap-1 ml-1">
-                                    {(w.status === 'assigned' || w.status === 'similar_assigned') && (
-                                      <button onClick={() => handleSubmitted(w.id, w.status)}
-                                        className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                        style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>제출확인</button>
-                                    )}
-                                    {(w.status === 'submitted' || w.status === 'similar_submitted') && (
-                                      <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
-                                        className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                        style={{ background: '#FAECE7', color: '#993C1D', border: '1px solid #F5C4B3' }}>점수입력</button>
-                                    )}
-                                    {w.status === 'scored' && (
-                                      <>
-                                        <button onClick={() => handleLevelUp(w)}
-                                          className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                          style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>레벨업↑</button>
-                                        <button onClick={() => handleRetry(w)}
-                                          className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                          style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
-                                        <button onClick={() => handleComplete(w)}
-                                          className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                          style={{ background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>완료</button>
-                                      </>
-                                    )}
-                                    <button onClick={() => handleDelete(w.id)}
-                                      className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                      style={{ background: '#f3f4f6', color: '#9ca3af', border: '1px solid #e5e7eb' }}>삭제</button>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                                      {/* 점수 */}
+                                      <div className="shrink-0 w-12 text-right">
+                                        {w.score != null
+                                          ? <span className="text-xs font-black"
+                                              style={{ color: w.score >= 85 ? '#27500A' : w.score >= 80 ? '#633806' : '#991b1b' }}>
+                                              {w.score}점
+                                            </span>
+                                          : <span className="text-[10px] text-gray-300">-</span>}
+                                      </div>
+                                      {/* 상태 */}
+                                      <span className={cx('text-[10px] font-bold shrink-0 w-14 text-center', cfg.color)}>{cfg.label}</span>
+                                      {/* 액션 */}
+                                      <div className="flex gap-1 shrink-0">
+                                        {(w.status === 'assigned' || w.status === 'similar_assigned') && (
+                                          <button onClick={() => handleSubmitted(w.id, w.status)}
+                                            className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                            style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>제출확인</button>
+                                        )}
+                                        {(w.status === 'submitted' || w.status === 'similar_submitted') && (
+                                          <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
+                                            className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                            style={{ background: '#FAECE7', color: '#993C1D', border: '1px solid #F5C4B3' }}>점수입력</button>
+                                        )}
+                                        {w.status === 'scored' && (
+                                          <>
+                                            <button onClick={() => handleLevelUp(w)}
+                                              className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                              style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>레벨업↑</button>
+                                            <button onClick={() => handleRetry(w)}
+                                              className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                              style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
+                                            <button onClick={() => handleComplete(w)}
+                                              className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                              style={{ background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>완료</button>
+                                          </>
+                                        )}
+                                        <button onClick={() => handleDelete(w.id)}
+                                          className="px-1.5 py-1 text-[10px] rounded-lg text-gray-300 hover:text-red-500 transition-colors">
+                                          <i className="ti ti-trash" style={{ fontSize: 12 }} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* 쌍둥이학습지 현황 */}
