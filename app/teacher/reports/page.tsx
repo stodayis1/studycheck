@@ -707,8 +707,30 @@ export default function TeacherReportsPage() {
                 <div className="border-b border-gray-100">
                   <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: "#fafafa", borderBottom: "1px solid #f0f0f0" }}><div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FAECE7" }}><i className="ti ti-books" style={{ fontSize: 14, color: "#993C1D" }} /></div><span className="text-sm font-bold" style={{ color: "#1f2937" }}>교재 진도 현황</span></div>
                   <div className="px-4 py-4 space-y-4">
-                    {/* 진행중 교재 - 격자 표시 */}
+                    {/* 연산서 - 달성률 바만 표시 */}
+                    {activeTBs.filter(tb => tb.textbook_type === '연산서').map((tb) => {
+                      const style = TYPE_STYLE['연산서']
+                      const percent = tb.progress_percent ?? 0
+                      return (
+                        <div key={tb.id}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                              style={{ background: style.dot, color: '#fff' }}>{style.label}</span>
+                            <span className="text-xs font-bold" style={{ color: '#1f2937' }}>{tb.textbook_name}</span>
+                            {tb.grade && <span className="text-[10px]" style={{ color: '#9ca3af' }}>{tb.grade} {tb.semester}학기</span>}
+                            <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{percent}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full mb-1" style={{ background: '#f3f0ea' }}>
+                            <div className="h-1.5 rounded-full transition-all"
+                              style={{ width: `${percent}%`, background: style.dot }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* 진행중 교재 (연산서 제외) - 격자 표시 */}
                     {activeTBs
+                      .filter(tb => tb.textbook_type !== '연산서')
                       .sort((a, b) => {
                         const gA = GRADE_ORDER.indexOf(a.grade ?? '')
                         const gB = GRADE_ORDER.indexOf(b.grade ?? '')
