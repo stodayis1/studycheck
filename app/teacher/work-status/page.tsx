@@ -56,15 +56,28 @@ export default function TeacherWorkStatusPage() {
   const DAYS = ['일','월','화','수','목','금','토']
   const todayDay = DAYS[new Date().getDay()]
 
-  // 이번주 월요일
-  const weekStart = (() => {
+  // 주차 관리
+  const getWeekStart = (offset = 0) => {
     const d = new Date()
+    d.setDate(d.getDate() + offset * 7)
     const day = d.getDay()
     const diff = d.getDate() - day + (day === 0 ? -6 : 1)
     return new Date(d.setDate(diff)).toISOString().split('T')[0]
+  }
+  const [weekOffset, setWeekOffset] = useState(0)
+  const weekStart = getWeekStart(weekOffset)
+  const weekEnd = (() => {
+    const d = new Date(weekStart)
+    d.setDate(d.getDate() + 6)
+    return d.toISOString().split('T')[0]
+  })()
+  const weekLabel = (() => {
+    const s = new Date(weekStart)
+    const e = new Date(weekEnd)
+    return `${s.getMonth()+1}/${s.getDate()} ~ ${e.getMonth()+1}/${e.getDate()}`
   })()
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => { fetchAll() }, [weekOffset])
 
   async function fetchAll() {
     setLoading(true)
@@ -379,8 +392,24 @@ export default function TeacherWorkStatusPage() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
               <i className="ti ti-calendar-week" style={{ fontSize: 16, color: '#993C1D' }} />
-              <h3 className="text-sm font-bold text-gray-700">이번 주 수업일지 작성률</h3>
-              <span className="text-xs text-gray-400 ml-auto">주 2회 기준</span>
+              <h3 className="text-sm font-bold text-gray-700">수업일지 작성률</h3>
+              <div className="ml-auto flex items-center gap-2">
+                <button onClick={() => setWeekOffset(prev => prev - 1)}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center hover:bg-gray-100 transition-all"
+                  style={{ border: '1px solid #e5e7eb' }}>
+                  <i className="ti ti-chevron-left" style={{ fontSize: 13, color: '#6b7280' }} />
+                </button>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-xl"
+                  style={{ background: weekOffset === 0 ? '#F0FBF7' : '#f3f4f6', color: weekOffset === 0 ? '#085041' : '#374151', minWidth: 100, textAlign: 'center' }}>
+                  {weekOffset === 0 ? '이번 주' : weekOffset === -1 ? '지난 주' : `${Math.abs(weekOffset)}주 전`} {weekLabel}
+                </span>
+                <button onClick={() => setWeekOffset(prev => Math.min(0, prev + 1))}
+                  disabled={weekOffset === 0}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center hover:bg-gray-100 transition-all disabled:opacity-30"
+                  style={{ border: '1px solid #e5e7eb' }}>
+                  <i className="ti ti-chevron-right" style={{ fontSize: 13, color: '#6b7280' }} />
+                </button>
+              </div>
             </div>
             <div className="px-4 py-4 space-y-4">
               {weeklyStats.filter(t => t.expected > 0).map(({ teacher, sessions, expected, rate }) => (
