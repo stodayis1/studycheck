@@ -104,6 +104,17 @@ export default function TeacherExamsPage() {
   const [examMemo, setExamMemo] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // 코어테스트 일괄입력
+  const [showCoreModal, setShowCoreModal] = useState(false)
+  const [coreGrade, setCoreGrade] = useState('')
+  const [coreTitle, setCoreTitle] = useState('')
+  const [coreDate, setCoreDate] = useState(new Date().toISOString().split('T')[0])
+  const [coreTotalScore, setCoreTotalScore] = useState('100')
+  const [coreActiveUnits, setCoreActiveUnits] = useState<string[]>([])
+  const [coreActiveSubTabs, setCoreActiveSubTabs] = useState<string[]>([])
+  const [coreScores, setCoreScores] = useState<Record<string, string>>({}) // studentId → score
+  const [coreSaving, setCoreSaving] = useState(false)
+
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
@@ -157,6 +168,46 @@ export default function TeacherExamsPage() {
     const firstChapter = firstGradeConcepts[0]?.chapter ?? ''
     setActiveUnitTabs(firstChapter ? [firstChapter] : [])
     setShowModal(true)
+  }
+
+  async function handleCoreSave() {
+    if (!coreGrade || !coreTitle) return
+    setCoreSaving(true)
+
+    // 범위 계산
+    const gradeConcepts = concepts.filter(c => c.grade === coreGrade)
+    const isElem = coreGrade.includes('초')
+    let selectedRangeKeys: string[] = []
+    if (isElem) {
+      selectedRangeKeys = coreActiveUnits
+    } else {
+      const unitsWithSub = new Set(coreActiveSubTabs.map(k => k.split('__')[0]))
+      const unitsOnly = coreActiveUnits.filter(u => !unitsWithSub.has(u))
+      selectedRangeKeys = [...coreActiveSubTabs, ...unitsOnly]
+    }
+    const rangeUnits = selectedRangeKeys.map(k => k.includes('__') ? k.split('__')[1] : k).join(', ')
+
+    // 점수 입력된 학생만 저장
+    const entries = Object.entries(coreScores).filter(([, s]) => s !== '')
+    await Promise.all(entries.map(([studentId, score]) =>
+      supabase.from('exams').insert({
+        student_id: studentId,
+        exam_type: '코어테스트',
+        exam_date: coreDate,
+        title: coreTitle,
+        unit_name: rangeUnits || null,
+        score: parseFloat(score),
+        total_score: parseFloat(coreTotalScore) || 100,
+        teacher_name: currentUser?.name ?? null,
+      })
+    ))
+
+    setCoreSaving(false)
+    setShowCoreModal(false)
+    setCoreScores({})
+    setCoreActiveUnits([])
+    setCoreActiveSubTabs([])
+    fetchData()
   }
 
   async function handleSave() {
@@ -236,11 +287,17 @@ export default function TeacherExamsPage() {
     <div className="min-h-screen" style={{ background: '#f9fafb' }}>
       <Header title="평가관리" subtitle={`${currentUser?.name} 선생님`}
         action={
-          <button onClick={() => setShowModal(true)}
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold"
-            style={{ background: '#9FE1CB', color: '#085041' }}>
-            + 평가 등록
-          </button>
+          tab === '코어테스트'
+            ? <button onClick={() => { setShowCoreModal(true); setCoreScores({}) }}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                style={{ background: '#EAF3DE', color: '#27500A' }}>
+                + 코어테스트 일괄입력
+              </button>
+            : <button onClick={() => setShowModal(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                style={{ background: '#9FE1CB', color: '#085041' }}>
+                + 평가 등록
+              </button>
         } />
 
       <div className="px-4 py-4 space-y-4 max-w-4xl mx-auto">
@@ -741,6 +798,168 @@ export default function TeacherExamsPage() {
                 {saving
                   ? <><span className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />저장 중...</>
                   : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 코어테스트 일괄입력 모달 */}
+      {showCoreModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => setShowCoreModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2">
+                <i className="ti ti-target" style={{ fontSize: 18, color: '#27500A' }} />
+                <h3 className="text-base font-bold text-gray-900">코어테스트 일괄입력</h3>
+              </div>
+              <button onClick={() => setShowCoreModal(false)} className="text-gray-400">
+                <i className="ti ti-x" style={{ fontSize: 18 }} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {/* 날짜 + 만점 */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">날짜</label>
+                  <input type="date" value={coreDate} onChange={e => setCoreDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">만점</label>
+                  <input type="number" value={coreTotalScore} onChange={e => setCoreTotalScore(e.target.value)}
+                    className="w-24 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none text-center" />
+                </div>
+              </div>
+
+              {/* 회차 */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">회차</label>
+                <div className="flex gap-2">
+                  {['예비 1회', '예비 2회', '본고사'].map(t => (
+                    <button key={t} onClick={() => setCoreTitle(t)}
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold border transition-all"
+                      style={coreTitle === t
+                        ? { background: '#639922', color: 'white', borderColor: '#639922' }
+                        : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 학년 선택 */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">학년 (단원 기준)</label>
+                <div className="flex flex-wrap gap-2">
+                  {['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3'].map(g => (
+                    <button key={g} onClick={() => { setCoreGrade(g); setCoreActiveUnits([]); setCoreActiveSubTabs([]) }}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+                      style={coreGrade === g
+                        ? { background: '#27500A', color: 'white', borderColor: '#27500A' }
+                        : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 단원 범위 */}
+              {coreGrade && (() => {
+                const gradeConcepts = concepts.filter(c => c.grade === coreGrade)
+                const chapters = [...new Set(gradeConcepts.map(c => c.chapter))]
+                const isElem = coreGrade.includes('초')
+                return (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">시험 범위</label>
+                    <div className="flex flex-wrap gap-1 mb-2 max-h-28 overflow-y-auto">
+                      {chapters.map(ch => (
+                        <button key={ch} onClick={() => setCoreActiveUnits(prev =>
+                          prev.includes(ch) ? prev.filter(x => x !== ch) : [...prev, ch]
+                        )}
+                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all"
+                          style={coreActiveUnits.includes(ch)
+                            ? { background: '#639922', color: 'white', borderColor: '#639922' }
+                            : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                          {ch.slice(0, 14)}
+                        </button>
+                      ))}
+                    </div>
+                    {!isElem && coreActiveUnits.length > 0 && (
+                      <div className="space-y-1">
+                        {coreActiveUnits.map(ch => {
+                          const subChapters = [...new Set(gradeConcepts.filter(c => c.chapter === ch).map(c => c.sub_chapter).filter(Boolean))]
+                          if (subChapters.length === 0) return null
+                          return (
+                            <div key={ch}>
+                              <p className="text-[10px] font-bold text-gray-500 mb-1">{ch} 중단원</p>
+                              <div className="flex flex-wrap gap-1">
+                                {subChapters.map(sub => {
+                                  const key = ch + '__' + sub
+                                  return (
+                                    <button key={key} onClick={() => setCoreActiveSubTabs(prev =>
+                                      prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key]
+                                    )}
+                                      className="px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all"
+                                      style={coreActiveSubTabs.includes(key)
+                                        ? { background: '#EAF3DE', color: '#27500A', borderColor: '#639922' }
+                                        : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                                      {sub}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* 학생별 점수 입력 */}
+              {coreGrade && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                    학생별 점수 입력 <span className="font-normal text-gray-400">({coreGrade} 학생만 표시)</span>
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {myStudents.filter(s => s.grade === coreGrade || s.grade.startsWith(coreGrade)).map(s => (
+                      <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-xl"
+                        style={{ background: coreScores[s.id] ? '#EAF3DE' : '#fafafa', border: '1px solid #f3f4f6' }}>
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                          style={{ background: '#EAF3DE', color: '#27500A' }}>
+                          {s.name[0]}
+                        </div>
+                        <span className="text-sm font-semibold flex-1 text-gray-800">{s.name}</span>
+                        <span className="text-[10px] text-gray-400">{s.grade}</span>
+                        <input
+                          type="number" min="0" max={coreTotalScore}
+                          value={coreScores[s.id] ?? ''}
+                          onChange={e => setCoreScores(prev => ({ ...prev, [s.id]: e.target.value }))}
+                          placeholder="-"
+                          className="w-16 px-2 py-1.5 rounded-xl border text-sm text-center focus:outline-none"
+                          style={{ borderColor: coreScores[s.id] ? '#639922' : '#e5e7eb' }}
+                        />
+                        <span className="text-[10px] text-gray-400">/{coreTotalScore}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={handleCoreSave}
+                disabled={coreSaving || !coreTitle || !coreGrade || Object.values(coreScores).every(s => !s)}
+                className="w-full py-3 rounded-2xl text-sm font-bold transition-all"
+                style={{
+                  background: coreSaving || !coreTitle || !coreGrade ? '#e5e7eb' : '#27500A',
+                  color: coreSaving || !coreTitle || !coreGrade ? '#9ca3af' : 'white'
+                }}>
+                {coreSaving ? '저장 중...' : `${Object.values(coreScores).filter(s => s).length}명 저장`}
               </button>
             </div>
           </div>
