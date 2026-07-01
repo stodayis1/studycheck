@@ -24,6 +24,7 @@ const NAV_ITEMS = [
 ]
 
 const BULK_ITEM = { href: '/teacher/bulk-progress', label: '진도일괄입력', icon: 'ti-list-check' }
+const SETTINGS_ITEM = { href: '/teacher/settings', label: '설정', icon: 'ti-settings' }
 const IMPORT_ITEM = { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' }
 
 // 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
@@ -46,8 +47,13 @@ export function TeacherSidebar() {
 
   const showBulk = isAdmin() || bulkEnabled
 
-  const desktopNavItems = showBulk ? [...NAV_ITEMS, BULK_ITEM, IMPORT_ITEM] : [...NAV_ITEMS, IMPORT_ITEM]
-  const mobileMoreItems = showBulk ? [...MOBILE_MORE, BULK_ITEM, IMPORT_ITEM] : [...MOBILE_MORE, IMPORT_ITEM]
+  const adminItems = isAdmin() ? [SETTINGS_ITEM] : []
+  const desktopNavItems = showBulk
+    ? [...NAV_ITEMS, BULK_ITEM, IMPORT_ITEM, ...adminItems]
+    : [...NAV_ITEMS, IMPORT_ITEM, ...adminItems]
+  const mobileMoreItems = showBulk
+    ? [...MOBILE_MORE, BULK_ITEM, IMPORT_ITEM, ...adminItems]
+    : [...MOBILE_MORE, IMPORT_ITEM, ...adminItems]
 
   return (
     <>
@@ -83,7 +89,7 @@ export function TeacherSidebar() {
         <nav className="flex-1 px-3 py-2 space-y-0.5">
           {desktopNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            const isBulk = item.href === '/teacher/bulk-progress'
+            const isBulk = item.href === '/teacher/bulk-progress' || item.href === '/teacher/import-records' || item.href === '/teacher/settings'
             return (
               <Link key={item.href} href={item.href}
                 className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
