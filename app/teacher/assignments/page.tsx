@@ -1262,7 +1262,7 @@ export default function TeacherAssignmentsPage() {
                 </div>
 
                 {twinStudent && (() => {
-                  const studentTBs = textbooks.filter(t => t.student_id === twinStudent.id && t.status === 'assigned' && t.textbook_type !== '연산서')
+                  const studentTBs = textbooks.filter(t => t.student_id === twinStudent.id && (t.status === 'assigned' || t.status === 'completed') && t.textbook_type !== '연산서')
                   return (
                     <>
                       <div>
