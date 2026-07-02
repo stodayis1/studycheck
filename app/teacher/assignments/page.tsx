@@ -176,9 +176,9 @@ export default function TeacherAssignmentsPage() {
     setLoading(true)
     const [{ data: sData }, { data: wData }, { data: tData }, { data: cData }, { data: mwData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: false }),
-      supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }),
-      supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
+      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: false }).limit(5000),
+      supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
+      supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order').limit(5000),
       supabase.from('middle_worksheets').select('*').order('grade').order('semester').order('lesson_no'),
     ])
     if (sData) setStudents(sData)
