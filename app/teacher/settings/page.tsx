@@ -42,6 +42,7 @@ export default function SettingsPage() {
   const [togglingBulk, setTogglingBulk] = useState(false)
 
   useEffect(() => {
+    if (!isAdmin()) { router.push('/teacher/dashboard'); return }
     fetchProfiles()
     fetchSettings()
   }, [])
@@ -65,7 +66,7 @@ export default function SettingsPage() {
 
     // Supabase Auth에 사용자 생성
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: `${newLoginId}@studycheck.local`,
+      email: newLoginId,
       password: newPassword,
       email_confirm: true,
     })
@@ -73,7 +74,7 @@ export default function SettingsPage() {
     if (authError) {
       // admin API 없으면 signUp 사용
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: `${newLoginId}@studycheck.local`,
+        email: newLoginId,
         password: newPassword,
       })
       if (signUpError) { setAddError('계정 생성 실패: ' + signUpError.message); setAdding(false); return }
@@ -298,9 +299,9 @@ export default function SettingsPage() {
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#9FE1CB]" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">로그인 ID</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">이메일 (로그인 ID)</label>
                 <input value={newLoginId} onChange={e => setNewLoginId(e.target.value)}
-                  placeholder="teacher01"
+                  placeholder="example@naver.com"
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#9FE1CB]" />
               </div>
               <div>
@@ -353,7 +354,7 @@ export default function SettingsPage() {
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#9FE1CB]" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">로그인 ID</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">이메일 (로그인 ID)</label>
                 <input value={editProfile.login_id} disabled
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-100 text-sm bg-gray-50 text-gray-400" />
               </div>
