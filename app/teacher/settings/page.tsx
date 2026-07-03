@@ -42,7 +42,6 @@ export default function SettingsPage() {
   const [togglingBulk, setTogglingBulk] = useState(false)
 
   useEffect(() => {
-    if (!isAdmin()) { router.push('/teacher/dashboard'); return }
     fetchProfiles()
     fetchSettings()
   }, [])
