@@ -8,11 +8,9 @@ import { useRouter } from 'next/navigation'
 
 interface Profile {
   id: string
-  login_id: string
   name: string
   email: string | null
   role: 'admin' | 'teacher' | 'staff'
-  is_active: boolean
 }
 
 export default function SettingsPage() {
@@ -48,7 +46,7 @@ export default function SettingsPage() {
 
   async function fetchProfiles() {
     setLoadingProfiles(true)
-    const { data } = await supabase.from('profiles').select('*').order('role').order('name')
+    const { data } = await supabase.from('users').select('id, name, email, role').order('name')
     setProfiles(data ?? [])
     setLoadingProfiles(false)
   }
@@ -81,23 +79,21 @@ export default function SettingsPage() {
       // profiles 테이블에 저장
       const userId = signUpData.user?.id
       if (userId) {
-        await supabase.from('profiles').upsert({
+        await supabase.from('users').upsert({
           id: userId,
-          login_id: newLoginId,
           name: newName,
+          email: newLoginId,
           role: newRole,
-          is_active: true,
         })
       }
     } else {
       const userId = authData.user?.id
       if (userId) {
-        await supabase.from('profiles').upsert({
+        await supabase.from('users').upsert({
           id: userId,
-          login_id: newLoginId,
           name: newName,
+          email: newLoginId,
           role: newRole,
-          is_active: true,
         })
       }
     }
@@ -110,17 +106,14 @@ export default function SettingsPage() {
   }
 
   async function toggleActive(profile: Profile) {
-    if (profile.id === currentUser?.id) { showToast('⚠ 본인 계정은 비활성화할 수 없어요'); return }
-    await supabase.from('profiles').update({ is_active: !profile.is_active }).eq('id', profile.id)
-    setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, is_active: !p.is_active } : p))
-    showToast(profile.is_active ? '계정을 비활성화했어요' : '계정을 활성화했어요')
+    showToast('⚠ 계정 비활성화는 Supabase에서 직접 해주세요')
   }
 
   async function handleEditSave() {
     if (!editProfile) return
     setEditSaving(true)
-    const updates: any = { name: editName }
-    await supabase.from('profiles').update(updates).eq('id', editProfile.id)
+    const updates: any = { name: editName, email: editProfile.email }
+    await supabase.from('users').update(updates).eq('id', editProfile.id)
     if (editPassword) {
       // 비밀번호 변경은 admin API 필요 - 여기서는 안내만
     }
@@ -188,7 +181,7 @@ export default function SettingsPage() {
                   const rc = ROLE_COLOR[p.role] ?? ROLE_COLOR.teacher
                   return (
                     <div key={p.id} className="rounded-2xl p-4 flex items-center gap-3"
-                      style={{ background: 'white', border: '1px solid #f3f4f6', opacity: p.is_active ? 1 : 0.5 }}>
+                      style={{ background: 'white', border: '1px solid #f3f4f6' }}>
                       <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                         style={{ background: rc.bg, color: rc.color }}>
                         {p.name?.[0] ?? '?'}
@@ -198,12 +191,9 @@ export default function SettingsPage() {
                           <p className="text-sm font-bold text-gray-800">{p.name}</p>
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                             style={rc}>{ROLE_LABEL[p.role]}</span>
-                          {!p.is_active && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                              style={{ background: '#f3f4f6', color: '#9ca3af' }}>비활성</span>
-                          )}
+                
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5">ID: {p.login_id}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{p.email}</p>
                       </div>
                       <div className="flex gap-1.5">
                         <button onClick={() => { setEditProfile(p); setEditName(p.name); setEditPassword('') }}
@@ -214,10 +204,8 @@ export default function SettingsPage() {
                         {p.id !== currentUser?.id && (
                           <button onClick={() => toggleActive(p)}
                             className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all"
-                            style={p.is_active
-                              ? { background: '#fee2e2', color: '#991b1b' }
-                              : { background: '#EAF3DE', color: '#27500A' }}>
-                            {p.is_active ? '비활성화' : '활성화'}
+                            style={{ background: '#fee2e2', color: '#991b1b' }}>
+                            삭제
                           </button>
                         )}
                       </div>
