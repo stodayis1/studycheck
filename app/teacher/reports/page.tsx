@@ -152,11 +152,11 @@ export default function TeacherReportsPage() {
     setLoading(true)
     const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, { data: pcData }, { data: examData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }),
+      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
-      supabase.from('student_textbooks').select('*'),
+      supabase.from('student_textbooks').select('*').limit(5000),
       supabase.from('progress_checks').select('*').limit(10000),
-      supabase.from('exams').select('*').order('exam_date', { ascending: true }),
+      supabase.from('exams').select('*').order('exam_date', { ascending: true }).limit(5000),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
     ])
     if (studentData) setStudents(studentData)
