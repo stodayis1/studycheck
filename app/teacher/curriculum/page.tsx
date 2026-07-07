@@ -591,7 +591,8 @@ export default function TeacherCurriculumPage() {
               const now = new Date()
               const myExamPreps = examPreps.filter((ep) => {
                 if (ep.student_id !== student.id) return false
-                if (!ep.exam_date) return true
+                if (ep.status === 'done') return false
+                if (!ep.exam_date) return false
                 const examEnd = new Date(ep.exam_date)
                 examEnd.setDate(examEnd.getDate() + 7)
                 return now <= examEnd
