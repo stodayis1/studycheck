@@ -804,7 +804,7 @@ export default function TeacherExamPrepPage() {
               {/* 시험 날짜 */}
               {selUnitIds.length > 0 && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">시험 날짜 <span className="text-gray-400 font-normal">(선택)</span></label>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">시험 날짜 <span className="text-red-400">*</span></label>
                   {/* 학교 일정에서 자동 가져오기 */}
                   {selStudent && (() => {
                     const matchedSchedules = examSchedules.filter(es =>
@@ -848,7 +848,7 @@ export default function TeacherExamPrepPage() {
               )}
 
               <button onClick={handleAssign}
-                disabled={!selStudent || selUnitIds.length === 0 || assigning}
+                disabled={!selStudent || selUnitIds.length === 0 || !examDate || assigning}
                 className="w-full py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ background: '#F5C4B3', color: '#712B13' }}>
                 {assigning
