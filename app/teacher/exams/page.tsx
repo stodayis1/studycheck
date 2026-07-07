@@ -20,6 +20,7 @@ interface Exam {
 }
 
 const EXAM_TYPES = ['입학테스트', '진단평가', '코어테스트', '학교시험'] as const
+const GRADE_OPTIONS = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','공통수학1','공통수학2','대수','미적분1','확률과통계','기하']
 type ExamType = typeof EXAM_TYPES[number]
 
 const EXAM_CONFIG: Record<ExamType, { color: string; bg: string; badge: string; desc: string; icon: string }> = {
@@ -90,6 +91,7 @@ export default function TeacherExamsPage() {
   const [unitEntries, setUnitEntries] = useState<Record<string, { level: number | null; score: string; memo: string }>>({})
   const [activeUnitTabs, setActiveUnitTabs] = useState<string[]>([])
   const [activeSubTabs, setActiveSubTabs] = useState<string[]>([])
+  const [rangeGradeOverride, setRangeGradeOverride] = useState('')
 
   // 등록 모달
   const [showModal, setShowModal] = useState(false)
@@ -146,6 +148,22 @@ export default function TeacherExamsPage() {
     return matchGrade && matchSearch
   })
 
+  // 시험 범위 학년 결정
+  // 코어테스트: 학교 현행(학생 실제 학년) 고정 (고등은 concepts가 과목명 기준이라 교재 학년)
+  // 입학테스트/진단평가: 선생님이 선택 가능 (기본값=배정 교재 학년, 고등=교재 과목명)
+  function getRangeGrade(student: Student | null, examTab: string): string {
+    if (!student) return ''
+    const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
+    const tbGrade = myTBs[0]?.grade ?? ''
+    if (examTab === '코어테스트' && student.grade && !student.grade.includes('고')) {
+      return student.grade
+    }
+    if ((examTab === '입학테스트' || examTab === '진단평가') && rangeGradeOverride) {
+      return rangeGradeOverride
+    }
+    return tbGrade
+  }
+
   function openModal(student: Student) {
     setModalStudent(student)
     setExamDate(new Date().toISOString().split('T')[0])
@@ -158,12 +176,14 @@ export default function TeacherExamsPage() {
     setExamMemo('')
     setUnitEntries({})
     setActiveSubTabs([])
-    // 학생 배정 교재의 첫 번째 grade로 단원 탭 초기화
+    setRangeGradeOverride('')
+    // 초기 탭: 오버라이드 없이 기본 학년 기준으로 계산
     const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
-    const HIGH_SUBJECTS = ['공통수학1','공통수학2','미적분1','확률과통계','대수','기하']
-    const topTB = myTBs[0]
-    const firstGradeConcepts = topTB?.grade
-      ? concepts.filter((c) => c.grade === topTB.grade)
+    const tbGrade = myTBs[0]?.grade ?? ''
+    const rangeGrade = (tab === '코어테스트' && student.grade && !student.grade.includes('고'))
+      ? student.grade : tbGrade
+    const firstGradeConcepts = rangeGrade
+      ? concepts.filter((c) => c.grade === rangeGrade)
       : []
     const firstChapter = firstGradeConcepts[0]?.chapter ?? ''
     setActiveUnitTabs(firstChapter ? [firstChapter] : [])
@@ -215,8 +235,7 @@ export default function TeacherExamsPage() {
     setSaving(true)
 
     // 선택한 범위 키 계산 (초등=대단원 / 중고등=중단원, 없으면 대단원)
-    const myTBs0 = studentTextbooks.filter((t) => t.student_id === modalStudent.id)
-    const grade0 = myTBs0[0]?.grade ?? ''
+    const grade0 = getRangeGrade(modalStudent, tab)
     const isElem0 = grade0.includes('초')
     let selectedRangeKeys: string[] = []
     if (isElem0) {
@@ -619,13 +638,27 @@ export default function TeacherExamsPage() {
 
             {/* 단원별 탭 입력 (입학테스트/진단평가/코어테스트) */}
             {tab !== '학교시험' && (() => {
-              const myTBs = modalStudent ? studentTextbooks.filter((t) => t.student_id === modalStudent.id) : []
-              const topTB = myTBs[0]
-              const gradeConcepts = topTB?.grade ? concepts.filter((c) => c.grade === topTB.grade) : []
+              const rangeGrade = getRangeGrade(modalStudent, tab)
+              const gradeConcepts = rangeGrade ? concepts.filter((c) => c.grade === rangeGrade) : []
               const chapters = [...new Set(gradeConcepts.map((c) => c.chapter))]
+              const canPickGrade = tab === '입학테스트' || tab === '진단평가'
+              const gradeOptions = GRADE_OPTIONS.filter((g) => concepts.some((c) => c.grade === g))
+
+              const gradeSelector = canPickGrade ? (
+                <div className="mb-2 flex items-center gap-2">
+                  <label className="text-xs font-bold text-gray-700 shrink-0">범위 학년/과목</label>
+                  <select value={rangeGrade}
+                    onChange={(e) => { setRangeGradeOverride(e.target.value); setActiveUnitTabs([]); setActiveSubTabs([]) }}
+                    className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none bg-white">
+                    <option value="">선택하세요</option>
+                    {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+              ) : null
 
               if (chapters.length === 0) return (
                 <div>
+                  {gradeSelector}
                   <label className="block text-xs font-bold text-gray-700 mb-2">단원 / 범위</label>
                   <div className="flex gap-2">
                     <input value={examUnit} onChange={(e) => setExamUnit(e.target.value)}
@@ -637,7 +670,7 @@ export default function TeacherExamsPage() {
               )
 
               // 초등 여부 확인
-              const isElementary = topTB?.grade?.includes('초') ?? false
+              const isElementary = rangeGrade.includes('초')
               const getTabKey = (ch, sub) => sub ? ch + '__' + sub : ch
 
               // 선택 범위 키 (초등=대단원 / 중고등=중단원, 없으면 대단원)
@@ -652,6 +685,7 @@ export default function TeacherExamsPage() {
 
               return (
                 <div>
+                  {gradeSelector}
                   <label className="block text-xs font-bold text-gray-700 mb-2">
                     시험 범위 <span className="font-normal text-gray-400">(대단원 복수 선택 가능 · 점수는 평가당 1개)</span>
                   </label>
