@@ -1625,16 +1625,18 @@ export default function TeacherLearningNotesPage() {
                 {/* 시험대비 (이너프원) */}
                 {(() => {
                   if (!noteStudent) return null
-                  const myPreps = examPreps.filter(ep => ep.student_id === noteStudent.id)
-                  if (myPreps.length === 0) return (
-                    <div className="rounded-xl px-4 py-3" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
-                      <p className="text-xs font-bold text-gray-500 mb-1 flex items-center gap-1.5">
-                        <i className="ti ti-pencil-check" style={{ fontSize: 13, color: '#9ca3af' }} />
-                        시험대비 (이너프원)
-                      </p>
-                      <p className="text-[11px] text-gray-400">배정된 시험대비 교재가 없어요</p>
-                    </div>
-                  )
+                  const today7 = new Date(); today7.setHours(0,0,0,0)
+                  const myPreps = examPreps.filter(ep => {
+                    if (ep.student_id !== noteStudent.id) return false
+                    if (ep.status === 'done') return false
+                    if (ep.exam_date) {
+                      const examDt = new Date(ep.exam_date); examDt.setHours(0,0,0,0)
+                      const diff = Math.floor((today7.getTime() - examDt.getTime()) / (1000*60*60*24))
+                      if (diff > 7) return false
+                    }
+                    return true
+                  })
+                  if (myPreps.length === 0) return null
 
                   return (
                     <div>
@@ -2050,7 +2052,13 @@ export default function TeacherLearningNotesPage() {
                 {/* 시험대비 과제 - 시험배정 자동연동 */}
                 {(() => {
                   const now = new Date()
+                  const todayEP = new Date(); todayEP.setHours(0,0,0,0)
                   const myEPs = noteStudent ? examPreps.filter((ep) => {
+                    if (ep.exam_date) {
+                      const epDt = new Date(ep.exam_date); epDt.setHours(0,0,0,0)
+                      const diff = Math.floor((todayEP.getTime() - epDt.getTime()) / (1000*60*60*24))
+                      if (diff > 7) return false
+                    }
                     if (ep.student_id !== noteStudent.id) return false
                     if (!ep.exam_date) return true
                     const examEnd = new Date(ep.exam_date)
