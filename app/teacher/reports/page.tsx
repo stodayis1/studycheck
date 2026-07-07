@@ -115,9 +115,19 @@ export default function TeacherReportsPage() {
 
   useEffect(() => {
     if (!selectedStudent) return
+    const sid = selectedStudent.id
     async function fetchStudentProgress() {
-      const { data } = await supabase.from('progress_checks').select('*').eq('student_id', selectedStudent.id)
-      if (data) setProgressChecks(data)
+      const [{ data: pcData }, { data: tbData }] = await Promise.all([
+        supabase.from('progress_checks').select('*').eq('student_id', sid),
+        supabase.from('student_textbooks').select('*').eq('student_id', sid),
+      ])
+      if (pcData) setProgressChecks(pcData)
+      if (tbData) {
+        setStudentTextbooks((prev) => [
+          ...prev.filter((t) => t.student_id !== sid),
+          ...tbData,
+        ])
+      }
     }
     fetchStudentProgress()
   }, [selectedStudent])

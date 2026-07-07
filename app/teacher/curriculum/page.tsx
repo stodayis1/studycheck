@@ -196,7 +196,7 @@ export default function TeacherCurriculumPage() {
       const stu = students.find(s => s.id === sid)
       // 같은 학생+교재종류 이미 있으면 교체 (다중모드는 묻지 않고 교체)
       const existing = textbooks.find(
-        (t) => t.student_id === sid && t.textbook_type === tbType
+        (t) => t.student_id === sid && t.textbook_type === tbType && t.status === 'assigned'
       )
       if (existing) {
         if (!tbMultiMode) {
