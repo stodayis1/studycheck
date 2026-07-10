@@ -44,6 +44,7 @@ interface ProgressCheck {
   student_id: string
   concept_id: string
   check_count: number
+  student_textbook_id?: string | null
 }
 
 const TB_STATUS: Record<string, { label: string; color: string }> = {
@@ -355,7 +356,7 @@ export default function TeacherCurriculumPage() {
                   : student.grade.includes('중3') ? '중3' : student.grade.includes('고1') ? '고1'
                   : student.grade.includes('고2') ? '고2' : '고3'
                 const studentConcepts = concepts.filter((c) => c.grade === gradeKey)
-                const studentChecks = progressChecks.filter((p) => p.student_id === student.id)
+                const studentChecks = progressChecks.filter((p) => p.student_id === student.id && !p.student_textbook_id)
                 const totalRate = studentConcepts.length > 0
                   ? Math.round(studentChecks.length / studentConcepts.length * 100) : 0
                 return (
@@ -406,7 +407,7 @@ export default function TeacherCurriculumPage() {
               grouped[c.chapter][c.sub_chapter].push(c)
             }
 
-            const studentChecks = progressChecks.filter((p) => p.student_id === selectedProgressStudent.id)
+            const studentChecks = progressChecks.filter((p) => p.student_id === selectedProgressStudent.id && !p.student_textbook_id)
             const checkedCount = semesterConcepts.filter((c) =>
               studentChecks.some((p) => p.concept_id === c.id && p.check_count >= 1)
             ).length
