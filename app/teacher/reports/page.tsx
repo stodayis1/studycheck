@@ -850,7 +850,7 @@ export default function TeacherReportsPage() {
                               style={{ background: '#F0FBF7', border: '1px solid #9FE1CB' }}>
                               <i className="ti ti-circle-check" style={{ fontSize: 11, color: '#085041' }} />
                               <span className="text-xs font-medium" style={{ color: '#085041' }}>{tb.textbook_name}</span>
-                              {tb.grade && <span className="text-[10px]" style={{ color: '#9FE1CB' }}>{tb.grade}</span>}
+                              {tb.grade && <span className="text-[10px]" style={{ color: '#9FE1CB' }}>{tb.grade} {tb.semester ? `${tb.semester}학기` : ''}</span>}
                             </div>
                           ))}
                         </div>
@@ -866,7 +866,7 @@ export default function TeacherReportsPage() {
                               style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
                               <i className="ti ti-pause" style={{ fontSize: 11, color: '#9ca3af' }} />
                               <span className="text-xs font-medium text-gray-500">{tb.textbook_name}</span>
-                              {tb.grade && <span className="text-[10px] text-gray-400">{tb.grade}</span>}
+                              {tb.grade && <span className="text-[10px] text-gray-400">{tb.grade} {tb.semester ? `${tb.semester}학기` : ''}</span>}
                             </div>
                           ))}
                         </div>
