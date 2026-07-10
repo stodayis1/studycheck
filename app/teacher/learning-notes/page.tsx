@@ -521,20 +521,23 @@ export default function TeacherLearningNotesPage() {
     const existingNote = notes.find((n) => n.session_id === sessionId)
     // 교재별 진도 progress_checks 자동 업데이트
     if (noteStudent && Object.keys(noteProgressByTB).length > 0) {
+      // 교재 종류별 목표 레벨 (진도표/보고서/학생·학부모 화면과 동일한 기준: 개념=1, 유형=2, 심화=3)
+      const TARGET_LEVEL: Record<string, number> = { '개념서': 1, '유형서': 2, '심화서': 3 }
       const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
       for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
         if (sel.conceptIds.length === 0) continue
         const tb = myTBs.find((t) => t.id === tbId)
         if (!tb) continue
+        const level = TARGET_LEVEL[tb.textbook_type ?? ''] ?? 1
         await Promise.all(sel.conceptIds.map(async (conceptId) => {
           const { data: existing } = await supabase
             .from('progress_checks').select('id, check_count')
             .eq('student_id', noteStudent.id).eq('concept_id', conceptId).single()
           if (existing) {
-            if (existing.check_count < 1)
-              await supabase.from('progress_checks').update({ check_count: 1 }).eq('id', existing.id)
+            if (existing.check_count < level)
+              await supabase.from('progress_checks').update({ check_count: level }).eq('id', existing.id)
           } else {
-            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1 })
+            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: level })
           }
         }))
       }
@@ -545,10 +548,11 @@ export default function TeacherLearningNotesPage() {
         for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
           const tb = myTBs2.find((t) => t.id === tbId)
           if (!tb) continue
+          const level = TARGET_LEVEL[tb.textbook_type ?? ''] ?? 1
           for (const conceptId of sel.conceptIds) {
             const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId)
-            if (idx >= 0) { if (updated[idx].check_count < 1) updated[idx] = { ...updated[idx], check_count: 1 } }
-            else updated.push({ id: 'temp_' + conceptId, student_id: noteStudent!.id, concept_id: conceptId, check_count: 1 })
+            if (idx >= 0) { if (updated[idx].check_count < level) updated[idx] = { ...updated[idx], check_count: level } }
+            else updated.push({ id: 'temp_' + conceptId, student_id: noteStudent!.id, concept_id: conceptId, check_count: level })
           }
         }
         return updated
@@ -1481,7 +1485,9 @@ export default function TeacherLearningNotesPage() {
                                               const existingCheck = noteStudent
                                                 ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id)
                                                 : null
-                                              const done = existingCheck && existingCheck.check_count >= 1
+                                              // 교재 종류별 목표 레벨 (개념=1, 유형=2, 심화=3) 이상이어야 "이미 완료"로 표시
+                                              const tbLevel = tb.textbook_type === '유형서' ? 2 : tb.textbook_type === '심화서' ? 3 : 1
+                                              const done = existingCheck && existingCheck.check_count >= tbLevel
 
                                               return (
                                                 <button key={c.id}
