@@ -908,7 +908,7 @@ export default function TeacherCurriculumPage() {
                 <div className="flex gap-1.5 flex-wrap">
                   {(tbCourseGroup === '초등'
                     ? ['초1','초2','초3','초4','초5','초6']
-                    : ['중1','중2','중3']
+                    : ['중1','중2','중3','중2모의고사']
                   ).map((g) => (
                     <button key={g} onClick={() => setTbGrade(g)}
                       className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
