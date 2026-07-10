@@ -62,6 +62,7 @@ interface ProgressCheck {
   student_id: string
   concept_id: string
   check_count: number
+  student_textbook_id?: string | null
 }
 
 interface StudentWorksheet {
@@ -471,9 +472,11 @@ export default function ParentDashboardPage() {
                     if (!tb.grade) return null
                     const tbConcepts = concepts.filter(c => c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true))
                     if (tbConcepts.length === 0) return null
-                    const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+                    const myChecks = progressChecks.filter(p =>
+                      p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서')
+                    )
                     const checkedConcepts = tbConcepts.filter(c =>
-                      progressChecks.some(p => p.concept_id === c.id && p.check_count >= targetCount)
+                      myChecks.some(p => p.concept_id === c.id && p.check_count >= 1)
                     )
                     const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
@@ -499,9 +502,9 @@ export default function ParentDashboardPage() {
                                 <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
                                 <div className="flex flex-wrap gap-1">
                                   {chConcepts.map(c => {
-                                    const check = progressChecks.find(p => p.concept_id === c.id)
-                                    const done = check && check.check_count >= targetCount
-                                    const partial = check && check.check_count > 0 && check.check_count < targetCount
+                                    const check = myChecks.find(p => p.concept_id === c.id)
+                                    const done = check && check.check_count >= 1
+                                    const partial = false
                                     return (
                                       <div key={c.id} title={c.concept_name} style={{
                                         width: 16, height: 16, borderRadius: 3, flexShrink: 0,
