@@ -755,10 +755,11 @@ export default function TeacherReportsPage() {
                         if (tbConcepts.length === 0) return null
 
                         const myChecks = progressChecks.filter((p) => p.student_id === selectedStudent.id)
-                        // targetCount 제거
+                        // 교재 종류별 목표 레벨 (개념=1, 유형=2, 심화=3) - 학생/학부모 화면과 동일 기준
+                        const targetCount = tb.textbook_type === '유형서' ? 2 : tb.textbook_type === '심화서' ? 3 : 1
 
                         const checkedConcepts = tbConcepts.filter((c) =>
-                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= 1)
+                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= targetCount)
                         )
                         const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
                         const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
@@ -801,8 +802,8 @@ export default function TeacherReportsPage() {
                                     <div className="flex flex-wrap gap-1">
                                       {chConcepts.map((c) => {
                                         const check = myChecks.find((p) => p.concept_id === c.id)
-                                        const done = check && check.check_count >= 1
-                                        const partial = false
+                                        const done = check && check.check_count >= targetCount
+                                        const partial = check && check.check_count > 0 && check.check_count < targetCount
                                         return (
                                           <div key={c.id}
                                             title={c.concept_name}
