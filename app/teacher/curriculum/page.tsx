@@ -208,13 +208,19 @@ export default function TeacherCurriculumPage() {
         }
         await supabase.from('student_textbooks').delete().eq('id', existing.id)
       }
+      // 모의고사 1부/2부는 다른 교재와 진도가 섞이지 않도록 학년/학기를 전용 값으로 자동 지정
+      const isMockExam1 = tbName === '모의고사 1부'
+      const isMockExam2 = tbName === '모의고사 2부'
+      const savedGrade = (isMockExam1 || isMockExam2) ? '중2모의고사' : tbGrade
+      const savedSemester = isMockExam1 ? 1 : isMockExam2 ? 2 : tbSemester
+
       await supabase.from('student_textbooks').insert({
         student_id: sid,
         concept_id: null,
         textbook_name: tbName,
         textbook_type: tbType,
-        grade: tbGrade,
-        semester: tbSemester,
+        grade: savedGrade,
+        semester: savedSemester,
         status: 'assigned',
         memo: tbMemo || null,
       })
@@ -908,7 +914,7 @@ export default function TeacherCurriculumPage() {
                 <div className="flex gap-1.5 flex-wrap">
                   {(tbCourseGroup === '초등'
                     ? ['초1','초2','초3','초4','초5','초6']
-                    : ['중1','중2','중3','중2모의고사']
+                    : ['중1','중2','중3']
                   ).map((g) => (
                     <button key={g} onClick={() => setTbGrade(g)}
                       className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
