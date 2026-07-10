@@ -76,6 +76,7 @@ interface ProgressCheck {
   student_id: string
   concept_id: string
   check_count: number
+  student_textbook_id?: string | null
 }
 
 const WS_STATUS: Record<string, { label: string; color: string; bg: string }> = {
@@ -228,13 +229,13 @@ export default function StudentDashboardPage() {
   // 오늘 진도 텍스트 생성 (교재별)
   function buildProgressText(tb: StudentTextbook): string | null {
     if (!tb.grade) return null
-    const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
     const tbConcepts = concepts.filter(c =>
       c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true)
     )
-    // 오늘 수업에서 진도 나간 개념 (progress_checks 기준)
+    // 오늘 수업에서 진도 나간 개념 (이 교재에서 직접 체크한 것 + 개념서에 한해 예전 기록도 포함)
     const todayChecked = progressChecks.filter(p =>
-      p.check_count >= targetCount &&
+      p.check_count >= 1 &&
+      (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서')) &&
       tbConcepts.some(c => c.id === p.concept_id)
     )
     if (todayChecked.length === 0) return null
@@ -818,9 +819,11 @@ export default function StudentDashboardPage() {
                     if (!tb.grade) return null
                     const tbConcepts = concepts.filter(c => c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true))
                     if (tbConcepts.length === 0) return null
-                    const targetCount = tb.textbook_type === '개념서' ? 1 : tb.textbook_type === '유형서' ? 2 : 3
+                    const myChecks = progressChecks.filter(p =>
+                      p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서')
+                    )
                     const checkedConcepts = tbConcepts.filter(c =>
-                      progressChecks.some(p => p.concept_id === c.id && p.check_count >= targetCount)
+                      myChecks.some(p => p.concept_id === c.id && p.check_count >= 1)
                     )
                     // 연산서는 progress_percent 사용, 나머지는 개념 체크 기반
                     const isCalc = tb.textbook_type === '연산서'
@@ -849,9 +852,9 @@ export default function StudentDashboardPage() {
                                 <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
                                 <div className="flex flex-wrap gap-1">
                                   {chConcepts.map(c => {
-                                    const check = progressChecks.find(p => p.concept_id === c.id)
-                                    const done = check && check.check_count >= targetCount
-                                    const partial = check && check.check_count > 0 && check.check_count < targetCount
+                                    const check = myChecks.find(p => p.concept_id === c.id)
+                                    const done = check && check.check_count >= 1
+                                    const partial = false
                                     return (
                                       <div key={c.id} title={c.concept_name} style={{
                                         width: 16, height: 16, borderRadius: 3, flexShrink: 0,
