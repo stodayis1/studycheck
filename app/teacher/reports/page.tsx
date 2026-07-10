@@ -1128,7 +1128,17 @@ export default function TeacherReportsPage() {
 
         {/* ── 시험대비(이너프원) 섹션 ── */}
         {selectedStudent && (() => {
-          const myPreps = examPreps.filter((ep) => ep.student_id === selectedStudent.id)
+          const nowEP = new Date()
+          const myPreps = examPreps.filter((ep) => {
+            if (ep.student_id !== selectedStudent.id) return false
+            if (ep.status === 'done') return false
+            if (ep.exam_date) {
+              const examEnd = new Date(ep.exam_date)
+              examEnd.setDate(examEnd.getDate() + 7)
+              if (nowEP > examEnd) return false
+            }
+            return true
+          })
           if (myPreps.length === 0) return null
           return (
             <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#F5C4B3' }}>

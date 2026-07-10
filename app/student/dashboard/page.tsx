@@ -173,12 +173,14 @@ export default function StudentDashboardPage() {
     const fourWeeksLater = new Date(today)
     fourWeeksLater.setDate(today.getDate() + 35)
     const maxDate = fourWeeksLater.toISOString().split('T')[0]
-    const todayDate = today.toISOString().split('T')[0]
+    const sevenDaysAgo = new Date(today)
+    sevenDaysAgo.setDate(today.getDate() - 7)
+    const minDate = sevenDaysAgo.toISOString().split('T')[0]
     const { data: epData } = await supabase
       .from('student_exam_prep')
       .select('*, inner_enough(*)')
       .eq('student_id', sid)
-      .or(`exam_date.is.null,and(exam_date.lte.${maxDate},exam_date.gte.${todayDate})`)
+      .or(`exam_date.is.null,and(exam_date.lte.${maxDate},exam_date.gte.${minDate})`)
       .neq('status', 'done')
       .order('exam_date', { ascending: true, nullsFirst: false })
     if (epData) setExamPreps(epData)
@@ -539,8 +541,10 @@ export default function StudentDashboardPage() {
 
         {/* 시험대비 현황 카드 - 독립 표시 (4주 이내 시험) */}
         {examPreps.length > 0 && (() => {
-          const nearestExam = examPreps[0]
-          const diffDays = Math.ceil((new Date(nearestExam.exam_date).getTime() - new Date().setHours(0,0,0,0)) / 86400000)
+          const todayMid = new Date(); todayMid.setHours(0,0,0,0)
+          const upcomingExams = examPreps.filter((e: any) => e.exam_date && new Date(e.exam_date) >= todayMid)
+          const nearestExam = upcomingExams.length > 0 ? upcomingExams[0] : examPreps[examPreps.length - 1]
+          const diffDays = Math.ceil((new Date(nearestExam.exam_date).getTime() - todayMid.getTime()) / 86400000)
           return (
             <div className="bg-white rounded-2xl border shadow-sm overflow-hidden"
               style={{ borderColor: '#F5C4B3' }}>
@@ -550,7 +554,7 @@ export default function StudentDashboardPage() {
                 <h3 className="text-sm font-bold" style={{ color: '#712B13' }}>시험대비 현황</h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto"
                   style={{ background: '#F5C4B3', color: '#712B13' }}>
-                  D-{diffDays} · {nearestExam.exam_date}
+                  {diffDays >= 0 ? `D-${diffDays}` : '시험 종료'} · {nearestExam.exam_date}
                 </span>
               </div>
               <div className="divide-y divide-gray-50">
