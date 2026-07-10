@@ -59,6 +59,7 @@ interface ProgressCheck {
   student_id: string
   concept_id: string
   check_count: number
+  student_textbook_id?: string | null
 }
 
 interface Exam {
@@ -345,7 +346,10 @@ export default function TeacherReportsPage() {
     const tbProgress = tbs.map((tb: any) => {
       const tbC = concepts.filter((c: any) => c.grade === tb.grade && String(c.semester) === String(tb.semester))
       if (tbC.length === 0) return null
-      const checked = tbC.filter((c: any) => (pcData ?? []).some((p: any) => p.concept_id === c.id && p.check_count >= 1))
+      const checked = tbC.filter((c: any) => (pcData ?? []).some((p: any) =>
+        p.concept_id === c.id && p.check_count >= 1 &&
+        (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서'))
+      ))
       return { name: tb.textbook_name, type: tb.textbook_type, rate: Math.round(checked.length / tbC.length * 100) }
     }).filter(Boolean)
     const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
@@ -754,12 +758,14 @@ export default function TeacherReportsPage() {
                         )
                         if (tbConcepts.length === 0) return null
 
-                        const myChecks = progressChecks.filter((p) => p.student_id === selectedStudent.id)
-                        // 교재 종류별 목표 레벨 (개념=1, 유형=2, 심화=3) - 학생/학부모 화면과 동일 기준
-                        const targetCount = tb.textbook_type === '유형서' ? 2 : tb.textbook_type === '심화서' ? 3 : 1
+                        // 이 교재에서 직접 체크한 기록 + (개념서에 한해) 교재 구분 없던 예전 기록도 포함
+                        const myChecks = progressChecks.filter((p) =>
+                          p.student_id === selectedStudent.id &&
+                          (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서'))
+                        )
 
                         const checkedConcepts = tbConcepts.filter((c) =>
-                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= targetCount)
+                          myChecks.some((p) => p.concept_id === c.id && p.check_count >= 1)
                         )
                         const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
                         const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
@@ -802,8 +808,8 @@ export default function TeacherReportsPage() {
                                     <div className="flex flex-wrap gap-1">
                                       {chConcepts.map((c) => {
                                         const check = myChecks.find((p) => p.concept_id === c.id)
-                                        const done = check && check.check_count >= targetCount
-                                        const partial = check && check.check_count > 0 && check.check_count < targetCount
+                                        const done = check && check.check_count >= 1
+                                        const partial = false
                                         return (
                                           <div key={c.id}
                                             title={c.concept_name}
