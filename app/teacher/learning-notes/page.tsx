@@ -1715,7 +1715,11 @@ export default function TeacherLearningNotesPage() {
 
                   // 배정된 교재 중 첫 번째 grade 기반으로 단원 목록
                   const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','공통수학1','공통수학2','미적분1','확률과통계','대수','기하','고1','고2','고3']
-                  const topTB = myTBs.sort((a, b) => GRADE_ORDER.indexOf(b.grade ?? '') - GRADE_ORDER.indexOf(a.grade ?? ''))[0]
+                  const topTB = myTBs.sort((a, b) => {
+                    const gradeDiff = GRADE_ORDER.indexOf(b.grade ?? '') - GRADE_ORDER.indexOf(a.grade ?? '')
+                    if (gradeDiff !== 0) return gradeDiff
+                    return (b.semester ?? 0) - (a.semester ?? 0)
+                  })[0]
                   const allConcepts = topTB?.grade
                     ? concepts.filter((c) => c.grade === topTB.grade && (topTB.semester ? c.semester === topTB.semester : true))
                     : []
