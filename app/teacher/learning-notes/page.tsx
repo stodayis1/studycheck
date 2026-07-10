@@ -521,23 +521,21 @@ export default function TeacherLearningNotesPage() {
     const existingNote = notes.find((n) => n.session_id === sessionId)
     // 교재별 진도 progress_checks 자동 업데이트
     if (noteStudent && Object.keys(noteProgressByTB).length > 0) {
-      // 교재 종류별 목표 레벨 (진도표/보고서/학생·학부모 화면과 동일한 기준: 개념=1, 유형=2, 심화=3)
-      const TARGET_LEVEL: Record<string, number> = { '개념서': 1, '유형서': 2, '심화서': 3 }
+      // 교재 하나하나(같은 종류/학년/학기라도)마다 진도를 따로 기록 - student_textbook_id로 구분
       const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
       for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
         if (sel.conceptIds.length === 0) continue
         const tb = myTBs.find((t) => t.id === tbId)
         if (!tb) continue
-        const level = TARGET_LEVEL[tb.textbook_type ?? ''] ?? 1
         await Promise.all(sel.conceptIds.map(async (conceptId) => {
           const { data: existing } = await supabase
             .from('progress_checks').select('id, check_count')
-            .eq('student_id', noteStudent.id).eq('concept_id', conceptId).single()
+            .eq('student_id', noteStudent.id).eq('concept_id', conceptId).eq('student_textbook_id', tb.id).single()
           if (existing) {
-            if (existing.check_count < level)
-              await supabase.from('progress_checks').update({ check_count: level }).eq('id', existing.id)
+            if (existing.check_count < 1)
+              await supabase.from('progress_checks').update({ check_count: 1 }).eq('id', existing.id)
           } else {
-            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: level })
+            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id })
           }
         }))
       }
@@ -548,11 +546,10 @@ export default function TeacherLearningNotesPage() {
         for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
           const tb = myTBs2.find((t) => t.id === tbId)
           if (!tb) continue
-          const level = TARGET_LEVEL[tb.textbook_type ?? ''] ?? 1
           for (const conceptId of sel.conceptIds) {
-            const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId)
-            if (idx >= 0) { if (updated[idx].check_count < level) updated[idx] = { ...updated[idx], check_count: level } }
-            else updated.push({ id: 'temp_' + conceptId, student_id: noteStudent!.id, concept_id: conceptId, check_count: level })
+            const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId && p.student_textbook_id === tb.id)
+            if (idx >= 0) { if (updated[idx].check_count < 1) updated[idx] = { ...updated[idx], check_count: 1 } }
+            else updated.push({ id: 'temp_' + conceptId + '_' + tb.id, student_id: noteStudent!.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id })
           }
         }
         return updated
@@ -1482,12 +1479,12 @@ export default function TeacherLearningNotesPage() {
                                             </div>
                                             {tbConceptList.map((c, idx) => {
                                               const selected = sel.conceptIds.includes(c.id)
+                                              // 이 교재에서 직접 체크한 기록 우선, 없으면 교재 구분 없던 예전 기록(개념서에 한해) 참고
                                               const existingCheck = noteStudent
-                                                ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id)
+                                                ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id && p.student_textbook_id === tb.id)
+                                                  ?? (tb.textbook_type === '개념서' ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id && !p.student_textbook_id) : undefined)
                                                 : null
-                                              // 교재 종류별 목표 레벨 (개념=1, 유형=2, 심화=3) 이상이어야 "이미 완료"로 표시
-                                              const tbLevel = tb.textbook_type === '유형서' ? 2 : tb.textbook_type === '심화서' ? 3 : 1
-                                              const done = existingCheck && existingCheck.check_count >= tbLevel
+                                              const done = existingCheck && existingCheck.check_count >= 1
 
                                               return (
                                                 <button key={c.id}
