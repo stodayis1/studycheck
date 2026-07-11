@@ -307,26 +307,8 @@ export default function TeacherAssignmentsPage() {
     const score = parseInt(inputScore)
     if (isNaN(score) || score < 0 || score > 100) { alert('0~100 사이 점수를 입력해주세요.'); return }
     setSavingScore(true)
-    await supabase.from('student_worksheets').update({ score }).eq('id', scoreWS.id)
-
-    if (scoreWS.worksheet_type === 'twin') {
-      // 쌍둥이학습지: 점수 입력 후 무조건 scored (레벨업/재도전/완료 선택)
-      await supabase.from('student_worksheets').update({ status: 'scored' }).eq('id', scoreWS.id)
-    } else if (scoreWS.status === 'submitted') {
-      if (score < 80) {
-        await supabase.from('student_worksheets').update({ status: 'retry' }).eq('id', scoreWS.id)
-        await supabase.from('student_worksheets').insert({
-          student_id: scoreWS.student_id, subject: '수학',
-          grade_level: scoreWS.grade_level, unit: scoreWS.unit,
-          unit_name: scoreWS.unit_name, current_level: scoreWS.current_level,
-          status: 'similar_assigned', worksheet_type: 'similar', parent_worksheet_id: scoreWS.id,
-        })
-      } else {
-        await supabase.from('student_worksheets').update({ status: 'scored' }).eq('id', scoreWS.id)
-      }
-    } else if (scoreWS.status === 'similar_submitted') {
-      await supabase.from('student_worksheets').update({ status: 'scored' }).eq('id', scoreWS.id)
-    }
+    // 점수만 저장하고, 다음 액션(레벨업/재도전/오답유사/완료)은 선생님이 직접 선택
+    await supabase.from('student_worksheets').update({ score, status: 'scored' }).eq('id', scoreWS.id)
     setSavingScore(false); setShowScoreModal(false); setInputScore(''); fetchData()
   }
 
@@ -337,6 +319,17 @@ export default function TeacherAssignmentsPage() {
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
       current_level: nextLevel, status: 'assigned', worksheet_type: 'main',
+    })
+    fetchData()
+  }
+
+  // 오답유사 학습지 배정 (기존엔 80점 미만이면 자동 배정됐지만, 이제 선생님이 직접 선택)
+  async function handleSimilarAssign(w: StudentWorksheet) {
+    await supabase.from('student_worksheets').update({ status: 'retry' }).eq('id', w.id)
+    await supabase.from('student_worksheets').insert({
+      student_id: w.student_id, subject: '수학',
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
+      current_level: w.current_level, status: 'similar_assigned', worksheet_type: 'similar', parent_worksheet_id: w.id,
     })
     fetchData()
   }
@@ -669,6 +662,9 @@ export default function TeacherAssignmentsPage() {
                                             <button onClick={() => handleRetry(w)}
                                               className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
                                               style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
+                                            <button onClick={() => handleSimilarAssign(w)}
+                                              className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                              style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>오답유사</button>
                                             <button onClick={() => handleComplete(w)}
                                               className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
                                               style={{ background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>완료</button>
@@ -1606,8 +1602,8 @@ export default function TeacherAssignmentsPage() {
                   color: parseInt(inputScore) >= 85 ? '#27500A' : parseInt(inputScore) >= 80 ? '#633806' : '#991b1b'
                 }}>
                 {scoreWS?.worksheet_type === 'twin'
-                  ? (parseInt(inputScore) >= 80 ? '✓ 점수 저장 후 다음 액션 선택' : '△ 점수 저장 후 다음 액션 선택')
-                  : (parseInt(inputScore) >= 85 ? '✓ 레벨업/재도전 선택' : parseInt(inputScore) >= 80 ? '△ 레벨업/재도전 선택' : '✕ 오답유사 자동 배정')}
+                  ? '점수 저장 후 다음 액션 선택'
+                  : (parseInt(inputScore) >= 85 ? '✓ 레벨업 추천' : parseInt(inputScore) >= 80 ? '△ 레벨업/재도전 선택' : '✕ 재도전/오답유사 선택')}
               </div>
             )}
             <div className="flex gap-2">
@@ -1632,7 +1628,9 @@ export default function TeacherAssignmentsPage() {
                   <button onClick={() => handleRetry(scoreWS)}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold"
                     style={{ background: '#fee2e2', color: '#991b1b', border: '2px solid #dc2626' }}>재도전</button>
-
+                  <button onClick={() => { handleSimilarAssign(scoreWS); setShowScoreModal(false) }}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                    style={{ background: '#FFF5F2', color: '#712B13', border: '2px solid #F5C4B3' }}>오답유사</button>
                 </div>
               </div>
             )}
