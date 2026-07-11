@@ -2574,4 +2574,11 @@ export default function TeacherLearningNotesPage() {
             </div>
             <button onClick={handleSaveSchedule} disabled={!scheduleStudent || scheduleDays.length === 0 || savingSchedule}
               className="w-full py-3.5 bg-[#9FE1CB] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-              {savingSchedule ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : scheduleDays.
+              {savingSchedule ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : scheduleDays.length > 0 ? `${scheduleDays.join('·')}요일 저장하기` : '요일을 선택하세요'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
