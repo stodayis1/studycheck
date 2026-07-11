@@ -325,7 +325,7 @@ export default function TeacherAssignmentsPage() {
 
   // 오답유사 학습지 배정 (기존엔 80점 미만이면 자동 배정됐지만, 이제 선생님이 직접 선택)
   async function handleSimilarAssign(w: StudentWorksheet) {
-    await supabase.from('student_worksheets').update({ status: 'retry' }).eq('id', w.id)
+    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,

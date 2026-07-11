@@ -207,7 +207,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
-      supabase.from('student_worksheets').select('*').not('status', 'eq', 'passed'),
+      supabase.from('student_worksheets').select('*'),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('progress_checks').select('*').limit(10000),
       supabase.from('video_watch_logs').select('*'),

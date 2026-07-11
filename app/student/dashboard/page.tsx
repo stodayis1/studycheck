@@ -138,7 +138,7 @@ export default function StudentDashboardPage() {
     const [{ data: ssData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', sid)
         .gte('session_date', fromStr).order('session_date', { ascending: false }),
-      supabase.from('student_worksheets').select('*').eq('student_id', sid).not('status', 'in', '("passed")').order('assigned_at', { ascending: false }),
+      supabase.from('student_worksheets').select('*').eq('student_id', sid).order('assigned_at', { ascending: false }),
       supabase.from('student_textbooks').select('*').eq('student_id', sid).not('status', 'in', '("checked")').order('assigned_at', { ascending: false }),
       supabase.from('concepts').select('*').order('concept_order'),
       supabase.from('progress_checks').select('*').eq('student_id', sid),
