@@ -34,8 +34,10 @@ interface Concept {
 }
 
 interface ProgressCheck {
+  id: string
   concept_id: string
   check_count: number
+  student_textbook_id?: string | null
 }
 
 export default function BulkProgressPage() {
@@ -91,62 +93,100 @@ export default function BulkProgressPage() {
     if (conceptList.length > 0 && selectedStudent) {
       const ids = conceptList.map((c: Concept) => c.id)
       const { data: pcData } = await supabase.from('progress_checks')
-        .select('concept_id, check_count')
+        .select('id, concept_id, check_count, student_textbook_id')
         .eq('student_id', selectedStudent.id)
         .in('concept_id', ids)
       setProgressChecks(pcData ?? [])
+    } else {
+      setProgressChecks([])
     }
     setLoading(false)
   }
 
+  // 이 교재에서 직접 체크한 기록을 우선 보고, 없으면 (개념서에 한해) 교재 구분 없던 예전 기록을 참고
+  function getCheckEntry(conceptId: string) {
+    if (!selectedTextbook) return undefined
+    return progressChecks.find(p => p.concept_id === conceptId && p.student_textbook_id === selectedTextbook.id)
+      ?? (selectedTextbook.textbook_type === '개념서'
+        ? progressChecks.find(p => p.concept_id === conceptId && !p.student_textbook_id)
+        : undefined)
+  }
+
   function getCheckCount(conceptId: string) {
-    return progressChecks.find(p => p.concept_id === conceptId)?.check_count ?? 0
+    return getCheckEntry(conceptId)?.check_count ?? 0
   }
 
   // 대단원 목록
   const chapters = Array.from(new Set(concepts.map(c => c.chapter))).filter(Boolean)
 
   async function toggleConcept(concept: Concept) {
-    if (!selectedStudent) return
-    const current = getCheckCount(concept.id)
-    const newCount = current >= 1 ? 0 : 1
-    if (newCount === 0) {
-      await supabase.from('progress_checks').delete()
-        .eq('student_id', selectedStudent.id).eq('concept_id', concept.id)
+    if (!selectedStudent || !selectedTextbook) return
+    const entry = getCheckEntry(concept.id)
+    const isDone = (entry?.check_count ?? 0) >= 1
+    if (isDone) {
+      if (entry) {
+        const { error } = await supabase.from('progress_checks').delete().eq('id', entry.id)
+        if (error) { showToast('저장 실패: ' + error.message); return }
+        setProgressChecks(prev => prev.filter(p => p.id !== entry.id))
+      }
+      showToast(`↩ "${concept.concept_name}" 해제`)
     } else {
-      await supabase.from('progress_checks').upsert(
-        { student_id: selectedStudent.id, concept_id: concept.id, check_count: 1 },
-        { onConflict: 'student_id,concept_id' }
-      )
+      const existingForThisTB = progressChecks.find(p => p.concept_id === concept.id && p.student_textbook_id === selectedTextbook.id)
+      if (existingForThisTB) {
+        const { error } = await supabase.from('progress_checks').update({ check_count: 1 }).eq('id', existingForThisTB.id)
+        if (error) { showToast('저장 실패: ' + error.message); return }
+        setProgressChecks(prev => prev.map(p => p.id === existingForThisTB.id ? { ...p, check_count: 1 } : p))
+      } else {
+        const { data, error } = await supabase.from('progress_checks')
+          .insert({ student_id: selectedStudent.id, concept_id: concept.id, check_count: 1, student_textbook_id: selectedTextbook.id })
+          .select('id, concept_id, check_count, student_textbook_id').single()
+        if (error) { showToast('저장 실패: ' + error.message); return }
+        if (data) setProgressChecks(prev => [...prev, data])
+      }
+      showToast(`✅ "${concept.concept_name}" 완료`)
     }
-    setProgressChecks(prev => {
-      const updated = prev.filter(p => p.concept_id !== concept.id)
-      if (newCount > 0) updated.push({ concept_id: concept.id, check_count: newCount })
-      return updated
-    })
-    showToast(newCount >= 1 ? `✅ "${concept.concept_name}" 완료` : `↩ "${concept.concept_name}" 해제`)
   }
 
   async function toggleChapter(chapter: string) {
-    if (!selectedStudent) return
+    if (!selectedStudent || !selectedTextbook) return
     const chapterConcepts = concepts.filter(c => c.chapter === chapter)
     const allDone = chapterConcepts.every(c => getCheckCount(c.id) >= 1)
     setSaving(true)
     if (allDone) {
-      // 전체 해제
-      await supabase.from('progress_checks').delete()
-        .eq('student_id', selectedStudent.id)
-        .in('concept_id', chapterConcepts.map(c => c.id))
-      setProgressChecks(prev => prev.filter(p => !chapterConcepts.some(c => c.id === p.concept_id)))
+      // 전체 해제 - 이 교재에서 실제로 체크가 걸려 있는(레거시 포함) 행을 각각 지움
+      const entries = chapterConcepts.map(c => getCheckEntry(c.id)).filter((e): e is ProgressCheck => !!e)
+      if (entries.length > 0) {
+        const { error } = await supabase.from('progress_checks').delete().in('id', entries.map(e => e.id))
+        if (error) { showToast('저장 실패: ' + error.message); setSaving(false); return }
+        const removedIds = new Set(entries.map(e => e.id))
+        setProgressChecks(prev => prev.filter(p => !removedIds.has(p.id)))
+      }
       showToast(`↩ "${chapter}" 전체 해제`)
     } else {
-      // 전체 체크
-      const rows = chapterConcepts.map(c => ({ student_id: selectedStudent.id, concept_id: c.id, check_count: 1 }))
-      await supabase.from('progress_checks').upsert(rows, { onConflict: 'student_id,concept_id' })
+      // 전체 체크 - 이 교재 소유의 행만 새로 만들거나 갱신 (다른 교재 행은 건드리지 않음)
+      const toUpdate = chapterConcepts
+        .map(c => ({ concept: c, existing: progressChecks.find(p => p.concept_id === c.id && p.student_textbook_id === selectedTextbook.id) }))
+        .filter(x => x.existing)
+      const toInsert = chapterConcepts
+        .filter(c => !progressChecks.some(p => p.concept_id === c.id && p.student_textbook_id === selectedTextbook.id))
+
+      if (toUpdate.length > 0) {
+        const { error } = await supabase.from('progress_checks')
+          .update({ check_count: 1 }).in('id', toUpdate.map(x => x.existing!.id))
+        if (error) { showToast('저장 실패: ' + error.message); setSaving(false); return }
+      }
+      let inserted: ProgressCheck[] = []
+      if (toInsert.length > 0) {
+        const { data, error } = await supabase.from('progress_checks')
+          .insert(toInsert.map(c => ({ student_id: selectedStudent.id, concept_id: c.id, check_count: 1, student_textbook_id: selectedTextbook.id })))
+          .select('id, concept_id, check_count, student_textbook_id')
+        if (error) { showToast('저장 실패: ' + error.message); setSaving(false); return }
+        inserted = data ?? []
+      }
       setProgressChecks(prev => {
-        const updated = prev.filter(p => !chapterConcepts.some(c => c.id === p.concept_id))
-        chapterConcepts.forEach(c => updated.push({ concept_id: c.id, check_count: 1 }))
-        return updated
+        const updatedIds = new Set(toUpdate.map(x => x.existing!.id))
+        const withUpdates = prev.map(p => updatedIds.has(p.id) ? { ...p, check_count: 1 } : p)
+        return [...withUpdates, ...inserted]
       })
       showToast(`✅ "${chapter}" 전체 완료`)
     }
