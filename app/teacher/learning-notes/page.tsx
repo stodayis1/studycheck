@@ -533,9 +533,11 @@ export default function TeacherLearningNotesPage() {
             .eq('student_id', noteStudent.id).eq('concept_id', conceptId).eq('student_textbook_id', tb.id).single()
           if (existing) {
             if (existing.check_count < 1)
-              await supabase.from('progress_checks').update({ check_count: 1 }).eq('id', existing.id)
+              await supabase.from('progress_checks').update({ check_count: 1, session_id: sessionId }).eq('id', existing.id)
+            else
+              await supabase.from('progress_checks').update({ session_id: sessionId }).eq('id', existing.id)
           } else {
-            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id })
+            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id, session_id: sessionId })
           }
         }))
       }
@@ -2572,11 +2574,4 @@ export default function TeacherLearningNotesPage() {
             </div>
             <button onClick={handleSaveSchedule} disabled={!scheduleStudent || scheduleDays.length === 0 || savingSchedule}
               className="w-full py-3.5 bg-[#9FE1CB] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-              {savingSchedule ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : scheduleDays.length > 0 ? `${scheduleDays.join('·')}요일 저장하기` : '요일을 선택하세요'}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+              {savingSchedule ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</> : scheduleDays.
