@@ -207,21 +207,32 @@ export default function TeacherReportsPage() {
   })
 
   // ── 초등용: 단원 × 레벨 테이블 ──
+  // 같은 단원(예: 4단원)은 단원명이 기록마다 달라도 한 행으로 합친다
   function getStudentUnits(studentId: string) {
-    const studentWS = worksheets.filter((w) => w.student_id === studentId)
-    const units = [...new Set(studentWS.map((w) => `${w.grade_level}__${w.unit}__${w.unit_name ?? ''}`))]
-    return units.map((u) => {
-      const [grade_level, unit, unit_name] = u.split('__')
-      return { grade_level, unit, unit_name }
+    const studentWS = worksheets
+      .filter((w) => w.student_id === studentId)
+      .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+    const map = new Map<string, { grade_level: string; unit: string; unit_name: string }>()
+    studentWS.forEach((w) => {
+      const key = `${w.grade_level}__${w.unit}`
+      const existing = map.get(key)
+      if (!existing) {
+        map.set(key, { grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name ?? '' })
+      } else if (w.unit_name && !existing.unit_name) {
+        map.set(key, { ...existing, unit_name: w.unit_name })
+      }
     })
+    return Array.from(map.values())
   }
 
-  function getRecord(studentId: string, gradeLevel: string, unit: string, level: number) {
-    const records = worksheets.filter((w) =>
-      w.student_id === studentId && w.grade_level === gradeLevel &&
-      w.unit === unit && w.current_level === level
-    )
-    return records.length > 0 ? records[records.length - 1] : null
+  // 같은 단원 × 같은 레벨의 학습지를 여러 번 했다면 전부 반환 (2차/3차 표시용)
+  function getRecords(studentId: string, gradeLevel: string, unit: string, level: number) {
+    return worksheets
+      .filter((w) =>
+        w.student_id === studentId && w.grade_level === gradeLevel &&
+        w.unit === unit && w.current_level === level
+      )
+      .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
   }
 
   function getUsedLevels(studentId: string) {
@@ -1089,11 +1100,30 @@ export default function TeacherReportsPage() {
                                 </td>
                                 <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600">{unit_name || '-'}</td>
                                 {usedLevels.map((level) => {
-                                  const record = getRecord(selectedStudent.id, grade_level, unit, level)
-                                  const cell = getCellStyle(record)
+                                  const records = getRecords(selectedStudent.id, grade_level, unit, level)
+                                  if (records.length === 0) {
+                                    const cell = getCellStyle(null)
+                                    return (
+                                      <td key={level} className={cx('px-2 py-2.5 border-b border-r border-gray-100 text-center', cell.bg)}>
+                                        <span className={cx('font-bold', cell.textColor)}>{cell.text}</span>
+                                      </td>
+                                    )
+                                  }
                                   return (
-                                    <td key={level} className={cx('px-2 py-2.5 border-b border-r border-gray-100 text-center', cell.bg)}>
-                                      <span className={cx('font-bold', cell.textColor)}>{cell.text}</span>
+                                    <td key={level} className="px-2 py-1.5 border-b border-r border-gray-100 text-center align-top">
+                                      <div className="flex flex-col gap-1">
+                                        {records.map((record, i) => {
+                                          const cell = getCellStyle(record)
+                                          return (
+                                            <div key={record.id} className={cx('rounded px-1 py-1', cell.bg)}>
+                                              {records.length > 1 && (
+                                                <span className="text-[8px] text-gray-400 mr-1">{i + 1}차</span>
+                                              )}
+                                              <span className={cx('font-bold', cell.textColor)}>{cell.text}</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
                                     </td>
                                   )
                                 })}

@@ -1071,6 +1071,7 @@ export default function TeacherAssignmentsPage() {
           ) : (() => {
             const studentWS = worksheets.filter((w) => w.student_id === unitStatusStudent.id)
             const gradeGroups2 = [...new Set(studentWS.map((w) => w.grade_level))].sort()
+            const SUPERSCRIPT: Record<number, string> = { 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' }
 
             function getUnitStatus(gradeLevel: string, unit: string) {
               const unitWS = studentWS
@@ -1080,7 +1081,22 @@ export default function TeacherAssignmentsPage() {
               const passed = unitWS.filter((w) => w.status === 'passed')
               const active = unitWS.find((w) => w.status !== 'passed')
               const maxLevel = Math.max(...passed.map((w) => w.current_level ?? 0))
-              return { passed, active, maxLevel, all: unitWS }
+              // 같은 레벨을 여러 번 진행했다면 배정순으로 회차(2차/3차...)를 매긴다
+              const roundByLevel: Record<number, StudentWorksheet[]> = {}
+              unitWS.forEach((w) => {
+                if (!roundByLevel[w.current_level]) roundByLevel[w.current_level] = []
+                roundByLevel[w.current_level].push(w)
+              })
+              Object.values(roundByLevel).forEach((arr) =>
+                arr.sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+              )
+              function roundOf(w: StudentWorksheet) {
+                const arr = roundByLevel[w.current_level] ?? []
+                if (arr.length <= 1) return null
+                const idx = arr.findIndex((x) => x.id === w.id)
+                return idx + 1
+              }
+              return { passed, active, maxLevel, all: unitWS, roundOf }
             }
 
             const STATUS_COLOR: Record<string, string> = {
@@ -1154,29 +1170,35 @@ export default function TeacherAssignmentsPage() {
                                 )}
                               </div>
                               <div className="flex gap-1 flex-wrap pl-4">
-                                {st.all.sort((a, b) => a.current_level - b.current_level).map((w) => (
-                                  <div key={w.id}
-                                    title={`${w.current_level}레벨 · ${STATUS_LABEL[w.status] ?? w.status}${w.score != null ? ` · ${w.score}점` : ''}`}
-                                    style={{
-                                      width: 28, height: 28, borderRadius: 6,
-                                      background: STATUS_COLOR[w.status] ?? '#e5e7eb',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      cursor: 'default', flexShrink: 0,
-                                    }}>
-                                    <span style={{ fontSize: 9, color: 'white', fontWeight: 700 }}>
-                                      {w.current_level}{w.worksheet_type === 'similar' ? '*' : ''}
-                                    </span>
-                                  </div>
-                                ))}
+                                {st.all.sort((a, b) => a.current_level - b.current_level).map((w) => {
+                                  const round = st.roundOf(w)
+                                  return (
+                                    <div key={w.id}
+                                      title={`${w.current_level}레벨${round ? ` ${round}차` : ''} · ${STATUS_LABEL[w.status] ?? w.status}${w.score != null ? ` · ${w.score}점` : ''}`}
+                                      style={{
+                                        width: 28, height: 28, borderRadius: 6,
+                                        background: STATUS_COLOR[w.status] ?? '#e5e7eb',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'default', flexShrink: 0,
+                                      }}>
+                                      <span style={{ fontSize: 9, color: 'white', fontWeight: 700 }}>
+                                        {w.current_level}{round ? (SUPERSCRIPT[round] ?? `^${round}`) : ''}{w.worksheet_type === 'similar' ? '*' : ''}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
                               </div>
                               {st.all.some((w) => w.score != null) && (
                                 <div className="flex gap-1.5 flex-wrap pl-4">
-                                  {st.all.filter((w) => w.score != null).map((w) => (
-                                    <span key={w.id} className="text-[10px] font-bold"
-                                      style={{ color: (w.score ?? 0) >= 85 ? '#22c55e' : (w.score ?? 0) >= 80 ? '#f59e0b' : '#ef4444' }}>
-                                      {w.current_level}레벨 {w.score}점
-                                    </span>
-                                  ))}
+                                  {st.all.filter((w) => w.score != null).map((w) => {
+                                    const round = st.roundOf(w)
+                                    return (
+                                      <span key={w.id} className="text-[10px] font-bold"
+                                        style={{ color: (w.score ?? 0) >= 85 ? '#22c55e' : (w.score ?? 0) >= 80 ? '#f59e0b' : '#ef4444' }}>
+                                        {w.current_level}레벨{round ? ` ${round}차` : ''} {w.score}점
+                                      </span>
+                                    )
+                                  })}
                                 </div>
                               )}
                             </div>
