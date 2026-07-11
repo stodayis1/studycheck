@@ -234,24 +234,33 @@ export default function TeacherExamsPage() {
     if (!modalStudent) return
     setSaving(true)
 
-    // 선택한 범위 키 계산 (초등=대단원 / 중고등=중단원, 없으면 대단원)
-    const grade0 = getRangeGrade(modalStudent, tab)
-    const isElem0 = grade0.includes('초')
-    let selectedRangeKeys: string[] = []
-    if (isElem0) {
-      selectedRangeKeys = activeUnitTabs
+    // 학교시험은 선생님이 직접 입력한 단원/범위 텍스트를 그대로 사용한다.
+    // (대단원·중단원 선택 UI는 입학테스트/진단평가/코어테스트에서만 쓰이는데,
+    //  activeUnitTabs가 모달을 열 때 학생의 첫 대단원으로 미리 채워져 있어서
+    //  학교시험에서도 그 값이 그대로 저장되며 직접 입력한 단원명을 덮어쓰던 버그였음)
+    let rangeUnits: string | null
+    if (tab === '학교시험') {
+      rangeUnits = examUnitName || null
     } else {
-      const subKeys = activeSubTabs
-      // 중단원 선택 안 된 대단원은 대단원 자체를 범위로
-      const unitsWithSub = new Set(subKeys.map((k) => k.split('__')[0]))
-      const unitsOnly = activeUnitTabs.filter((u) => !unitsWithSub.has(u))
-      selectedRangeKeys = [...subKeys, ...unitsOnly]
-    }
+      // 선택한 범위 키 계산 (초등=대단원 / 중고등=중단원, 없으면 대단원)
+      const grade0 = getRangeGrade(modalStudent, tab)
+      const isElem0 = grade0.includes('초')
+      let selectedRangeKeys: string[] = []
+      if (isElem0) {
+        selectedRangeKeys = activeUnitTabs
+      } else {
+        const subKeys = activeSubTabs
+        // 중단원 선택 안 된 대단원은 대단원 자체를 범위로
+        const unitsWithSub = new Set(subKeys.map((k) => k.split('__')[0]))
+        const unitsOnly = activeUnitTabs.filter((u) => !unitsWithSub.has(u))
+        selectedRangeKeys = [...subKeys, ...unitsOnly]
+      }
 
-    // 선택한 단원 범위를 문자열로 합침
-    const rangeUnits = selectedRangeKeys.length > 0
-      ? selectedRangeKeys.map((k) => k.includes('__') ? k.split('__')[1] : k).join(', ')
-      : (examUnitName || null)
+      // 선택한 단원 범위를 문자열로 합침
+      rangeUnits = selectedRangeKeys.length > 0
+        ? selectedRangeKeys.map((k) => k.includes('__') ? k.split('__')[1] : k).join(', ')
+        : (examUnitName || null)
+    }
 
     if (examScore) {
       // 평가 1개 = 점수 1개 (단원은 범위 표시용)
