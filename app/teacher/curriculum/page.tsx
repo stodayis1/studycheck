@@ -194,20 +194,7 @@ export default function TeacherCurriculumPage() {
     setTbAssigning(true)
 
     for (const sid of targetIds) {
-      const stu = students.find(s => s.id === sid)
-      // 같은 학생+교재종류 이미 있으면 교체 (다중모드는 묻지 않고 교체)
-      const existing = textbooks.find(
-        (t) => t.student_id === sid && t.textbook_type === tbType && t.status === 'assigned'
-      )
-      if (existing) {
-        if (!tbMultiMode) {
-          if (!confirm(`${stu?.name ?? '이'} 학생에게 이미 ${tbType}(${existing.textbook_name})가 배정되어 있어요.\n새 교재로 교체할까요?`)) {
-            setTbAssigning(false)
-            return
-          }
-        }
-        await supabase.from('student_textbooks').delete().eq('id', existing.id)
-      }
+      // 같은 종류 교재(개념서/유형서/심화서)도 여러 권 동시에 진행할 수 있도록 자동 교체하지 않고 그대로 추가
       // 모의고사 1부/2부는 다른 교재와 진도가 섞이지 않도록 학년/학기를 전용 값으로 자동 지정
       const isMockExam1 = tbName === '모의고사 1부'
       const isMockExam2 = tbName === '모의고사 2부'
