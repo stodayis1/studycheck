@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서'))
       ))
       const rate = tb.status === 'completed' ? 100 : Math.round(checked.length / tbC.length * 100)
-      return { name: tb.textbook_name, type: tb.textbook_type, rate }
+      return { name: tb.textbook_name, type: tb.textbook_type, rate, completed: tb.status === 'completed' }
     }).filter(Boolean)
     const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
 

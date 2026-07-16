@@ -481,6 +481,7 @@ export default function ParentDashboardPage() {
                     const rate = tb.status === 'completed' ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
                     const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
+                    const isCompleted = tb.status === 'completed'
                     return (
                       <div key={tb.id}>
                         <div className="flex items-center gap-2 mb-2">
@@ -489,43 +490,53 @@ export default function ParentDashboardPage() {
                           </span>
                           <span className="text-xs font-bold text-gray-800">{tb.textbook_name}</span>
                           <span className="text-[10px] text-gray-400">{tb.grade} {tb.semester}학기</span>
-                          <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
+                          {isCompleted ? (
+                            <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: style.dot, color: '#fff' }}>완료</span>
+                          ) : (
+                            <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
+                          )}
                         </div>
                         <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
                           <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
                         </div>
-                        <div className="space-y-2">
-                          {chapters.map(ch => {
-                            const chConcepts = tbConcepts.filter(c => c.chapter === ch)
-                            return (
-                              <div key={ch}>
-                                <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {chConcepts.map(c => {
-                                    const check = myChecks.find(p => p.concept_id === c.id)
-                                    const done = tb.status === 'completed' || (check && check.check_count >= 1)
-                                    const partial = false
-                                    return (
-                                      <div key={c.id} title={c.concept_name} style={{
-                                        width: 16, height: 16, borderRadius: 3, flexShrink: 0,
-                                        background: done ? style.dot : partial ? style.fill : '#f3f0ea',
-                                        border: `1px solid ${done ? style.dot : partial ? style.dot + '80' : '#e5d5c5'}`,
-                                      }} />
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                        <div className="flex gap-3 mt-2">
-                          {[['완료', style.dot, ''], ['진행중', style.fill, `1px solid ${style.dot}80`], ['미진도', '#f3f0ea', '1px solid #e5d5c5']].map(([label, bg, border]) => (
-                            <div key={label} className="flex items-center gap-1">
-                              <div style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: border || 'none' }} />
-                              <span className="text-[9px] text-gray-500">{label}</span>
+                        {isCompleted ? (
+                          <p className="text-[10px] text-gray-400">완료 처리된 교재예요 · 개념별 진도는 표시하지 않아요</p>
+                        ) : (
+                          <>
+                            <div className="space-y-2">
+                              {chapters.map(ch => {
+                                const chConcepts = tbConcepts.filter(c => c.chapter === ch)
+                                return (
+                                  <div key={ch}>
+                                    <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {chConcepts.map(c => {
+                                        const check = myChecks.find(p => p.concept_id === c.id)
+                                        const done = check && check.check_count >= 1
+                                        const partial = false
+                                        return (
+                                          <div key={c.id} title={c.concept_name} style={{
+                                            width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                                            background: done ? style.dot : partial ? style.fill : '#f3f0ea',
+                                            border: `1px solid ${done ? style.dot : partial ? style.dot + '80' : '#e5d5c5'}`,
+                                          }} />
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })}
                             </div>
-                          ))}
-                        </div>
+                            <div className="flex gap-3 mt-2">
+                              {[['완료', style.dot, ''], ['진행중', style.fill, `1px solid ${style.dot}80`], ['미진도', '#f3f0ea', '1px solid #e5d5c5']].map(([label, bg, border]) => (
+                                <div key={label} className="flex items-center gap-1">
+                                  <div style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: border || 'none' }} />
+                                  <span className="text-[9px] text-gray-500">{label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     )
                   })}

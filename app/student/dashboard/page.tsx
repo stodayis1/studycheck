@@ -827,7 +827,8 @@ export default function StudentDashboardPage() {
                     )
                     // 연산서는 progress_percent 사용, 나머지는 개념 체크 기반
                     const isCalc = tb.textbook_type === '연산서'
-                    const rate = isCalc ? (tb.progress_percent ?? 0) : tb.status === 'completed' ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                    const isCompleted = tb.status === 'completed'
+                    const rate = isCalc ? (tb.progress_percent ?? 0) : isCompleted ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
                     const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
                     return (
@@ -836,13 +837,19 @@ export default function StudentDashboardPage() {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: style.dot, color: '#fff' }}>{style.label}</span>
                           <span className="text-xs font-bold text-gray-800">{tb.textbook_name}</span>
                           <span className="text-[10px] text-gray-400">{tb.grade} {tb.semester}학기</span>
-                          <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
+                          {isCompleted ? (
+                            <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: style.dot, color: '#fff' }}>완료</span>
+                          ) : (
+                            <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
+                          )}
                         </div>
                         <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
                           <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
                         </div>
                         {isCalc ? (
                           <p className="text-[10px] text-gray-400">달성률 기준으로 표시돼요</p>
+                        ) : isCompleted ? (
+                          <p className="text-[10px] text-gray-400">완료 처리된 교재예요 · 개념별 진도는 표시하지 않아요</p>
                         ) : (
                         <div className="space-y-2">
                           {chapters.map(ch => {
@@ -853,7 +860,7 @@ export default function StudentDashboardPage() {
                                 <div className="flex flex-wrap gap-1">
                                   {chConcepts.map(c => {
                                     const check = myChecks.find(p => p.concept_id === c.id)
-                                    const done = tb.status === 'completed' || (check && check.check_count >= 1)
+                                    const done = check && check.check_count >= 1
                                     const partial = false
                                     return (
                                       <div key={c.id} title={c.concept_name} style={{

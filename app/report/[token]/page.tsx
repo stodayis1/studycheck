@@ -18,7 +18,7 @@ interface ReportLink {
     avgScore: number | null
     passRate: number
     periodCount: number
-    tbProgress: { name: string; type: string; rate: number }[]
+    tbProgress: { name: string; type: string; rate: number; completed?: boolean }[]
     calcProgress: { name: string; percent: number }[]
     exams: any[]
     studentName: string
@@ -124,10 +124,14 @@ export default function PublicReportPage() {
                   <div key={i}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{tb.rate}%</span>
+                      {tb.completed ? (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#0f3460', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>완료</span>
+                      ) : (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{tb.rate}%</span>
+                      )}
                     </div>
                     <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                      <div style={{ height: 4, borderRadius: 4, width: `${tb.rate}%`, background: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
+                      <div style={{ height: 4, borderRadius: 4, width: `${tb.rate}%`, background: tb.completed ? '#9FE1CB' : tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
                     </div>
                   </div>
                 ))}
