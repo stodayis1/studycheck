@@ -478,7 +478,7 @@ export default function ParentDashboardPage() {
                     const checkedConcepts = tbConcepts.filter(c =>
                       myChecks.some(p => p.concept_id === c.id && p.check_count >= 1)
                     )
-                    const rate = Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                    const rate = tb.status === 'completed' ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
                     const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
                     return (
@@ -503,7 +503,7 @@ export default function ParentDashboardPage() {
                                 <div className="flex flex-wrap gap-1">
                                   {chConcepts.map(c => {
                                     const check = myChecks.find(p => p.concept_id === c.id)
-                                    const done = check && check.check_count >= 1
+                                    const done = tb.status === 'completed' || (check && check.check_count >= 1)
                                     const partial = false
                                     return (
                                       <div key={c.id} title={c.concept_name} style={{

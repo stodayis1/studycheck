@@ -326,7 +326,7 @@ export default function TeacherReportsPage() {
       supabase.from('learning_notes').select('*'),
       supabase.from('student_worksheets').select('*').eq('student_id', student.id),
       supabase.from('exams').select('*').eq('student_id', student.id).gte('exam_date', startStr).lte('exam_date', endStr),
-      supabase.from('student_textbooks').select('*').eq('student_id', student.id).eq('status','assigned'),
+      supabase.from('student_textbooks').select('*').eq('student_id', student.id),
       supabase.from('progress_checks').select('*').limit(10000).eq('student_id', student.id),
     ])
 
@@ -346,7 +346,7 @@ export default function TeacherReportsPage() {
     const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
     const hwRate = hwNotes.length > 0 ? Math.round(hwDone / hwNotes.length * 100) : 0
 
-    const monthWS = (wsData ?? []).filter((w: any) => w.assigned_at >= startStr && w.assigned_at <= endStr)
+    const monthWS = (wsData ?? []).filter((w: any) => w.assigned_at && w.assigned_at.slice(0, 10) >= startStr && w.assigned_at.slice(0, 10) <= endStr)
     const scoredWS = monthWS.filter((w: any) => w.score != null)
     const avgScore = scoredWS.length > 0 ? Math.round(scoredWS.reduce((s: number, w: any) => s + w.score, 0) / scoredWS.length) : null
     const passedWS = monthWS.filter((w: any) => w.status === 'passed').length
@@ -361,7 +361,8 @@ export default function TeacherReportsPage() {
         p.concept_id === c.id && p.check_count >= 1 &&
         (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서'))
       ))
-      return { name: tb.textbook_name, type: tb.textbook_type, rate: Math.round(checked.length / tbC.length * 100) }
+      const rate = tb.status === 'completed' ? 100 : Math.round(checked.length / tbC.length * 100)
+      return { name: tb.textbook_name, type: tb.textbook_type, rate }
     }).filter(Boolean)
     const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
 

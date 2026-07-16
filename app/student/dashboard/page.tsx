@@ -827,7 +827,7 @@ export default function StudentDashboardPage() {
                     )
                     // 연산서는 progress_percent 사용, 나머지는 개념 체크 기반
                     const isCalc = tb.textbook_type === '연산서'
-                    const rate = isCalc ? (tb.progress_percent ?? 0) : Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                    const rate = isCalc ? (tb.progress_percent ?? 0) : tb.status === 'completed' ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
                     const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
                     return (
@@ -853,7 +853,7 @@ export default function StudentDashboardPage() {
                                 <div className="flex flex-wrap gap-1">
                                   {chConcepts.map(c => {
                                     const check = myChecks.find(p => p.concept_id === c.id)
-                                    const done = check && check.check_count >= 1
+                                    const done = tb.status === 'completed' || (check && check.check_count >= 1)
                                     const partial = false
                                     return (
                                       <div key={c.id} title={c.concept_name} style={{
