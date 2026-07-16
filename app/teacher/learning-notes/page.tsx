@@ -970,6 +970,11 @@ export default function TeacherLearningNotesPage() {
                                   {student.wise_step}단계
                                 </span>
                               )}
+                              {student.teacher_name && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">
+                                  {student.teacher_name} 선생님
+                                </span>
+                              )}
                               {note && (
                                 <span className="text-[10px] font-bold text-green-600">✓ 수업일지 완료</span>
                               )}
@@ -1116,7 +1121,7 @@ export default function TeacherLearningNotesPage() {
                             </div>
                             <div>
                               <p className="text-xs font-bold text-gray-700">{student.name}</p>
-                              <p className="text-[10px] text-gray-400">{student.grade}</p>
+                              <p className="text-[10px] text-gray-400">{student.grade}{student.teacher_name ? ` · ${student.teacher_name} 선생님` : ''}</p>
                             </div>
                           </div>
                           {/* 현재 진도 미리보기 */}
