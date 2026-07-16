@@ -585,6 +585,44 @@ export default function TeacherLearningNotesPage() {
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
   }
 
+  // 결석 한번에 처리 (전체 입력폼 없이 바로 기록) - 미입력과 결석을 구분하기 위함
+  async function quickMarkAbsent(student: Student) {
+    if (!confirm(`${student.name} 학생을 오늘(${todayStr}) 결석으로 처리할까요?\n나중에 '수정'으로 세부 내용을 보완할 수 있어요.`)) return
+    const { data: existingSession } = await supabase
+      .from('class_sessions')
+      .select('id')
+      .eq('student_id', student.id)
+      .eq('session_date', todayStr)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    let sessionId = existingSession?.id
+    if (!sessionId) {
+      const { data: newSession } = await supabase.from('class_sessions')
+        .insert({ student_id: student.id, session_date: todayStr, session_type: '정규', created_by: currentUser?.name })
+        .select().single()
+      sessionId = newSession?.id
+    }
+    if (!sessionId) return
+    const existingNote = notes.find((n) => n.session_id === sessionId)
+    const noteData = {
+      student_id: student.id,
+      session_id: sessionId,
+      attendance: '결석',
+      worksheet_submitted: false,
+      worksheet_score: null as number | null,
+      textbook_submitted: false,
+      workbook_done: false,
+      memo: null as string | null,
+    }
+    if (existingNote) {
+      await supabase.from('learning_notes').update(noteData).eq('id', existingNote.id)
+    } else {
+      await supabase.from('learning_notes').insert(noteData)
+    }
+    fetchData()
+  }
+
   async function openFeedbackModal(student: Student) {
     setFeedbackStudent(student)
     setFeedbackContent('')
@@ -786,13 +824,7 @@ export default function TeacherLearningNotesPage() {
 
   // 수업일지 삭제 (당일+다음날만 가능, 관리자 예외)
   async function handleDeleteNote(sessionId: string, sessionDate: string) {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(today.getDate() + 1)
-    const sDate = new Date(sessionDate)
-    sDate.setHours(0, 0, 0, 0)
-    const canEdit = isAdmin() || sDate >= today && sDate <= tomorrow
+    const canEdit = canEditNote(sessionDate)
 
     if (!canEdit) {
       alert('수정/삭제는 수업 당일과 다음날까지만 가능해요. 그 이후에는 관리자에게 문의해주세요.')
@@ -807,15 +839,15 @@ export default function TeacherLearningNotesPage() {
     fetchData()
   }
 
-  // 수업일지 수정 가능 여부 체크
+  // 수업일지 수정 가능 여부 체크 (수업 당일 + 다음날까지)
   function canEditNote(sessionDate: string) {
+    if (isAdmin()) return true
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(today.getDate() + 1)
     const sDate = new Date(sessionDate)
     sDate.setHours(0, 0, 0, 0)
-    return isAdmin() || (sDate >= today && sDate <= tomorrow)
+    const diffDays = Math.round((today.getTime() - sDate.getTime()) / 86400000)
+    return diffDays >= 0 && diffDays <= 1
   }
 
   async function handleDeleteSchedule(id: string) {
@@ -1002,10 +1034,16 @@ export default function TeacherLearningNotesPage() {
                                 </>
                               )
                             })() : (
-                              <button onClick={() => openNoteModal(student)}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
-                                ✏️ 입력
-                              </button>
+                              <>
+                                <button onClick={() => openNoteModal(student)}
+                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
+                                  ✏️ 입력
+                                </button>
+                                <button onClick={() => quickMarkAbsent(student)}
+                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg text-red-500 bg-red-50 border border-red-100">
+                                  🚫 결석
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>

@@ -321,13 +321,14 @@ export default function TeacherReportsPage() {
     const endDate = new Date(year, month, 0)
     const endStr = `${year}-${String(month).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`
 
-    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }] = await Promise.all([
+    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: schedulesData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', student.id).gte('session_date', startStr).lte('session_date', endStr),
       supabase.from('learning_notes').select('*'),
       supabase.from('student_worksheets').select('*').eq('student_id', student.id),
       supabase.from('exams').select('*').eq('student_id', student.id).gte('exam_date', startStr).lte('exam_date', endStr),
       supabase.from('student_textbooks').select('*').eq('student_id', student.id),
       supabase.from('progress_checks').select('*').limit(10000).eq('student_id', student.id),
+      supabase.from('schedules').select('*').eq('student_id', student.id).eq('is_active', true),
     ])
 
     const sessions = sessionsData ?? []
@@ -341,6 +342,27 @@ export default function TeacherReportsPage() {
       else if (n.attendance === '결석') attendance.결석++
     })
     const totalSessions = sessions.length
+
+    // 결석/미입력 상세 - 정규 시간표 기준 예정일과 실제 출결 비교 (업무 확인용)
+    const dayMap: Record<number, string> = { 0: '일', 1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토' }
+    const scheduleDays = new Set((schedulesData ?? []).map((s: any) => s.day_of_week))
+    const todayStr9 = new Date().toISOString().slice(0, 10)
+    const attendanceDetail: { date: string; dow: string; status: string }[] = []
+    if (scheduleDays.size > 0) {
+      const cursor = new Date(startStr + 'T00:00:00')
+      const endD = new Date(endStr + 'T00:00:00')
+      while (cursor <= endD) {
+        const dateStr = cursor.toISOString().slice(0, 10)
+        if (dateStr > todayStr9) break
+        const dow = dayMap[cursor.getDay()]
+        if (scheduleDays.has(dow)) {
+          const session = sessions.find((s: any) => s.session_date === dateStr)
+          const note = session ? notes.find((n: any) => n.session_id === session.id) : null
+          attendanceDetail.push({ date: dateStr, dow, status: note?.attendance ?? '미입력' })
+        }
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
 
     const hwNotes = notes.filter((n: any) => n.attendance !== '결석')
     const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
@@ -366,7 +388,7 @@ export default function TeacherReportsPage() {
     }).filter(Boolean)
     const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
 
-    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month })
+    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail })
     setMLoading(false)
   }
 
@@ -472,6 +494,20 @@ export default function TeacherReportsPage() {
 
             {mData && (
               <>
+                {/* 미입력 경고 (전송 전 확인용, 캡처 이미지에는 포함 안 됨) */}
+                {mData.attendanceDetail?.some((a: any) => a.status === '미입력') && (
+                  <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#9a3412', marginBottom: 4 }}>
+                      ⚠ 학습일지 미입력 {mData.attendanceDetail.filter((a: any) => a.status === '미입력').length}건
+                    </div>
+                    <div style={{ fontSize: 11, color: '#c2410c' }}>
+                      {mData.attendanceDetail.filter((a: any) => a.status === '미입력')
+                        .map((a: any) => `${Number(a.date.slice(5,7))}/${Number(a.date.slice(8,10))}(${a.dow})`).join(', ')}
+                      {' '}· 결석인지 미기록인지 선생님께 확인 후 발송해주세요
+                    </div>
+                  </div>
+                )}
+
                 {/* 보고서 카드 (이미지 캡처 대상) */}
                 <div ref={reportRef} style={{ background: '#0f3460', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', color: 'white' }}>
                   {/* 헤더 */}
@@ -507,6 +543,41 @@ export default function TeacherReportsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* 출결 상세 (결석일 표시) */}
+                  {mData.attendanceDetail && mData.attendanceDetail.length > 0 && (() => {
+                    const absentDates = mData.attendanceDetail.filter((a: any) => a.status === '결석')
+                    return (
+                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>수업 일정</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {mData.attendanceDetail.map((a: any, i: number) => {
+                            const isAbsent = a.status === '결석'
+                            const isLate = a.status === '지각'
+                            const noEntry = a.status === '미입력'
+                            return (
+                              <div key={i} title={`${a.date} (${a.dow}) · ${a.status}`}
+                                style={{
+                                  minWidth: 34, textAlign: 'center', borderRadius: 8, padding: '4px 5px',
+                                  background: isAbsent ? 'rgba(245,196,179,0.25)' : noEntry ? 'rgba(255,255,255,0.04)' : 'rgba(159,225,203,0.12)',
+                                  border: isAbsent ? '1px solid #F5C4B3' : '1px solid rgba(255,255,255,0.08)',
+                                }}>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: isAbsent ? '#F5C4B3' : isLate ? '#FAEEDA' : noEntry ? 'rgba(255,255,255,0.3)' : '#9FE1CB' }}>
+                                  {Number(a.date.slice(5,7))}/{Number(a.date.slice(8,10))}
+                                </div>
+                                <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{a.dow}</div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {absentDates.length > 0 && (
+                          <div style={{ marginTop: 10, fontSize: 10, color: '#F5C4B3', lineHeight: 1.6 }}>
+                            결석 {absentDates.length}회 · {absentDates.map((a: any) => `${Number(a.date.slice(5,7))}/${Number(a.date.slice(8,10))}(${a.dow})`).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* 학습지 */}
                   {mData.monthWS > 0 && (

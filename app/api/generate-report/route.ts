@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const { data: student } = await supabase.from('students').select('*').eq('id', studentId).single()
     if (!student) return NextResponse.json({ error: '학생을 찾을 수 없습니다.' }, { status: 404 })
 
-    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: conceptsData }] = await Promise.all([
+    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: conceptsData }, { data: schedulesData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', studentId).gte('session_date', range.start).lte('session_date', range.end),
       supabase.from('learning_notes').select('*'),
       supabase.from('student_worksheets').select('*').eq('student_id', studentId),
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       supabase.from('student_textbooks').select('*').eq('student_id', studentId),
       supabase.from('progress_checks').select('*').limit(10000).eq('student_id', studentId),
       supabase.from('concepts').select('*'),
+      supabase.from('schedules').select('*').eq('student_id', studentId).eq('is_active', true),
     ])
 
     const sessions = sessionsData ?? []
@@ -72,6 +73,27 @@ export async function POST(req: NextRequest) {
       else if (n.attendance === '결석') attendance.결석++
     })
     const totalSessions = sessions.length
+
+    // 결석/미입력 상세 - 정규 시간표 기준 이번 기간 수업 예정일과 실제 출결 비교
+    const dayMap: Record<number, string> = { 0: '일', 1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토' }
+    const scheduleDays = new Set((schedulesData ?? []).map((s: any) => s.day_of_week))
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const attendanceDetail: { date: string; dow: string; status: string }[] = []
+    if (scheduleDays.size > 0) {
+      const cursor = new Date(range.start + 'T00:00:00')
+      const endD = new Date(range.end + 'T00:00:00')
+      while (cursor <= endD) {
+        const dateStr = cursor.toISOString().slice(0, 10)
+        if (dateStr > todayStr) break
+        const dow = dayMap[cursor.getDay()]
+        if (scheduleDays.has(dow)) {
+          const session = sessions.find((s: any) => s.session_date === dateStr)
+          const note = session ? notes.find((n: any) => n.session_id === session.id) : null
+          attendanceDetail.push({ date: dateStr, dow, status: note?.attendance ?? '미입력' })
+        }
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
 
     const hwNotes = notes.filter((n: any) => n.attendance !== '결석')
     const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
@@ -101,6 +123,7 @@ export async function POST(req: NextRequest) {
       totalSessions, attendance, hwRate, avgScore, passRate,
       periodCount: periodWS.length, tbProgress, calcProgress,
       exams: examData ?? [], studentName: student.name, studentGrade: student.grade,
+      attendanceDetail,
     }
 
     // AI 한 줄평 생성

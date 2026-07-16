@@ -23,6 +23,7 @@ interface ReportLink {
     exams: any[]
     studentName: string
     studentGrade: string
+    attendanceDetail?: { date: string; dow: string; status: string }[]
   }
   ai_comment: string | null
   created_at: string
@@ -102,6 +103,41 @@ export default function PublicReportPage() {
               </div>
             </div>
           </div>
+
+          {/* 출결 상세 (결석일 표시) */}
+          {d.attendanceDetail && d.attendanceDetail.length > 0 && (() => {
+            const absentDates = d.attendanceDetail.filter(a => a.status === '결석')
+            return (
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>수업 일정</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {d.attendanceDetail.map((a, i) => {
+                    const isAbsent = a.status === '결석'
+                    const isLate = a.status === '지각'
+                    const noEntry = a.status === '미입력'
+                    return (
+                      <div key={i} title={`${a.date} (${a.dow}) · ${a.status}`}
+                        style={{
+                          minWidth: 34, textAlign: 'center', borderRadius: 8, padding: '4px 5px',
+                          background: isAbsent ? 'rgba(245,196,179,0.25)' : noEntry ? 'rgba(255,255,255,0.04)' : 'rgba(159,225,203,0.12)',
+                          border: isAbsent ? '1px solid #F5C4B3' : '1px solid rgba(255,255,255,0.08)',
+                        }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: isAbsent ? '#F5C4B3' : isLate ? '#FAEEDA' : noEntry ? 'rgba(255,255,255,0.3)' : '#9FE1CB' }}>
+                          {Number(a.date.slice(5,7))}/{Number(a.date.slice(8,10))}
+                        </div>
+                        <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{a.dow}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {absentDates.length > 0 && (
+                  <div style={{ marginTop: 10, fontSize: 10, color: '#F5C4B3', lineHeight: 1.6 }}>
+                    결석 {absentDates.length}회 · {absentDates.map(a => `${Number(a.date.slice(5,7))}/${Number(a.date.slice(8,10))}(${a.dow})`).join(', ')}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* 학습지 */}
           {d.periodCount > 0 && (
