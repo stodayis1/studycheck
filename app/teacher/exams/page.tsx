@@ -116,6 +116,7 @@ export default function TeacherExamsPage() {
   const [coreActiveSubTabs, setCoreActiveSubTabs] = useState<string[]>([])
   const [coreScores, setCoreScores] = useState<Record<string, string>>({}) // studentId → score
   const [coreSaving, setCoreSaving] = useState(false)
+  const [coreSemester, setCoreSemester] = useState(1) // 초/중 단원은 학기별로 나뉘어 있어 구분 필요
 
   useEffect(() => { fetchData() }, [])
 
@@ -899,7 +900,7 @@ export default function TeacherExamsPage() {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">학년 (단원 기준)</label>
                 <div className="flex flex-wrap gap-2">
                   {['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3'].map(g => (
-                    <button key={g} onClick={() => { setCoreGrade(g); setCoreActiveUnits([]); setCoreActiveSubTabs([]) }}
+                    <button key={g} onClick={() => { setCoreGrade(g); setCoreActiveUnits([]); setCoreActiveSubTabs([]); setCoreSemester(1) }}
                       className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
                       style={coreGrade === g
                         ? { background: '#27500A', color: 'white', borderColor: '#27500A' }
@@ -912,11 +913,25 @@ export default function TeacherExamsPage() {
 
               {/* 단원 범위 */}
               {coreGrade && (() => {
-                const gradeConcepts = concepts.filter(c => c.grade === coreGrade)
+                const hasSemester = coreGrade.startsWith('초') || coreGrade.startsWith('중')
+                const gradeConcepts = concepts.filter(c => c.grade === coreGrade && (!hasSemester || c.semester === coreSemester))
                 const chapters = [...new Set(gradeConcepts.map(c => c.chapter))]
                 const isElem = coreGrade.includes('초')
                 return (
                   <div>
+                    {hasSemester && (
+                      <div className="flex gap-2 mb-2">
+                        {[1, 2].map(sem => (
+                          <button key={sem} onClick={() => { setCoreSemester(sem); setCoreActiveUnits([]); setCoreActiveSubTabs([]) }}
+                            className="flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                            style={coreSemester === sem
+                              ? { background: '#27500A', color: 'white', borderColor: '#27500A' }
+                              : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                            {sem}학기
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">시험 범위</label>
                     <div className="flex flex-wrap gap-1 mb-2 max-h-28 overflow-y-auto">
                       {chapters.map(ch => (
