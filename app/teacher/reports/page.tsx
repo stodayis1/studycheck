@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Student {
@@ -161,12 +161,12 @@ export default function TeacherReportsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, { data: pcData }, { data: examData }, { data: epData }] = await Promise.all([
+    const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, pcData, { data: examData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').limit(5000),
-      supabase.from('progress_checks').select('*').limit(10000),
+      fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
       supabase.from('exams').select('*').order('exam_date', { ascending: true }).limit(5000),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
     ])
@@ -174,7 +174,7 @@ export default function TeacherReportsPage() {
     if (worksheetData) setWorksheets(worksheetData)
     if (conceptData) setConcepts(conceptData)
     if (tbData) setStudentTextbooks(tbData)
-    if (pcData) setProgressChecks(pcData)
+    setProgressChecks(pcData)
     if (examData) setExams(examData)
     if (epData) setExamPreps(epData)
     setLoading(false)
@@ -323,7 +323,7 @@ export default function TeacherReportsPage() {
 
     const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: schedulesData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', student.id).gte('session_date', startStr).lte('session_date', endStr),
-      supabase.from('learning_notes').select('*'),
+      supabase.from('learning_notes').select('*').limit(5000),
       supabase.from('student_worksheets').select('*').eq('student_id', student.id),
       supabase.from('exams').select('*').eq('student_id', student.id).gte('exam_date', startStr).lte('exam_date', endStr),
       supabase.from('student_textbooks').select('*').eq('student_id', student.id),

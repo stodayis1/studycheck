@@ -86,9 +86,9 @@ export default function AdminPage() {
 
     const [{ data: sData }, { data: nData }, { data: ssData }, { data: wsData }, { data: pgData }, { data: etData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('teacher_name').order('grade').order('name'),
-      supabase.from('learning_notes').select('*'),
+      supabase.from('learning_notes').select('*').limit(5000),
       supabase.from('class_sessions').select('id, student_id, session_date').gte('session_date', monthStart),
-      supabase.from('student_worksheets').select('id, student_id, status, score'),
+      supabase.from('student_worksheets').select('id, student_id, status, score').limit(5000),
       supabase.from('student_progress').select('*'),
       supabase.from('elementary_textbooks').select('id, grade, semester, chapter_no, lesson_type'),
     ])

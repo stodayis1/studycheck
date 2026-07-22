@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -199,22 +199,23 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, { data: pcData }, { data: vwData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('schedules').select('*').eq('is_active', true),
-      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }),
-      supabase.from('learning_notes').select('*'),
+      supabase.from('schedules').select('*').eq('is_active', true).limit(5000),
+      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }).limit(5000),
+      supabase.from('learning_notes').select('*').limit(5000),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
-      supabase.from('student_worksheets').select('*'),
+      supabase.from('student_worksheets').select('*').limit(5000),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
-      supabase.from('progress_checks').select('*').limit(10000),
+      fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
       supabase.from('video_watch_logs').select('*'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
     ])
     if (sData) setStudents(sData)
-    if (scData) setSchedules(scData)
+    // periods는 DB에서 numeric 타입이라 문자열("2.5")로 내려올 수 있어 숫자로 변환 (연산 시 문자열 이어붙기 방지)
+    if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
     if (ssData) setSessions(ssData)
     if (nData) setNotes(nData)
     if (fbData) setFeedbacks(fbData)
@@ -222,7 +223,7 @@ export default function TeacherLearningNotesPage() {
     if (stData) setStudentTextbooks(stData)
     if (wData) setWorksheets(wData)
     if (catLNData) setLNCatalog(catLNData)
-    if (pcData) setProgressChecks(pcData)
+    setProgressChecks(pcData)
     if (vwData) setVideoWatchLogs(vwData)
     if (epData) setExamPreps(epData)
     setLoading(false)

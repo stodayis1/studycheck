@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -109,18 +109,18 @@ export default function TeacherCurriculumPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: tData }, { data: cData }, { data: pData }, { data: catData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, { data: tData }, { data: cData }, pData, { data: catData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }),
+      supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
-      supabase.from('progress_checks').select('*'),
+      fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: false }),
     ])
     if (sData) setStudents(sData)
     if (tData) setTextbooks(tData)
     if (cData) setConcepts(cData)
-    if (pData) setProgressChecks(pData)
+    setProgressChecks(pData)
     if (catData) setCatalog(catData)
     if (epData) setExamPreps(epData)
     setLoading(false)

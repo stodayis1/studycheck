@@ -135,7 +135,7 @@ export default function ParentDashboardPage() {
           supabase.from('progress_checks').select('*').eq('student_id', session.id),
           supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(20),
         ])
-        if (scData) setSchedules(scData)
+        if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
         if (ssData) setSessions(ssData)
         if (nData) setNotes(nData)
         if (wsData) setWorksheets(wsData)

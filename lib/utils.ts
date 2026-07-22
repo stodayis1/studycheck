@@ -39,3 +39,26 @@ export function formatDueDate(isoString: string): { text: string; isOverdue: boo
 export function cx(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ")
 }
+
+// Supabase는 기본적으로 한 번에 최대 1000행까지만 돌려준다.
+// .limit()으로 숫자를 늘려도 데이터가 그 이상 쌓이면 다시 누락되므로,
+// 테이블이 아무리 커져도 절대 누락 없이 전부 가져오도록 페이지 단위로 끝까지 순회한다.
+export async function fetchAllRows<T = any>(
+  buildQuery: () => any,
+  pageSize = 1000
+): Promise<T[]> {
+  let from = 0
+  let all: T[] = []
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1)
+    if (error) {
+      console.error('fetchAllRows 오류:', error)
+      break
+    }
+    if (!data || data.length === 0) break
+    all = all.concat(data as T[])
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return all
+}

@@ -97,8 +97,8 @@ export default function TeacherMyRecordsPage() {
     const [studentsRes, feedbacksRes, sessionsRes, notesRes] = await Promise.all([
       supabase.from('students').select('id, name, school, grade, teacher_name').eq('is_active', true).order('name'),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
-      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }),
-      supabase.from('learning_notes').select('*'),
+      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }).limit(5000),
+      supabase.from('learning_notes').select('*').limit(5000),
     ])
     if (studentsRes.data) setStudents(studentsRes.data)
     if (feedbacksRes.data) setFeedbacks(feedbacksRes.data)

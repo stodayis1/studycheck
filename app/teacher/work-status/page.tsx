@@ -85,8 +85,8 @@ export default function TeacherWorkStatusPage() {
       supabase.from('users').select('*').eq('role', 'teacher').order('name'),
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('class_sessions').select('*').gte('session_date', weekStart).order('session_date', { ascending: false }),
-      supabase.from('student_worksheets').select('*').not('status', 'in', '("passed")').order('assigned_at', { ascending: false }),
-      supabase.from('schedules').select('*'),
+      supabase.from('student_worksheets').select('*').not('status', 'in', '("passed")').order('assigned_at', { ascending: false }).limit(5000),
+      supabase.from('schedules').select('*').limit(5000),
     ])
     if (tData) setTeachers(tData)
     if (sData) setStudents(sData)

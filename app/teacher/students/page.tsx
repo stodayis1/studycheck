@@ -300,7 +300,7 @@ export default function TeacherStudentsPage() {
                       setEditSchedules(scData ? scData.map((s: any) => ({
                         day: s.day_of_week,
                         time: s.start_time.slice(0, 5),
-                        periods: s.periods ?? 2,
+                        periods: Number(s.periods) || 2,
                       })) : [])
                       setShowEditModal(true)
                     }}

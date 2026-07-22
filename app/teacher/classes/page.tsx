@@ -52,10 +52,10 @@ export default function TeacherClassesPage() {
       setLoading(true)
       const [{ data: sData }, { data: scData }] = await Promise.all([
         supabase.from('students').select('*').eq('is_active', true).order('name'),
-        supabase.from('schedules').select('*').eq('is_active', true),
+        supabase.from('schedules').select('*').eq('is_active', true).limit(5000),
       ])
       if (sData) setStudents(sData)
-      if (scData) setSchedules(scData)
+      if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
       setLoading(false)
     }
     fetchData()
