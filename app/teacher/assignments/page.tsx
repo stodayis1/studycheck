@@ -27,6 +27,7 @@ interface StudentWorksheet {
   score: number | null
   assigned_at: string
   submitted_at: string | null
+  updated_at?: string | null
 }
 
 interface StudentTextbook {
@@ -170,6 +171,14 @@ export default function TeacherAssignmentsPage() {
   const [tbMemo, setTbMemo] = useState('')
   const [tbAssigning, setTbAssigning] = useState(false)
 
+  const [toast, setToast] = useState<string | null>(null)
+  const [showRecentPassed, setShowRecentPassed] = useState(false)
+
+  function flashToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 4000)
+  }
+
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
@@ -224,6 +233,16 @@ export default function TeacherAssignmentsPage() {
   })
   const activeLevelWS = activeWorksheets.filter(w => w.worksheet_type !== 'twin')
   const activeTwinWS = activeWorksheets.filter(w => w.worksheet_type === 'twin')
+
+  // 완료 처리(재도전/오답유사/레벨업/완료) 직후 "목록에서 사라진 것처럼 보이는" 문제 보완용:
+  // 최근 24시간 안에 완료 처리된 항목을 별도로 볼 수 있게 + 되돌리기 제공
+  const recentlyPassedLevelWS = worksheets
+    .filter((w) => {
+      if (w.worksheet_type === 'twin' || w.status !== 'passed' || !myStudentIds.has(w.student_id)) return false
+      const ts = w.updated_at ?? w.assigned_at
+      return ts && (Date.now() - new Date(ts).getTime()) < 24 * 60 * 60 * 1000
+    })
+    .sort((a, b) => new Date(b.updated_at ?? b.assigned_at).getTime() - new Date(a.updated_at ?? a.assigned_at).getTime())
 
   const activeTextbooks = textbooks.filter((t) =>
     myStudentIds.has(t.student_id) && t.status !== 'checked' &&
@@ -314,24 +333,28 @@ export default function TeacherAssignmentsPage() {
 
   async function handleLevelUp(w: StudentWorksheet) {
     const nextLevel = Math.min(6.0, w.current_level + 0.5)
-    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
+    const name = getStudentName(w.student_id)
+    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
       current_level: nextLevel, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
+    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리 → ${nextLevel}레벨 새로 배정했어요`)
   }
 
   // 오답유사 학습지 배정 (기존엔 80점 미만이면 자동 배정됐지만, 이제 선생님이 직접 선택)
   async function handleSimilarAssign(w: StudentWorksheet) {
-    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
+    const name = getStudentName(w.student_id)
+    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
       current_level: w.current_level, status: 'similar_assigned', worksheet_type: 'similar', parent_worksheet_id: w.id,
     })
     fetchData()
+    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리 → 오답유사 학습지 새로 배정했어요`)
   }
 
   async function handleDelete(id: string) {
@@ -375,18 +398,30 @@ export default function TeacherAssignmentsPage() {
   }
 
   async function handleComplete(w: StudentWorksheet) {
-    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
+    const name = getStudentName(w.student_id)
+    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     fetchData()
+    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리했어요 (목록에서 사라진 게 아니라 "최근 완료"로 이동)`)
   }
 
   async function handleRetry(w: StudentWorksheet) {
-    await supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id)
+    const name = getStudentName(w.student_id)
+    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
       current_level: w.current_level, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
+    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
+  }
+
+  // 완료 처리를 잘못 눌렀을 때 되돌리기 (점수입력 직후 상태로 복귀)
+  async function handleRevertToScored(w: StudentWorksheet) {
+    if (!confirm('되돌릴까요? 이 학습지를 다시 "결과대기" 상태로 되돌립니다. (그 사이 새로 배정된 학습지가 있다면 목록에서 따로 삭제해주세요)')) return
+    await supabase.from('student_worksheets').update({ status: 'scored', updated_at: new Date().toISOString() }).eq('id', w.id)
+    fetchData()
+    flashToast(`↩️ ${getStudentName(w.student_id)} ${w.current_level}레벨을 되돌렸어요`)
   }
 
   async function handleTBAssign() {
@@ -502,6 +537,40 @@ export default function TeacherAssignmentsPage() {
                   </div>
                 </div>
               )}
+
+              {recentlyPassedLevelWS.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                  <button onClick={() => setShowRecentPassed(v => !v)}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left">
+                    <i className="ti ti-check" style={{ fontSize: 15, color: '#27500A' }} />
+                    <p className="text-sm font-bold text-gray-700 flex-1">최근 24시간 완료 처리 {recentlyPassedLevelWS.length}건</p>
+                    <span className="text-[11px] text-gray-400">잘못 눌렀다면 되돌리기 가능</span>
+                    <i className={`ti ${showRecentPassed ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 14, color: '#9ca3af' }} />
+                  </button>
+                  {showRecentPassed && (
+                    <div className="border-t border-gray-50 divide-y divide-gray-50">
+                      {recentlyPassedLevelWS.map((w) => (
+                        <div key={w.id} className="px-4 py-2.5 flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-800">{getStudentName(w.student_id)}
+                              <span className="font-normal text-gray-400 ml-1.5">{formatUnit(w.grade_level, w.unit, w.unit_name)} · {w.current_level}레벨</span>
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              {new Date(w.updated_at ?? w.assigned_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 완료
+                            </p>
+                          </div>
+                          <button onClick={() => handleRevertToScored(w)}
+                            className="px-2.5 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap shrink-0"
+                            style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
+                            ↩️ 되돌리기
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
                   <i className="ti ti-file-text" style={{ fontSize: 16, color: '#993C1D' }} />
@@ -1828,6 +1897,13 @@ export default function TeacherAssignmentsPage() {
                 : <><i className="ti ti-book" style={{ fontSize: 16 }} />병행교재 배정하기</>}
             </button>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed left-1/2 z-[100] px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white"
+          style={{ bottom: 24, transform: 'translateX(-50%)', background: '#27500A', maxWidth: '90vw' }}>
+          {toast}
         </div>
       )}
     </div>
