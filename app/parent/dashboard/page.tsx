@@ -454,9 +454,9 @@ export default function ParentDashboardPage() {
           </div>
         )}
 
-        {/* 교재 진도 현황 — 보고서와 동일 */}
+        {/* 교재 진도 현황 — 보고서와 동일 (연산서는 개념별이 아니라 진도율로만 관리하므로 제외, 아래 "병행교재 현황"에서 표시) */}
         {(() => {
-          const myTBs = textbooks.filter(t => t.grade)
+          const myTBs = textbooks.filter(t => t.grade && t.textbook_type !== '연산서')
           if (myTBs.length === 0) return null
           return (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
