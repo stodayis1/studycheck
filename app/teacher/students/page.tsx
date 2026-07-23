@@ -37,6 +37,15 @@ export default function TeacherStudentsPage() {
   const [editSchedules, setEditSchedules] = useState<{day: string, time: string, periods: number}[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const EMPTY_STUDENT: Student = {
+    name: '', school: '', grade: '', class_time: '', teacher_name: '',
+    parent_name: '', parent_phone: '', is_active: true, textbook_grade: 'B', wise_step: 'W',
+  }
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newStudent, setNewStudent] = useState<Student>(EMPTY_STUDENT)
+  const [newSchedules, setNewSchedules] = useState<{day: string, time: string, periods: number}[]>([])
+  const [adding, setAdding] = useState(false)
+
   async function fetchStudents() {
     setLoading(true)
     let query = supabase.from('students').select('*').eq('is_active', true).order('name')
@@ -157,6 +166,63 @@ export default function TeacherStudentsPage() {
     fetchStudents()
   }
 
+  async function handleAddStudent() {
+    const name = newStudent.name.trim()
+    const school = newStudent.school.trim()
+    if (!name) { alert('이름을 입력해주세요.'); return }
+    setAdding(true)
+    try {
+      // 이미 있는 재원생인지(이름+학교) 확인 — 중복 등록 방지
+      const { data: existing } = await supabase
+        .from('students').select('id').eq('name', name).eq('school', school).eq('is_active', true).maybeSingle()
+      if (existing) {
+        alert('같은 이름·학교의 재원생이 이미 있어요. 학생관리 목록에서 확인해주세요.')
+        return
+      }
+
+      // 로그인 아이디 결정: 동명이인이 있으면 "이름+보호자전화번호 뒷4자리"로 구분
+      const { data: isDup } = await supabase.rpc('check_duplicate_name', { p_name: name })
+      const last4 = newStudent.parent_phone.replace(/[^0-9]/g, '').slice(-4)
+      const loginId = isDup && last4 ? `${name}${last4}` : name
+
+      const DAY_ORDER = ['월','화','수','목','금','토','일']
+      const sortedSchedules = [...newSchedules]
+        .filter((sc) => sc.day && sc.time)
+        .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))
+      const classTimeText = sortedSchedules
+        .map((sc) => `${sc.day}${sc.time.slice(0, 5)}·${sc.periods}교시`)
+        .join(', ')
+
+      const { data: inserted, error } = await supabase.from('students').insert({
+        name, school, grade: newStudent.grade.trim(),
+        class_time: classTimeText,
+        teacher_name: newStudent.teacher_name.trim(),
+        parent_name: newStudent.parent_name.trim(),
+        parent_phone: newStudent.parent_phone.trim(),
+        is_active: true,
+        textbook_grade: newStudent.textbook_grade || 'B',
+        wise_step: newStudent.wise_step || 'W',
+        login_id: loginId,
+      }).select('id').single()
+
+      if (error || !inserted) { alert('등록 중 오류가 발생했습니다.'); return }
+
+      for (const sc of sortedSchedules) {
+        await supabase.from('schedules').insert({
+          student_id: inserted.id, day_of_week: sc.day, start_time: sc.time, periods: sc.periods, is_active: true,
+        })
+      }
+
+      setShowAddModal(false)
+      setNewStudent(EMPTY_STUDENT)
+      setNewSchedules([])
+      fetchStudents()
+      alert(`${name} 학생이 등록되었습니다.\n\n로그인 아이디: ${loginId}\n비밀번호: 보호자 전화번호 뒷 4자리`)
+    } finally {
+      setAdding(false)
+    }
+  }
+
   async function handleDelete(studentId: string, name: string) {
     if (!confirm(`${name} 학생을 삭제할까요?`)) return
     const { error } = await supabase.from('students').update({ is_active: false }).eq('id', studentId)
@@ -180,7 +246,8 @@ export default function TeacherStudentsPage() {
               className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg">
               📥 엑셀 업로드
             </button>
-            <button className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
+            <button onClick={() => { setNewStudent(EMPTY_STUDENT); setNewSchedules([]); setShowAddModal(true) }}
+              className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
               + 학생 등록
             </button>
           </div>
@@ -459,6 +526,156 @@ export default function TeacherStudentsPage() {
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveEdit}
                 className="flex-1 py-3 bg-[#9FE1CB] text-white font-bold rounded-xl">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 신규 등록 모달 */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => !adding && setShowAddModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">학생 등록</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400">✕</button>
+            </div>
+
+            {/* 교재 등급 */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">교재 등급</label>
+              <div className="flex gap-2">
+                {['A','B','C'].map((g) => (
+                  <button key={g} onClick={() => setNewStudent({ ...newStudent, textbook_grade: g })}
+                    className={cx('flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all',
+                      newStudent.textbook_grade === g
+                        ? g === 'A' ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]'
+                          : g === 'B' ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-500 border-gray-200')}>
+                    {g}등급
+                    <span className="block text-[10px] font-normal opacity-70">
+                      {g === 'A' ? '하루 3개' : g === 'B' ? '하루 2개' : '하루 1개'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* W·I·S·E Step */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">
+                🎯 W·I·S·E Step
+                <span className="text-gray-400 font-normal ml-1">(현재 학습 단계)</span>
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { step: 'W', desc: 'Warm-up', sub: '도입' },
+                  { step: 'I', desc: 'Input', sub: '개념' },
+                  { step: 'S', desc: 'Skill', sub: '유형연습' },
+                  { step: 'E', desc: 'Evaluation', sub: '확인' },
+                ].map(({ step, sub }) => (
+                  <button key={step}
+                    onClick={() => setNewStudent({ ...newStudent, wise_step: step })}
+                    className={cx('py-2.5 rounded-xl text-sm font-black border-2 transition-all flex flex-col items-center gap-0.5',
+                      newStudent.wise_step === step
+                        ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]'
+                        : 'bg-white text-gray-600 border-gray-200')}>
+                    <span>{step}</span>
+                    <span className="text-[9px] font-normal opacity-70">{sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 기타 정보 */}
+            {[
+              { label:'이름 *',     key:'name',         placeholder:'학생 이름' },
+              { label:'학교',       key:'school',       placeholder:'학교명' },
+              { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
+              { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
+              { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
+            ].map(({ label, key, placeholder }) => (
+              <div key={key}>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                <input type="text"
+                  value={String(newStudent[key as keyof Student] ?? '')}
+                  onChange={(e) => setNewStudent({ ...newStudent, [key]: e.target.value })}
+                  placeholder={placeholder}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
+              </div>
+            ))}
+            <p className="text-[11px] text-gray-400 -mt-2">
+              로그인 아이디는 이름으로 자동 설정돼요. 같은 이름의 재원생이 있으면 이름 뒤에 보호자 전화번호 뒷 4자리가 자동으로 붙어요.
+            </p>
+
+            {/* 시간표 편집 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-600">수업 시간표 (선택)</label>
+                <button
+                  onClick={() => setNewSchedules([...newSchedules, { day: '월', time: '16:00', periods: 2 }])}
+                  className="text-xs font-bold text-gray-800 bg-blue-50 px-2 py-1 rounded-lg">
+                  + 추가
+                </button>
+              </div>
+              {newSchedules.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-2">등록된 시간표가 없어요</p>
+              )}
+              {newSchedules.map((sc, idx) => (
+                <div key={idx} className="flex items-center gap-2 mb-2">
+                  <select value={sc.day}
+                    onChange={(e) => {
+                      const updated = [...newSchedules]
+                      updated[idx] = { ...updated[idx], day: e.target.value }
+                      setNewSchedules(updated)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
+                    {['월','화','수','목','금','토'].map((d) => (
+                      <option key={d} value={d}>{d}요일</option>
+                    ))}
+                  </select>
+                  <select value={sc.time}
+                    onChange={(e) => {
+                      const updated = [...newSchedules]
+                      updated[idx] = { ...updated[idx], time: e.target.value }
+                      setNewSchedules(updated)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none flex-1">
+                    {['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30','21:00'].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <select value={sc.periods}
+                    onChange={(e) => {
+                      const updated = [...newSchedules]
+                      updated[idx] = { ...updated[idx], periods: parseFloat(e.target.value) }
+                      setNewSchedules(updated)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
+                    {[1, 1.5, 2, 2.5, 3, 3.5, 4].map((p) => (
+                      <option key={p} value={p}>{p}교시</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setNewSchedules(newSchedules.filter((_, i) => i !== idx))}
+                    className="text-red-400 hover:text-red-600 text-sm font-bold px-1">
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setShowAddModal(false)} disabled={adding}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl disabled:opacity-50">취소</button>
+              <button onClick={handleAddStudent} disabled={adding}
+                className="flex-1 py-3 bg-[#9FE1CB] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+                {adding && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {adding ? '등록 중...' : '등록하기'}
+              </button>
             </div>
           </div>
         </div>

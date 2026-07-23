@@ -130,6 +130,7 @@ export default function TeacherAssignmentsPage() {
   const [wsConceptGrade, setWsConceptGrade] = useState('')
   const [wsChapters, setWsChapters] = useState<string[]>([])
   const [wsSubChapters, setWsSubChapters] = useState<string[]>([])
+  const [wsConceptIds, setWsConceptIds] = useState<string[]>([])
   const [wsAssigning, setWsAssigning] = useState(false)
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkStudentIds, setBulkStudentIds] = useState<string[]>([])
@@ -262,6 +263,7 @@ export default function TeacherAssignmentsPage() {
   async function handleWSAssign() {
     setWsAssigning(true)
     const isMiddleHigh = wsCourseGroup === '중등' || wsCourseGroup === '고등'
+    const wsConceptNames = concepts.filter((c) => wsConceptIds.includes(c.id)).map((c) => c.concept_name).join(' + ')
     const targets = bulkMode ? bulkStudentIds : wsStudent ? [wsStudent.id] : []
     if (targets.length === 0) { setWsAssigning(false); return }
     for (const sid of targets) {
@@ -269,11 +271,12 @@ export default function TeacherAssignmentsPage() {
         student_id: sid, subject: '수학',
         grade_level: isMiddleHigh ? wsConceptGrade : wsGradeLevel,
         unit: isMiddleHigh ? wsChapters.join(' + ') : wsUnit,
-        unit_name: isMiddleHigh ? wsSubChapters.join(' + ') : wsUnitName,
+        unit_name: isMiddleHigh ? wsConceptNames : wsUnitName,
         current_level: wsLevel, status: 'assigned', worksheet_type: 'main',
       })
     }
     setShowWSModal(false); setWsStudent(null); setWsUnitName('')
+    setWsConceptIds([])
     setBulkStudentIds([]); setBulkMode(false)
     setWsAssigning(false); fetchData()
   }
@@ -384,15 +387,17 @@ export default function TeacherAssignmentsPage() {
     if (bulkStudentIds.length === 0 || !wsStudent) return
     setWsAssigning(true)
     const isMiddleHigh = wsCourseGroup === '중등' || wsCourseGroup === '고등'
+    const wsConceptNames = concepts.filter((c) => wsConceptIds.includes(c.id)).map((c) => c.concept_name).join(' + ')
     for (const sid of bulkStudentIds) {
       await supabase.from('student_worksheets').insert({
         student_id: sid, subject: '수학',
         grade_level: isMiddleHigh ? wsConceptGrade : wsGradeLevel,
         unit: isMiddleHigh ? wsChapters.join(' + ') : wsUnit,
-        unit_name: isMiddleHigh ? wsSubChapters.join(' + ') : wsUnitName,
+        unit_name: isMiddleHigh ? wsConceptNames : wsUnitName,
         current_level: wsLevel, status: 'assigned', worksheet_type: 'main',
       })
     }
+    setWsConceptIds([])
     setShowWSModal(false); setBulkStudentIds([]); setWsStudent(null); setWsUnitName('')
     setWsAssigning(false); fetchData()
   }
@@ -1530,7 +1535,7 @@ export default function TeacherAssignmentsPage() {
                   <button key={g} onClick={() => {
                     setWsCourseGroup(g)
                     setWsConceptGrade(g === '초등' ? '초4' : g === '중등' ? '중1' : '공통수학1')
-                    setWsChapters([]); setWsSubChapters([])
+                    setWsChapters([]); setWsSubChapters([]); setWsConceptIds([])
                     setWsGradeLevel(g === '초등' ? '초4' : g === '중등' ? '중1' : '공통수학1')
                   }}
                     className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
@@ -1612,6 +1617,7 @@ export default function TeacherAssignmentsPage() {
                               setWsChapters(nextChapters)
                               const validSubs = [...new Set(concepts.filter((cc) => cc.grade === wsConceptGrade && nextChapters.includes(cc.chapter)).map((cc) => cc.sub_chapter).filter(Boolean))]
                               setWsSubChapters((prev) => prev.filter((s) => validSubs.includes(s)))
+                              setWsConceptIds([])
                             }}
                               className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
                               style={wsChapters.includes(ch)
@@ -1625,7 +1631,10 @@ export default function TeacherAssignmentsPage() {
                           <label className="block text-xs font-bold text-gray-700 mb-2">중단원 <span className="text-[10px] font-normal text-gray-400">복수 선택 가능</span></label>
                           <div className="flex gap-1.5 flex-wrap">
                             {subChapters.filter((s): s is string => !!s).map((sub) => (
-                              <button key={sub} onClick={() => setWsSubChapters((prev) => prev.includes(sub) ? prev.filter((x) => x !== sub) : [...prev, sub])}
+                              <button key={sub} onClick={() => {
+                                setWsSubChapters((prev) => prev.includes(sub) ? prev.filter((x) => x !== sub) : [...prev, sub])
+                                setWsConceptIds([])
+                              }}
                                 className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
                                 style={wsSubChapters.includes(sub)
                                   ? { background: '#F5C4B3', color: '#712B13' }
@@ -1634,6 +1643,30 @@ export default function TeacherAssignmentsPage() {
                           </div>
                         </div>
                       )}
+                      {wsSubChapters.length > 0 && (() => {
+                        const subConcepts = gradeConcepts
+                          .filter((c) => wsChapters.includes(c.chapter) && wsSubChapters.includes(c.sub_chapter))
+                          .sort((a, b) => a.concept_order - b.concept_order)
+                        return (
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-2">
+                              소개념 <span className="text-[10px] font-normal" style={{ color: wsConceptIds.length === 0 ? '#dc2626' : '#9ca3af' }}>
+                                {wsConceptIds.length === 0 ? '필수 선택' : `${wsConceptIds.length}개 선택`}
+                              </span>
+                            </label>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {subConcepts.map((c) => (
+                                <button key={c.id} onClick={() =>
+                                  setWsConceptIds((prev) => prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id])}
+                                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                                  style={wsConceptIds.includes(c.id)
+                                    ? { background: '#712B13', color: 'white' }
+                                    : { background: '#f3f4f6', color: '#6b7280' }}>{c.concept_name}</button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </>
                   )
                 })()}
@@ -1653,7 +1686,14 @@ export default function TeacherAssignmentsPage() {
               </div>
             </div>
 
-            <button onClick={handleWSAssign} disabled={(!wsStudent && !bulkMode) || (bulkMode && bulkStudentIds.length === 0) || wsAssigning}
+            {(wsCourseGroup === '중등' || wsCourseGroup === '고등') && wsSubChapters.length > 0 && wsConceptIds.length === 0 && (
+              <p className="text-[11px] text-center" style={{ color: '#dc2626' }}>소개념을 1개 이상 선택해주세요</p>
+            )}
+            <button onClick={handleWSAssign}
+              disabled={
+                (!wsStudent && !bulkMode) || (bulkMode && bulkStudentIds.length === 0) || wsAssigning ||
+                ((wsCourseGroup === '중등' || wsCourseGroup === '고등') && wsConceptIds.length === 0)
+              }
               className="w-full py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: '#F5C4B3', color: '#712B13' }}>
               {wsAssigning
