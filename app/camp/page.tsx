@@ -41,7 +41,7 @@ const TOTAL = SESSIONS.length
 // 진행률에 따라 표정/포즈가 바뀌는 캐릭터
 function CampCharacter({ percent, allClear }: { percent: number; allClear: boolean }) {
   const stage = allClear ? 4 : percent >= 60 ? 3 : percent >= 25 ? 2 : percent > 0 ? 1 : 0
-  const bodyColor = allClear ? '#ffd76a' : stage >= 2 ? '#a78bfa' : '#8b5cf6'
+  const bodyColor = allClear ? '#ffd76a' : stage >= 2 ? '#fb923c' : '#38bdf8'
   return (
     <div className="camp-char" style={{ animation: allClear ? 'campBounceBig 0.7s ease-in-out infinite' : 'campBounce 2.2s ease-in-out infinite' }}>
       <svg width="40" height="46" viewBox="0 0 48 52">
@@ -196,7 +196,7 @@ export default function CampBoardPage() {
                       )}
                     </div>
                     <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0 text-white"
-                      style={{ background: allClear ? '#ffd76a' : '#8b5cf6', color: allClear ? '#3a2b12' : 'white' }}>
+                      style={{ background: allClear ? '#ffd76a' : '#38bdf8', color: allClear ? '#3a2b12' : 'white' }}>
                       {student.name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -228,7 +228,7 @@ export default function CampBoardPage() {
                       {SESSIONS.map((s) => {
                         const r = stat.rows.find((x) => x.session_no === s.no)
                         const checks = r ? [r.watched, r.retried, r.worksheet].filter(Boolean).length : 0
-                        const bg = checks === 3 ? '#ffd76a' : checks === 0 ? 'rgba(255,255,255,0.1)' : '#8b5cf6'
+                        const bg = checks === 3 ? '#ffd76a' : checks === 0 ? 'rgba(255,255,255,0.1)' : '#fb923c'
                         const opacity = checks === 0 ? 1 : checks === 1 ? 0.5 : checks === 2 ? 0.75 : 1
                         return (
                           <div key={s.no} className="flex-1 h-1.5 rounded-full" style={{ background: bg, opacity }} />
