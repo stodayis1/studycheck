@@ -105,6 +105,21 @@ export async function POST(req: NextRequest) {
     const passedWS = periodWS.filter((w: any) => w.status === 'passed').length
     const passRate = periodWS.length > 0 ? Math.round(passedWS / periodWS.length * 100) : 0
 
+    const WS_STATUS_LABEL: Record<string, string> = {
+      assigned: '진행중', submitted: '채점대기', similar_assigned: '오답유사중',
+      similar_submitted: '오답유사채점', scored: '결과대기', passed: '완료', retry: '재도전',
+    }
+    const worksheetDetail = [...periodWS]
+      .sort((a: any, b: any) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+      .map((w: any) => ({
+        unit: `${w.grade_level} ${w.unit}${w.unit_name ? ' ' + w.unit_name : ''}`.trim(),
+        level: w.current_level,
+        score: w.score,
+        status: WS_STATUS_LABEL[w.status] ?? w.status,
+        isSimilar: w.worksheet_type === 'similar',
+        assignedAt: w.assigned_at,
+      }))
+
     const tbs = (tbData ?? []).filter((t: any) => t.textbook_type !== '연산서')
     const calcTbs = (tbData ?? []).filter((t: any) => t.textbook_type === '연산서')
     const tbProgress = tbs.map((tb: any) => {
@@ -121,7 +136,7 @@ export async function POST(req: NextRequest) {
 
     const reportData = {
       totalSessions, attendance, hwRate, avgScore, passRate,
-      periodCount: periodWS.length, tbProgress, calcProgress,
+      periodCount: periodWS.length, tbProgress, calcProgress, worksheetDetail,
       exams: examData ?? [], studentName: student.name, studentGrade: student.grade,
       attendanceDetail,
     }

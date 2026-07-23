@@ -18,6 +18,7 @@ interface ReportLink {
     avgScore: number | null
     passRate: number
     periodCount: number
+    worksheetDetail?: { unit: string; level: number; score: number | null; status: string; isSimilar: boolean; assignedAt: string }[]
     tbProgress: { name: string; type: string; rate: number; completed?: boolean }[]
     calcProgress: { name: string; percent: number }[]
     exams: any[]
@@ -148,6 +149,20 @@ export default function PublicReportPage() {
                 <div><div style={{ fontSize: 18, fontWeight: 900, color: d.avgScore != null ? (d.avgScore >= 85 ? '#9FE1CB' : d.avgScore >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>{d.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div></div>
                 <div><div style={{ fontSize: 18, fontWeight: 900, color: d.passRate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{d.passRate}%</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>통과율</div></div>
               </div>
+              {d.worksheetDetail?.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {d.worksheetDetail.map((w: any, i: number) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {w.unit} · {w.level}레벨{w.isSimilar ? ' (오답유사)' : ''}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: w.score != null ? (w.score >= 85 ? '#9FE1CB' : w.score >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                        {w.score != null ? `${w.score}점` : w.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

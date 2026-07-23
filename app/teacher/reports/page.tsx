@@ -374,6 +374,21 @@ export default function TeacherReportsPage() {
     const passedWS = monthWS.filter((w: any) => w.status === 'passed').length
     const passRate = monthWS.length > 0 ? Math.round(passedWS / monthWS.length * 100) : 0
 
+    const WS_STATUS_LABEL: Record<string, string> = {
+      assigned: '진행중', submitted: '채점대기', similar_assigned: '오답유사중',
+      similar_submitted: '오답유사채점', scored: '결과대기', passed: '완료', retry: '재도전',
+    }
+    const worksheetDetail = [...monthWS]
+      .sort((a: any, b: any) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+      .map((w: any) => ({
+        unit: `${w.grade_level} ${w.unit}${w.unit_name ? ' ' + w.unit_name : ''}`.trim(),
+        level: w.current_level,
+        score: w.score,
+        status: WS_STATUS_LABEL[w.status] ?? w.status,
+        isSimilar: w.worksheet_type === 'similar',
+        assignedAt: w.assigned_at,
+      }))
+
     const tbs = (tbData ?? []).filter((t: any) => t.textbook_type !== '연산서')
     const calcTbs = (tbData ?? []).filter((t: any) => t.textbook_type === '연산서')
     const tbProgress = tbs.map((tb: any) => {
@@ -388,7 +403,7 @@ export default function TeacherReportsPage() {
     }).filter(Boolean)
     const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
 
-    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail })
+    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail })
     setMLoading(false)
   }
 
@@ -588,6 +603,20 @@ export default function TeacherReportsPage() {
                         <div><div style={{ fontSize: 18, fontWeight: 900, color: mData.avgScore != null ? (mData.avgScore >= 85 ? '#9FE1CB' : mData.avgScore >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>{mData.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div></div>
                         <div><div style={{ fontSize: 18, fontWeight: 900, color: mData.passRate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{mData.passRate}%</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>통과율</div></div>
                       </div>
+                      {mData.worksheetDetail?.length > 0 && (
+                        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {mData.worksheetDetail.map((w: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {w.unit} · {w.level}레벨{w.isSimilar ? ' (오답유사)' : ''}
+                              </span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: w.score != null ? (w.score >= 85 ? '#9FE1CB' : w.score >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                                {w.score != null ? `${w.score}점` : w.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
