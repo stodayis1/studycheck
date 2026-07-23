@@ -495,29 +495,21 @@ export default function TeacherLearningNotesPage() {
       created_by: currentUser?.name,
     }
 
-    if (!sessionId) {
-      // 같은 날짜에 이미 session이 있으면 그걸 사용 (중복 방지)
-      const { data: existingSession } = await supabase
-        .from('class_sessions')
-        .select('id')
-        .eq('student_id', noteStudent.id)
-        .eq('session_date', todayStr)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-      if (existingSession) {
-        sessionId = existingSession.id
-        await supabase.from('class_sessions').update(sessionData).eq('id', sessionId)
-      } else {
-        const { data: newSession } = await supabase.from('class_sessions')
-          .insert(sessionData).select().single()
-        sessionId = newSession?.id
-      }
-    } else {
-      await supabase.from('class_sessions').update(sessionData).eq('id', sessionId)
+    // 같은 학생 + 같은 날짜는 DB에서 하나로 강제되므로(unique 제약),
+    // upsert로 한 번에 처리하면 "찾았는데 놓쳐서 새로 만들어버리는" 중복 생성이 원천적으로 불가능해진다.
+    const { data: savedSession, error: sessionError } = await supabase
+      .from('class_sessions')
+      .upsert(sessionData, { onConflict: 'student_id,session_date' })
+      .select()
+      .single()
+    if (sessionError || !savedSession) {
+      console.error('세션 저장 오류:', sessionError)
+      setSavingNote(false)
+      alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      return
     }
-
-    if (!sessionId) { setSavingNote(false); return }
+    sessionId = savedSession.id
+    setNoteSession(savedSession)
 
     const existingNote = notes.find((n) => n.session_id === sessionId)
     // 교재별 진도 progress_checks 자동 업데이트
@@ -589,22 +581,20 @@ export default function TeacherLearningNotesPage() {
   // 결석 한번에 처리 (전체 입력폼 없이 바로 기록) - 미입력과 결석을 구분하기 위함
   async function quickMarkAbsent(student: Student) {
     if (!confirm(`${student.name} 학생을 오늘(${todayStr}) 결석으로 처리할까요?\n나중에 '수정'으로 세부 내용을 보완할 수 있어요.`)) return
-    const { data: existingSession } = await supabase
+    const { data: savedSession, error: sessionError } = await supabase
       .from('class_sessions')
-      .select('id')
-      .eq('student_id', student.id)
-      .eq('session_date', todayStr)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .upsert(
+        { student_id: student.id, session_date: todayStr, session_type: '정규', created_by: currentUser?.name },
+        { onConflict: 'student_id,session_date', ignoreDuplicates: false }
+      )
+      .select()
       .single()
-    let sessionId = existingSession?.id
-    if (!sessionId) {
-      const { data: newSession } = await supabase.from('class_sessions')
-        .insert({ student_id: student.id, session_date: todayStr, session_type: '정규', created_by: currentUser?.name })
-        .select().single()
-      sessionId = newSession?.id
+    if (sessionError || !savedSession) {
+      console.error('세션 저장 오류:', sessionError)
+      alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      return
     }
-    if (!sessionId) return
+    const sessionId = savedSession.id
     const existingNote = notes.find((n) => n.session_id === sessionId)
     const noteData = {
       student_id: student.id,
