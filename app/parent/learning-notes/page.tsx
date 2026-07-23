@@ -261,6 +261,11 @@ export default function ParentLearningNotesPage() {
                       ) : (
                         <p className="text-xs text-gray-400">배움노트 미작성</p>
                       )}
+                      {note?.memo && (
+                        <p className="text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5 mt-1">
+                          📝 선생님 메모: {note.memo}
+                        </p>
+                      )}
                     </div>
                   )
                 })}

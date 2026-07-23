@@ -43,6 +43,7 @@ interface LearningNote {
   worksheet_score: number | null
   textbook_submitted: boolean
   workbook_done: boolean
+  memo: string | null
   video_started_at: string | null
   video_completed_at: string | null
 }
@@ -703,6 +704,12 @@ export default function ParentDashboardPage() {
                           <span style={{ color: '#d1d5db' }}> · 정답률</span>
                         </span>
                       )}
+                    </div>
+                  )}
+                  {activeNote?.memo && (
+                    <div className="rounded-xl px-3 py-2.5" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                      <p className="text-[10px] text-gray-400 mb-1">📝 선생님 메모</p>
+                      <p className="text-xs text-gray-700 whitespace-pre-wrap">{activeNote.memo}</p>
                     </div>
                   )}
                 </div>
