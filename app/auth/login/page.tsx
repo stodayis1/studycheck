@@ -26,8 +26,8 @@ export default function LoginPage() {
 
   async function checkDuplicate(name: string) {
     if (mode === 'teacher' || name.length < 2) { setIsDuplicate(false); return }
-    const { data } = await supabase.from('students').select('id').eq('name', name.trim()).eq('is_active', true)
-    setIsDuplicate((data?.length ?? 0) > 1)
+    const { data } = await supabase.rpc('check_duplicate_name', { p_name: name.trim() })
+    setIsDuplicate(!!data)
   }
 
   async function handleLogin() {
@@ -40,18 +40,29 @@ export default function LoginPage() {
         else localStorage.removeItem('studycheck_remember')
         router.push('/teacher/dashboard')
       } else {
-        const { data: student } = await supabase.from('students').select('*')
-          .eq('login_id', loginId.trim()).eq('is_active', true).maybeSingle()
-        if (!student) {
-          const name = loginId.trim()
-          const { data: duplicates } = await supabase.from('students').select('id').eq('name', name).eq('is_active', true)
-          if ((duplicates?.length ?? 0) > 1) throw new Error(`"${name}" 이름의 학생이 여러 명이에요!\n전화번호 뒷 4자리를 이름 뒤에 붙여주세요.\n예) ${name}1234`)
-          throw new Error('아이디를 찾을 수 없어요. 학원에 문의해주세요.')
+        // 학생/학부모: DB에 직접 조회하지 않고, 먼저 익명 보안 세션을 발급받은 뒤
+        // 서버 쪽 검증 함수(student_login)로만 신원을 확인합니다.
+        const { data: sessionData } = await supabase.auth.getSession()
+        if (!sessionData.session) {
+          const { error: anonError } = await supabase.auth.signInAnonymously()
+          if (anonError) throw new Error('로그인 준비 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
         }
-        const phone = student.parent_phone ?? ''
-        const last4 = phone.replace(/[^0-9]/g, '').slice(-4)
-        if (password !== last4) throw new Error('비밀번호가 올바르지 않습니다.\n보호자 전화번호 뒷 4자리를 입력해주세요.')
-        sessionStorage.setItem('studycheck_student', JSON.stringify({ id: student.id, name: student.name, role: mode }))
+
+        const { data: result, error: rpcError } = await supabase.rpc('student_login', {
+          p_login_id: loginId.trim(),
+          p_phone_last4: password.trim(),
+        })
+        if (rpcError) throw new Error('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
+
+        const r = result as { ok: boolean; reason?: string; student_id?: string; student_name?: string } | null
+        if (!r?.ok) {
+          const name = loginId.trim()
+          if (r?.reason === 'duplicate') throw new Error(`"${name}" 이름의 학생이 여러 명이에요!\n전화번호 뒷 4자리를 이름 뒤에 붙여주세요.\n예) ${name}1234`)
+          if (r?.reason === 'not_found') throw new Error('아이디를 찾을 수 없어요. 학원에 문의해주세요.')
+          throw new Error('비밀번호가 올바르지 않습니다.\n보호자 전화번호 뒷 4자리를 입력해주세요.')
+        }
+
+        sessionStorage.setItem('studycheck_student', JSON.stringify({ id: r.student_id, name: r.student_name, role: mode }))
         if (rememberMe) localStorage.setItem('studycheck_remember', JSON.stringify({ mode, loginId, password }))
         else localStorage.removeItem('studycheck_remember')
         if (mode === 'student') router.push('/student/dashboard')
