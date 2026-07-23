@@ -954,12 +954,14 @@ export default function TeacherAssignmentsPage() {
                               <span className={cx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', cfg2.bg, cfg2.color)}>
                                 {cfg2.label}
                               </span>
-                              {t.status === 'assigned' && (
+                              {/* 제출확인/채점완료는 연산서(제출형 워크북)에만 해당 - 개념서/유형서/심화서는 개념 체크로 진도를 관리하므로
+                                  실수로 이 상태가 되면 "진행중 교재" 목록(status==='assigned' 기준)에서 사라져버린다 */}
+                              {t.textbook_type === '연산서' && t.status === 'assigned' && (
                                 <button onClick={() => handleTBSubmitted(t.id)}
                                   className="px-2 py-1 text-[10px] font-semibold rounded-lg"
                                   style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>제출확인</button>
                               )}
-                              {t.status === 'submitted' && (
+                              {t.textbook_type === '연산서' && t.status === 'submitted' && (
                                 <button onClick={() => handleTBChecked(t.id)}
                                   className="px-2 py-1 text-[10px] font-semibold rounded-lg"
                                   style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>채점완료</button>

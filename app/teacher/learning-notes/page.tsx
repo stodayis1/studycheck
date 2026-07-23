@@ -352,6 +352,24 @@ export default function TeacherLearningNotesPage() {
         ])
       }
     })
+    // 학습지관리/과정관리에서 방금 배정한 게 "과제배부" 탭에 바로 안 뜨는 문제 방지 -
+    // 페이지 로드 시점 캐시에 의존하지 않고 모달 열 때마다 해당 학생 것만 새로 불러온다.
+    supabase.from('student_worksheets').select('*').eq('student_id', student.id).then(({ data }) => {
+      if (data) {
+        setWorksheets((prev) => [
+          ...prev.filter((w) => w.student_id !== student.id),
+          ...data,
+        ])
+      }
+    })
+    supabase.from('student_textbooks').select('*').eq('student_id', student.id).then(({ data }) => {
+      if (data) {
+        setStudentTextbooks((prev) => [
+          ...prev.filter((t) => t.student_id !== student.id),
+          ...data,
+        ])
+      }
+    })
     setNoteSession(session ?? null)
     setNoteTab('basic')
     setNoteProgress(session?.progress_content ?? session?.today_textbook_name ?? '')
