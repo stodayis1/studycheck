@@ -38,6 +38,70 @@ export const SESSIONS = [
 
 const TOTAL = SESSIONS.length
 
+// 진행률에 따라 표정/포즈가 바뀌는 캐릭터
+function CampCharacter({ percent, allClear }: { percent: number; allClear: boolean }) {
+  const stage = allClear ? 4 : percent >= 60 ? 3 : percent >= 25 ? 2 : percent > 0 ? 1 : 0
+  const bodyColor = allClear ? '#ffd76a' : stage >= 2 ? '#a78bfa' : '#8b5cf6'
+  return (
+    <div className="camp-char" style={{ animation: allClear ? 'campBounceBig 0.7s ease-in-out infinite' : 'campBounce 2.2s ease-in-out infinite' }}>
+      <svg width="40" height="46" viewBox="0 0 48 52">
+        {allClear && (
+          <>
+            <polygon points="24,2 15,16 33,16" fill="#f97316" />
+            <circle cx="24" cy="2" r="3" fill="#fff" />
+          </>
+        )}
+        {stage >= 3 && (
+          <>
+            <rect x="2" y="20" width="6" height="15" rx="3" fill={bodyColor} transform="rotate(-35 5 27)" />
+            <rect x="40" y="20" width="6" height="15" rx="3" fill={bodyColor} transform="rotate(35 43 27)" />
+          </>
+        )}
+        <circle cx="24" cy="30" r="20" fill={bodyColor} />
+        <ellipse cx="17" cy="22" rx="5" ry="3" fill="#fff" opacity="0.25" />
+        {stage >= 1 && (
+          <>
+            <circle cx="12" cy="33" r="3.2" fill="#ff9eb0" opacity="0.6" />
+            <circle cx="36" cy="33" r="3.2" fill="#ff9eb0" opacity="0.6" />
+          </>
+        )}
+        {stage === 0 ? (
+          <>
+            <path d="M14 27 h6" stroke="#2d1b4e" strokeWidth="2.2" strokeLinecap="round" />
+            <path d="M28 27 h6" stroke="#2d1b4e" strokeWidth="2.2" strokeLinecap="round" />
+          </>
+        ) : stage >= 4 ? (
+          <>
+            <path d="M13 28 q4 -5 8 0" stroke="#2d1b4e" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+            <path d="M27 28 q4 -5 8 0" stroke="#2d1b4e" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <circle cx="17" cy="27" r="2.5" fill="#2d1b4e" />
+            <circle cx="31" cy="27" r="2.5" fill="#2d1b4e" />
+            {stage >= 3 && (
+              <>
+                <circle cx="18" cy="26" r="0.9" fill="#fff" />
+                <circle cx="32" cy="26" r="0.9" fill="#fff" />
+              </>
+            )}
+          </>
+        )}
+        {stage === 0 ? (
+          <path d="M20 36 q4 1 8 0" stroke="#2d1b4e" strokeWidth="2" fill="none" strokeLinecap="round" />
+        ) : stage === 1 ? (
+          <path d="M18 35 q6 4 12 0" stroke="#2d1b4e" strokeWidth="2" fill="none" strokeLinecap="round" />
+        ) : stage === 2 ? (
+          <path d="M16 34 q8 8 16 0" stroke="#2d1b4e" strokeWidth="2" fill="none" strokeLinecap="round" />
+        ) : (
+          <path d="M15 33 q9 11 18 0 q-9 4 -18 0 z" fill="#712B13" />
+        )}
+      </svg>
+      {allClear && <div className="camp-sparkle">✨</div>}
+    </div>
+  )
+}
+
 export default function CampBoardPage() {
   const [students, setStudents] = useState<CampStudent[]>([])
   const [progress, setProgress] = useState<CampProgress[]>([])
@@ -79,6 +143,13 @@ export default function CampBoardPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#1a1033 0%,#2d1b4e 40%,#1a1033 100%)' }}>
+      <style>{`
+        @keyframes campBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        @keyframes campBounceBig { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-8px) rotate(4deg); } }
+        @keyframes campSpin { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.3); } 100% { transform: rotate(360deg) scale(1); } }
+        .camp-char { position: relative; }
+        .camp-sparkle { position: absolute; top: -4px; right: -6px; font-size: 12px; animation: campSpin 1.6s linear infinite; }
+      `}</style>
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="text-center mb-6">
           <p className="text-[13px] font-bold tracking-wide" style={{ color: '#ffd76a' }}>공통수학1 · 짤강 방학특강</p>
@@ -140,17 +211,30 @@ export default function CampBoardPage() {
                     </div>
                   </button>
 
-                  {/* 진행 트랙 */}
-                  <div className="px-4 pb-3 flex items-center gap-1">
-                    {SESSIONS.map((s) => {
-                      const r = stat.rows.find((x) => x.session_no === s.no)
-                      const checks = r ? [r.watched, r.retried, r.worksheet].filter(Boolean).length : 0
-                      const bg = checks === 3 ? '#ffd76a' : checks === 0 ? 'rgba(255,255,255,0.1)' : '#8b5cf6'
-                      const opacity = checks === 0 ? 1 : checks === 1 ? 0.5 : checks === 2 ? 0.75 : 1
-                      return (
-                        <div key={s.no} className="flex-1 h-1.5 rounded-full" style={{ background: bg, opacity }} />
-                      )
-                    })}
+                  {/* 진행 트랙 + 캐릭터 */}
+                  <div className="px-4 pb-3">
+                    <div className="relative" style={{ height: 40 }}>
+                      <div className="absolute"
+                        style={{
+                          left: `${Math.min(96, Math.max(4, stat.percent))}%`,
+                          bottom: 4,
+                          transform: 'translateX(-50%)',
+                          transition: 'left 0.5s ease',
+                        }}>
+                        <CampCharacter percent={stat.percent} allClear={allClear} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {SESSIONS.map((s) => {
+                        const r = stat.rows.find((x) => x.session_no === s.no)
+                        const checks = r ? [r.watched, r.retried, r.worksheet].filter(Boolean).length : 0
+                        const bg = checks === 3 ? '#ffd76a' : checks === 0 ? 'rgba(255,255,255,0.1)' : '#8b5cf6'
+                        const opacity = checks === 0 ? 1 : checks === 1 ? 0.5 : checks === 2 ? 0.75 : 1
+                        return (
+                          <div key={s.no} className="flex-1 h-1.5 rounded-full" style={{ background: bg, opacity }} />
+                        )
+                      })}
+                    </div>
                   </div>
 
                   {isOpen && (
