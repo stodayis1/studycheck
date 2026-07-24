@@ -195,7 +195,25 @@ export default function TeacherLearningNotesPage() {
   const [schedulePeriods, setSchedulePeriods] = useState(2)
   const [savingSchedule, setSavingSchedule] = useState(false)
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    fetchData()
+    // 여러 선생님이 동시에 같은 화면을 쓰다 보니, 내가 페이지를 켜놓은 사이 다른 선생님이 입력한 게
+    // 새로고침 전까진 "입력완료" 표시에 안 잡히는 문제가 있었다. 30초마다 조용히 최신 상태로 맞춘다.
+    const interval = setInterval(() => { refreshTodayStatus() }, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const [refreshing, setRefreshing] = useState(false)
+  async function refreshTodayStatus() {
+    setRefreshing(true)
+    const [{ data: ssData }, { data: nData }] = await Promise.all([
+      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }).limit(5000),
+      supabase.from('learning_notes').select('*').limit(5000),
+    ])
+    if (ssData) setSessions(ssData)
+    if (nData) setNotes(nData)
+    setRefreshing(false)
+  }
 
   async function fetchData() {
     setLoading(true)
@@ -984,9 +1002,34 @@ export default function TeacherLearningNotesPage() {
               )}
 
               {/* 오늘 수업 학생 목록 */}
-              {todayStudents.length > 0 && (
+              {todayStudents.length > 0 && (() => {
+                const missingStudents = todayStudents.filter(({ student }) => !getTodayNote(student.id))
+                return (
                 <div>
-                  <p className="text-xs font-bold text-gray-800 px-1 mb-2">📅 오늘 ({todayDay}요일) 수업 {todayStudents.length}명</p>
+                  <div className="flex items-center justify-between px-1 mb-2">
+                    <p className="text-xs font-bold text-gray-800">
+                      📅 오늘 ({todayDay}요일) 수업 {todayStudents.length}명
+                      <span className="ml-1.5 font-normal text-gray-400">
+                        · 입력완료 {todayStudents.length - missingStudents.length}/{todayStudents.length}
+                      </span>
+                    </p>
+                    <button onClick={refreshTodayStatus} disabled={refreshing}
+                      className="text-[11px] font-semibold text-gray-500 px-2 py-1 rounded-lg bg-gray-100 flex items-center gap-1 disabled:opacity-50">
+                      <i className={cx('ti ti-refresh', refreshing && 'animate-spin')} style={{ fontSize: 11 }} />
+                      새로고침
+                    </button>
+                  </div>
+                  {missingStudents.length > 0 && (
+                    <div className="rounded-xl px-3 py-2 mb-2 flex flex-wrap items-center gap-1.5"
+                      style={{ background: '#FFF5F2', border: '1px solid #F5C4B3' }}>
+                      <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>미입력</span>
+                      {missingStudents.map(({ student }) => (
+                        <span key={student.id} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white" style={{ color: '#712B13' }}>
+                          {student.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {todayStudents.map(({ student, schedule }) => {
                     const note = getTodayNote(student.id)
                     const session = getTodaySession(student.id)
@@ -1137,7 +1180,8 @@ export default function TeacherLearningNotesPage() {
                     )
                   })}
                 </div>
-              )}
+                )
+              })()}
 
               {/* 오늘 수업 없는 학생 */}
               {otherStudents.length > 0 && (
