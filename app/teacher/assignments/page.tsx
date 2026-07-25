@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx } from '@/lib/utils'
+import { cx, formatConceptRangeLabel } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -263,7 +263,7 @@ export default function TeacherAssignmentsPage() {
   async function handleWSAssign() {
     setWsAssigning(true)
     const isMiddleHigh = wsCourseGroup === '중등' || wsCourseGroup === '고등'
-    const wsConceptNames = concepts.filter((c) => wsConceptIds.includes(c.id)).map((c) => c.concept_name).join(' + ')
+    const wsConceptNames = formatConceptRangeLabel(concepts.filter((c) => c.grade === wsConceptGrade), wsConceptIds)
     const targets = bulkMode ? bulkStudentIds : wsStudent ? [wsStudent.id] : []
     if (targets.length === 0) { setWsAssigning(false); return }
     for (const sid of targets) {
@@ -387,7 +387,7 @@ export default function TeacherAssignmentsPage() {
     if (bulkStudentIds.length === 0 || !wsStudent) return
     setWsAssigning(true)
     const isMiddleHigh = wsCourseGroup === '중등' || wsCourseGroup === '고등'
-    const wsConceptNames = concepts.filter((c) => wsConceptIds.includes(c.id)).map((c) => c.concept_name).join(' + ')
+    const wsConceptNames = formatConceptRangeLabel(concepts.filter((c) => c.grade === wsConceptGrade), wsConceptIds)
     for (const sid of bulkStudentIds) {
       await supabase.from('student_worksheets').insert({
         student_id: sid, subject: '수학',

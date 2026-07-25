@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { compressRangeLabels } from '@/lib/utils'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
@@ -266,7 +267,10 @@ export default function TeacherExamsPage() {
       const unitsOnly = coreActiveUnits.filter(u => !unitsWithSub.has(u))
       selectedRangeKeys = [...coreActiveSubTabs, ...unitsOnly]
     }
-    const rangeUnits = selectedRangeKeys.map(k => k.includes('__') ? k.split('__')[1] : k).join(', ')
+    // 선택한 순서가 아니라 교육과정 순서 기준으로 "첫구간~마지막구간" 형태로 압축
+    const orderedLabels = [...new Set(gradeConcepts.map((c) => c.sub_chapter || c.chapter))]
+    const selectedLabels = selectedRangeKeys.map(k => k.includes('__') ? k.split('__')[1] : k)
+    const rangeUnits = compressRangeLabels(orderedLabels, selectedLabels)
 
     // 점수 입력된 학생만 저장
     const entries = Object.entries(coreScores).filter(([, s]) => s !== '')
@@ -317,9 +321,12 @@ export default function TeacherExamsPage() {
         selectedRangeKeys = [...subKeys, ...unitsOnly]
       }
 
-      // 선택한 단원 범위를 문자열로 합침
+      // 선택한 순서가 아니라 교육과정 순서 기준으로 "첫구간~마지막구간" 형태로 압축
+      const grade0Concepts = concepts.filter((c) => c.grade === grade0)
+      const orderedLabels0 = [...new Set(grade0Concepts.map((c) => c.sub_chapter || c.chapter))]
+      const selectedLabels0 = selectedRangeKeys.map((k) => k.includes('__') ? k.split('__')[1] : k)
       rangeUnits = selectedRangeKeys.length > 0
-        ? selectedRangeKeys.map((k) => k.includes('__') ? k.split('__')[1] : k).join(', ')
+        ? compressRangeLabels(orderedLabels0, selectedLabels0) || null
         : (examUnitName || null)
     }
 

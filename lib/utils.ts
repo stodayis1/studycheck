@@ -40,6 +40,40 @@ export function cx(...classes: (string | boolean | undefined | null)[]): string 
   return classes.filter(Boolean).join(" ")
 }
 
+// 여러 개의 구간(대단원/중단원 등) 라벨을 "선택한 순서"가 아니라 "교육과정 순서" 기준으로
+// 정렬한 뒤, 1개면 그대로, 여러 개면 "첫구간~마지막구간"으로 압축한다.
+// (그래야 클릭한 순서와 무관하게 "1단원~3단원"처럼 자연스러운 범위로 나온다)
+export function compressRangeLabels(orderedAllLabels: string[], selectedLabels: string[]): string {
+  const selected = orderedAllLabels.filter((l) => selectedLabels.includes(l))
+  if (selected.length === 0) return ''
+  if (selected.length === 1) return selected[0]
+  return `${selected[0]}~${selected[selected.length - 1]}`
+}
+
+// 소개념 단위로 고른 학습지/평가 범위를 사람이 읽기 좋은 형태로 압축한다.
+// - 중단원 하나를 통째로 골랐으면: "1. 정수와 유리수"
+// - 중단원 하나에서 소개념 일부만 골랐으면: "1. 정수와 유리수(소인수분해~최대공약수)"
+// - 여러 중단원에 걸쳐 골랐으면: "1. 정수와 유리수~3. 정수의 곱셈과 나눗셈" (소개념 나열 없이 범위만)
+export function formatConceptRangeLabel(
+  scopeConcepts: { id: string; sub_chapter?: string | null; concept_name: string }[],
+  selectedConceptIds: string[]
+): string {
+  const subOrder = [...new Set(scopeConcepts.map((c) => c.sub_chapter).filter((s): s is string => !!s))]
+  const subsWithSelection = subOrder.filter((sub) =>
+    scopeConcepts.some((c) => c.sub_chapter === sub && selectedConceptIds.includes(c.id))
+  )
+  if (subsWithSelection.length === 0) return ''
+  if (subsWithSelection.length > 1) {
+    return `${subsWithSelection[0]}~${subsWithSelection[subsWithSelection.length - 1]}`
+  }
+  const sub = subsWithSelection[0]
+  const allInSub = scopeConcepts.filter((c) => c.sub_chapter === sub)
+  const selectedInSub = allInSub.filter((c) => selectedConceptIds.includes(c.id))
+  if (selectedInSub.length === allInSub.length) return sub
+  if (selectedInSub.length === 1) return `${sub}(${selectedInSub[0].concept_name})`
+  return `${sub}(${selectedInSub[0].concept_name}~${selectedInSub[selectedInSub.length - 1].concept_name})`
+}
+
 // Supabase는 기본적으로 한 번에 최대 1000행까지만 돌려준다.
 // .limit()으로 숫자를 늘려도 데이터가 그 이상 쌓이면 다시 누락되므로,
 // 테이블이 아무리 커져도 절대 누락 없이 전부 가져오도록 페이지 단위로 끝까지 순회한다.
