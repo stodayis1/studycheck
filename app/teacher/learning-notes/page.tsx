@@ -547,7 +547,6 @@ export default function TeacherLearningNotesPage() {
     sessionId = savedSession.id
     setNoteSession(savedSession)
 
-    const existingNote = notes.find((n) => n.session_id === sessionId)
     // 교재별 진도 progress_checks 자동 업데이트
     if (noteStudent && Object.keys(noteProgressByTB).length > 0) {
       // 교재 하나하나(같은 종류/학년/학기라도)마다 진도를 따로 기록 - student_textbook_id로 구분
@@ -603,10 +602,14 @@ export default function TeacherLearningNotesPage() {
       memo: memoText,
     }
 
-    if (existingNote) {
-      await supabase.from('learning_notes').update(noteData).eq('id', existingNote.id)
-    } else {
-      await supabase.from('learning_notes').insert(noteData)
+    const { error: noteError } = await supabase
+      .from('learning_notes')
+      .upsert(noteData, { onConflict: 'session_id' })
+    if (noteError) {
+      console.error('학습일지 저장 오류:', noteError)
+      setSavingNote(false)
+      alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      return
     }
 
     setSavingNote(false)
@@ -631,7 +634,6 @@ export default function TeacherLearningNotesPage() {
       return
     }
     const sessionId = savedSession.id
-    const existingNote = notes.find((n) => n.session_id === sessionId)
     const noteData = {
       student_id: student.id,
       session_id: sessionId,
@@ -642,10 +644,13 @@ export default function TeacherLearningNotesPage() {
       workbook_done: false,
       memo: null as string | null,
     }
-    if (existingNote) {
-      await supabase.from('learning_notes').update(noteData).eq('id', existingNote.id)
-    } else {
-      await supabase.from('learning_notes').insert(noteData)
+    const { error: noteError } = await supabase
+      .from('learning_notes')
+      .upsert(noteData, { onConflict: 'session_id' })
+    if (noteError) {
+      console.error('결석 처리 오류:', noteError)
+      alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      return
     }
     fetchData()
   }
@@ -1102,7 +1107,7 @@ export default function TeacherLearningNotesPage() {
 
                         {/* 배정 교재 + 진도 미리보기 (수업일지 없을 때) */}
                         {!note && (() => {
-                          const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
+                          const myTBs = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
                           if (myTBs.length === 0) return null
                           const recentSession = sessions
                             .filter((s) => s.student_id === student.id && s.session_date < todayStr)
@@ -1199,7 +1204,7 @@ export default function TeacherLearningNotesPage() {
                       const recentNote = recentSession
                         ? notes.find((n) => n.session_id === recentSession.id)
                         : null
-                      const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
+                      const myTBs = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
                       const mainTB = myTBs.find((t) => t.textbook_type === '개념서') ?? myTBs[0]
 
                       return (
@@ -1324,7 +1329,7 @@ export default function TeacherLearningNotesPage() {
               if (!prevSession) return null
 
               // 선행 진도: 배정된 교재 중 가장 앞선 과정 계산
-              const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+              const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned')
               const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
               const TYPE_ORDER = ['개념서','유형서','심화서']
               const topTB = myTBs.reduce((best, t) => {
@@ -1425,7 +1430,7 @@ export default function TeacherLearningNotesPage() {
 
                   // 배정된 교재 목록
                   const myTextbooks = noteStudent
-                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned')
                     : []
 
                   return (
@@ -1811,7 +1816,7 @@ export default function TeacherLearningNotesPage() {
                 {/* 테스트 범위 선택 - 단원만 선택 */}
                 {(() => {
                   const myTBs = noteStudent
-                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned')
                     : []
 
                   // 배정된 교재 중 첫 번째 grade 기반으로 단원 목록
@@ -1967,7 +1972,7 @@ export default function TeacherLearningNotesPage() {
                 {/* 교재 과제 - 배정된 교재 기반 (다중 선택) */}
                 {(() => {
                   const myTBs = noteStudent
-                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id)
+                    ? studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned')
                     : []
 
                   const TYPE_COLOR: Record<string, string> = {
