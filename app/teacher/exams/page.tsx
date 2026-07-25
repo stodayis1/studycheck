@@ -106,6 +106,18 @@ export default function TeacherExamsPage() {
   const [examMemo, setExamMemo] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // 개별 평가 수정/삭제 (등록된 값 실수로 잘못 올렸을 때 고치는 용도)
+  const [editingExam, setEditingExam] = useState<Exam | null>(null)
+  const [editDate, setEditDate] = useState('')
+  const [editTitle, setEditTitle] = useState('')
+  const [editUnit, setEditUnit] = useState('')
+  const [editUnitName, setEditUnitName] = useState('')
+  const [editLevel, setEditLevel] = useState('')
+  const [editScore, setEditScore] = useState('')
+  const [editTotalScore, setEditTotalScore] = useState('')
+  const [editMemo, setEditMemo] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+
   // 코어테스트 일괄입력
   const [showCoreModal, setShowCoreModal] = useState(false)
   const [coreGrade, setCoreGrade] = useState('')
@@ -189,6 +201,54 @@ export default function TeacherExamsPage() {
     const firstChapter = firstGradeConcepts[0]?.chapter ?? ''
     setActiveUnitTabs(firstChapter ? [firstChapter] : [])
     setShowModal(true)
+  }
+
+  function openEditModal(exam: Exam) {
+    setEditingExam(exam)
+    setEditDate(exam.exam_date)
+    setEditTitle(exam.title ?? '')
+    setEditUnit(exam.unit ?? '')
+    setEditUnitName(exam.unit_name ?? '')
+    setEditLevel(exam.level != null ? String(exam.level) : '')
+    setEditScore(exam.score != null ? String(exam.score) : '')
+    setEditTotalScore(String(exam.total_score ?? 100))
+    setEditMemo(exam.memo ?? '')
+  }
+
+  async function handleUpdateExam() {
+    if (!editingExam) return
+    setEditSaving(true)
+    const { error } = await supabase.from('exams').update({
+      exam_date: editDate,
+      title: editTitle || null,
+      unit: editUnit || null,
+      unit_name: editUnitName || null,
+      level: editLevel ? parseFloat(editLevel) : null,
+      score: editScore ? parseFloat(editScore) : null,
+      total_score: editTotalScore ? parseFloat(editTotalScore) : 100,
+      memo: editMemo || null,
+    }).eq('id', editingExam.id)
+    setEditSaving(false)
+    if (error) {
+      alert('수정 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      return
+    }
+    setEditingExam(null)
+    fetchData()
+  }
+
+  async function handleDeleteExam() {
+    if (!editingExam) return
+    if (!confirm('이 평가 기록을 삭제할까요? 되돌릴 수 없어요.')) return
+    setEditSaving(true)
+    const { error } = await supabase.from('exams').delete().eq('id', editingExam.id)
+    setEditSaving(false)
+    if (error) {
+      alert('삭제 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      return
+    }
+    setEditingExam(null)
+    fetchData()
   }
 
   async function handleCoreSave() {
@@ -532,6 +592,10 @@ export default function TeacherExamsPage() {
                                     <p className="text-[10px] text-gray-400 mt-0.5">{pct(exam.score, exam.total_score)}%</p>
                                   </div>
                                 )}
+                                <button onClick={(e) => { e.stopPropagation(); openEditModal(exam) }}
+                                  className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100">
+                                  <i className="ti ti-pencil" style={{ fontSize: 14 }} />
+                                </button>
                               </div>
                               )
                             })}
@@ -546,6 +610,77 @@ export default function TeacherExamsPage() {
           </div>
         )}
       </div>
+
+      {/* 개별 평가 수정 모달 - 잘못 등록한 점수/날짜 등을 고치는 용도 */}
+      {editingExam && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => setEditingExam(null)}>
+          <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">평가 기록 수정</h3>
+              <button onClick={() => setEditingExam(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">날짜</label>
+              <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">제목</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="예: 본고사, 예비 1회"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">범위(대단원)</label>
+                <input value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">범위(상세)</label>
+                <input value={editUnitName} onChange={(e) => setEditUnitName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">점수</label>
+                <input type="number" value={editScore} onChange={(e) => setEditScore(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none text-center font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">총점</label>
+                <input type="number" value={editTotalScore} onChange={(e) => setEditTotalScore(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none text-center font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">레벨</label>
+                <input type="number" step="0.5" value={editLevel} onChange={(e) => setEditLevel(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none text-center font-bold" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">메모</label>
+              <input value={editMemo} onChange={(e) => setEditMemo(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleDeleteExam} disabled={editSaving}
+                className="px-4 py-3.5 font-bold rounded-xl disabled:opacity-50 text-red-500 bg-red-50 border border-red-100">
+                삭제
+              </button>
+              <button onClick={handleUpdateExam} disabled={editSaving}
+                className="flex-1 py-3.5 font-bold rounded-xl disabled:opacity-50"
+                style={{ background: '#F5C4B3', color: '#712B13' }}>
+                {editSaving ? '저장 중...' : '수정 저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 평가 등록 모달 */}
       {showModal && (
