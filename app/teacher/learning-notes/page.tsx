@@ -206,9 +206,11 @@ export default function TeacherLearningNotesPage() {
   const [refreshing, setRefreshing] = useState(false)
   async function refreshTodayStatus() {
     setRefreshing(true)
-    const [{ data: ssData }, { data: nData }] = await Promise.all([
-      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }).limit(5000),
-      supabase.from('learning_notes').select('*').limit(5000),
+    // learning_notes/class_sessions는 이제 1000행이 훌쩍 넘어서 PostgREST 기본 상한(1000행)에
+    // 걸리면 정렬 기준과 무관하게 최근 저장분이 통째로 빠질 수 있다 - 끝까지 순회해서 전부 가져온다.
+    const [ssData, nData] = await Promise.all([
+      fetchAllRows(() => supabase.from('class_sessions').select('*')),
+      fetchAllRows(() => supabase.from('learning_notes').select('*')),
     ])
     if (ssData) setSessions(ssData)
     if (nData) setNotes(nData)
@@ -217,11 +219,13 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: scData }, { data: ssData }, { data: nData }, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, { data: scData }, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('schedules').select('*').eq('is_active', true).limit(5000),
-      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }).limit(5000),
-      supabase.from('learning_notes').select('*').limit(5000),
+      // class_sessions/learning_notes는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
+      // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
+      fetchAllRows(() => supabase.from('class_sessions').select('*')),
+      fetchAllRows(() => supabase.from('learning_notes').select('*')),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),

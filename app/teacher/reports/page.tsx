@@ -321,15 +321,20 @@ export default function TeacherReportsPage() {
     const endDate = new Date(year, month, 0)
     const endStr = `${year}-${String(month).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`
 
-    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: schedulesData }] = await Promise.all([
+    const [{ data: sessionsData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: schedulesData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', student.id).gte('session_date', startStr).lte('session_date', endStr),
-      supabase.from('learning_notes').select('*').limit(5000),
       supabase.from('student_worksheets').select('*').eq('student_id', student.id),
       supabase.from('exams').select('*').eq('student_id', student.id).gte('exam_date', startStr).lte('exam_date', endStr),
       supabase.from('student_textbooks').select('*').eq('student_id', student.id),
       supabase.from('progress_checks').select('*').limit(10000).eq('student_id', student.id),
       supabase.from('schedules').select('*').eq('student_id', student.id).eq('is_active', true),
     ])
+    // learning_notes는 전체 테이블에서 limit()으로 긁으면 PostgREST 1000행 상한에 걸려
+    // 이 학생 것이 빠질 수 있다 - 이 달 세션 id로만 걸러서 정확히 가져온다.
+    const sessionIdsForNotes = (sessionsData ?? []).map((s) => s.id)
+    const { data: notesData } = sessionIdsForNotes.length > 0
+      ? await supabase.from('learning_notes').select('*').in('session_id', sessionIdsForNotes)
+      : { data: [] as any[] }
 
     const sessions = sessionsData ?? []
     const sessionIds = sessions.map((s: any) => s.id)

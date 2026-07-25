@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 
@@ -84,9 +84,10 @@ export default function AdminPage() {
     const now = new Date()
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-    const [{ data: sData }, { data: nData }, { data: ssData }, { data: wsData }, { data: pgData }, { data: etData }] = await Promise.all([
+    const [{ data: sData }, nData, { data: ssData }, { data: wsData }, { data: pgData }, { data: etData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('teacher_name').order('grade').order('name'),
-      supabase.from('learning_notes').select('*').limit(5000),
+      // 1957행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 최근 기록이 빠질 수 있어 전부 순회
+      fetchAllRows(() => supabase.from('learning_notes').select('*')),
       supabase.from('class_sessions').select('id, student_id, session_date').gte('session_date', monthStart),
       supabase.from('student_worksheets').select('id, student_id, status, score').limit(5000),
       supabase.from('student_progress').select('*'),
