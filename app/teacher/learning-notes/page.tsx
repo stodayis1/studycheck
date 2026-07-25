@@ -347,6 +347,18 @@ export default function TeacherLearningNotesPage() {
     return notes.find((n) => n.session_id === session.id)
   }
 
+  // "작성완료" = 결석 처리됐거나, 수업내용(진도)과 과제배부가 둘 다 입력된 경우.
+  // 데일리테스트는 안 하는 수업도 있어서 선택사항 - 완료 판정에 포함하지 않는다.
+  function isTodayComplete(studentId: string) {
+    const session = getTodaySession(studentId)
+    const note = getTodayNote(studentId)
+    if (!session || !note) return false
+    if (note.attendance === '결석') return true
+    const hasContent = !!(session.progress_content || session.today_textbook_name)
+    const hasHomework = !!(session.hw_textbook_name || session.hw_worksheet_range || session.video_url)
+    return hasContent && hasHomework
+  }
+
   function openNoteModal(student: Student, targetSession?: ClassSession) {
     // 기존 세션이 있고 편집 권한 체크
     const session = targetSession ?? getTodaySession(student.id)
@@ -977,7 +989,7 @@ export default function TeacherLearningNotesPage() {
                           const periods = schedule!.periods
                           const top = timeToOffset(schedule!.start_time)
                           const blockH = HOUR_PX * periods - 6
-                          const hasNote = !!getTodayNote(student.id)
+                          const isComplete = isTodayComplete(student.id)
                           return (
                             <div key={student.id} className="shrink-0 relative" style={{ width: 80, height: totalHeight }}>
                               <button
@@ -985,15 +997,15 @@ export default function TeacherLearningNotesPage() {
                                 className="rounded-xl px-2 flex flex-col justify-center w-full transition-all hover:opacity-80 absolute"
                                 style={{
                                   backgroundColor: color.bg,
-                                  borderLeft: `4px solid ${hasNote ? '#10b981' : color.border}`,
+                                  borderLeft: `4px solid ${isComplete ? '#10b981' : color.border}`,
                                   height: blockH, top, zIndex: 1
                                 }}>
                                 <span className="text-xs font-black text-gray-900 truncate">{student.name}</span>
                                 <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: color.sub }}>
                                   {student.grade}
                                 </span>
-                                {hasNote && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
-                                {!hasNote && schedule!.start_time.slice(0,5) && (
+                                {isComplete && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
+                                {!isComplete && schedule!.start_time.slice(0,5) && (
                                   <span className="text-[9px] text-gray-400">{schedule!.start_time.slice(0,5)} · {periods}교시</span>
                                 )}
                               </button>
@@ -1008,7 +1020,7 @@ export default function TeacherLearningNotesPage() {
 
               {/* 오늘 수업 학생 목록 */}
               {todayStudents.length > 0 && (() => {
-                const missingStudents = todayStudents.filter(({ student }) => !getTodayNote(student.id))
+                const missingStudents = todayStudents.filter(({ student }) => !isTodayComplete(student.id))
                 return (
                 <div>
                   <div className="flex items-center justify-between px-1 mb-2">
@@ -1038,12 +1050,13 @@ export default function TeacherLearningNotesPage() {
                   {todayStudents.map(({ student, schedule }) => {
                     const note = getTodayNote(student.id)
                     const session = getTodaySession(student.id)
+                    const isComplete = isTodayComplete(student.id)
                     return (
                       <div key={student.id} className={cx(
                         'bg-white rounded-2xl border-2 shadow-sm overflow-hidden mb-3',
-                        note ? 'border-green-200' : 'border-blue-100'
+                        isComplete ? 'border-green-200' : note ? 'border-orange-200' : 'border-blue-100'
                       )}>
-                        <div className={cx('px-4 py-3 flex items-center gap-3', note ? 'bg-green-50' : 'bg-blue-50')}>
+                        <div className={cx('px-4 py-3 flex items-center gap-3', isComplete ? 'bg-green-50' : note ? 'bg-orange-50' : 'bg-blue-50')}>
                           <div className="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                             {student.name[0]}
                           </div>
@@ -1064,8 +1077,10 @@ export default function TeacherLearningNotesPage() {
                                   {student.teacher_name} 선생님
                                 </span>
                               )}
-                              {note && (
-                                <span className="text-[10px] font-bold text-green-600">✓ 수업일지 완료</span>
+                              {isComplete ? (
+                                <span className="text-[10px] font-bold text-green-600">✓ 작성완료</span>
+                              ) : note && (
+                                <span className="text-[10px] font-bold text-orange-500">📝 입력중 (수업내용/과제배부 확인)</span>
                               )}
                             </div>
                           </div>
