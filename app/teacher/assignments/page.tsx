@@ -1647,13 +1647,24 @@ export default function TeacherAssignmentsPage() {
                         const subConcepts = gradeConcepts
                           .filter((c) => wsChapters.includes(c.chapter) && wsSubChapters.includes(c.sub_chapter))
                           .sort((a, b) => a.concept_order - b.concept_order)
+                        const allSelected = subConcepts.length > 0 && subConcepts.every((c) => wsConceptIds.includes(c.id))
                         return (
                           <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-2">
-                              소개념 <span className="text-[10px] font-normal" style={{ color: wsConceptIds.length === 0 ? '#dc2626' : '#9ca3af' }}>
-                                {wsConceptIds.length === 0 ? '필수 선택' : `${wsConceptIds.length}개 선택`}
-                              </span>
-                            </label>
+                            <div className="flex items-center justify-between mb-2 flex-wrap gap-1.5">
+                              <label className="text-xs font-bold text-gray-700">
+                                소개념 <span className="text-[10px] font-normal" style={{ color: wsConceptIds.length === 0 ? '#dc2626' : '#9ca3af' }}>
+                                  {wsConceptIds.length === 0 ? '필수 선택' : `${wsConceptIds.length}개 선택`}
+                                </span>
+                              </label>
+                              {/* 중단원 단위로 통째로 낼 때는 하나하나 누르지 않고 한 번에 전체 선택/해제 */}
+                              <button onClick={() => setWsConceptIds(allSelected ? [] : subConcepts.map((c) => c.id))}
+                                className="text-[10px] font-bold px-2 py-1 rounded-lg transition-all"
+                                style={allSelected
+                                  ? { background: '#fee2e2', color: '#991b1b' }
+                                  : { background: '#EAF3DE', color: '#27500A' }}>
+                                {allSelected ? '전체 해제' : `중단원 전체선택 (${subConcepts.length}개)`}
+                              </button>
+                            </div>
                             <div className="flex gap-1.5 flex-wrap">
                               {subConcepts.map((c) => (
                                 <button key={c.id} onClick={() =>
