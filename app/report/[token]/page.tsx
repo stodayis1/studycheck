@@ -209,7 +209,9 @@ export default function PublicReportPage() {
                 const pct = e.total_score > 0 ? Math.round(e.score / e.total_score * 100) : null
                 return (
                   <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{e.exam_type}{e.unit ? ` · ${e.unit}` : ''}</span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
+                      {[e.exam_type, e.title, e.unit, e.unit_name].filter(Boolean).join(' · ')}
+                    </span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: pct != null ? (pct >= 85 ? '#9FE1CB' : pct >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
                       {e.score != null ? `${e.score}/${e.total_score} (${pct}%)` : '미채점'}
                     </span>
