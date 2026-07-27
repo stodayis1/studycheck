@@ -219,11 +219,11 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: scData }, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, wData, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, wData, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('schedules').select('*').eq('is_active', true).limit(5000),
-      // class_sessions/learning_notes/student_worksheets는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
+      // schedules/class_sessions/learning_notes/student_worksheets는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
       // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
+      fetchAllRows(() => supabase.from('schedules').select('*').eq('is_active', true)),
       fetchAllRows(() => supabase.from('class_sessions').select('*')),
       fetchAllRows(() => supabase.from('learning_notes').select('*')),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),

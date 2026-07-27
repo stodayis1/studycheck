@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -50,9 +50,10 @@ export default function TeacherClassesPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
-      const [{ data: sData }, { data: scData }] = await Promise.all([
+      const [{ data: sData }, scData] = await Promise.all([
         supabase.from('students').select('*').eq('is_active', true).order('name'),
-        supabase.from('schedules').select('*').eq('is_active', true).limit(5000),
+        // schedules도 곧 1000행 넘어가는 테이블이라 미리 전부 순회하도록 방어
+        fetchAllRows(() => supabase.from('schedules').select('*').eq('is_active', true)),
       ])
       if (sData) setStudents(sData)
       if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
