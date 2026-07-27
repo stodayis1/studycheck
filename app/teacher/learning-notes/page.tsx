@@ -167,6 +167,7 @@ export default function TeacherLearningNotesPage() {
   const [videoWatchLogs, setVideoWatchLogs] = useState<any[]>([])
   const [hwSelectedWSId, setHwSelectedWSId] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [justSavedNote, setJustSavedNote] = useState(false) // 저장 성공 시 잠깐 보여줄 확인 표시 (성공해도 화면이 그대로라 "저장 안 됐나?" 하고 헷갈리는 것 방지)
 
   // 피드백 모달
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
@@ -364,6 +365,7 @@ export default function TeacherLearningNotesPage() {
   }
 
   function openNoteModal(student: Student, targetSession?: ClassSession) {
+    setJustSavedNote(false)
     // 기존 세션이 있고 편집 권한 체크
     const session = targetSession ?? getTodaySession(student.id)
     if (session && !canEditNote(session.session_date)) {
@@ -648,6 +650,9 @@ export default function TeacherLearningNotesPage() {
 
     fetchData()
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
+    // 화면이 그대로라 저장이 됐는지 안 됐는지 헷갈릴 수 있어 잠깐 확인 표시를 보여줌
+    setJustSavedNote(true)
+    setTimeout(() => setJustSavedNote(false), 2500)
     } catch (err) {
       console.error('학습일지 저장 중 예상치 못한 오류:', err)
       alert('저장 중 오류가 발생했어요. 인터넷 연결을 확인하고 다시 시도해주세요.')
@@ -2272,6 +2277,14 @@ export default function TeacherLearningNotesPage() {
               </div>
             )}
 
+
+            {/* 저장 성공 확인 표시 - 저장해도 화면이 그대로라 "안 됐나?" 헷갈리는 것 방지 */}
+            {justSavedNote && (
+              <div className="mt-3 py-2.5 rounded-xl text-center text-sm font-bold flex items-center justify-center gap-1.5"
+                style={{ background: '#DCFCE7', color: '#166534' }}>
+                <i className="ti ti-circle-check" style={{ fontSize: 16 }} /> 저장됐어요!
+              </div>
+            )}
 
             {/* 저장 버튼 - 모든 탭에서 표시 */}
             <button onClick={handleSaveNote} disabled={savingNote}
