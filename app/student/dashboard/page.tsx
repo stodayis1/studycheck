@@ -754,45 +754,53 @@ export default function StudentDashboardPage() {
           </div>
         )}
 
-        {/* 레벨 학습지 전체 현황 */}
-        {worksheets.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #efefef' }}>
-              <i className="ti ti-file-text" style={{ fontSize: 16, color: '#993C1D' }} />
-              <h3 className="text-sm font-bold text-gray-700">레벨 학습지 전체 현황</h3>
-              <span className="text-xs text-gray-400 ml-auto">{worksheets.length}개</span>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {worksheets.map((w) => {
-                const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
-                return (
-                  <div key={w.id} className="px-4 py-3">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <span className={cx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.color)}>{cfg.label}</span>
-                      {w.worksheet_type === 'similar' && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                          style={{ background: '#FFF5F2', color: '#712B13' }}>오답유사</span>
-                      )}
-                      <span className="text-[10px] font-semibold ml-auto" style={{ color: '#9ca3af' }}>{w.current_level}레벨</span>
+        {/* 레벨 학습지 전체 현황 - 선생님 보고서 화면과 같은 요약+한줄목록 형태로 표시 */}
+        {worksheets.length > 0 && (() => {
+          const scoredWS = worksheets.filter((w) => w.score != null)
+          const avgScore = scoredWS.length > 0 ? Math.round(scoredWS.reduce((s, w) => s + (w.score ?? 0), 0) / scoredWS.length) : null
+          const passedCount = worksheets.filter((w) => w.status === 'passed').length
+          const passRate = worksheets.length > 0 ? Math.round(passedCount / worksheets.length * 100) : 0
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #efefef' }}>
+                <i className="ti ti-file-text" style={{ fontSize: 16, color: '#993C1D' }} />
+                <h3 className="text-sm font-bold text-gray-700">레벨 학습지 전체 현황</h3>
+                <span className="text-xs text-gray-400 ml-auto">{worksheets.length}개</span>
+              </div>
+              <div className="px-4 pt-4">
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {[
+                    { label: '총 학습지', value: worksheets.length, unit: '개' },
+                    { label: '평균점수', value: avgScore ?? '-', unit: avgScore != null ? '점' : '' },
+                    { label: '통과율', value: passRate, unit: '%' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f9fafb' }}>
+                      <p className="text-[10px] text-gray-400 mb-0.5">{item.label}</p>
+                      <p className="text-base font-bold text-gray-800">{item.value}<span className="text-[10px] font-normal text-gray-400 ml-0.5">{item.unit}</span></p>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-gray-900">
-                        {w.grade_level} {w.unit}
-                        {w.unit_name && <span className="text-xs font-normal text-gray-400 ml-1">{w.unit_name}</span>}
-                      </p>
-                      {w.score != null && (
-                        <span className="text-sm font-black shrink-0" style={{
-                          color: w.score >= 85 ? '#27500A' : w.score >= 70 ? '#633806' : '#991b1b'
-                        }}>{w.score}점</span>
-                      )}
+                  ))}
+                </div>
+              </div>
+              <div className="divide-y divide-gray-50 pb-1">
+                {worksheets.map((w) => {
+                  const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
+                  const scoreColor = w.score != null ? (w.score >= 85 ? '#27500A' : w.score >= 70 ? '#633806' : '#991b1b') : '#9ca3af'
+                  return (
+                    <div key={w.id} className="px-4 py-2 flex items-center justify-between gap-2">
+                      <span className="text-xs text-gray-600 flex-1 min-w-0 truncate">
+                        {w.grade_level} {w.unit}{w.unit_name ? ` ${w.unit_name}` : ''} · {w.current_level}레벨
+                        {w.worksheet_type === 'similar' && <span style={{ color: '#712B13' }}> (오답유사)</span>}
+                      </span>
+                      <span className="text-xs font-bold shrink-0" style={{ color: scoreColor }}>
+                        {w.score != null ? `${w.score}점` : cfg.label}
+                      </span>
                     </div>
-                    {w.memo && <p className="text-[10px] mt-0.5" style={{ color: '#9ca3af' }}>{w.memo}</p>}
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* 교재 진도 현황 */}
         {(() => {
