@@ -449,7 +449,7 @@ export default function TeacherLearningNotesPage() {
   async function handleSaveNote() {
     if (!noteStudent) return
     setSavingNote(true)
-
+    try {
     // 진도 텍스트 - "대단원번호-중단원번호 첫개념~마지막개념" 형식
     const myTBsForText = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
     const progressParts = Object.entries(noteProgressByTB)
@@ -564,42 +564,61 @@ export default function TeacherLearningNotesPage() {
     setNoteSession(savedSession)
 
     // 교재별 진도 progress_checks 자동 업데이트
+    // 이 블록은 부가 정보(진도 체크) 갱신용 - 여기서 오류가 나도(네트워크 순간 끊김, 동시저장 충돌 등)
+    // 수업일지 저장 자체(출석/과제 등 핵심 데이터)는 반드시 계속 진행되어야 하므로 별도로 try/catch 처리.
+    // (예전엔 이 블록에서 조회 후 삽입하는 방식이라 두 번 연속 저장하면 "이미 있는 행을 다시 만들려는"
+    //  충돌이 날 수 있었고, 이 함수 안에서 처리되지 않은 예외가 발생하면 저장 버튼이 계속 "저장 중" 상태로
+    //  멈춰버려 선생님이 알림도 못 보고 여러 번 다시 시도해야 했던 문제가 있었음)
     if (noteStudent && Object.keys(noteProgressByTB).length > 0) {
-      // 교재 하나하나(같은 종류/학년/학기라도)마다 진도를 따로 기록 - student_textbook_id로 구분
-      const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
-      for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
-        if (sel.conceptIds.length === 0) continue
-        const tb = myTBs.find((t) => t.id === tbId)
-        if (!tb) continue
-        await Promise.all(sel.conceptIds.map(async (conceptId) => {
-          const { data: existing } = await supabase
-            .from('progress_checks').select('id, check_count')
-            .eq('student_id', noteStudent.id).eq('concept_id', conceptId).eq('student_textbook_id', tb.id).single()
-          if (existing) {
-            if (existing.check_count < 1)
-              await supabase.from('progress_checks').update({ check_count: 1, session_id: sessionId }).eq('id', existing.id)
-            else
-              await supabase.from('progress_checks').update({ session_id: sessionId }).eq('id', existing.id)
-          } else {
-            await supabase.from('progress_checks').insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id, session_id: sessionId })
-          }
-        }))
-      }
-      // 로컬 즉시 반영
-      const myTBs2 = myTBs
-      setProgressChecks((prev) => {
-        const updated = [...prev]
+      try {
+        // 교재 하나하나(같은 종류/학년/학기라도)마다 진도를 따로 기록 - student_textbook_id로 구분
+        const myTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
         for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
-          const tb = myTBs2.find((t) => t.id === tbId)
+          if (sel.conceptIds.length === 0) continue
+          const tb = myTBs.find((t) => t.id === tbId)
           if (!tb) continue
-          for (const conceptId of sel.conceptIds) {
-            const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId && p.student_textbook_id === tb.id)
-            if (idx >= 0) { if (updated[idx].check_count < 1) updated[idx] = { ...updated[idx], check_count: 1 } }
-            else updated.push({ id: 'temp_' + conceptId + '_' + tb.id, student_id: noteStudent!.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id })
-          }
+          await Promise.all(sel.conceptIds.map(async (conceptId) => {
+            const { data: existing } = await supabase
+              .from('progress_checks').select('id, check_count')
+              .eq('student_id', noteStudent.id).eq('concept_id', conceptId).eq('student_textbook_id', tb.id).maybeSingle()
+            if (existing) {
+              if (existing.check_count < 1)
+                await supabase.from('progress_checks').update({ check_count: 1, session_id: sessionId }).eq('id', existing.id)
+              else
+                await supabase.from('progress_checks').update({ session_id: sessionId }).eq('id', existing.id)
+            } else {
+              const { error: insertError } = await supabase.from('progress_checks')
+                .insert({ student_id: noteStudent.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id, session_id: sessionId })
+              // 동시 저장(중복 클릭 등)으로 그 사이 이미 같은 행이 생겼다면(23505 = 중복키) 삽입 대신 업데이트로 전환
+              if (insertError?.code === '23505') {
+                await supabase.from('progress_checks')
+                  .update({ check_count: 1, session_id: sessionId })
+                  .eq('student_id', noteStudent.id).eq('concept_id', conceptId).eq('student_textbook_id', tb.id)
+              } else if (insertError) {
+                console.error('진도 체크 저장 오류:', insertError)
+              }
+            }
+          }))
         }
-        return updated
-      })
+        // 로컬 즉시 반영
+        const myTBs2 = myTBs
+        setProgressChecks((prev) => {
+          const updated = [...prev]
+          for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
+            const tb = myTBs2.find((t) => t.id === tbId)
+            if (!tb) continue
+            for (const conceptId of sel.conceptIds) {
+              const idx = updated.findIndex((p) => p.student_id === noteStudent!.id && p.concept_id === conceptId && p.student_textbook_id === tb.id)
+              if (idx >= 0) { if (updated[idx].check_count < 1) updated[idx] = { ...updated[idx], check_count: 1 } }
+              else updated.push({ id: 'temp_' + conceptId + '_' + tb.id, student_id: noteStudent!.id, concept_id: conceptId, check_count: 1, student_textbook_id: tb.id })
+            }
+          }
+          return updated
+        })
+      } catch (progressErr) {
+        // 진도 체크 갱신은 실패해도 아래 수업일지 저장은 계속 진행
+        console.error('진도 체크 반영 중 오류(수업일지 저장은 계속 진행):', progressErr)
+      }
     }
 
     const memoText = [
@@ -623,14 +642,18 @@ export default function TeacherLearningNotesPage() {
       .upsert(noteData, { onConflict: 'session_id' })
     if (noteError) {
       console.error('학습일지 저장 오류:', noteError)
-      setSavingNote(false)
       alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
       return
     }
 
-    setSavingNote(false)
     fetchData()
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
+    } catch (err) {
+      console.error('학습일지 저장 중 예상치 못한 오류:', err)
+      alert('저장 중 오류가 발생했어요. 인터넷 연결을 확인하고 다시 시도해주세요.')
+    } finally {
+      setSavingNote(false)
+    }
   }
 
   // 결석 한번에 처리 (전체 입력폼 없이 바로 기록) - 미입력과 결석을 구분하기 위함

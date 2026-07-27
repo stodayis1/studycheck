@@ -131,6 +131,7 @@ export default function TeacherCurriculumPage() {
     const key = `${studentId}_${conceptId}`
     if (updatingProgress === key) return
     setUpdatingProgress(key)
+    try {
 
     const existing = progressChecks.find(
       (p) => p.student_id === studentId && p.concept_id === conceptId
@@ -138,7 +139,15 @@ export default function TeacherCurriculumPage() {
     const nextCount = existing ? (existing.check_count >= 3 ? 0 : existing.check_count + 1) : 1
 
     if (!existing) {
-      await supabase.from('progress_checks').insert({ student_id: studentId, concept_id: conceptId, check_count: 1 })
+      const { error: insertError } = await supabase.from('progress_checks').insert({ student_id: studentId, concept_id: conceptId, check_count: 1 })
+      // 화면에 반영된 목록이 순간적으로 최신이 아니어서(다른 탭/기기에서 방금 만든 행 등) "없다"고 판단했는데
+      // 실제로는 이미 있던 경우 - 삽입 대신 업데이트로 전환해서 중복키 오류로 멈추지 않게 함
+      if (insertError?.code === '23505') {
+        await supabase.from('progress_checks').update({ check_count: 1, updated_at: new Date().toISOString() })
+          .eq('student_id', studentId).eq('concept_id', conceptId).is('student_textbook_id', null)
+      } else if (insertError) {
+        console.error('진도 체크 저장 오류:', insertError)
+      }
     } else if (nextCount === 0) {
       await supabase.from('progress_checks').delete().eq('id', existing.id)
     } else {
@@ -151,7 +160,11 @@ export default function TeacherCurriculumPage() {
       if (nextCount === 0) return prev.filter((p) => !(p.student_id === studentId && p.concept_id === conceptId))
       return prev.map((p) => p.student_id === studentId && p.concept_id === conceptId ? { ...p, check_count: nextCount } : p)
     })
-    setUpdatingProgress(null)
+    } catch (err) {
+      console.error('진도 체크 처리 중 오류:', err)
+    } finally {
+      setUpdatingProgress(null)
+    }
   }
 
   // 연산서 진도 업데이트 (0/20/40/60/80/100)
