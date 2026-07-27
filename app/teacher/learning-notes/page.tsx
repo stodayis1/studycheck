@@ -628,14 +628,17 @@ export default function TeacherLearningNotesPage() {
       noteMemo,
     ].filter(Boolean).join(' ') || null
 
+    // 결석이면 화면에 남아있던 과제 달성률/성취도 기본값(100% 등)이 그대로 저장되지 않도록
+    // UI 비활성화와 별개로 저장 시점에도 한 번 더 강제로 "기록 없음" 처리
+    const isAbsent = noteAttendance === '결석'
     const noteData = {
       student_id: noteStudent.id,
       session_id: sessionId,
       attendance: noteAttendance,
-      worksheet_submitted: noteAchievement > 0,
-      worksheet_score: noteScorePct,
-      textbook_submitted: noteAchievement > 0,
-      workbook_done: noteAchievement === 100,
+      worksheet_submitted: isAbsent ? false : noteAchievement > 0,
+      worksheet_score: isAbsent ? null : noteScorePct,
+      textbook_submitted: isAbsent ? false : noteAchievement > 0,
+      workbook_done: isAbsent ? false : noteAchievement === 100,
       memo: memoText,
     }
 
@@ -1720,30 +1723,35 @@ export default function TeacherLearningNotesPage() {
                   </div>
                 </div>
 
-                {/* 과제 달성률 */}
-                <div>
+                {/* 과제 달성률 - 결석이면 과제 자체가 없는 것이므로 비활성화 */}
+                <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold text-gray-700 mb-2">📊 과제 달성률</label>
                   <div className="grid grid-cols-4 gap-2">
                     {ACHIEVEMENT_OPTIONS.map((opt) => (
                       <button key={opt.value} onClick={() => setNoteAchievement(opt.value)}
+                        disabled={noteAttendance === '결석'}
                         className="py-2.5 rounded-xl text-sm font-black transition-all"
-                        style={noteAchievement === opt.value
+                        style={noteAttendance !== '결석' && noteAchievement === opt.value
                           ? { background: '#F5C4B3', color: '#712B13' }
                           : { background: '#f3f4f6', color: '#9ca3af' }}>
                         {opt.label}
                       </button>
                     ))}
                   </div>
+                  {noteAttendance === '결석' && (
+                    <p className="text-[11px] text-gray-400 mt-1.5">결석 처리 시 과제 항목은 기록되지 않아요.</p>
+                  )}
                 </div>
 
-                {/* 과제 성취도 % */}
-                <div>
+                {/* 과제 성취도 % - 결석이면 비활성화 */}
+                <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold text-gray-700 mb-2">🎯 과제 성취도</label>
                   <div className="flex gap-1.5 flex-wrap">
                     {[0, 30, 50, 70, 90, 100].map((pct) => (
                       <button key={pct} onClick={() => setNoteScorePct(pct)}
+                        disabled={noteAttendance === '결석'}
                         className="px-3 py-2 rounded-xl text-sm font-bold transition-all"
-                        style={noteScorePct === pct
+                        style={noteAttendance !== '결석' && noteScorePct === pct
                           ? { background: '#F5C4B3', color: '#712B13' }
                           : { background: '#f3f4f6', color: '#9ca3af' }}>
                         {pct}%
