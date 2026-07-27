@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx, formatConceptRangeLabel } from '@/lib/utils'
+import { cx, formatConceptRangeLabel, fetchAllRows } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -184,9 +184,11 @@ export default function TeacherAssignmentsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: wData }, { data: tData }, { data: cData }, { data: mwData }] = await Promise.all([
+    const [{ data: sData }, wData, { data: tData }, { data: cData }, { data: mwData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: false }).limit(5000),
+      // 1250행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 오래된 진행중 학습지가
+      // 통째로 잘려나가 "학습지가 0건"처럼 보이던 근본 원인 - 끝까지 순회해서 전부 가져온다.
+      fetchAllRows(() => supabase.from('student_worksheets').select('*')),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order').limit(5000),
       supabase.from('middle_worksheets').select('*').order('grade').order('semester').order('lesson_no'),

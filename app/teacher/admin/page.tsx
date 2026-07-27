@@ -84,12 +84,13 @@ export default function AdminPage() {
     const now = new Date()
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-    const [{ data: sData }, nData, { data: ssData }, { data: wsData }, { data: pgData }, { data: etData }] = await Promise.all([
+    const [{ data: sData }, nData, { data: ssData }, wsData, { data: pgData }, { data: etData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('teacher_name').order('grade').order('name'),
       // 1957행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 최근 기록이 빠질 수 있어 전부 순회
       fetchAllRows(() => supabase.from('learning_notes').select('*')),
       supabase.from('class_sessions').select('id, student_id, session_date').gte('session_date', monthStart),
-      supabase.from('student_worksheets').select('id, student_id, status, score').limit(5000),
+      // 1250행+ - 마찬가지로 상한에 걸려 오래된 진행중 학습지가 통째로 빠지던 문제 - 전부 순회
+      fetchAllRows(() => supabase.from('student_worksheets').select('id, student_id, status, score')),
       supabase.from('student_progress').select('*'),
       supabase.from('elementary_textbooks').select('id, grade, semester, chapter_no, lesson_type'),
     ])

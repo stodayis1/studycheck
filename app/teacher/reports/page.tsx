@@ -161,9 +161,10 @@ export default function TeacherReportsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: studentData }, { data: worksheetData }, { data: conceptData }, { data: tbData }, pcData, { data: examData }, { data: epData }] = await Promise.all([
+    const [{ data: studentData }, worksheetData, { data: conceptData }, { data: tbData }, pcData, { data: examData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: true }).limit(5000),
+      // 1250행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 오래된 진행중 학습지가 빠지던 문제 - 전부 순회
+      fetchAllRows(() => supabase.from('student_worksheets').select('*')),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').limit(5000),
       fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴

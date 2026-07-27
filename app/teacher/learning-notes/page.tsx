@@ -219,17 +219,17 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: scData }, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: wData }, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, { data: scData }, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, wData, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('schedules').select('*').eq('is_active', true).limit(5000),
-      // class_sessions/learning_notes는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
+      // class_sessions/learning_notes/student_worksheets는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
       // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
       fetchAllRows(() => supabase.from('class_sessions').select('*')),
       fetchAllRows(() => supabase.from('learning_notes').select('*')),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
-      supabase.from('student_worksheets').select('*').limit(5000),
+      fetchAllRows(() => supabase.from('student_worksheets').select('*')),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
       supabase.from('video_watch_logs').select('*'),

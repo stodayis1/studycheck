@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -64,9 +64,10 @@ export default function TeacherSubmissionsPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
-      const [{ data: sData }, { data: wData }, { data: tData }] = await Promise.all([
+      const [{ data: sData }, wData, { data: tData }] = await Promise.all([
         supabase.from('students').select('*').eq('is_active', true).order('name'),
-        supabase.from('student_worksheets').select('*').order('assigned_at', { ascending: false }).limit(5000),
+        // 1250행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 오래된 채점대기 항목이 빠지던 문제 - 전부 순회
+        fetchAllRows(() => supabase.from('student_worksheets').select('*')),
         supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       ])
       if (sData) setStudents(sData)
