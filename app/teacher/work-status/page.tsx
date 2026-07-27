@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { fetchAllRows } from '@/lib/utils'
 
 interface Teacher {
   id: string
@@ -81,12 +82,13 @@ export default function TeacherWorkStatusPage() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: tData }, { data: sData }, { data: ssData }, { data: wData }, { data: scData }] = await Promise.all([
+    const [{ data: tData }, { data: sData }, { data: ssData }, wData, scData] = await Promise.all([
       supabase.from('users').select('*').eq('role', 'teacher').order('name'),
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('class_sessions').select('*').gte('session_date', weekStart).order('session_date', { ascending: false }),
-      supabase.from('student_worksheets').select('*').not('status', 'in', '("passed")').order('assigned_at', { ascending: false }).limit(5000),
-      supabase.from('schedules').select('*').limit(5000),
+      fetchAllRows(() => supabase.from('student_worksheets').select('*').not('status', 'in', '("passed")')),
+      // schedules가 1246행이라 이미 PostgREST 상한(1000행)을 넘어서 활성/비활성 다 합치면 잘려나간다 - 전부 순회
+      fetchAllRows(() => supabase.from('schedules').select('*')),
     ])
     if (tData) setTeachers(tData)
     if (sData) setStudents(sData)
