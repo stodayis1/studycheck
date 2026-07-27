@@ -363,6 +363,8 @@ export default function TeacherAssignmentsPage() {
   }
 
   async function handleDelete(id: string) {
+    // 확인 없이 바로 삭제되던 버튼 - 실수로 눌러도 되돌릴 방법이 없어서 확인창 추가
+    if (!confirm('이 학습지 기록을 삭제할까요? 되돌릴 수 없어요.')) return
     const { error } = await supabase.from('student_worksheets').delete().eq('id', id)
     if (error) {
       console.error('삭제 오류:', error)
@@ -374,6 +376,7 @@ export default function TeacherAssignmentsPage() {
 
   async function handleBulkDelete() {
     if (selectedWSIds.length === 0) return
+    if (!confirm(`선택한 ${selectedWSIds.length}건의 학습지 기록을 삭제할까요? 되돌릴 수 없어요.`)) return
     const { error } = await supabase.from('student_worksheets').delete().in('id', selectedWSIds)
     if (error) {
       console.error('일괄삭제 오류:', error)
