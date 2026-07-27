@@ -307,12 +307,16 @@ export default function TeacherExamPrepPage() {
         {viewTab === 'assign' && (() => {
           // 담당 학생별로 그룹핑
           const myStudentIds = myStudents.map(s => s.id)
+          // 완료(done) 처리된 배정은 "배정 현황"(진행 관리용 목록)에서 자동으로 빠지게 함.
+          // exam_date가 비어있는 기록이 많아 시험일 기준 자동 숨김은 적용이 안 됐었고,
+          // 시험이 끝나 완료 처리됐는데도 계속 남아있던 문제 - 완료 여부로 판단.
+          // (완료 이력은 "학생별 진도" 탭에서 계속 확인 가능)
           const grouped = myStudents
             .filter(s => !searchText || s.name.includes(searchText))
             .map(s => ({
               student: s,
               preps: assignments
-                .filter(a => a.student_id === s.id)
+                .filter(a => a.student_id === s.id && a.status !== 'done')
                 .sort((a, b) => {
                   const isSpecialA = ['전범위','복합'].includes(a.inner_enough?.unit_name ?? '')
                   const isSpecialB = ['전범위','복합'].includes(b.inner_enough?.unit_name ?? '')
