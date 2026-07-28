@@ -360,7 +360,9 @@ export default function TeacherLearningNotesPage() {
     if (!session || !note) return false
     if (note.attendance === '결석') return true
     const hasContent = !!(session.progress_content || session.today_textbook_name)
-    const hasHomework = !!(session.hw_textbook_name || session.hw_worksheet_range || session.video_url)
+    // 교재/학습지를 고르지 않고 메모("📝 ...")로만 과제를 적는 경우 hw_textbook_page에만 값이 들어가는데
+    // 여기 빠져있어서 분명히 과제를 입력했는데도 "미완료"로 잘못 표시되던 문제 (고등부 메모 위주 입력에서 특히 발생)
+    const hasHomework = !!(session.hw_textbook_name || session.hw_worksheet_range || session.video_url || session.hw_textbook_page)
     return hasContent && hasHomework
   }
 
