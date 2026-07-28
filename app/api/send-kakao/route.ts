@@ -13,7 +13,7 @@ const APP_URL = 'https://studycheck-five.vercel.app'
 
 export async function POST(req: NextRequest) {
   try {
-    const { sessionId } = (await req.json()) as { sessionId?: string }
+    const { sessionId, testPhone } = (await req.json()) as { sessionId?: string; testPhone?: string }
     if (!sessionId) {
       return NextResponse.json({ error: 'sessionId는 필수입니다.' }, { status: 400 })
     }
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const { data: note } = await supabase.from('learning_notes').select('*').eq('session_id', sessionId).maybeSingle()
     const { data: student } = await supabase.from('students').select('*').eq('id', session.student_id).single()
     if (!student) return NextResponse.json({ error: '학생을 찾을 수 없어요.' }, { status: 404 })
-    if (!student.parent_phone) {
+    if (!testPhone && !student.parent_phone) {
       return NextResponse.json({ error: '보호자 전화번호가 등록되어 있지 않아요.' }, { status: 400 })
     }
 
