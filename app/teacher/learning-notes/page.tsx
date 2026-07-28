@@ -426,7 +426,6 @@ export default function TeacherLearningNotesPage() {
     setHwSelectedWSId('')
     setHwSelectedEPIds([])
     setHwEPPages({})
-    setHwMemo('')
     setNoteAchievement(note?.achievement ?? 100)
     setNoteScorePct(note?.score_pct ?? 100)
     setNoteExtraClass(note?.extra_class ?? false)
@@ -440,7 +439,14 @@ export default function TeacherLearningNotesPage() {
     setDailyConceptIds([])
     setDailyLastIdx(-1)
     setHwTextbookName(session?.hw_textbook_name ?? '')
-    setHwTextbookPage(session?.hw_textbook_page ?? '')
+    // hw_textbook_page는 "교재정보 / 📝 메모" 처럼 여러 조각이 합쳐진 값이라
+    // 그 중 메모(📝 ...) 조각만 뽑아 메모칸에 다시 채워준다.
+    // (안 그러면 다시 열었을 때 메모칸이 비어있어서 "저장한 게 지워졌다"고 보이게 됨)
+    const savedHwParts = (session?.hw_textbook_page ?? '').split(' / ').filter(Boolean)
+    const savedHwMemoPart = savedHwParts.find((p) => p.startsWith('📝 '))
+    const savedHwOtherParts = savedHwParts.filter((p) => !p.startsWith('📝 '))
+    setHwMemo(savedHwMemoPart ? savedHwMemoPart.slice(2).trim() : '')
+    setHwTextbookPage(savedHwOtherParts.join(' / '))
     setHwWorksheetRange(session?.hw_worksheet_range ?? '')
     setHwVideoUrls(
       session?.video_url
@@ -547,9 +553,12 @@ export default function TeacherLearningNotesPage() {
           return [`시험대비: ${ep.inner_enough?.unit_name ?? ''}`, page].filter(Boolean).join(' · ')
         }).filter(Boolean)
         const memoPart = hwMemo ? `📝 ${hwMemo}` : ''
-        const allParts = [...tbParts, ...epParts, memoPart].filter(Boolean)
-        if (allParts.length > 0) return allParts.join(' / ')
-        return hwTextbookPage || null
+        // 이번에 교재/시험대비를 새로 고르지 않았다면(=picker를 안 건드렸다면),
+        // 예전에 저장돼 있던 교재 관련 텍스트(hwTextbookPage, 메모 제외)는 지우지 않고 그대로 유지한다.
+        // (안 그러면 메모만 살짝 고쳐 저장해도 예전 교재 정보가 통째로 사라짐)
+        const preservedOld = (tbParts.length === 0 && epParts.length === 0) ? hwTextbookPage : ''
+        const allParts = [preservedOld, ...tbParts, ...epParts, memoPart].filter(Boolean)
+        return allParts.length > 0 ? allParts.join(' / ') : null
       })(),
       hw_worksheet_range: (() => {
         if (hwSelectedWSId) {
