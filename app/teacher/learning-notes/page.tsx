@@ -168,6 +168,30 @@ export default function TeacherLearningNotesPage() {
   const [hwSelectedWSId, setHwSelectedWSId] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [justSavedNote, setJustSavedNote] = useState(false) // 저장 성공 시 잠깐 보여줄 확인 표시 (성공해도 화면이 그대로라 "저장 안 됐나?" 하고 헷갈리는 것 방지)
+  const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
+
+  async function handleSendKakao(sessionId: string, studentName: string) {
+    if (!confirm(`${studentName} 학생 학부모님께 오늘 학습 안내 카톡을 보낼까요?`)) return
+    setSendingKakao(sessionId)
+    try {
+      const res = await fetch('/api/send-kakao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert('카톡 발송 실패: ' + (data.error ?? '알 수 없는 오류'))
+        return
+      }
+      alert('카톡을 보냈어요!')
+    } catch (err) {
+      console.error('카톡 발송 오류:', err)
+      alert('카톡 발송 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setSendingKakao(null)
+    }
+  }
 
   // 피드백 모달
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
@@ -1150,6 +1174,14 @@ export default function TeacherLearningNotesPage() {
                               const editable = canEditNote(session.session_date)
                               return (
                                 <>
+                                  {isComplete && (
+                                    <button onClick={() => handleSendKakao(session.id, student.name)}
+                                      disabled={sendingKakao === session.id}
+                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
+                                      style={{ background: '#FEE500' }}>
+                                      {sendingKakao === session.id ? '보내는 중...' : '💬 카톡 발송'}
+                                    </button>
+                                  )}
                                   <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음날까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
                                     className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
                                       editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>

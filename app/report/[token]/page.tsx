@@ -4,14 +4,30 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+interface DailyReportData {
+  studentName: string
+  studentGrade: string
+  sessionDate: string
+  attendance: string
+  progressContent: string | null
+  hwTextbookName: string | null
+  hwTextbookPage: string | null
+  hwWorksheetRange: string | null
+  videoUrl: string | null
+  dailyTestUnit: string | null
+  dailyTestScore: number | null
+  worksheetScore: number | null
+  memo: string | null
+}
+
 interface ReportLink {
   id: string
   student_id: string
-  report_type: 'monthly' | 'quarterly'
+  report_type: 'daily' | 'monthly' | 'quarterly'
   period_label: string
   period_start: string
   period_end: string
-  data: {
+  data: DailyReportData | {
     totalSessions: number
     attendance: { 정시: number; 지각: number; 결석: number }
     hwRate: number
@@ -65,7 +81,78 @@ export default function PublicReportPage() {
     )
   }
 
-  const d = link.data
+  // 카톡 알림톡 "자세히 보기" 링크용 - 그날 하루치 요약만 보여주는 간단한 화면
+  if (link.report_type === 'daily') {
+    const dd = link.data as DailyReportData
+    const scoreForColor = dd.worksheetScore ?? dd.dailyTestScore
+    const scoreColor = scoreForColor == null ? '#9FE1CB' : scoreForColor >= 85 ? '#9FE1CB' : scoreForColor >= 70 ? '#FAEEDA' : '#F5C4B3'
+    const dateLabel = `${Number(dd.sessionDate.slice(5, 7))}월 ${Number(dd.sessionDate.slice(8, 10))}일`
+    const hwParts = [dd.hwTextbookName, dd.hwTextbookPage, dd.hwWorksheetRange].filter(Boolean)
+    return (
+      <div className="min-h-screen py-8 px-4" style={{ background: '#f5f5f5', fontFamily: 'Pretendard, sans-serif' }}>
+        <div className="max-w-md mx-auto">
+          <div style={{ background: '#0f3460', borderRadius: 20, padding: 28, color: 'white' }}>
+            <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
+              수학의지혜 · STUDY CHECK
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>{dd.studentName}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2, marginBottom: 20 }}>
+              {dd.studentGrade} · {dateLabel} 학습 안내
+            </div>
+            <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20, opacity: 0.4 }} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>출결</div>
+                <div style={{ fontSize: 16, fontWeight: 900 }}>{dd.attendance}</div>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>결과</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: scoreColor }}>{scoreForColor != null ? `${scoreForColor}점` : '-'}</div>
+              </div>
+            </div>
+
+            {dd.progressContent && (
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>오늘 진도</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>{dd.progressContent}</div>
+              </div>
+            )}
+
+            {dd.dailyTestScore != null && (
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>데일리테스트</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
+                  {dd.dailyTestUnit ? `${dd.dailyTestUnit} · ` : ''}{dd.dailyTestScore}점
+                </div>
+              </div>
+            )}
+
+            {hwParts.length > 0 && (
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{hwParts.join('\n')}</div>
+              </div>
+            )}
+
+            {dd.memo && (
+              <div style={{ background: 'rgba(159,225,203,0.1)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.3)' }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>메모</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>{dd.memo}</div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>수학의지혜 학원</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{dd.sessionDate}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const d = link.data as Exclude<ReportLink['data'], DailyReportData>
   const isQuarterly = link.report_type === 'quarterly'
 
   return (
