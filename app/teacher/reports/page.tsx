@@ -99,6 +99,7 @@ export default function TeacherReportsPage() {
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [dailyTestSessions, setDailyTestSessions] = useState<{ session_date: string; daily_test_unit: string | null; daily_test_score: number }[]>([])
 
   // 월간보고서 상태
   const [activeTab, setActiveTab] = useState<'report' | 'monthly'>('report')
@@ -118,9 +119,11 @@ export default function TeacherReportsPage() {
     if (!selectedStudent) return
     const sid = selectedStudent.id
     async function fetchStudentProgress() {
-      const [{ data: pcData }, { data: tbData }] = await Promise.all([
+      const [{ data: pcData }, { data: tbData }, { data: dtData }] = await Promise.all([
         supabase.from('progress_checks').select('*').eq('student_id', sid),
         supabase.from('student_textbooks').select('*').eq('student_id', sid),
+        supabase.from('class_sessions').select('session_date, daily_test_unit, daily_test_score')
+          .eq('student_id', sid).not('daily_test_score', 'is', null).order('session_date', { ascending: false }),
       ])
       if (pcData) setProgressChecks(pcData)
       if (tbData) {
@@ -129,6 +132,7 @@ export default function TeacherReportsPage() {
           ...tbData,
         ])
       }
+      setDailyTestSessions(dtData ?? [])
     }
     fetchStudentProgress()
   }, [selectedStudent])
@@ -1041,6 +1045,58 @@ export default function TeacherReportsPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* ── 데일리테스트 (고등부는 학습지보다 매 수업 데일리테스트가 핵심) ── */}
+            {dailyTestSessions.length > 0 && (() => {
+              const sixMonthsAgo = new Date()
+              sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+              const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0]
+              const recentTests = dailyTestSessions.filter((t) => t.session_date >= sixMonthsAgoStr)
+              if (recentTests.length === 0) return null
+              const avg = Math.round(recentTests.reduce((s, t) => s + t.daily_test_score, 0) / recentTests.length)
+              return (
+                <div className="border-b border-gray-100">
+                  <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAEEDA' }}>
+                      <i className="ti ti-pencil" style={{ fontSize: 14, color: '#633806' }} />
+                    </div>
+                    <span className="text-sm font-bold" style={{ color: '#1f2937' }}>데일리테스트</span>
+                    <span className="text-[10px] text-gray-400 ml-1">최근 6개월</span>
+                  </div>
+                  <div className="px-4 pt-4 pb-3">
+                    <div className="rounded-xl px-3 py-3 mb-3" style={{ background: '#FAEEDA' }}>
+                      <p className="text-[10px] font-bold mb-1 flex items-center gap-1" style={{ color: '#633806' }}>
+                        <i className="ti ti-chart-bar" style={{ fontSize: 10 }} />평균점수
+                      </p>
+                      <p className="text-xl font-black" style={{ color: '#633806' }}>
+                        {avg}<span className="text-xs font-normal ml-0.5">점</span>
+                      </p>
+                      <p className="text-[10px] mt-1" style={{ color: '#633806', opacity: 0.7 }}>
+                        응시 {recentTests.length}회
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {recentTests.slice(0, 20).map((t, i) => {
+                        const scoreC = t.daily_test_score >= 85 ? '#27500A' : t.daily_test_score >= 70 ? '#633806' : '#991b1b'
+                        const scoreBg = t.daily_test_score >= 85 ? '#EAF3DE' : t.daily_test_score >= 70 ? '#FAEEDA' : '#fee2e2'
+                        return (
+                          <div key={i} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl"
+                            style={{ background: '#fdf8f5', border: '1px solid #f0e5da' }}>
+                            <span className="text-xs text-gray-700 flex-1 min-w-0 truncate">
+                              {Number(t.session_date.slice(5,7))}/{Number(t.session_date.slice(8,10))}
+                              {t.daily_test_unit ? ` · ${t.daily_test_unit}` : ''}
+                            </span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-lg shrink-0" style={{ color: scoreC, background: scoreBg }}>
+                              {t.daily_test_score}점
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               )

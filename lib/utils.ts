@@ -74,6 +74,30 @@ export function formatConceptRangeLabel(
   return `${sub}(${selectedInSub[0].concept_name}~${selectedInSub[selectedInSub.length - 1].concept_name})`
 }
 
+// 데일리테스트 범위 라벨 - 중단원 여러 개를 고르면 소개념까지 나열하지 않고
+// 교육과정 순서 기준 "처음중단원 ~ 마지막중단원"으로, 중단원 하나만 고르면
+// "{대단원 순번}-{중단원 순번}. {중단원명}" (예: 2-2. 직선의 방정식) 형태로 압축한다.
+// 고등 과목은 대단원 텍스트에 번호가 없는 경우(도형의 방정식, 함수 등)가 많아서
+// 텍스트에서 숫자를 뽑는 대신 커리큘럼 상 등장 순서로 번호를 매긴다.
+export function formatDailyTestUnitLabel(
+  gradeConcepts: { chapter: string; sub_chapter: string }[],
+  chapter: string,
+  subChapters: string[]
+): string {
+  if (!chapter) return ''
+  const chapterOrder = [...new Set(gradeConcepts.map((c) => c.chapter))]
+  const chapterIdx = chapterOrder.indexOf(chapter) + 1
+  const subOrderAll = [...new Set(gradeConcepts.filter((c) => c.chapter === chapter).map((c) => c.sub_chapter))]
+  if (subChapters.length === 0) return chapter
+  const selectedOrdered = subOrderAll.filter((s) => subChapters.includes(s))
+  if (selectedOrdered.length === 0) return chapter
+  if (selectedOrdered.length === 1) {
+    const subIdx = subOrderAll.indexOf(selectedOrdered[0]) + 1
+    return `${chapterIdx}-${subIdx}. ${selectedOrdered[0]}`
+  }
+  return `${selectedOrdered[0]} ~ ${selectedOrdered[selectedOrdered.length - 1]}`
+}
+
 // Supabase는 기본적으로 한 번에 최대 1000행까지만 돌려준다.
 // .limit()으로 숫자를 늘려도 데이터가 그 이상 쌓이면 다시 누락되므로,
 // 테이블이 아무리 커져도 절대 누락 없이 전부 가져오도록 페이지 단위로 끝까지 순회한다.
