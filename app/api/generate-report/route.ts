@@ -99,6 +99,14 @@ export async function POST(req: NextRequest) {
     const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
     const hwRate = hwNotes.length > 0 ? Math.round(hwDone / hwNotes.length * 100) : 0
 
+    // 데일리테스트 (고등부는 학습지보다 매 수업 데일리테스트 위주라 이 항목이 훨씬 중요함)
+    const dailyTests = sessions
+      .filter((s: any) => s.daily_test_score != null)
+      .sort((a: any, b: any) => a.session_date.localeCompare(b.session_date))
+      .map((s: any) => ({ date: s.session_date, unit: s.daily_test_unit, score: s.daily_test_score }))
+    const avgDailyTest = dailyTests.length > 0
+      ? Math.round(dailyTests.reduce((s: number, t: any) => s + t.score, 0) / dailyTests.length) : null
+
     const periodWS = (wsData ?? []).filter((w: any) => w.assigned_at && w.assigned_at.slice(0, 10) >= range.start && w.assigned_at.slice(0, 10) <= range.end)
     const scoredWS = periodWS.filter((w: any) => w.score != null)
     const avgScore = scoredWS.length > 0 ? Math.round(scoredWS.reduce((s: number, w: any) => s + w.score, 0) / scoredWS.length) : null
@@ -138,7 +146,7 @@ export async function POST(req: NextRequest) {
       totalSessions, attendance, hwRate, avgScore, passRate,
       periodCount: periodWS.length, tbProgress, calcProgress, worksheetDetail,
       exams: examData ?? [], studentName: student.name, studentGrade: student.grade,
-      attendanceDetail,
+      attendanceDetail, dailyTests, avgDailyTest,
     }
 
     // AI 한 줄평 생성

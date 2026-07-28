@@ -374,6 +374,13 @@ export default function TeacherReportsPage() {
     const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
     const hwRate = hwNotes.length > 0 ? Math.round(hwDone / hwNotes.length * 100) : 0
 
+    // 데일리테스트 (고등부는 학습지보다 매 수업 데일리테스트 위주라 이 항목이 훨씬 중요함)
+    const dailyTests = sessions
+      .filter((s: any) => s.daily_test_score != null)
+      .sort((a: any, b: any) => a.session_date.localeCompare(b.session_date))
+    const avgDailyTest = dailyTests.length > 0
+      ? Math.round(dailyTests.reduce((s: number, ss: any) => s + ss.daily_test_score, 0) / dailyTests.length) : null
+
     const monthWS = (wsData ?? []).filter((w: any) => w.assigned_at && w.assigned_at.slice(0, 10) >= startStr && w.assigned_at.slice(0, 10) <= endStr)
     const scoredWS = monthWS.filter((w: any) => w.score != null)
     const avgScore = scoredWS.length > 0 ? Math.round(scoredWS.reduce((s: number, w: any) => s + w.score, 0) / scoredWS.length) : null
@@ -409,7 +416,7 @@ export default function TeacherReportsPage() {
     }).filter(Boolean)
     const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
 
-    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail })
+    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail, dailyTests, avgDailyTest })
     setMLoading(false)
   }
 
@@ -599,6 +606,37 @@ export default function TeacherReportsPage() {
                       </div>
                     )
                   })()}
+
+                  {/* 데일리테스트 - 고등부는 학습지보다 매 수업 데일리테스트가 핵심이라 별도 섹션으로 표시 */}
+                  {mData.dailyTests?.length > 0 && (
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>데일리테스트</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center', marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 18, fontWeight: 900 }}>{mData.dailyTests.length}</div>
+                          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>응시 횟수</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 18, fontWeight: 900, color: mData.avgDailyTest != null ? (mData.avgDailyTest >= 85 ? '#9FE1CB' : mData.avgDailyTest >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
+                            {mData.avgDailyTest ?? '-'}
+                          </div>
+                          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                        {mData.dailyTests.map((t: any, i: number) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {Number(t.session_date.slice(5,7))}/{Number(t.session_date.slice(8,10))}{t.daily_test_unit ? ` · ${t.daily_test_unit}` : ''}
+                            </span>
+                            <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: t.daily_test_score >= 85 ? '#9FE1CB' : t.daily_test_score >= 70 ? '#FAEEDA' : '#F5C4B3' }}>
+                              {t.daily_test_score}점
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 학습지 */}
                   {mData.monthWS > 0 && (
