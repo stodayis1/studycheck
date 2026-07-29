@@ -1,8 +1,12 @@
-'use client'
+import { createClient } from '@supabase/supabase-js'
 
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+// 카카오톡 인앱 브라우저에서 클라이언트 fetch가 먹통이 되는 경우가 있어서
+// (링크는 오는데 눌러보면 빈 화면) 서버에서 미리 데이터를 읽어 HTML에 담아 보내도록 변경.
+// 이러면 인앱 브라우저의 JS 제약과 상관없이 화면이 바로 보인다.
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 interface DailyReportData {
   studentName: string
@@ -48,31 +52,12 @@ interface ReportLink {
   created_at: string
 }
 
-export default function PublicReportPage() {
-  const params = useParams()
-  const token = params?.token as string
-  const [link, setLink] = useState<ReportLink | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+export default async function PublicReportPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
+  const { data, error } = await supabase.from('report_links').select('*').eq('token', token).single()
+  const link = (!error && data) ? (data as ReportLink) : null
 
-  useEffect(() => {
-    if (!token) return
-    supabase.from('report_links').select('*').eq('token', token).single().then(({ data, error }) => {
-      if (error || !data) { setNotFound(true); setLoading(false); return }
-      setLink(data as ReportLink)
-      setLoading(false)
-    })
-  }, [token])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f5f5f5' }}>
-        <span className="w-8 h-8 border-2 border-[#9FE1CB]/40 border-t-[#9FE1CB] rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  if (notFound || !link) {
+  if (!link) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-2 px-6 text-center" style={{ background: '#f5f5f5' }}>
         <p className="text-lg font-bold text-gray-700">리포트를 찾을 수 없어요</p>
