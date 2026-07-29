@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
     const messageService = new SolapiMessageService(apiKey, apiSecret)
     await messageService.send({
-      to: student.parent_phone.replace(/-/g, ''),
+      to: (testPhone || student.parent_phone).replace(/-/g, ''),
       from: senderPhone.replace(/-/g, ''),
       kakaoOptions: {
         pfId,
