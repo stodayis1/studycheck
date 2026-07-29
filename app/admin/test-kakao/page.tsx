@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 export default function TestKakaoPage() {
-  const [sessionId, setSessionId] = useState('116dacde-b674-48a8-a842-f68fcdfe7120')
+  const [sessionId, setSessionId] = useState('992df295-59ce-48d5-8741-795f450b89e3') // 최온유, 정시 출석, 학습지100점/데일리테스트83점
   const [testPhone, setTestPhone] = useState('01097302589')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
