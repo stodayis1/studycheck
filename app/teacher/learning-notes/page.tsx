@@ -51,8 +51,9 @@ interface LearningNote {
   memo: string | null
   video_started_at: string | null
   video_completed_at: string | null
-  achievement?: number | null
-  score_pct?: number | null
+  achievement_pct?: number | null
+  worksheet_unit?: string | null
+  worksheet_level?: string | null
   extra_class?: boolean | null
   extra_time?: string | null
 }
@@ -135,6 +136,8 @@ export default function TeacherLearningNotesPage() {
   const [noteAttendance, setNoteAttendance] = useState('정시')
   const [noteAchievement, setNoteAchievement] = useState(100) // 과제 달성률
   const [noteScorePct, setNoteScorePct] = useState(100)       // 과제 성취도 %
+  const [noteWorksheetUnit, setNoteWorksheetUnit] = useState('')  // 채점한 학습지 단원 (지난 과제)
+  const [noteWorksheetLevel, setNoteWorksheetLevel] = useState('') // 채점한 학습지 레벨
   const [noteExtraClass, setNoteExtraClass] = useState(false)
   const [noteExtraTime, setNoteExtraTime] = useState('')
   const [noteMemo, setNoteMemo] = useState('')
@@ -450,8 +453,11 @@ export default function TeacherLearningNotesPage() {
     setHwSelectedWSId('')
     setHwSelectedEPIds([])
     setHwEPPages({})
-    setNoteAchievement(note?.achievement ?? 100)
-    setNoteScorePct(note?.score_pct ?? 100)
+    // achievement_pct 컬럼 생기기 전 기존 기록은 boolean만 남아있어서, 그 경우엔 근사치로 복원
+    setNoteAchievement(note?.achievement_pct ?? (note ? (note.workbook_done ? 100 : note.worksheet_submitted ? 70 : 0) : 100))
+    setNoteScorePct(note?.worksheet_score ?? 100) // 예전엔 없는 필드(score_pct)를 읽어서 항상 100으로 초기화되던 버그 수정
+    setNoteWorksheetUnit(note?.worksheet_unit ?? '')
+    setNoteWorksheetLevel(note?.worksheet_level ?? '')
     setNoteExtraClass(note?.extra_class ?? false)
     setNoteExtraTime(note?.extra_time ?? '')
     setNoteMemo(note?.memo ?? '')
@@ -685,6 +691,9 @@ export default function TeacherLearningNotesPage() {
       worksheet_score: isAbsent ? null : noteScorePct,
       textbook_submitted: isAbsent ? false : noteAchievement > 0,
       workbook_done: isAbsent ? false : noteAchievement === 100,
+      achievement_pct: isAbsent ? null : noteAchievement,
+      worksheet_unit: isAbsent ? null : (noteWorksheetUnit.trim() || null),
+      worksheet_level: isAbsent ? null : (noteWorksheetLevel.trim() || null),
       memo: memoText,
     }
 
@@ -1250,7 +1259,7 @@ export default function TeacherLearningNotesPage() {
                               {note.attendance}
                             </span>
                             <span className="text-[10px] text-gray-500">
-                              과제달성률 {note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
+                              과제달성률 {note.achievement_pct != null ? `${note.achievement_pct}%` : note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
                             </span>
                             {note.worksheet_score != null && (
                               <span className={cx('text-[10px] font-bold', note.worksheet_score >= 85 ? 'text-green-600' : note.worksheet_score >= 70 ? 'text-gray-800' : 'text-red-500')}>
@@ -1811,6 +1820,17 @@ export default function TeacherLearningNotesPage() {
                         {pct}%
                       </button>
                     ))}
+                  </div>
+                  {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
+                  <div className="flex gap-2 mt-2">
+                    <input type="text" value={noteWorksheetUnit} onChange={(e) => setNoteWorksheetUnit(e.target.value)}
+                      disabled={noteAttendance === '결석'}
+                      placeholder="단원 (예: 3단원 분수의 덧셈)"
+                      className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
+                    <input type="text" value={noteWorksheetLevel} onChange={(e) => setNoteWorksheetLevel(e.target.value)}
+                      disabled={noteAttendance === '결석'}
+                      placeholder="레벨 (예: 2레벨)"
+                      className="w-28 shrink-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                   </div>
                 </div>
 

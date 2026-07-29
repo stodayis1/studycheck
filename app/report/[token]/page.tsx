@@ -21,6 +21,8 @@ interface DailyReportData {
   dailyTestUnit: string | null
   dailyTestScore: number | null
   worksheetScore: number | null
+  worksheetUnit: string | null
+  worksheetLevel: string | null
   achievementText: string | null
   memo: string | null
 }
@@ -95,6 +97,11 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
               <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
                 <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>지난 학습지</div>
                 <div style={{ fontSize: 16, fontWeight: 900, color: scoreColor }}>{dd.worksheetScore != null ? `${dd.worksheetScore}점` : '-'}</div>
+                {(dd.worksheetUnit || dd.worksheetLevel) && (
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>
+                    {[dd.worksheetUnit, dd.worksheetLevel].filter(Boolean).join(' · ')}
+                  </div>
+                )}
               </div>
             </div>
 

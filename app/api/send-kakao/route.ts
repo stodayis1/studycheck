@@ -35,11 +35,12 @@ export async function POST(req: NextRequest) {
         ? `${session.daily_test_score}점(데일리테스트)`
         : '-'
 
-    // 과제 달성률 - 결석이면 결석으로, 아니면 제출/완료 여부를 텍스트로
+    // 과제 달성률 - 결석이면 결석으로, 아니면 실제 입력한 % (100/70/50/0). achievement_pct 이전 기록은 boolean으로 근사
     const achievementText = note?.attendance === '결석'
       ? '결석'
-      : note?.workbook_done ? '완료'
-        : note?.worksheet_submitted ? '제출완료' : '미제출'
+      : note?.achievement_pct != null ? `${note.achievement_pct}%`
+        : note?.workbook_done ? '완료'
+          : note?.worksheet_submitted ? '제출완료' : '미제출'
 
     const progressText = session.progress_content ?? session.today_textbook_name ?? '-'
 
@@ -64,6 +65,8 @@ export async function POST(req: NextRequest) {
         dailyTestUnit: session.daily_test_unit,
         dailyTestScore: session.daily_test_score,
         worksheetScore: note?.worksheet_score ?? null,
+        worksheetUnit: note?.worksheet_unit ?? null,
+        worksheetLevel: note?.worksheet_level ?? null,
         achievementText,
         memo: note?.memo ?? null,
       },
