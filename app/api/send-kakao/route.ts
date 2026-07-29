@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
         dailyTestUnit: session.daily_test_unit,
         dailyTestScore: session.daily_test_score,
         worksheetScore: note?.worksheet_score ?? null,
+        achievementText,
         memo: note?.memo ?? null,
       },
       token,

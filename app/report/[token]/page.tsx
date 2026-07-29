@@ -21,6 +21,7 @@ interface DailyReportData {
   dailyTestUnit: string | null
   dailyTestScore: number | null
   worksheetScore: number | null
+  achievementText: string | null
   memo: string | null
 }
 
@@ -69,8 +70,8 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   // 카톡 알림톡 "자세히 보기" 링크용 - 그날 하루치 요약만 보여주는 간단한 화면
   if (link.report_type === 'daily') {
     const dd = link.data as DailyReportData
-    const scoreForColor = dd.worksheetScore ?? dd.dailyTestScore
-    const scoreColor = scoreForColor == null ? '#9FE1CB' : scoreForColor >= 85 ? '#9FE1CB' : scoreForColor >= 70 ? '#FAEEDA' : '#F5C4B3'
+    // '결과' 칸은 지난 시간 과제였던 학습지를 오늘 채점한 점수만 보여준다 (데일리테스트는 아래 별도 칸에 이미 나오므로 여기서 섞지 않음)
+    const scoreColor = dd.worksheetScore == null ? '#9FE1CB' : dd.worksheetScore >= 85 ? '#9FE1CB' : dd.worksheetScore >= 70 ? '#FAEEDA' : '#F5C4B3'
     const dateLabel = `${Number(dd.sessionDate.slice(5, 7))}월 ${Number(dd.sessionDate.slice(8, 10))}일`
     const hwParts = [dd.hwTextbookName, dd.hwTextbookPage, dd.hwWorksheetRange].filter(Boolean)
     return (
@@ -92,10 +93,17 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
                 <div style={{ fontSize: 16, fontWeight: 900 }}>{dd.attendance}</div>
               </div>
               <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>결과</div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: scoreColor }}>{scoreForColor != null ? `${scoreForColor}점` : '-'}</div>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>지난 학습지</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: scoreColor }}>{dd.worksheetScore != null ? `${dd.worksheetScore}점` : '-'}</div>
               </div>
             </div>
+
+            {dd.achievementText && (
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.9)' }}>{dd.achievementText}</div>
+              </div>
+            )}
 
             {dd.progressContent && (
               <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
@@ -115,7 +123,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
             {hwParts.length > 0 && (
               <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제</div>
+                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>오늘의 과제 (다음 시간까지)</div>
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{hwParts.join('\n')}</div>
               </div>
             )}
