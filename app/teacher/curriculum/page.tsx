@@ -362,7 +362,14 @@ export default function TeacherCurriculumPage() {
                   : student.grade.includes('중3') ? '중3' : student.grade.includes('고1') ? '고1'
                   : student.grade.includes('고2') ? '고2' : '고3'
                 const studentConcepts = concepts.filter((c) => c.grade === gradeKey)
-                const studentChecks = progressChecks.filter((p) => p.student_id === student.id && !p.student_textbook_id)
+                // 학습일지/일괄진도체크에서 찍는 체크는 교재(student_textbook_id)에 묶여서 저장되는 경우가 대부분이라
+                // 여기서도 스코프 상관없이 전부 봐야 한다 (안 그러면 분명 체크했는데 진도표엔 0%로 보이는 문제 발생)
+                const checkedConceptIds = new Set(
+                  progressChecks
+                    .filter((p) => p.student_id === student.id && p.check_count >= 1)
+                    .map((p) => p.concept_id)
+                )
+                const studentChecks = studentConcepts.filter((c) => checkedConceptIds.has(c.id))
                 const totalRate = studentConcepts.length > 0
                   ? Math.round(studentChecks.length / studentConcepts.length * 100) : 0
                 return (
@@ -413,10 +420,15 @@ export default function TeacherCurriculumPage() {
               grouped[c.chapter][c.sub_chapter].push(c)
             }
 
-            const studentChecks = progressChecks.filter((p) => p.student_id === selectedProgressStudent.id && !p.student_textbook_id)
-            const checkedCount = semesterConcepts.filter((c) =>
-              studentChecks.some((p) => p.concept_id === c.id && p.check_count >= 1)
-            ).length
+            // 학습일지/일괄진도체크에서 찍는 체크는 대부분 교재(student_textbook_id)에 묶여서 저장되므로
+            // 스코프 상관없이 전부 모아서, 같은 개념이 여러 교재에서 체크됐으면 가장 높이 나간 회차를 기준으로 삼는다
+            const checkCountByConcept = new Map<string, number>()
+            for (const p of progressChecks) {
+              if (p.student_id !== selectedProgressStudent.id) continue
+              const cur = checkCountByConcept.get(p.concept_id) ?? 0
+              if (p.check_count > cur) checkCountByConcept.set(p.concept_id, p.check_count)
+            }
+            const checkedCount = semesterConcepts.filter((c) => (checkCountByConcept.get(c.id) ?? 0) >= 1).length
             const totalRate = semesterConcepts.length > 0
               ? Math.round(checkedCount / semesterConcepts.length * 100) : 0
 
@@ -518,9 +530,7 @@ export default function TeacherCurriculumPage() {
                 {/* 대단원 목록 */}
                 {Object.entries(grouped).map(([bigUnit, subGroups]) => {
                   const bigConcepts = Object.values(subGroups).flat()
-                  const bigChecked = bigConcepts.filter((c) =>
-                    studentChecks.some((p) => p.concept_id === c.id && p.check_count >= 1)
-                  ).length
+                  const bigChecked = bigConcepts.filter((c) => (checkCountByConcept.get(c.id) ?? 0) >= 1).length
                   const bigRate = bigConcepts.length > 0 ? Math.round(bigChecked / bigConcepts.length * 100) : 0
 
                   return (
@@ -543,8 +553,7 @@ export default function TeacherCurriculumPage() {
                           {/* 소단원 목록 */}
                           <div className="divide-y divide-gray-50">
                             {subConcepts.map((concept) => {
-                              const check = studentChecks.find((p) => p.concept_id === concept.id)
-                              const count = check?.check_count ?? 0
+                              const count = checkCountByConcept.get(concept.id) ?? 0
                               const style = CHECK_STYLE[count]
                               const isUpdating = updatingProgress === `${selectedProgressStudent.id}_${concept.id}`
                               return (

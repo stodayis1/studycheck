@@ -20,6 +20,8 @@ interface Student {
   is_active: boolean
   textbook_grade: string
   wise_step: string
+  intake_notes?: string | null
+  assigned_seen?: boolean
 }
 
 export default function TeacherStudentsPage() {
@@ -35,6 +37,7 @@ export default function TeacherStudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editSchedules, setEditSchedules] = useState<{day: string, time: string, periods: number}[]>([])
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const EMPTY_STUDENT: Student = {
@@ -230,6 +233,12 @@ export default function TeacherStudentsPage() {
     else alert('삭제 중 오류가 발생했습니다.')
   }
 
+  // 신규상담 등록으로 새로 배정된 학생 "NEW" 배지 확인 처리
+  async function handleAckNew(studentId: string) {
+    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, assigned_seen: true } : s))
+    await supabase.from('students').update({ assigned_seen: true }).eq('id', studentId)
+  }
+
   const GRADE_COLORS: Record<string, string> = {
     A: 'bg-blue-100 text-blue-700',
     B: 'bg-green-100 text-green-700',
@@ -336,19 +345,38 @@ export default function TeacherStudentsPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map((student) => (
-                <div key={student.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-white">
+                <div key={student.id}>
+                <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-white">
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                     {student.name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-800">{student.name}</p>
+                      {student.assigned_seen === false && (
+                        <button onClick={() => student.id && handleAckNew(student.id)}
+                          title="눌러서 확인 처리"
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                          🆕 NEW
+                        </button>
+                      )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
                       {student.teacher_name && <Badge variant="blue" size="sm">{student.teacher_name}</Badge>}
                       {/* 교재 등급 */}
                       <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full', GRADE_COLORS[student.textbook_grade] ?? 'bg-gray-100 text-gray-500')}>
                         {student.textbook_grade ?? 'B'}등급
                       </span>
+                      {student.intake_notes && (
+                        <button
+                          onClick={() => setExpandedNotes(prev => {
+                            const next = new Set(prev)
+                            student.id && (next.has(student.id) ? next.delete(student.id) : next.add(student.id))
+                            return next
+                          })}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-50 text-pink-600">
+                          📋 상담메모
+                        </button>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {[student.school, student.class_time].filter(Boolean).join(' · ')}
@@ -375,6 +403,12 @@ export default function TeacherStudentsPage() {
                     <button onClick={() => handleDelete(student.id!, student.name)}
                       className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
                   </div>
+                </div>
+                {student.intake_notes && student.id && expandedNotes.has(student.id) && (
+                  <div className="mx-3 mb-2 px-3 py-2 bg-pink-50 border border-pink-100 rounded-xl text-xs text-gray-600 whitespace-pre-line leading-relaxed">
+                    {student.intake_notes}
+                  </div>
+                )}
                 </div>
               ))}
             </div>
