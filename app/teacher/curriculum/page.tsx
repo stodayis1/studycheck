@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 
+const GRADE_ORDER = ['중1', '중2', '중3', '고1', '고2', '고3']
+
 interface Student {
   id: string
   name: string
@@ -82,6 +84,7 @@ export default function TeacherCurriculumPage() {
   const [progressTab, setProgressTab] = useState<'progress' | 'textbook'>('textbook')
   const [selectedProgressStudent, setSelectedProgressStudent] = useState<Student | null>(null)
   const [progressSemester, setProgressSemester] = useState(1)
+  const [progressGrade, setProgressGrade] = useState<string | null>(null) // null이면 학생 본인 학년을 기본값으로 사용 (선행 등으로 다른 학년 진도표도 볼 수 있게)
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [updatingProgress, setUpdatingProgress] = useState<string | null>(null)
 
@@ -404,7 +407,7 @@ export default function TeacherCurriculumPage() {
                 const totalRate = studentConcepts.length > 0
                   ? Math.round(studentChecks.length / studentConcepts.length * 100) : 0
                 return (
-                  <button key={student.id} onClick={() => setSelectedProgressStudent(student)}
+                  <button key={student.id} onClick={() => { setSelectedProgressStudent(student); setProgressGrade(null) }}
                     className="w-full bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 hover:border-blue-200 transition-all text-left">
                     <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                       {student.name[0]}
@@ -433,11 +436,18 @@ export default function TeacherCurriculumPage() {
             </div>
           ) : (() => {
             // 진도표 상세 화면
-            const gradeLabel = selectedProgressStudent.grade.includes('중1') ? '중1'
-              : selectedProgressStudent.grade.includes('중2') ? '중2'
-              : selectedProgressStudent.grade.includes('중3') ? '중3'
-              : selectedProgressStudent.grade.includes('고1') ? '고1'
-              : selectedProgressStudent.grade.includes('고2') ? '고2' : '고3'
+            const normalizeGrade = (g: string): string | null =>
+              g.includes('중1') ? '중1' : g.includes('중2') ? '중2' : g.includes('중3') ? '중3'
+              : g.includes('고1') ? '고1' : g.includes('고2') ? '고2' : g.includes('고3') ? '고3' : null
+            const defaultGradeLabel = normalizeGrade(selectedProgressStudent.grade) ?? '중1'
+            // 선행 등으로 실제 재원 학년과 다른 학기 교재를 나가는 경우가 많아서,
+            // 이 학생이 배정받은 적 있는 교재들의 학년도 선택할 수 있게 함 (안 그러면 진도표에 본인 학년 것만 보임)
+            const availableGrades = Array.from(new Set([
+              defaultGradeLabel,
+              ...textbooks.filter((t) => t.student_id === selectedProgressStudent.id && t.grade)
+                .map((t) => normalizeGrade(t.grade!)).filter((g): g is string => !!g),
+            ])).sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
+            const gradeLabel = progressGrade ?? defaultGradeLabel
 
             const semesterConcepts = concepts.filter(
               (c) => c.grade === gradeLabel && c.semester === progressSemester
@@ -483,6 +493,19 @@ export default function TeacherCurriculumPage() {
                     <p className="text-xs text-gray-400">{gradeLabel} {progressSemester}학기 · {checkedCount}/{semesterConcepts.length}개 완료</p>
                   </div>
                 </div>
+
+                {/* 학년 선택 (선행 등으로 재원 학년과 다른 학년 교재를 나가는 경우가 있어서) */}
+                {availableGrades.length > 1 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {availableGrades.map((g) => (
+                      <button key={g} onClick={() => setProgressGrade(g)}
+                        className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
+                          gradeLabel === g ? 'bg-[#0f3460] text-white border-[#0f3460]' : 'bg-white text-gray-600 border-gray-200')}>
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* 진도율 바 */}
                 <div className="bg-white rounded-2xl border border-gray-100 p-4">
