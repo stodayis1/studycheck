@@ -23,6 +23,7 @@ interface StudentTextbook {
   textbook_name: string
   textbook_type: string
   textbook_grade: string | null
+  grade: string | null
   semester: number | null
   status: string
   memo: string | null
@@ -231,10 +232,40 @@ export default function TeacherCurriculumPage() {
     fetchData()
   }
 
+  // 심화서를 완료 처리하면 그 학기 전체 개념을 3회독(심화)으로 일괄 반영
+  // (안 그러면 진도표에 군데군데 빠지거나 낮은 회차로 남아서 선생님이 일일이 클릭해서 맞춰야 했음)
+  async function markSemesterMastered(studentId: string, grade: string, semester: number) {
+    const semesterConcepts = concepts.filter((c) => c.grade === grade && c.semester === semester)
+    if (semesterConcepts.length === 0) return
+    const existingByConcept = new Map(
+      progressChecks.filter((p) => p.student_id === studentId && !p.student_textbook_id).map((p) => [p.concept_id, p])
+    )
+    const toUpdate = semesterConcepts.filter((c) => {
+      const ex = existingByConcept.get(c.id)
+      return ex && ex.check_count < 3
+    })
+    const toInsert = semesterConcepts.filter((c) => !existingByConcept.has(c.id))
+
+    await Promise.all(toUpdate.map((c) =>
+      supabase.from('progress_checks')
+        .update({ check_count: 3, updated_at: new Date().toISOString() })
+        .eq('id', existingByConcept.get(c.id)!.id)
+    ))
+    if (toInsert.length > 0) {
+      await supabase.from('progress_checks').insert(
+        toInsert.map((c) => ({ student_id: studentId, concept_id: c.id, check_count: 3 }))
+      )
+    }
+  }
+
   // 교재 완료
   async function handleCompleteTB(id: string) {
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
+    const tb = textbooks.find((t) => t.id === id)
+    if (tb && tb.textbook_type === '심화서' && tb.grade && tb.semester) {
+      await markSemesterMastered(tb.student_id, tb.grade, tb.semester)
+    }
     fetchData()
   }
 
