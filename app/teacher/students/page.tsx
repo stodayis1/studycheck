@@ -227,6 +227,7 @@ export default function TeacherStudentsPage() {
   }
 
   async function handleDelete(studentId: string, name: string) {
+    if (!isAdmin()) { alert('학생 삭제는 원장님만 하실 수 있어요.'); return }
     if (!confirm(`${name} 학생을 삭제할까요?`)) return
     const { error } = await supabase.from('students').update({ is_active: false }).eq('id', studentId)
     if (!error) fetchStudents()
@@ -400,8 +401,10 @@ export default function TeacherStudentsPage() {
                       setShowEditModal(true)
                     }}
                       className="px-2.5 py-1.5 text-xs font-semibold text-gray-800 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
-                    <button onClick={() => handleDelete(student.id!, student.name)}
-                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
+                    {isAdmin() && (
+                      <button onClick={() => handleDelete(student.id!, student.name)}
+                        className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
+                    )}
                   </div>
                 </div>
                 {student.intake_notes && student.id && expandedNotes.has(student.id) && (
