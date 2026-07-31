@@ -174,6 +174,7 @@ export default function TeacherLearningNotesPage() {
   const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
 
   async function handleSendKakao(sessionId: string, studentName: string) {
+    if (!isAdmin()) { alert('카톡 발송은 원장님만 하실 수 있어요.'); return }
     if (!confirm(`${studentName} 학생 학부모님께 오늘 학습 안내 카톡을 보낼까요?`)) return
     setSendingKakao(sessionId)
     try {
@@ -1183,7 +1184,7 @@ export default function TeacherLearningNotesPage() {
                               const editable = canEditNote(session.session_date)
                               return (
                                 <>
-                                  {isComplete && (
+                                  {isComplete && isAdmin() && (
                                     <button onClick={() => handleSendKakao(session.id, student.name)}
                                       disabled={sendingKakao === session.id}
                                       className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
