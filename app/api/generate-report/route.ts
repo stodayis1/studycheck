@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes } from 'crypto'
+import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -128,23 +129,16 @@ export async function POST(req: NextRequest) {
         assignedAt: w.assigned_at,
       }))
 
-    const tbs = (tbData ?? []).filter((t: any) => t.textbook_type !== '연산서')
-    const calcTbs = (tbData ?? []).filter((t: any) => t.textbook_type === '연산서')
-    const tbProgress = tbs.map((tb: any) => {
-      const tbC = concepts.filter((c: any) => c.grade === tb.grade && String(c.semester) === String(tb.semester))
-      if (tbC.length === 0) return null
-      const checked = tbC.filter((c: any) => (pcData ?? []).some((p: any) =>
-        p.concept_id === c.id && p.check_count >= 1 &&
-        (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서'))
-      ))
-      const rate = tb.status === 'completed' ? 100 : Math.round(checked.length / tbC.length * 100)
-      return { name: tb.textbook_name, type: tb.textbook_type, rate, completed: tb.status === 'completed' }
-    }).filter(Boolean)
-    const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
+    // 진도표(과정관리)와 동일한 기준으로, 기록이 있는 학년+학기만 회차/진행률로 압축해서 보여준다.
+    // (배정만 되고 체크 기록이 없는 과정은 보고서에 넣을 필요가 없어서 자동으로 제외됨)
+    const curriculumProgress = computeCurriculumProgressGroups(concepts, pcData ?? [])
+    const calcProgress = (tbData ?? [])
+      .filter((t: any) => t.textbook_type === '연산서')
+      .map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0, grade: tb.grade, semester: tb.semester }))
 
     const reportData = {
       totalSessions, attendance, hwRate, avgScore, passRate,
-      periodCount: periodWS.length, tbProgress, calcProgress, worksheetDetail,
+      periodCount: periodWS.length, curriculumProgress, calcProgress, worksheetDetail,
       exams: examData ?? [], studentName: student.name, studentGrade: student.grade,
       attendanceDetail, dailyTests, avgDailyTest,
     }
@@ -152,7 +146,7 @@ export async function POST(req: NextRequest) {
     // AI 한 줄평 생성
     let aiComment = ''
     try {
-      const prompt = `다음은 수학 학원 학생의 ${type === 'monthly' ? '한 달' : '한 분기'} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${student.name}, 학년: ${student.grade}, 수업 횟수: ${totalSessions}회, 출결: 정시 ${attendance.정시}회/지각 ${attendance.지각}회/결석 ${attendance.결석}회, 과제달성률: ${hwRate}%, 학습지 평균: ${avgScore ?? '미채점'}점, 통과율: ${passRate}%, 교재진도: ${tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
+      const prompt = `다음은 수학 학원 학생의 ${type === 'monthly' ? '한 달' : '한 분기'} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${student.name}, 학년: ${student.grade}, 수업 횟수: ${totalSessions}회, 출결: 정시 ${attendance.정시}회/지각 ${attendance.지각}회/결석 ${attendance.결석}회, 과제달성률: ${hwRate}%, 학습지 평균: ${avgScore ?? '미채점'}점, 통과율: ${passRate}%, 교재진도: ${curriculumProgress.map((g) => `${g.grade} ${g.semester}학기 ${g.round}회독 ${g.rate}%`).join(', ')}`
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
         max_tokens: 500,

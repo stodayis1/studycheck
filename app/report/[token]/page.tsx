@@ -42,8 +42,8 @@ interface ReportLink {
     passRate: number
     periodCount: number
     worksheetDetail?: { unit: string; level: number; score: number | null; status: string; isSimilar: boolean; assignedAt: string }[]
-    tbProgress: { name: string; type: string; rate: number; completed?: boolean }[]
-    calcProgress: { name: string; percent: number }[]
+    curriculumProgress?: { grade: string; semester: number; rate: number; round: number }[]
+    calcProgress: { name: string; percent: number; grade?: string | null; semester?: number | null }[]
     exams: any[]
     studentName: string
     studentGrade: string
@@ -286,31 +286,29 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
             </div>
           )}
 
-          {/* 교재 진도 */}
-          {(d.tbProgress.length > 0 || d.calcProgress.length > 0) && (
+          {/* 교재 진도 - 기록이 있는 학년/학기만, 회차 + 진행률로 압축해서 보여줌 */}
+          {((d.curriculumProgress?.length ?? 0) > 0 || d.calcProgress.length > 0) && (
             <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
               <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {d.tbProgress.map((tb, i) => (
+                {(d.curriculumProgress ?? []).map((g, i) => (
                   <div key={i}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}</span>
-                      {tb.completed ? (
-                        <span style={{ fontSize: 9, fontWeight: 700, color: '#0f3460', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>완료</span>
-                      ) : (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{tb.rate}%</span>
-                      )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)' }}>{g.grade} {g.semester}학기</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#085041', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>{g.round}회독</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA', marginLeft: 'auto' }}>{g.rate}%</span>
                     </div>
                     <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                      <div style={{ height: 4, borderRadius: 4, width: `${tb.rate}%`, background: tb.completed ? '#9FE1CB' : tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
+                      <div style={{ height: 4, borderRadius: 4, width: `${g.rate}%`, background: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
                     </div>
                   </div>
                 ))}
                 {d.calcProgress.map((tb, i) => (
-                  <div key={`c${i}`}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name} <span style={{ color: '#c4b5fd', fontSize: 9 }}>연산</span></span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd' }}>{tb.percent}%</span>
+                  <div key={`c${i}`} style={{ borderTop: i === 0 && (d.curriculumProgress?.length ?? 0) > 0 ? '1px solid rgba(255,255,255,0.1)' : undefined, paddingTop: i === 0 && (d.curriculumProgress?.length ?? 0) > 0 ? 8 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', borderRadius: 8, padding: '1px 6px' }}>연산서</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}{tb.grade ? ` · ${tb.grade}${tb.semester ? ` ${tb.semester}학기` : ''}` : ''}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd', marginLeft: 'auto' }}>{tb.percent}%</span>
                     </div>
                     <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
                       <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: '#c4b5fd' }} />

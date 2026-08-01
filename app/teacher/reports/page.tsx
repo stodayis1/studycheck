@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
+import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 
 interface Student {
   id: string
@@ -406,21 +407,14 @@ export default function TeacherReportsPage() {
         assignedAt: w.assigned_at,
       }))
 
-    const tbs = (tbData ?? []).filter((t: any) => t.textbook_type !== '연산서')
-    const calcTbs = (tbData ?? []).filter((t: any) => t.textbook_type === '연산서')
-    const tbProgress = tbs.map((tb: any) => {
-      const tbC = concepts.filter((c: any) => c.grade === tb.grade && String(c.semester) === String(tb.semester))
-      if (tbC.length === 0) return null
-      const checked = tbC.filter((c: any) => (pcData ?? []).some((p: any) =>
-        p.concept_id === c.id && p.check_count >= 1 &&
-        (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서'))
-      ))
-      const rate = tb.status === 'completed' ? 100 : Math.round(checked.length / tbC.length * 100)
-      return { name: tb.textbook_name, type: tb.textbook_type, rate, completed: tb.status === 'completed' }
-    }).filter(Boolean)
-    const calcProgress = calcTbs.map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0 }))
+    // 진도표(과정관리)와 동일한 기준으로, 기록이 있는 학년+학기만 회차/진행률로 압축 (generate-report API와 동일 함수 사용 -
+    // 여기(미리보기)랑 실제 발송되는 보고서가 서로 다른 로직으로 계산돼서 값이 어긋나는 일이 없도록)
+    const curriculumProgress = computeCurriculumProgressGroups(concepts, pcData ?? [])
+    const calcProgress = (tbData ?? [])
+      .filter((t: any) => t.textbook_type === '연산서')
+      .map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0, grade: tb.grade, semester: tb.semester }))
 
-    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, tbProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail, dailyTests, avgDailyTest })
+    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, curriculumProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail, dailyTests, avgDailyTest })
     setMLoading(false)
   }
 
@@ -668,31 +662,29 @@ export default function TeacherReportsPage() {
                     </div>
                   )}
 
-                  {/* 교재 진도 */}
-                  {(mData.tbProgress.length > 0 || mData.calcProgress.length > 0) && (
+                  {/* 교재 진도 - 기록이 있는 학년/학기만, 회차 + 진행률로 압축해서 보여줌 (실제 발송 보고서와 동일 로직) */}
+                  {(mData.curriculumProgress.length > 0 || mData.calcProgress.length > 0) && (
                     <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
                       <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {mData.tbProgress.map((tb: any, i: number) => (
+                        {mData.curriculumProgress.map((g: any, i: number) => (
                           <div key={i}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}</span>
-                              {tb.completed ? (
-                                <span style={{ fontSize: 9, fontWeight: 700, color: '#0f3460', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>완료</span>
-                              ) : (
-                                <span style={{ fontSize: 10, fontWeight: 700, color: tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{tb.rate}%</span>
-                              )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)' }}>{g.grade} {g.semester}학기</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: '#085041', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>{g.round}회독</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA', marginLeft: 'auto' }}>{g.rate}%</span>
                             </div>
                             <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                              <div style={{ height: 4, borderRadius: 4, width: `${tb.rate}%`, background: tb.completed || tb.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
+                              <div style={{ height: 4, borderRadius: 4, width: `${g.rate}%`, background: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
                             </div>
                           </div>
                         ))}
                         {mData.calcProgress.map((tb: any, i: number) => (
-                          <div key={`c${i}`}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name} <span style={{ color: '#c4b5fd', fontSize: 9 }}>연산</span></span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd' }}>{tb.percent}%</span>
+                          <div key={`c${i}`} style={{ borderTop: i === 0 && mData.curriculumProgress.length > 0 ? '1px solid rgba(255,255,255,0.1)' : undefined, paddingTop: i === 0 && mData.curriculumProgress.length > 0 ? 8 : 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', borderRadius: 8, padding: '1px 6px' }}>연산서</span>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}{tb.grade ? ` · ${tb.grade}${tb.semester ? ` ${tb.semester}학기` : ''}` : ''}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd', marginLeft: 'auto' }}>{tb.percent}%</span>
                             </div>
                             <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
                               <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: '#c4b5fd' }} />
