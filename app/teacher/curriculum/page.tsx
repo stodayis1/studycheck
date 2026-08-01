@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 
-const GRADE_ORDER = ['중1', '중2', '중3', '고1', '고2', '고3']
+// concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
+const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
 
 interface Student {
   id: string
@@ -203,6 +204,23 @@ export default function TeacherCurriculumPage() {
     return concepts.find((c) => c.id === id)
   }
 
+  // 학생 grade("고1" 등 재원학년)가 concepts.grade와 그대로 안 맞는 경우(특히 고등부는 과목명이라 안 맞음)가 있어서,
+  // 실제로 그 학생이 배정받은 교재들의 grade(=concepts.grade와 같은 값)를 기준으로 커리큘럼 학년을 찾는다.
+  // 초/중처럼 학생 grade가 concepts.grade와 그대로 맞는 경우엔 그것도 후보로 포함.
+  const validCurriculumGrades = new Set(concepts.map((c) => c.grade))
+  function normalizeToConceptGrade(g: string): string | null {
+    return validCurriculumGrades.has(g) ? g : null
+  }
+  function getStudentCurriculumGrades(studentId: string, studentOwnGrade: string): string[] {
+    const fromTextbooks = textbooks
+      .filter((t) => t.student_id === studentId && t.grade)
+      .map((t) => normalizeToConceptGrade(t.grade!))
+      .filter((g): g is string => !!g)
+    const own = normalizeToConceptGrade(studentOwnGrade)
+    return Array.from(new Set([...(own ? [own] : []), ...fromTextbooks]))
+      .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
+  }
+
   async function handleTBAssign() {
     if (!tbName) return
     // 대상 학생 결정: 다중모드면 체크된 학생들, 아니면 단일 학생
@@ -392,13 +410,10 @@ export default function TeacherCurriculumPage() {
             <div className="space-y-2">
               <p className="text-xs text-gray-400 px-1">진도를 확인할 학생을 선택하세요</p>
               {filteredStudents.map((student) => {
-                const gradeKey = student.grade.includes('초1') ? '초1' : student.grade.includes('초2') ? '초2'
-                  : student.grade.includes('초3') ? '초3' : student.grade.includes('초4') ? '초4'
-                  : student.grade.includes('초5') ? '초5' : student.grade.includes('초6') ? '초6'
-                  : student.grade.includes('중1') ? '중1' : student.grade.includes('중2') ? '중2'
-                  : student.grade.includes('중3') ? '중3' : student.grade.includes('고1') ? '고1'
-                  : student.grade.includes('고2') ? '고2' : '고3'
-                const studentConcepts = concepts.filter((c) => c.grade === gradeKey)
+                // 실제 나가고 있는 커리큘럼 학년 전부(선행 포함) 기준으로 계산 - 재원학년 하나만 보면
+                // 초등학생인데 중등과정이 나오거나(잘못된 fallback), 고등부는 과목명이 안 맞아 늘 0%로 나오던 문제
+                const studentGrades = getStudentCurriculumGrades(student.id, student.grade)
+                const studentConcepts = concepts.filter((c) => studentGrades.includes(c.grade))
                 // 학습일지/일괄진도체크에서 찍는 체크는 교재(student_textbook_id)에 묶여서 저장되는 경우가 대부분이라
                 // 여기서도 스코프 상관없이 전부 봐야 한다 (안 그러면 분명 체크했는데 진도표엔 0%로 보이는 문제 발생)
                 const checkedConceptIds = new Set(
@@ -439,17 +454,11 @@ export default function TeacherCurriculumPage() {
             </div>
           ) : (() => {
             // 진도표 상세 화면
-            const normalizeGrade = (g: string): string | null =>
-              g.includes('중1') ? '중1' : g.includes('중2') ? '중2' : g.includes('중3') ? '중3'
-              : g.includes('고1') ? '고1' : g.includes('고2') ? '고2' : g.includes('고3') ? '고3' : null
-            const defaultGradeLabel = normalizeGrade(selectedProgressStudent.grade) ?? '중1'
             // 선행 등으로 실제 재원 학년과 다른 학기 교재를 나가는 경우가 많아서,
-            // 이 학생이 배정받은 적 있는 교재들의 학년도 선택할 수 있게 함 (안 그러면 진도표에 본인 학년 것만 보임)
-            const availableGrades = Array.from(new Set([
-              defaultGradeLabel,
-              ...textbooks.filter((t) => t.student_id === selectedProgressStudent.id && t.grade)
-                .map((t) => normalizeGrade(t.grade!)).filter((g): g is string => !!g),
-            ])).sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
+            // 이 학생이 실제로 나간 적 있는 커리큘럼 학년들 중에서 고를 수 있게 함
+            // (재원학년만 보면 초등학생인데 중등이 뜨거나, 고등부는 과목명이 달라서 늘 빈 화면으로 보이던 문제)
+            const availableGrades = getStudentCurriculumGrades(selectedProgressStudent.id, selectedProgressStudent.grade)
+            const defaultGradeLabel = availableGrades[0] ?? null
             const gradeLabel = progressGrade ?? defaultGradeLabel
 
             const semesterConcepts = concepts.filter(
@@ -481,6 +490,22 @@ export default function TeacherCurriculumPage() {
               1: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '개념' },
               2: { bg: 'bg-green-100', text: 'text-green-700', label: '유형' },
               3: { bg: 'bg-orange-100', text: 'text-orange-700', label: '심화' },
+            }
+
+            if (!gradeLabel) {
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setSelectedProgressStudent(null)}
+                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0">‹</button>
+                    <p className="text-sm font-bold text-gray-900">{selectedProgressStudent.name} · {selectedProgressStudent.grade}</p>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                    <p className="text-3xl mb-3">📊</p>
+                    <p className="text-sm text-gray-500">아직 배정된 교재가 없어서 진도표를 표시할 커리큘럼 학년을 알 수 없어요.<br />교재배정 탭에서 먼저 교재를 배정해주세요.</p>
+                  </div>
+                </div>
+              )
             }
 
             return (
