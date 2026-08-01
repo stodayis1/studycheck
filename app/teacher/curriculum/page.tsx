@@ -235,9 +235,11 @@ export default function TeacherCurriculumPage() {
     fetchData()
   }
 
-  // 심화서를 완료 처리하면 그 학기 전체 개념을 3회독(심화)으로 일괄 반영
+  // 교재를 완료 처리하면 그 학기 전체 개념을 해당 교재 단계(개념서=1회독/유형서=2회독/심화서=3회독)로 일괄 반영
   // (안 그러면 진도표에 군데군데 빠지거나 낮은 회차로 남아서 선생님이 일일이 클릭해서 맞춰야 했음)
-  async function markSemesterMastered(studentId: string, grade: string, semester: number) {
+  // 이미 더 높은 회차로 체크돼 있으면 낮추지 않고 그대로 둠
+  const TEXTBOOK_TYPE_LEVEL: Record<string, number> = { '개념서': 1, '유형서': 2, '심화서': 3 }
+  async function markSemesterMastered(studentId: string, grade: string, semester: number, targetLevel: number) {
     const semesterConcepts = concepts.filter((c) => c.grade === grade && c.semester === semester)
     if (semesterConcepts.length === 0) return
     const existingByConcept = new Map(
@@ -245,18 +247,18 @@ export default function TeacherCurriculumPage() {
     )
     const toUpdate = semesterConcepts.filter((c) => {
       const ex = existingByConcept.get(c.id)
-      return ex && ex.check_count < 3
+      return ex && ex.check_count < targetLevel
     })
     const toInsert = semesterConcepts.filter((c) => !existingByConcept.has(c.id))
 
     await Promise.all(toUpdate.map((c) =>
       supabase.from('progress_checks')
-        .update({ check_count: 3, updated_at: new Date().toISOString() })
+        .update({ check_count: targetLevel, updated_at: new Date().toISOString() })
         .eq('id', existingByConcept.get(c.id)!.id)
     ))
     if (toInsert.length > 0) {
       await supabase.from('progress_checks').insert(
-        toInsert.map((c) => ({ student_id: studentId, concept_id: c.id, check_count: 3 }))
+        toInsert.map((c) => ({ student_id: studentId, concept_id: c.id, check_count: targetLevel }))
       )
     }
   }
@@ -266,8 +268,9 @@ export default function TeacherCurriculumPage() {
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
     const tb = textbooks.find((t) => t.id === id)
-    if (tb && tb.textbook_type === '심화서' && tb.grade && tb.semester) {
-      await markSemesterMastered(tb.student_id, tb.grade, tb.semester)
+    const targetLevel = tb ? TEXTBOOK_TYPE_LEVEL[tb.textbook_type] : undefined
+    if (tb && targetLevel && tb.grade && tb.semester) {
+      await markSemesterMastered(tb.student_id, tb.grade, tb.semester, targetLevel)
     }
     fetchData()
   }
