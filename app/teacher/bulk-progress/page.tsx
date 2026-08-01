@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Header } from '@/components/common/Header'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { computeTextbookLevels } from '@/lib/progressLevel'
 
 interface Student {
   id: string
@@ -21,6 +22,7 @@ interface Textbook {
   grade: string
   semester: string
   status: string
+  assigned_at?: string | null
 }
 
 interface Concept {
@@ -40,15 +42,14 @@ interface ProgressCheck {
   student_textbook_id?: string | null
 }
 
-// 개념서 진행 중=1회독, 유형서 진행 중=2회독, 심화서 진행 중=3회독 (과정관리 진도표와 동일한 기준)
-// 예전엔 여기서 무조건 1로만 저장해서, 유형서/심화서를 체크해도 진도표엔 1회차로만 보이던 문제가 있었음
-const TEXTBOOK_TYPE_LEVEL: Record<string, number> = { '개념서': 1, '유형서': 2, '심화서': 3 }
-
 export default function BulkProgressPage() {
   const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [textbooks, setTextbooks] = useState<Textbook[]>([])
+  // 회차 계산용 - 진행중인 교재뿐 아니라 완료/중단된 것까지 다 있어야 "몇 번째 교재인지" 순서가 정확해짐
+  // (진행중인 것만 보면, 이미 끝낸 개념서가 빠져서 유형서가 1번째 교재로 잘못 계산됨)
+  const [allTextbooksForLevel, setAllTextbooksForLevel] = useState<Textbook[]>([])
   const [selectedTextbook, setSelectedTextbook] = useState<Textbook | null>(null)
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
@@ -72,15 +73,26 @@ export default function BulkProgressPage() {
     setConcepts([])
     setProgressChecks([])
     setLoading(true)
-    // 연산서 제외
+    // 연산서 제외, 상태 무관하게 전부 가져와서 회차 계산에 쓴다 (선택 목록엔 진행중인 것만 보여줌)
     const { data } = await supabase.from('student_textbooks')
       .select('*')
       .eq('student_id', student.id)
       .neq('textbook_type', '연산서')
-      .eq('status', 'assigned')
       .order('assigned_at')
-    setTextbooks(data ?? [])
+    const all = data ?? []
+    setAllTextbooksForLevel(all)
+    setTextbooks(all.filter((t) => t.status === 'assigned'))
     setLoading(false)
+  }
+
+  // 선택한 교재가 같은 학년+학기 안에서 몇 번째로 배정된 교재인지에 따라 회차를 계산
+  // (개념서 진행 중=1회독, 유형서=2회독, 심화서=3회독이 기본이지만, 같은 학기에 교재를 더 나갔으면 계속 올라감 - lib/progressLevel 참고)
+  function getSelectedTextbookLevel(): number {
+    if (!selectedTextbook) return 1
+    const siblings = allTextbooksForLevel.filter((t) =>
+      t.student_id === selectedTextbook.student_id && t.grade === selectedTextbook.grade && t.semester === selectedTextbook.semester
+    )
+    return computeTextbookLevels(siblings).get(selectedTextbook.id) ?? 1
   }
 
   async function selectTextbook(tb: Textbook) {
@@ -125,7 +137,7 @@ export default function BulkProgressPage() {
 
   async function toggleConcept(concept: Concept) {
     if (!selectedStudent || !selectedTextbook) return
-    const level = TEXTBOOK_TYPE_LEVEL[selectedTextbook.textbook_type] ?? 1
+    const level = getSelectedTextbookLevel()
     const entry = getCheckEntry(concept.id)
     const isDone = (entry?.check_count ?? 0) >= 1
     if (isDone) {
@@ -154,7 +166,7 @@ export default function BulkProgressPage() {
 
   async function toggleChapter(chapter: string) {
     if (!selectedStudent || !selectedTextbook) return
-    const level = TEXTBOOK_TYPE_LEVEL[selectedTextbook.textbook_type] ?? 1
+    const level = getSelectedTextbookLevel()
     const chapterConcepts = concepts.filter(c => c.chapter === chapter)
     const allDone = chapterConcepts.every(c => getCheckCount(c.id) >= 1)
     setSaving(true)

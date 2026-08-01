@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
+import { computeTextbookLevels, getExternalCompletedRounds, TextbookForLevel } from '@/lib/progressLevel'
 
 // concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
 const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
@@ -131,19 +132,21 @@ export default function TeacherCurriculumPage() {
     setLoading(false)
   }
 
-  // 진도 체크 토글 (0→1→2→3→0)
+  // 진도 체크를 누르면 회차가 +1씩 계속 올라감 (회독수는 상한이 없음 - 3회독이 끝이 아니라
+  // 4회독, 5회독도 나올 수 있어서 예전처럼 3에서 0으로 강제로 되돌리지 않음)
+  // 같은 개념에 교재별로 나뉜 기록이 여러 개 있을 수 있어서(과정관리 완료처리/진도일괄입력에서 생긴 것 포함),
+  // 화면에 보이는 값(=그 중 가장 높은 값)을 기준으로 그 행을 이어서 올린다.
   async function handleProgressCheck(studentId: string, conceptId: string) {
     const key = `${studentId}_${conceptId}`
     if (updatingProgress === key) return
     setUpdatingProgress(key)
     try {
 
-    const existing = progressChecks.find(
-      (p) => p.student_id === studentId && p.concept_id === conceptId
-    )
-    const nextCount = existing ? (existing.check_count >= 3 ? 0 : existing.check_count + 1) : 1
+    const rows = progressChecks.filter((p) => p.student_id === studentId && p.concept_id === conceptId)
+    const maxRow = rows.reduce<ProgressCheck | null>((max, r) => (!max || r.check_count > max.check_count ? r : max), null)
+    const nextCount = (maxRow?.check_count ?? 0) + 1
 
-    if (!existing) {
+    if (!maxRow) {
       const { error: insertError } = await supabase.from('progress_checks').insert({ student_id: studentId, concept_id: conceptId, check_count: 1 })
       // 화면에 반영된 목록이 순간적으로 최신이 아니어서(다른 탭/기기에서 방금 만든 행 등) "없다"고 판단했는데
       // 실제로는 이미 있던 경우 - 삽입 대신 업데이트로 전환해서 중복키 오류로 멈추지 않게 함
@@ -153,20 +156,34 @@ export default function TeacherCurriculumPage() {
       } else if (insertError) {
         console.error('진도 체크 저장 오류:', insertError)
       }
-    } else if (nextCount === 0) {
-      await supabase.from('progress_checks').delete().eq('id', existing.id)
     } else {
-      await supabase.from('progress_checks').update({ check_count: nextCount, updated_at: new Date().toISOString() }).eq('id', existing.id)
+      await supabase.from('progress_checks').update({ check_count: nextCount, updated_at: new Date().toISOString() }).eq('id', maxRow.id)
     }
 
     // 로컬 상태 즉시 반영 (UX)
     setProgressChecks((prev) => {
-      if (!existing) return [...prev, { id: 'temp', student_id: studentId, concept_id: conceptId, check_count: 1 }]
-      if (nextCount === 0) return prev.filter((p) => !(p.student_id === studentId && p.concept_id === conceptId))
-      return prev.map((p) => p.student_id === studentId && p.concept_id === conceptId ? { ...p, check_count: nextCount } : p)
+      if (!maxRow) return [...prev, { id: 'temp', student_id: studentId, concept_id: conceptId, check_count: 1 }]
+      return prev.map((p) => p.id === maxRow.id ? { ...p, check_count: nextCount } : p)
     })
     } catch (err) {
       console.error('진도 체크 처리 중 오류:', err)
+    } finally {
+      setUpdatingProgress(null)
+    }
+  }
+
+  // 진도 체크 완전 해제 - 이 개념에 걸린 기록을(교재별로 나뉜 것까지 전부) 다 지워서 "미진도"로 되돌림
+  async function handleResetProgressCheck(studentId: string, conceptId: string) {
+    const key = `reset_${studentId}_${conceptId}`
+    if (updatingProgress === key) return
+    setUpdatingProgress(key)
+    try {
+      const rows = progressChecks.filter((p) => p.student_id === studentId && p.concept_id === conceptId)
+      if (rows.length > 0) {
+        const { error } = await supabase.from('progress_checks').delete().in('id', rows.map((r) => r.id))
+        if (error) { console.error('진도 체크 해제 오류:', error); return }
+      }
+      setProgressChecks((prev) => prev.filter((p) => !(p.student_id === studentId && p.concept_id === conceptId)))
     } finally {
       setUpdatingProgress(null)
     }
@@ -253,10 +270,9 @@ export default function TeacherCurriculumPage() {
     fetchData()
   }
 
-  // 교재를 완료 처리하면 그 학기 전체 개념을 해당 교재 단계(개념서=1회독/유형서=2회독/심화서=3회독)로 일괄 반영
+  // 교재를 완료 처리하면 그 학기 전체 개념을 해당 교재의 회차(순번 기반, lib/progressLevel 참고)로 일괄 반영
   // (안 그러면 진도표에 군데군데 빠지거나 낮은 회차로 남아서 선생님이 일일이 클릭해서 맞춰야 했음)
   // 이미 더 높은 회차로 체크돼 있으면 낮추지 않고 그대로 둠
-  const TEXTBOOK_TYPE_LEVEL: Record<string, number> = { '개념서': 1, '유형서': 2, '심화서': 3 }
   async function markSemesterMastered(studentId: string, grade: string, semester: number, targetLevel: number) {
     const semesterConcepts = concepts.filter((c) => c.grade === grade && c.semester === semester)
     if (semesterConcepts.length === 0) return
@@ -286,9 +302,14 @@ export default function TeacherCurriculumPage() {
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
     const tb = textbooks.find((t) => t.id === id)
-    const targetLevel = tb ? TEXTBOOK_TYPE_LEVEL[tb.textbook_type] : undefined
-    if (tb && targetLevel && tb.grade && tb.semester) {
-      await markSemesterMastered(tb.student_id, tb.grade, tb.semester, targetLevel)
+    if (tb && tb.grade && tb.semester && tb.textbook_type !== '연산서') {
+      // 같은 학생의 같은 학년+학기 안에 있는 교재들(연산서 제외)을 배정 순서로 늘어놓고,
+      // 이 교재가 몇 번째 회차인지 계산 (개념서 2권째=2회독, 그 다음 유형서=3회독처럼 계속 올라갈 수 있음)
+      const siblings = textbooks.filter((t) =>
+        t.student_id === tb.student_id && t.grade === tb.grade && t.semester === tb.semester && t.textbook_type !== '연산서'
+      )
+      const targetLevel = computeTextbookLevels(siblings).get(tb.id)
+      if (targetLevel) await markSemesterMastered(tb.student_id, tb.grade, tb.semester, targetLevel)
     }
     fetchData()
   }
@@ -474,23 +495,45 @@ export default function TeacherCurriculumPage() {
             }
 
             // 학습일지/일괄진도체크에서 찍는 체크는 대부분 교재(student_textbook_id)에 묶여서 저장되므로
-            // 스코프 상관없이 전부 모아서, 같은 개념이 여러 교재에서 체크됐으면 가장 높이 나간 회차를 기준으로 삼는다
+            // 스코프 상관없이 전부 모아서, 같은 개념이 여러 교재에서 체크됐으면 가장 높이 나간 회차를 기준으로 삼는다.
+            // 그 회차를 만든 진짜 교재 종류(개념서/유형서/심화서)도 같이 기억해둔다 - 회차 숫자만으로
+            // 개념/유형/심화를 고정해서 라벨링하면(예전 방식) 회차가 4·5회독까지 늘어나거나 같은 회차라도
+            // 학생마다 실제 교재 종류가 다를 때 라벨이 틀리게 나올 수 있어서다.
             const checkCountByConcept = new Map<string, number>()
+            const checkRowByConcept = new Map<string, ProgressCheck>()
             for (const p of progressChecks) {
               if (p.student_id !== selectedProgressStudent.id) continue
               const cur = checkCountByConcept.get(p.concept_id) ?? 0
-              if (p.check_count > cur) checkCountByConcept.set(p.concept_id, p.check_count)
+              if (p.check_count > cur) {
+                checkCountByConcept.set(p.concept_id, p.check_count)
+                checkRowByConcept.set(p.concept_id, p)
+              }
             }
             const checkedCount = semesterConcepts.filter((c) => (checkCountByConcept.get(c.id) ?? 0) >= 1).length
             const totalRate = semesterConcepts.length > 0
               ? Math.round(checkedCount / semesterConcepts.length * 100) : 0
 
-            const CHECK_STYLE: Record<number, { bg: string; text: string; label: string }> = {
-              0: { bg: 'bg-gray-100', text: 'text-gray-400', label: '미진도' },
-              1: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '개념' },
-              2: { bg: 'bg-green-100', text: 'text-green-700', label: '유형' },
-              3: { bg: 'bg-orange-100', text: 'text-orange-700', label: '심화' },
+            const textbookById = new Map(textbooks.map((t) => [t.id, t]))
+            const TYPE_STYLE: Record<string, { bg: string; text: string }> = {
+              '개념서': { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+              '유형서': { bg: 'bg-green-100', text: 'text-green-700' },
+              '심화서': { bg: 'bg-orange-100', text: 'text-orange-700' },
             }
+            // 회독수는 상한이 없어서(3회독이 끝이 아님) 회차 숫자로 스타일을 고정하지 않고,
+            // 그 회차를 기록한 실제 교재 종류를 찾아서 색/라벨을 매긴다. 교재 종류를 알 수 없으면(수동 체크 등) 파란색 "n회독"으로 표시
+            function getConceptStyle(count: number, row: ProgressCheck | undefined) {
+              if (count <= 0) return { bg: 'bg-gray-100', text: 'text-gray-400', label: '미진도' }
+              const tbType = row?.student_textbook_id ? textbookById.get(row.student_textbook_id)?.textbook_type : undefined
+              if (tbType && TYPE_STYLE[tbType]) return { ...TYPE_STYLE[tbType], label: tbType }
+              return { bg: 'bg-blue-100', text: 'text-blue-700', label: `${count}회독` }
+            }
+
+            // 이 학년+학기에서 가장 먼저 배정된 교재가 개념서가 아니면(유형서부터 시작 등),
+            // 그 앞 회차는 우리 기록엔 없지만 타학원 등에서 이미 마친 것으로 간주하고 회차를 밀어서 계산한다 - 그 안내용
+            const semesterTextbooksForLevel: TextbookForLevel[] = textbooks.filter((t) =>
+              t.student_id === selectedProgressStudent.id && t.grade === gradeLabel && t.semester === progressSemester && t.textbook_type !== '연산서'
+            )
+            const externalRounds = getExternalCompletedRounds(semesterTextbooksForLevel)
 
             if (!gradeLabel) {
               return (
@@ -547,14 +590,25 @@ export default function TeacherCurriculumPage() {
                   </div>
                   {/* 범례 */}
                   <div className="flex gap-3 mt-3 flex-wrap">
-                    {[1,2,3].map((n) => (
-                      <div key={n} className="flex items-center gap-1">
-                        <span className={cx('w-3 h-3 rounded-full', CHECK_STYLE[n].bg)} />
-                        <span className="text-[10px] text-gray-500">{CHECK_STYLE[n].label}</span>
+                    {(['개념서', '유형서', '심화서'] as const).map((t) => (
+                      <div key={t} className="flex items-center gap-1">
+                        <span className={cx('w-3 h-3 rounded-full', TYPE_STYLE[t].bg)} />
+                        <span className="text-[10px] text-gray-500">{t}</span>
                       </div>
                     ))}
                   </div>
+                  <p className="text-[10px] text-gray-400 mt-2">회차는 배정한 교재 순서대로 계속 올라가요 (3회독이 끝이 아니에요 · 개념서를 두 권 나갔으면 2권째는 2회독)</p>
                 </div>
+
+                {/* 타학원완료 안내 - 이 학년/학기의 첫 교재가 개념서가 아니면(유형서부터 시작 등) 그 앞 회차는 우리 기록엔 없어도 이미 마친 것으로 처리 */}
+                {externalRounds > 0 && (
+                  <div className="rounded-xl px-3 py-2.5" style={{ background: '#EFF6FF', border: '1px solid #DBEAFE' }}>
+                    <p className="text-[11px]" style={{ color: '#1D4ED8', lineHeight: 1.6 }}>
+                      ℹ️ {gradeLabel} {progressSemester}학기는 1~{externalRounds}회차가 <b>타학원완료</b>로 처리돼요.
+                      스터디체크엔 그 단계 교재 기록이 없지만, 그보다 높은 단계 교재부터 나가고 있어서 이미 마친 것으로 간주했어요.
+                    </p>
+                  </div>
+                )}
 
                 {/* 연산서 진도 (별도 % 5단계) */}
                 {(() => {
@@ -571,7 +625,12 @@ export default function TeacherCurriculumPage() {
                         return (
                           <div key={tb.id} className="border border-gray-100 rounded-xl p-3">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-sm font-semibold text-gray-800">{tb.textbook_name}</p>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">{tb.textbook_name}</p>
+                                {tb.grade && (
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{tb.grade}{tb.semester ? ` ${tb.semester}학기` : ''}</p>
+                                )}
+                              </div>
                               <span className="text-sm font-bold" style={{ color: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }}>{pct}%</span>
                             </div>
                             <div className="bg-gray-100 rounded-full h-2 mb-3">
@@ -636,28 +695,41 @@ export default function TeacherCurriculumPage() {
                           <div className="divide-y divide-gray-50">
                             {subConcepts.map((concept) => {
                               const count = checkCountByConcept.get(concept.id) ?? 0
-                              const style = CHECK_STYLE[count]
+                              const style = getConceptStyle(count, checkRowByConcept.get(concept.id))
                               const isUpdating = updatingProgress === `${selectedProgressStudent.id}_${concept.id}`
+                              const isResetting = updatingProgress === `reset_${selectedProgressStudent.id}_${concept.id}`
                               return (
-                                <button key={concept.id}
-                                  onClick={() => handleProgressCheck(selectedProgressStudent.id, concept.id)}
-                                  disabled={isUpdating}
-                                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white transition-all text-left">
-                                  {/* 회차 뱃지 */}
-                                  <div className={cx('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all', style.bg, style.text)}>
-                                    {count === 0 ? '·' : `${count}회`}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className={cx('text-xs font-medium transition-all', count > 0 ? 'text-gray-800' : 'text-gray-400')}>
-                                      {concept.concept_order}. {concept.concept_name}
-                                    </p>
-                                  </div>
+                                <div key={concept.id} className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-white transition-all">
+                                  <button
+                                    onClick={() => handleProgressCheck(selectedProgressStudent.id, concept.id)}
+                                    disabled={isUpdating || isResetting}
+                                    title="누르면 회차가 1씩 올라가요"
+                                    className="flex-1 flex items-center gap-3 py-1.5 text-left min-w-0">
+                                    {/* 회차 뱃지 - 누르면 +1 */}
+                                    <div className={cx('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all', style.bg, style.text)}>
+                                      {count === 0 ? '·' : `${count}회`}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className={cx('text-xs font-medium transition-all', count > 0 ? 'text-gray-800' : 'text-gray-400')}>
+                                        {concept.concept_order}. {concept.concept_name}
+                                      </p>
+                                    </div>
+                                    {count > 0 && (
+                                      <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0', style.bg, style.text)}>
+                                        {style.label}
+                                      </span>
+                                    )}
+                                  </button>
                                   {count > 0 && (
-                                    <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0', style.bg, style.text)}>
-                                      {style.label}
-                                    </span>
+                                    <button
+                                      onClick={() => handleResetProgressCheck(selectedProgressStudent.id, concept.id)}
+                                      disabled={isUpdating || isResetting}
+                                      title="미진도로 완전히 해제"
+                                      className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all shrink-0 text-xs">
+                                      ✕
+                                    </button>
                                   )}
-                                </button>
+                                </div>
                               )
                             })}
                           </div>
