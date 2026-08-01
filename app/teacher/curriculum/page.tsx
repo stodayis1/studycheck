@@ -5,7 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
-import { computeTextbookLevels, getExternalCompletedRounds, TextbookForLevel } from '@/lib/progressLevel'
+import { computeTextbookLevels } from '@/lib/progressLevel'
 
 // concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
 const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
@@ -32,6 +32,8 @@ interface StudentTextbook {
   status: string
   memo: string | null
   assigned_at: string
+  delete_requested_by?: string | null
+  delete_requested_at?: string | null
 }
 
 interface Concept {
@@ -327,10 +329,27 @@ export default function TeacherCurriculumPage() {
     fetchData()
   }
 
-  // 교재 완전 삭제 (완료/중단 교재만)
+  // 교재 완전 삭제 - 원장님(관리자)만 가능. 강사는 삭제 자체가 안 되고 삭제요청만 할 수 있음
   async function handleDeleteTB(id: string) {
+    if (!isAdmin()) { alert('교재 삭제는 원장님만 하실 수 있어요. 잘못 입력했다면 "삭제요청"을 눌러주세요.'); return }
     if (!confirm('이 교재 기록을 완전히 삭제할까요? 되돌릴 수 없어요.')) return
     await supabase.from('student_textbooks').delete().eq('id', id)
+    fetchData()
+  }
+
+  // 강사가 잘못 입력한 교재를 발견했을 때 - 직접 지우지 못하고 원장님께 삭제요청만 남김
+  async function handleRequestDeleteTB(id: string) {
+    if (!confirm('이 교재 삭제를 원장님께 요청할까요?')) return
+    await supabase.from('student_textbooks')
+      .update({ delete_requested_by: currentUser?.name ?? '강사', delete_requested_at: new Date().toISOString() })
+      .eq('id', id)
+    fetchData()
+  }
+
+  // 삭제요청 취소 (원장님이 확인해보니 삭제할 필요는 없었던 경우)
+  async function handleCancelDeleteRequest(id: string) {
+    if (!isAdmin()) return
+    await supabase.from('student_textbooks').update({ delete_requested_by: null, delete_requested_at: null }).eq('id', id)
     fetchData()
   }
 
@@ -364,6 +383,49 @@ export default function TeacherCurriculumPage() {
   async function handleTBSubmitted(id: string) {
     await supabase.from('student_textbooks').update({ status: 'submitted' }).eq('id', id)
     fetchData()
+  }
+
+  // 삭제 버튼 자리 - 원장님(관리자)에겐 실제 삭제 버튼을, 강사에겐 삭제요청 버튼을 보여준다.
+  // 이미 삭제요청이 들어온 교재는 누구에게나 "삭제요청됨" 배지가 보여서 원장님이 놓치지 않게 함
+  function renderDeleteControl(t: StudentTextbook) {
+    if (t.delete_requested_by) {
+      if (isAdmin()) {
+        return (
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ background: '#FEE2E2', color: '#991B1B' }}>
+              🗑 {t.delete_requested_by} 삭제요청
+            </span>
+            <button onClick={() => handleDeleteTB(t.id)}
+              className="text-[10px] text-red-500 hover:text-red-700 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">
+              삭제
+            </button>
+            <button onClick={() => handleCancelDeleteRequest(t.id)}
+              className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-1">
+              취소
+            </button>
+          </div>
+        )
+      }
+      return (
+        <span className="text-[10px] font-semibold px-2 py-1 rounded-lg shrink-0" style={{ background: '#f3f4f6', color: '#9ca3af' }}>
+          삭제요청됨
+        </span>
+      )
+    }
+    if (isAdmin()) {
+      return (
+        <button onClick={() => handleDeleteTB(t.id)}
+          className="text-[10px] text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-all shrink-0">
+          삭제
+        </button>
+      )
+    }
+    return (
+      <button onClick={() => handleRequestDeleteTB(t.id)}
+        className="text-[10px] text-orange-500 hover:text-orange-700 px-2 py-1 rounded-lg hover:bg-orange-50 transition-all shrink-0">
+        삭제요청
+      </button>
+    )
   }
 
   return (
@@ -528,13 +590,6 @@ export default function TeacherCurriculumPage() {
               return { bg: 'bg-blue-100', text: 'text-blue-700', label: `${count}회독` }
             }
 
-            // 이 학년+학기에서 가장 먼저 배정된 교재가 개념서가 아니면(유형서부터 시작 등),
-            // 그 앞 회차는 우리 기록엔 없지만 타학원 등에서 이미 마친 것으로 간주하고 회차를 밀어서 계산한다 - 그 안내용
-            const semesterTextbooksForLevel: TextbookForLevel[] = textbooks.filter((t) =>
-              t.student_id === selectedProgressStudent.id && t.grade === gradeLabel && t.semester === progressSemester && t.textbook_type !== '연산서'
-            )
-            const externalRounds = getExternalCompletedRounds(semesterTextbooksForLevel)
-
             if (!gradeLabel) {
               return (
                 <div className="space-y-3">
@@ -597,18 +652,8 @@ export default function TeacherCurriculumPage() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-2">회차는 배정한 교재 순서대로 계속 올라가요 (3회독이 끝이 아니에요 · 개념서를 두 권 나갔으면 2권째는 2회독)</p>
+                  <p className="text-[10px] text-gray-400 mt-2">회차는 스터디체크에 기록된 순서대로 매겨져요 (3회독이 끝이 아니에요 · 교재를 여러 권 배정했으면 배정한 순서대로 계속 올라가요)</p>
                 </div>
-
-                {/* 타학원완료 안내 - 이 학년/학기의 첫 교재가 개념서가 아니면(유형서부터 시작 등) 그 앞 회차는 우리 기록엔 없어도 이미 마친 것으로 처리 */}
-                {externalRounds > 0 && (
-                  <div className="rounded-xl px-3 py-2.5" style={{ background: '#EFF6FF', border: '1px solid #DBEAFE' }}>
-                    <p className="text-[11px]" style={{ color: '#1D4ED8', lineHeight: 1.6 }}>
-                      ℹ️ {gradeLabel} {progressSemester}학기는 1~{externalRounds}회차가 <b>타학원완료</b>로 처리돼요.
-                      스터디체크엔 그 단계 교재 기록이 없지만, 그보다 높은 단계 교재부터 나가고 있어서 이미 마친 것으로 간주했어요.
-                    </p>
-                  </div>
-                )}
 
                 {/* 연산서 진도 (별도 % 5단계) */}
                 {(() => {
@@ -825,6 +870,7 @@ export default function TeacherCurriculumPage() {
                             style={{ background: '#FAEEDA', color: '#633806' }}>
                             중단
                           </button>
+                          {renderDeleteControl(t)}
                         </div>
                       ))}
                       {/* 중단 교재 */}
@@ -842,10 +888,7 @@ export default function TeacherCurriculumPage() {
                             style={{ background: '#9FE1CB', color: '#085041' }}>
                             재개
                           </button>
-                          <button onClick={() => handleDeleteTB(t.id)}
-                            className="text-[10px] text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-all shrink-0">
-                            삭제
-                          </button>
+                          {renderDeleteControl(t)}
                         </div>
                       ))}
                       {/* 완료 교재 */}
@@ -858,10 +901,7 @@ export default function TeacherCurriculumPage() {
                             <span className="text-xs font-bold text-gray-600">{t.textbook_type}</span>
                             <span className="text-xs text-gray-400 ml-1.5">{t.textbook_name}</span>
                           </div>
-                          <button onClick={() => handleDeleteTB(t.id)}
-                            className="text-[10px] text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-all shrink-0">
-                            삭제
-                          </button>
+                          {renderDeleteControl(t)}
                         </div>
                       ))}
                       {/* 시험대비 교재 (시험배정 자동 연동, 시험일 1주일 후 자동 사라짐) */}

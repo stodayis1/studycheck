@@ -564,6 +564,9 @@ export default function ParentDashboardPage() {
                       <div>
                         <p className="font-bold" style={{ color: '#993C1D' }}>{type}</p>
                         <p className="mt-0.5 text-[11px] text-gray-600">{tb.textbook_name}</p>
+                        {tb.grade && (
+                          <p className="mt-0.5 text-[10px] text-gray-400">{tb.grade} {tb.semester ? `${tb.semester}학기` : ''}</p>
+                        )}
                       </div>
                       {isCalc && (
                         <span className="text-sm font-bold" style={{ color: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }}>{pct}%</span>
