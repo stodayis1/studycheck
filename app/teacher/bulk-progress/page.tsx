@@ -40,6 +40,10 @@ interface ProgressCheck {
   student_textbook_id?: string | null
 }
 
+// 개념서 진행 중=1회독, 유형서 진행 중=2회독, 심화서 진행 중=3회독 (과정관리 진도표와 동일한 기준)
+// 예전엔 여기서 무조건 1로만 저장해서, 유형서/심화서를 체크해도 진도표엔 1회차로만 보이던 문제가 있었음
+const TEXTBOOK_TYPE_LEVEL: Record<string, number> = { '개념서': 1, '유형서': 2, '심화서': 3 }
+
 export default function BulkProgressPage() {
   const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
@@ -121,6 +125,7 @@ export default function BulkProgressPage() {
 
   async function toggleConcept(concept: Concept) {
     if (!selectedStudent || !selectedTextbook) return
+    const level = TEXTBOOK_TYPE_LEVEL[selectedTextbook.textbook_type] ?? 1
     const entry = getCheckEntry(concept.id)
     const isDone = (entry?.check_count ?? 0) >= 1
     if (isDone) {
@@ -133,12 +138,12 @@ export default function BulkProgressPage() {
     } else {
       const existingForThisTB = progressChecks.find(p => p.concept_id === concept.id && p.student_textbook_id === selectedTextbook.id)
       if (existingForThisTB) {
-        const { error } = await supabase.from('progress_checks').update({ check_count: 1 }).eq('id', existingForThisTB.id)
+        const { error } = await supabase.from('progress_checks').update({ check_count: level }).eq('id', existingForThisTB.id)
         if (error) { showToast('저장 실패: ' + error.message); return }
-        setProgressChecks(prev => prev.map(p => p.id === existingForThisTB.id ? { ...p, check_count: 1 } : p))
+        setProgressChecks(prev => prev.map(p => p.id === existingForThisTB.id ? { ...p, check_count: level } : p))
       } else {
         const { data, error } = await supabase.from('progress_checks')
-          .insert({ student_id: selectedStudent.id, concept_id: concept.id, check_count: 1, student_textbook_id: selectedTextbook.id })
+          .insert({ student_id: selectedStudent.id, concept_id: concept.id, check_count: level, student_textbook_id: selectedTextbook.id })
           .select('id, concept_id, check_count, student_textbook_id').single()
         if (error) { showToast('저장 실패: ' + error.message); return }
         if (data) setProgressChecks(prev => [...prev, data])
@@ -149,6 +154,7 @@ export default function BulkProgressPage() {
 
   async function toggleChapter(chapter: string) {
     if (!selectedStudent || !selectedTextbook) return
+    const level = TEXTBOOK_TYPE_LEVEL[selectedTextbook.textbook_type] ?? 1
     const chapterConcepts = concepts.filter(c => c.chapter === chapter)
     const allDone = chapterConcepts.every(c => getCheckCount(c.id) >= 1)
     setSaving(true)
@@ -172,20 +178,20 @@ export default function BulkProgressPage() {
 
       if (toUpdate.length > 0) {
         const { error } = await supabase.from('progress_checks')
-          .update({ check_count: 1 }).in('id', toUpdate.map(x => x.existing!.id))
+          .update({ check_count: level }).in('id', toUpdate.map(x => x.existing!.id))
         if (error) { showToast('저장 실패: ' + error.message); setSaving(false); return }
       }
       let inserted: ProgressCheck[] = []
       if (toInsert.length > 0) {
         const { data, error } = await supabase.from('progress_checks')
-          .insert(toInsert.map(c => ({ student_id: selectedStudent.id, concept_id: c.id, check_count: 1, student_textbook_id: selectedTextbook.id })))
+          .insert(toInsert.map(c => ({ student_id: selectedStudent.id, concept_id: c.id, check_count: level, student_textbook_id: selectedTextbook.id })))
           .select('id, concept_id, check_count, student_textbook_id')
         if (error) { showToast('저장 실패: ' + error.message); setSaving(false); return }
         inserted = data ?? []
       }
       setProgressChecks(prev => {
         const updatedIds = new Set(toUpdate.map(x => x.existing!.id))
-        const withUpdates = prev.map(p => updatedIds.has(p.id) ? { ...p, check_count: 1 } : p)
+        const withUpdates = prev.map(p => updatedIds.has(p.id) ? { ...p, check_count: level } : p)
         return [...withUpdates, ...inserted]
       })
       showToast(`✅ "${chapter}" 전체 완료`)
