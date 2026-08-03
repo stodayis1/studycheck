@@ -707,6 +707,8 @@ export default function TeacherLearningNotesPage() {
       return
     }
 
+    if (isAbsent) await ensureAbsentFeedback(noteStudent.id, noteStudent.name)
+
     fetchData()
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
     // 화면이 그대로라 저장이 됐는지 안 됐는지 헷갈릴 수 있어 잠깐 확인 표시를 보여줌
@@ -718,6 +720,28 @@ export default function TeacherLearningNotesPage() {
     } finally {
       setSavingNote(false)
     }
+  }
+
+  // 결석 처리 시 알림장(학부모 공유)도 자동으로 하나 남겨준다.
+  // 결석이면 진도/과제 항목이 다 비활성화돼서 학습일지는 채워지는데, 알림장은 원래 별도로
+  // 손으로 써야 하다 보니 아무도 안 써서 강사대시보드 "학부모 공유 대기"에 결석한 학생이 계속 미기록으로 남아있었음.
+  // 오늘 이미 알림장을 썼으면(직접 작성 포함) 중복으로 또 만들지 않음.
+  async function ensureAbsentFeedback(studentId: string, studentName: string) {
+    const todayStart = todayStr + 'T00:00:00'
+    const todayEnd = todayStr + 'T23:59:59'
+    const { data: existing } = await supabase.from('feedbacks')
+      .select('id')
+      .eq('student_id', studentId)
+      .gte('created_at', todayStart)
+      .lte('created_at', todayEnd)
+      .limit(1)
+    if (existing && existing.length > 0) return
+    await supabase.from('feedbacks').insert({
+      student_id: studentId,
+      teacher_name: currentUser?.name,
+      content: `오늘 ${studentName} 학생은 결석했습니다.`,
+      is_read: false,
+    })
   }
 
   // 결석 한번에 처리 (전체 입력폼 없이 바로 기록) - 미입력과 결석을 구분하기 위함
@@ -755,6 +779,7 @@ export default function TeacherLearningNotesPage() {
       alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
       return
     }
+    await ensureAbsentFeedback(student.id, student.name)
     fetchData()
   }
 
