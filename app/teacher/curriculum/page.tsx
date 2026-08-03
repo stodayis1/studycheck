@@ -533,8 +533,16 @@ export default function TeacherCurriculumPage() {
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
             </div>
-          ) : !selectedProgressStudent ? (
+          ) : !selectedProgressStudent ? (() => {
             // 학생 선택 화면
+            // 학년별 탭이 선택돼 있으면 그 학년을 실제로 나간 적 있는 학생만 남긴다.
+            // (전에는 목록은 그대로 두고 퍼센트만 다시 계산해서, 다른 학년 학생들까지 그대로 보여
+            //  "중3 탭인데 왜 전체가 다 보이냐"는 혼란이 있었음 - 목록 자체를 걸러줘야 함)
+            const gradeFilteredStudents = filteredStudents.filter((student) => {
+              if (!progressSubGrade) return true
+              return getStudentCurriculumGrades(student.id, student.grade).includes(progressSubGrade)
+            })
+            return (
             <div className="space-y-2">
               <p className="text-xs text-gray-400 px-1">진도를 확인할 학생을 선택하세요</p>
 
@@ -556,7 +564,7 @@ export default function TeacherCurriculumPage() {
                 </div>
               )}
 
-              {filteredStudents.map((student) => {
+              {gradeFilteredStudents.map((student) => {
                 // 실제 나가고 있는 커리큘럼 학년 전부(선행 포함) 기준으로 계산 - 재원학년 하나만 보면
                 // 초등학생인데 중등과정이 나오거나(잘못된 fallback), 고등부는 과목명이 안 맞아 늘 0%로 나오던 문제
                 const studentGrades = getStudentCurriculumGrades(student.id, student.grade)
@@ -592,14 +600,17 @@ export default function TeacherCurriculumPage() {
                   </button>
                 )
               })}
-              {filteredStudents.length === 0 && (
+              {gradeFilteredStudents.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
                   <p className="text-3xl mb-3">📊</p>
-                  <p className="text-sm text-gray-500">학생이 없어요</p>
+                  <p className="text-sm text-gray-500">
+                    {progressSubGrade ? `${progressSubGrade} 과정을 나간 학생이 없어요` : '학생이 없어요'}
+                  </p>
                 </div>
               )}
             </div>
-          ) : (() => {
+            )
+          })() : (() => {
             // 진도표 상세 화면
             // 선행 등으로 실제 재원 학년과 다른 학기 교재를 나가는 경우가 많아서,
             // 이 학생이 실제로 나간 적 있는 커리큘럼 학년들 중에서 고를 수 있게 함
