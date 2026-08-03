@@ -8,6 +8,14 @@ import Link from 'next/link'
 
 const DAYS = ['일','월','화','수','목','금','토']
 
+interface Announcement {
+  id: string
+  title: string
+  content: string
+  ends_at: string | null
+  created_at: string
+}
+
 export default function TeacherDashboardPage() {
   const { currentUser, isAdmin } = useAuth()
   const [stats, setStats] = useState({
@@ -17,8 +25,21 @@ export default function TeacherDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [bulkProgressEnabled, setBulkProgressEnabled] = useState(false)
   const [togglingBulk, setTogglingBulk] = useState(false)
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
 
-  useEffect(() => { if (currentUser) { fetchStats(); fetchBulkSetting() } }, [currentUser])
+  useEffect(() => { if (currentUser) { fetchStats(); fetchBulkSetting(); fetchAnnouncements() } }, [currentUser])
+
+  // 원장님이 올린 공지 중 지금 표시 대상인 것만 (종료일 지난 건 자동으로 제외)
+  async function fetchAnnouncements() {
+    const nowIso = new Date().toISOString()
+    const { data } = await supabase.from('announcements')
+      .select('id, title, content, ends_at, created_at')
+      .eq('is_active', true)
+      .or(`ends_at.is.null,ends_at.gte.${nowIso}`)
+      .order('created_at', { ascending: false })
+      .limit(3)
+    if (data) setAnnouncements(data)
+  }
 
   async function fetchBulkSetting() {
     const { data } = await supabase.from('app_settings').select('value').eq('key', 'bulk_progress_enabled').single()
@@ -123,6 +144,29 @@ export default function TeacherDashboardPage() {
         subtitle={isAdmin() ? '관리자 대시보드' : '수업일지 · 진도관리'} />
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
+
+        {/* 공지사항 - 원장님이 올린 학원 공지 (강사는 읽기 전용, 관리는 공지사항 메뉴에서) */}
+        {announcements.length > 0 && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F5C4B3', background: '#FFF5F2' }}>
+            <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: '#F5C4B3' }}>
+              <div className="flex items-center gap-1.5">
+                <i className="ti ti-speakerphone" style={{ fontSize: 14, color: '#712B13' }} />
+                <span className="text-xs font-bold" style={{ color: '#712B13' }}>공지사항</span>
+              </div>
+              <Link href="/teacher/announcements" className="text-[10px] font-semibold" style={{ color: '#712B13' }}>
+                전체보기 ›
+              </Link>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#F5C4B360' }}>
+              {announcements.map((a) => (
+                <Link key={a.id} href="/teacher/announcements" className="block px-4 py-2.5">
+                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.title}</p>
+                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{a.content}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 관리자 전용: 진도 일괄입력 토글 */}
         {isAdmin() && (

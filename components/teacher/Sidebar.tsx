@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/teacher/work-status',    label: '업무현황',   icon: 'ti-briefcase' },
   { href: '/teacher/exam-prep',      label: '시험배정',   icon: 'ti-clipboard-list' },
   { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
+  { href: '/teacher/announcements',  label: '공지사항',   icon: 'ti-speakerphone' },
 ]
 
 const BULK_ITEM = { href: '/teacher/bulk-progress', label: '진도일괄입력', icon: 'ti-list-check' }

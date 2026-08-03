@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
@@ -88,6 +89,13 @@ interface StudentTextbook {
   status: string
 }
 
+interface Announcement {
+  id: string
+  title: string
+  content: string
+  created_at: string
+}
+
 const DAYS = ['일','월','화','수','목','금','토']
 
 function ProgressBar({ rate, color, height = 'h-2' }: { rate: number; color: string; height?: string }) {
@@ -114,6 +122,7 @@ export default function ParentDashboardPage() {
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week')
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
 
   useEffect(() => {
     async function init() {
@@ -126,7 +135,8 @@ export default function ParentDashboardPage() {
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
 
-        const [{ data: scData }, { data: ssData }, { data: nData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }] = await Promise.all([
+        const nowIso = new Date().toISOString()
+        const [{ data: scData }, { data: ssData }, { data: nData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }, { data: anData }] = await Promise.all([
           supabase.from('schedules').select('*').eq('student_id', session.id).eq('is_active', true),
           supabase.from('class_sessions').select('*').eq('student_id', session.id).order('session_date', { ascending: false }),
           supabase.from('learning_notes').select('*').eq('student_id', session.id),
@@ -135,6 +145,9 @@ export default function ParentDashboardPage() {
           supabase.from('concepts').select('*').order('concept_order'),
           supabase.from('progress_checks').select('*').eq('student_id', session.id),
           supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(20),
+          // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
+          supabase.from('announcements').select('id, title, content, created_at').eq('is_active', true)
+            .or(`ends_at.is.null,ends_at.gte.${nowIso}`).order('created_at', { ascending: false }),
         ])
         if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
         if (ssData) setSessions(ssData)
@@ -144,6 +157,7 @@ export default function ParentDashboardPage() {
         if (cData) setConcepts(cData)
         if (pcData) setProgressChecks(pcData)
         if (fbData) setFeedbacks(fbData)
+        if (anData) setAnnouncements(anData)
 
         // 시험대비 - NULL이거나 4주 이내 시험
         const maxDate = new Date(Date.now() + 35*86400000).toISOString().split('T')[0]
@@ -256,6 +270,27 @@ export default function ParentDashboardPage() {
         action={<button onClick={signOut} className="text-xs text-gray-400 hover:text-gray-600">로그아웃</button>} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
+
+        {/* 공지사항 배너 - 원장님이 올린 학원 공지 (시험/방학/휴강 등). 카톡채널 공지를 잘 안 보셔서 앱 상단에 노출 */}
+        {announcements.length > 0 && (
+          <Link href="/parent/announcements"
+            className="block rounded-2xl p-4"
+            style={{ background: '#F5C4B3' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-base shrink-0">📢</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{announcements[0].title}</p>
+                <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{announcements[0].content}</p>
+              </div>
+              {announcements.length > 1 && (
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full shrink-0" style={{ background: '#712B13', color: 'white' }}>
+                  +{announcements.length - 1}
+                </span>
+              )}
+              <span className="text-sm shrink-0" style={{ color: '#712B13' }}>›</span>
+            </div>
+          </Link>
+        )}
 
         {/* 프로필 카드 */}
         <div className="rounded-2xl p-4 flex items-center gap-4" style={{ background: '#FAECE7' }}>
