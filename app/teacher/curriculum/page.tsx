@@ -535,12 +535,18 @@ export default function TeacherCurriculumPage() {
             </div>
           ) : !selectedProgressStudent ? (() => {
             // 학생 선택 화면
-            // 학년별 탭이 선택돼 있으면 그 학년을 실제로 나간 적 있는 학생만 남긴다.
-            // (전에는 목록은 그대로 두고 퍼센트만 다시 계산해서, 다른 학년 학생들까지 그대로 보여
-            //  "중3 탭인데 왜 전체가 다 보이냐"는 혼란이 있었음 - 목록 자체를 걸러줘야 함)
+            // 학년별 탭이 선택돼 있으면 그 학년 재원 학생만 남긴다.
+            // (한 번은 "그 학년 내용을 조금이라도 나간 적 있는 학생"까지 포함했더니, 선행학습으로 다른 학년
+            //  교재를 배정받은 학생까지 같이 떠서 "중3 탭인데 왜 다른 학년도 보이냐"는 혼란이 있었음.
+            //  초등/중등은 재원학년 문자열이 concepts.grade와 그대로 같아서(초4·중3 등) 재원학년으로 딱 걸러도 됨)
+            // 고등부는 재원학년("고1" 등)이 과목명(공통수학1 등)과 달라서 재원학년으로는 못 거르고,
+            // 그 과목을 실제로 나간 적 있는 학생인지로 판단한다 (기존 방식 유지)
             const gradeFilteredStudents = filteredStudents.filter((student) => {
               if (!progressSubGrade) return true
-              return getStudentCurriculumGrades(student.id, student.grade).includes(progressSubGrade)
+              if (gradeGroup === '고등') {
+                return getStudentCurriculumGrades(student.id, student.grade).includes(progressSubGrade)
+              }
+              return student.grade === progressSubGrade
             })
             return (
             <div className="space-y-2">
