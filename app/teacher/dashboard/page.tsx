@@ -70,15 +70,23 @@ export default function TeacherDashboardPage() {
     const mySessions = (sessions ?? []).filter((s: any) => myIds.has(s.student_id))
     const sessionIds = mySessions.map((s: any) => s.id)
     let unwrittenNotes = 0
+    let todayNotes: { session_id: string; attendance: string }[] = []
     if (sessionIds.length > 0) {
-      const { data: notes } = await supabase.from('learning_notes').select('session_id').in('session_id', sessionIds)
-      const written = new Set((notes ?? []).map((n: any) => n.session_id))
+      const { data: notes } = await supabase.from('learning_notes').select('session_id, attendance').in('session_id', sessionIds)
+      todayNotes = notes ?? []
+      const written = new Set(todayNotes.map((n) => n.session_id))
       unwrittenNotes = sessionIds.filter((id: string) => !written.has(id)).length
     }
     const { data: wsData } = await supabase.from('student_worksheets').select('student_id, status').in('status', ['submitted', 'similar_submitted'])
     const pendingScore = (wsData ?? []).filter((w: any) => myIds.has(w.student_id)).length
+    // 결석 학생은 진도/과제처럼 학부모에게 공유할 내용 자체가 없어서 "학부모 공유 대기"에서 제외한다.
+    // (예전엔 결석 처리 시 "OO 학생은 결석했습니다" 알림장을 자동으로 만들어서 대기에서 빠지게 했었는데,
+    //  원장님이 결석한 학생에게 굳이 알림장을 남길 필요 없다고 하셔서 자동생성 대신 아예 대기 계산에서 빼는 방식으로 변경함)
+    const absentSessionIds = new Set(todayNotes.filter((n) => n.attendance === '결석').map((n) => n.session_id))
+    const absentStudentIds = new Set(mySessions.filter((s: any) => absentSessionIds.has(s.id)).map((s: any) => s.student_id))
     let pendingShare = 0
     const myTodayStudentIds = Array.from(new Set(mySessions.map((s: any) => s.student_id)))
+      .filter((sid: string) => !absentStudentIds.has(sid))
     if (myTodayStudentIds.length > 0) {
       const todayStart = todayStr + 'T00:00:00'
       const todayEnd = todayStr + 'T23:59:59'
