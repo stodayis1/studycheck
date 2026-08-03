@@ -270,8 +270,10 @@ export default function TeacherCurriculumPage() {
   // 학생 선택 화면(진도표 목록)에서 특정 학년 범위(targetGrades)만 놓고 진행률/회독수를 계산.
   // 학년별 탭 선택 시 그 학년 하나만, "전체" 선택 시 학생이 나간 모든 학년을 합쳐서 계산한다.
   // (모든 학년을 합쳐서 보면 진도가 덜 끝난 것처럼 보이는 문제가 있어서 학년별 탭을 추가함)
-  function computeStudentGradeProgress(studentId: string, targetGrades: string[]): { rate: number; round: number } {
-    const targetConcepts = concepts.filter((c) => targetGrades.includes(c.grade))
+  // semester를 넘기면 그 학기만 계산 - 회독수는 학기별로 따로 세는 게 맞다고 확인됨(학기1에서 2권 끝냈어도
+  // 학기2에서 1권만 끝났으면 학기2는 1회독이 맞음). 목록에서 학기를 합쳐서 보여주면 헷갈려서 학기별로 쪼개 보여줌
+  function computeStudentGradeProgress(studentId: string, targetGrades: string[], semester?: number): { rate: number; round: number } {
+    const targetConcepts = concepts.filter((c) => targetGrades.includes(c.grade) && (semester == null || c.semester === semester))
     if (targetConcepts.length === 0) return { rate: 0, round: 0 }
     const maxByConcept = new Map<string, number>()
     for (const p of progressChecks) {
@@ -576,10 +578,16 @@ export default function TeacherCurriculumPage() {
                 const studentGrades = getStudentCurriculumGrades(student.id, student.grade)
                 // 학년별 탭이 선택돼 있으면 그 학년만, 아니면(전체) 학생이 나간 모든 학년을 합쳐서 계산
                 const targetGrades = progressSubGrade ? [progressSubGrade] : studentGrades
-                const { rate: totalRate, round } = computeStudentGradeProgress(student.id, targetGrades)
+                // 회독수는 학기별로 따로 세는 게 맞아서(학기1에서 2권 끝냈어도 학기2에서 1권만 끝났으면 학기2는 1회독),
+                // 초등/중등 학년별 탭에서는 학기를 합치지 않고 1학기/2학기를 따로 보여준다.
+                // 고등은 과목 하나가 곧 한 학기 분량이라(학기 구분 자체가 없음) 나눌 필요 없이 기존처럼 하나로 표시
+                const showSemesterSplit = !!progressSubGrade && gradeGroup !== '고등'
+                const blended = computeStudentGradeProgress(student.id, targetGrades)
+                const sem1 = showSemesterSplit ? computeStudentGradeProgress(student.id, targetGrades, 1) : null
+                const sem2 = showSemesterSplit ? computeStudentGradeProgress(student.id, targetGrades, 2) : null
                 // 학년별 탭에서만 회차 기준 색상(1회독 파랑/2회독 초록/3회독 빨강/4회독+ 보라) 적용.
                 // 전체(블렌디드) 보기는 여러 학년의 회차가 섞여있어 하나의 회차색으로 표현하기 애매해서 기존 파란색 유지
-                const barColor = progressSubGrade ? getRoundColorHex(round) : '#3b82f6'
+                const barColor = progressSubGrade ? getRoundColorHex(blended.round) : '#3b82f6'
                 return (
                   <button key={student.id} onClick={() => { setSelectedProgressStudent(student); setProgressGrade(progressSubGrade) }}
                     className="w-full bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 hover:border-blue-200 transition-all text-left">
@@ -589,18 +597,41 @@ export default function TeacherCurriculumPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-900">{student.name}</p>
                       <p className="text-xs text-gray-400">{student.grade} · {student.teacher_name}</p>
-                      {/* 진도율 바 */}
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full transition-all" style={{ width: `${totalRate}%`, background: barColor }} />
+                      {showSemesterSplit ? (
+                        // 학기별로 따로 표시 (합치면 "3회독 했는데 왜 2회독으로 뜨냐"는 혼란이 생겨서 분리함)
+                        <div className="mt-1.5 space-y-1">
+                          {[{ label: '1학기', data: sem1! }, { label: '2학기', data: sem2! }].map(({ label, data }) => {
+                            const semColor = getRoundColorHex(data.round)
+                            return (
+                              <div key={label} className="flex items-center gap-1.5">
+                                <span className="text-[9px] font-semibold text-gray-400 w-8 shrink-0">{label}</span>
+                                <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                                  <div className="h-1.5 rounded-full transition-all" style={{ width: `${data.rate}%`, background: semColor }} />
+                                </div>
+                                <span className="text-[10px] font-bold text-gray-800 shrink-0 w-8 text-right">{data.rate}%</span>
+                                {data.round > 0 && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: semColor + '22', color: semColor }}>
+                                    {data.round}회독
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
-                        <span className="text-[10px] font-bold text-gray-800 shrink-0">{totalRate}%</span>
-                        {progressSubGrade && round > 0 && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: barColor + '22', color: barColor }}>
-                            {round}회독
-                          </span>
-                        )}
-                      </div>
+                      ) : (
+                        /* 진도율 바 (전체/고등 - 학기 구분 없이 하나로) */
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full transition-all" style={{ width: `${blended.rate}%`, background: barColor }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-gray-800 shrink-0">{blended.rate}%</span>
+                          {progressSubGrade && blended.round > 0 && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: barColor + '22', color: barColor }}>
+                              {blended.round}회독
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <span className="text-gray-300 text-lg">›</span>
                   </button>
