@@ -72,6 +72,32 @@ interface TextbookCatalog {
 const GRADE_GROUPS = ['전체', '초등', '중등', '고등']
 const HIGH_SUBJECTS = ['공통수학1', '공통수학2', '미적분1', '확률과통계', '대수', '기하']
 const TB_TYPES = ['개념서', '유형서', '심화서', '연산서']
+// 초등/중등/고등 대분류 안에서 학년별로 나눠 볼 수 있게 하는 학년 목록 (진도표 학년별 탭용)
+const SUB_GRADE_OPTIONS: Record<string, string[]> = {
+  '초등': ['초1', '초2', '초3', '초4', '초5', '초6'],
+  '중등': ['중1', '중2', '중3'],
+  '고등': HIGH_SUBJECTS,
+}
+
+// 회독수 색상 규칙 (원장님 요청): 1회독=파랑, 2회독=초록, 3회독=빨강, 4회독 이상=보라
+const ROUND_COLOR_HEX: Record<number, string> = { 1: '#3b82f6', 2: '#22c55e', 3: '#ef4444' }
+const ROUND_COLOR_HEX_OVERFLOW = '#a855f5' // 4회독 이상
+function getRoundColorHex(round: number): string {
+  if (round <= 0) return '#d1d5db'
+  return ROUND_COLOR_HEX[round] ?? ROUND_COLOR_HEX_OVERFLOW
+}
+const ROUND_COLOR_CLASSES: Record<number, { bg: string; text: string }> = {
+  1: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  2: { bg: 'bg-green-100', text: 'text-green-700' },
+  3: { bg: 'bg-red-100', text: 'text-red-700' },
+}
+function getRoundColorClasses(round: number): { bg: string; text: string } {
+  if (round <= 0) return { bg: 'bg-gray-100', text: 'text-gray-400' }
+  return ROUND_COLOR_CLASSES[round] ?? { bg: 'bg-purple-100', text: 'text-purple-700' }
+}
+function getRoundLabel(round: number): string {
+  return round <= 0 ? '미진도' : `${round}회독`
+}
 
 export default function TeacherCurriculumPage() {
   const { currentUser, isAdmin } = useAuth()
@@ -89,6 +115,7 @@ export default function TeacherCurriculumPage() {
   const [selectedProgressStudent, setSelectedProgressStudent] = useState<Student | null>(null)
   const [progressSemester, setProgressSemester] = useState(1)
   const [progressGrade, setProgressGrade] = useState<string | null>(null) // null이면 학생 본인 학년을 기본값으로 사용 (선행 등으로 다른 학년 진도표도 볼 수 있게)
+  const [progressSubGrade, setProgressSubGrade] = useState<string | null>(null) // 학생 선택 화면에서 초등/중등/고등 안의 특정 학년만 볼 때 사용 (null이면 대분류 전체 블렌디드)
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [updatingProgress, setUpdatingProgress] = useState<string | null>(null)
 
@@ -238,6 +265,24 @@ export default function TeacherCurriculumPage() {
     const own = normalizeToConceptGrade(studentOwnGrade)
     return Array.from(new Set([...(own ? [own] : []), ...fromTextbooks]))
       .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
+  }
+
+  // 학생 선택 화면(진도표 목록)에서 특정 학년 범위(targetGrades)만 놓고 진행률/회독수를 계산.
+  // 학년별 탭 선택 시 그 학년 하나만, "전체" 선택 시 학생이 나간 모든 학년을 합쳐서 계산한다.
+  // (모든 학년을 합쳐서 보면 진도가 덜 끝난 것처럼 보이는 문제가 있어서 학년별 탭을 추가함)
+  function computeStudentGradeProgress(studentId: string, targetGrades: string[]): { rate: number; round: number } {
+    const targetConcepts = concepts.filter((c) => targetGrades.includes(c.grade))
+    if (targetConcepts.length === 0) return { rate: 0, round: 0 }
+    const maxByConcept = new Map<string, number>()
+    for (const p of progressChecks) {
+      if (p.student_id !== studentId) continue
+      const cur = maxByConcept.get(p.concept_id) ?? 0
+      if (p.check_count > cur) maxByConcept.set(p.concept_id, p.check_count)
+    }
+    const checked = targetConcepts.filter((c) => (maxByConcept.get(c.id) ?? 0) >= 1)
+    const rate = Math.round(checked.length / targetConcepts.length * 100)
+    const round = checked.reduce((max, c) => Math.max(max, maxByConcept.get(c.id) ?? 0), 0)
+    return { rate, round }
   }
 
   async function handleTBAssign() {
@@ -470,7 +515,7 @@ export default function TeacherCurriculumPage() {
         {/* 공통 검색/필터 */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {GRADE_GROUPS.map((g) => (
-            <button key={g} onClick={() => setGradeGroup(g)}
+            <button key={g} onClick={() => { setGradeGroup(g); setProgressSubGrade(null) }}
               className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold border whitespace-nowrap transition-all',
                 gradeGroup === g ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200')}>
               {g}
@@ -492,23 +537,37 @@ export default function TeacherCurriculumPage() {
             // 학생 선택 화면
             <div className="space-y-2">
               <p className="text-xs text-gray-400 px-1">진도를 확인할 학생을 선택하세요</p>
+
+              {/* 학년별 탭 - 초등/중등/고등 안에서 학년 하나만 골라 볼 수 있게 (전체로 합쳐보면 진도가 덜 끝난 것처럼 보이는 문제 개선) */}
+              {gradeGroup !== '전체' && (
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <button onClick={() => setProgressSubGrade(null)}
+                    className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap transition-all',
+                      progressSubGrade === null ? 'bg-[#0f3460] text-white border-[#0f3460]' : 'bg-white text-gray-500 border-gray-200')}>
+                    전체
+                  </button>
+                  {(SUB_GRADE_OPTIONS[gradeGroup] ?? []).map((g) => (
+                    <button key={g} onClick={() => setProgressSubGrade(g)}
+                      className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap transition-all',
+                        progressSubGrade === g ? 'bg-[#0f3460] text-white border-[#0f3460]' : 'bg-white text-gray-500 border-gray-200')}>
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {filteredStudents.map((student) => {
                 // 실제 나가고 있는 커리큘럼 학년 전부(선행 포함) 기준으로 계산 - 재원학년 하나만 보면
                 // 초등학생인데 중등과정이 나오거나(잘못된 fallback), 고등부는 과목명이 안 맞아 늘 0%로 나오던 문제
                 const studentGrades = getStudentCurriculumGrades(student.id, student.grade)
-                const studentConcepts = concepts.filter((c) => studentGrades.includes(c.grade))
-                // 학습일지/일괄진도체크에서 찍는 체크는 교재(student_textbook_id)에 묶여서 저장되는 경우가 대부분이라
-                // 여기서도 스코프 상관없이 전부 봐야 한다 (안 그러면 분명 체크했는데 진도표엔 0%로 보이는 문제 발생)
-                const checkedConceptIds = new Set(
-                  progressChecks
-                    .filter((p) => p.student_id === student.id && p.check_count >= 1)
-                    .map((p) => p.concept_id)
-                )
-                const studentChecks = studentConcepts.filter((c) => checkedConceptIds.has(c.id))
-                const totalRate = studentConcepts.length > 0
-                  ? Math.round(studentChecks.length / studentConcepts.length * 100) : 0
+                // 학년별 탭이 선택돼 있으면 그 학년만, 아니면(전체) 학생이 나간 모든 학년을 합쳐서 계산
+                const targetGrades = progressSubGrade ? [progressSubGrade] : studentGrades
+                const { rate: totalRate, round } = computeStudentGradeProgress(student.id, targetGrades)
+                // 학년별 탭에서만 회차 기준 색상(1회독 파랑/2회독 초록/3회독 빨강/4회독+ 보라) 적용.
+                // 전체(블렌디드) 보기는 여러 학년의 회차가 섞여있어 하나의 회차색으로 표현하기 애매해서 기존 파란색 유지
+                const barColor = progressSubGrade ? getRoundColorHex(round) : '#3b82f6'
                 return (
-                  <button key={student.id} onClick={() => { setSelectedProgressStudent(student); setProgressGrade(null) }}
+                  <button key={student.id} onClick={() => { setSelectedProgressStudent(student); setProgressGrade(progressSubGrade) }}
                     className="w-full bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 hover:border-blue-200 transition-all text-left">
                     <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                       {student.name[0]}
@@ -519,9 +578,14 @@ export default function TeacherCurriculumPage() {
                       {/* 진도율 바 */}
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${totalRate}%` }} />
+                          <div className="h-1.5 rounded-full transition-all" style={{ width: `${totalRate}%`, background: barColor }} />
                         </div>
                         <span className="text-[10px] font-bold text-gray-800 shrink-0">{totalRate}%</span>
+                        {progressSubGrade && round > 0 && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: barColor + '22', color: barColor }}>
+                            {round}회독
+                          </span>
+                        )}
                       </div>
                     </div>
                     <span className="text-gray-300 text-lg">›</span>
@@ -558,36 +622,20 @@ export default function TeacherCurriculumPage() {
 
             // 학습일지/일괄진도체크에서 찍는 체크는 대부분 교재(student_textbook_id)에 묶여서 저장되므로
             // 스코프 상관없이 전부 모아서, 같은 개념이 여러 교재에서 체크됐으면 가장 높이 나간 회차를 기준으로 삼는다.
-            // 그 회차를 만든 진짜 교재 종류(개념서/유형서/심화서)도 같이 기억해둔다 - 회차 숫자만으로
-            // 개념/유형/심화를 고정해서 라벨링하면(예전 방식) 회차가 4·5회독까지 늘어나거나 같은 회차라도
-            // 학생마다 실제 교재 종류가 다를 때 라벨이 틀리게 나올 수 있어서다.
             const checkCountByConcept = new Map<string, number>()
-            const checkRowByConcept = new Map<string, ProgressCheck>()
             for (const p of progressChecks) {
               if (p.student_id !== selectedProgressStudent.id) continue
               const cur = checkCountByConcept.get(p.concept_id) ?? 0
-              if (p.check_count > cur) {
-                checkCountByConcept.set(p.concept_id, p.check_count)
-                checkRowByConcept.set(p.concept_id, p)
-              }
+              if (p.check_count > cur) checkCountByConcept.set(p.concept_id, p.check_count)
             }
             const checkedCount = semesterConcepts.filter((c) => (checkCountByConcept.get(c.id) ?? 0) >= 1).length
             const totalRate = semesterConcepts.length > 0
               ? Math.round(checkedCount / semesterConcepts.length * 100) : 0
 
-            const textbookById = new Map(textbooks.map((t) => [t.id, t]))
-            const TYPE_STYLE: Record<string, { bg: string; text: string }> = {
-              '개념서': { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-              '유형서': { bg: 'bg-green-100', text: 'text-green-700' },
-              '심화서': { bg: 'bg-orange-100', text: 'text-orange-700' },
-            }
-            // 회독수는 상한이 없어서(3회독이 끝이 아님) 회차 숫자로 스타일을 고정하지 않고,
-            // 그 회차를 기록한 실제 교재 종류를 찾아서 색/라벨을 매긴다. 교재 종류를 알 수 없으면(수동 체크 등) 파란색 "n회독"으로 표시
-            function getConceptStyle(count: number, row: ProgressCheck | undefined) {
-              if (count <= 0) return { bg: 'bg-gray-100', text: 'text-gray-400', label: '미진도' }
-              const tbType = row?.student_textbook_id ? textbookById.get(row.student_textbook_id)?.textbook_type : undefined
-              if (tbType && TYPE_STYLE[tbType]) return { ...TYPE_STYLE[tbType], label: tbType }
-              return { bg: 'bg-blue-100', text: 'text-blue-700', label: `${count}회독` }
+            // 회차별 색상 (원장님 요청): 1회독=파랑, 2회독=초록, 3회독=빨강, 4회독 이상=보라
+            function getConceptStyle(count: number) {
+              const classes = getRoundColorClasses(count)
+              return { ...classes, label: getRoundLabel(count) }
             }
 
             if (!gradeLabel) {
@@ -643,14 +691,17 @@ export default function TeacherCurriculumPage() {
                     <div className="h-3 rounded-full transition-all duration-500"
                       style={{ width: `${totalRate}%`, background: totalRate >= 80 ? '#22c55e' : totalRate >= 50 ? '#3b82f6' : '#f59e0b' }} />
                   </div>
-                  {/* 범례 */}
+                  {/* 범례 - 회차별 색상 */}
                   <div className="flex gap-3 mt-3 flex-wrap">
-                    {(['개념서', '유형서', '심화서'] as const).map((t) => (
-                      <div key={t} className="flex items-center gap-1">
-                        <span className={cx('w-3 h-3 rounded-full', TYPE_STYLE[t].bg)} />
-                        <span className="text-[10px] text-gray-500">{t}</span>
-                      </div>
-                    ))}
+                    {[1, 2, 3, 4].map((r) => {
+                      const cls = getRoundColorClasses(r)
+                      return (
+                        <div key={r} className="flex items-center gap-1">
+                          <span className={cx('w-3 h-3 rounded-full', cls.bg)} />
+                          <span className="text-[10px] text-gray-500">{r >= 4 ? '4회독+' : `${r}회독`}</span>
+                        </div>
+                      )
+                    })}
                   </div>
                   <p className="text-[10px] text-gray-400 mt-2">회차는 스터디체크에 기록된 순서대로 매겨져요 (3회독이 끝이 아니에요 · 교재를 여러 권 배정했으면 배정한 순서대로 계속 올라가요)</p>
                 </div>
@@ -740,7 +791,7 @@ export default function TeacherCurriculumPage() {
                           <div className="divide-y divide-gray-50">
                             {subConcepts.map((concept) => {
                               const count = checkCountByConcept.get(concept.id) ?? 0
-                              const style = getConceptStyle(count, checkRowByConcept.get(concept.id))
+                              const style = getConceptStyle(count)
                               const isUpdating = updatingProgress === `${selectedProgressStudent.id}_${concept.id}`
                               const isResetting = updatingProgress === `reset_${selectedProgressStudent.id}_${concept.id}`
                               return (
