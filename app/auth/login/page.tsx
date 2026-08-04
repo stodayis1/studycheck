@@ -51,6 +51,7 @@ export default function LoginPage() {
         const { data: result, error: rpcError } = await supabase.rpc('student_login', {
           p_login_id: loginId.trim(),
           p_phone_last4: password.trim(),
+          p_role: mode,
         })
         if (rpcError) throw new Error('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
 

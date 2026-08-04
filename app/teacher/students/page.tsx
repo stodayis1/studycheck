@@ -22,6 +22,23 @@ interface Student {
   wise_step: string
   intake_notes?: string | null
   assigned_seen?: boolean
+  student_last_login_at?: string | null
+  parent_last_login_at?: string | null
+}
+
+// 상대적인 "n일 전" 형식으로 마지막 로그인 시간을 표시. 로그인 기록이 없으면 null 반환.
+function formatLastLogin(dateStr?: string | null): string | null {
+  if (!dateStr) return null
+  const diffMs = Date.now() - new Date(dateStr).getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return '방금 전'
+  if (diffMin < 60) return `${diffMin}분 전`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}시간 전`
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffDay < 30) return `${diffDay}일 전`
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
 }
 
 export default function TeacherStudentsPage() {
@@ -381,6 +398,14 @@ export default function TeacherStudentsPage() {
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {[student.school, student.class_time].filter(Boolean).join(' · ')}
+                    </p>
+                    <p className="text-[10px] text-gray-300 mt-0.5">
+                      {(() => {
+                        const s = formatLastLogin(student.student_last_login_at)
+                        const p = formatLastLogin(student.parent_last_login_at)
+                        if (!s && !p) return '학생·학부모 로그인 기록 없음'
+                        return `학생 접속 ${s ?? '기록 없음'} · 학부모 접속 ${p ?? '기록 없음'}`
+                      })()}
                     </p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
