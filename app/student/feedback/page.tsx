@@ -75,6 +75,12 @@ export default function StudentFeedbackPage() {
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-3">
 
+        <div className="rounded-2xl px-4 py-3" style={{ background: '#FFF5F2', border: '1px solid #F5C4B3' }}>
+          <p className="text-[11px] leading-relaxed" style={{ color: '#993C1D' }}>
+            💬 선생님 피드백은 특이사항이 있을 때만 남겨요. 매 수업마다 작성하는 건 아니에요.
+          </p>
+        </div>
+
         {feedbacks.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
             <i className="ti ti-message-circle" style={{ fontSize: 40, color: '#F5C4B3', display: 'block', marginBottom: 10 }} />

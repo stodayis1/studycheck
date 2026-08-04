@@ -410,12 +410,17 @@ export default function ParentDashboardPage() {
         {/* 알림장(피드백) — 선생님이 작성한 메시지 */}
         {feedbacks.length > 0 && (
           <div className="bg-white rounded-2xl border-2 shadow-sm overflow-hidden" style={{ borderColor: '#F5C4B3' }}>
-            <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #f5d6cc' }}>
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C4B3' }}>
-                <i className="ti ti-message-circle" style={{ fontSize: 14, color: '#712B13' }} />
+            <div className="px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #f5d6cc' }}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C4B3' }}>
+                  <i className="ti ti-message-circle" style={{ fontSize: 14, color: '#712B13' }} />
+                </div>
+                <span className="text-sm font-bold" style={{ color: '#712B13' }}>선생님 알림장</span>
+                <span className="text-[10px] ml-auto" style={{ color: '#993C1D' }}>{feedbacks.length}개</span>
               </div>
-              <span className="text-sm font-bold" style={{ color: '#712B13' }}>선생님 알림장</span>
-              <span className="text-[10px] ml-auto" style={{ color: '#993C1D' }}>{feedbacks.length}개</span>
+              <p className="text-[10px] mt-1 pl-9" style={{ color: '#993C1D' }}>
+                특이사항이 있을 때만 남겨요 · 매 수업마다 작성하는 건 아니에요
+              </p>
             </div>
             <div className="divide-y" style={{ borderColor: '#fde4dc' }}>
               {feedbacks.map((fb) => {
