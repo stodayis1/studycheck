@@ -5,7 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
-import { COLOR_PALETTE, EMOJI_PICKS, renderRichContent } from '@/lib/richContent'
+import { COLOR_PALETTE, SIZE_PALETTE, FONT_PALETTE, EMOJI_PICKS, renderRichContent } from '@/lib/richContent'
 
 interface Announcement {
   id: string
@@ -74,20 +74,21 @@ export default function TeacherAnnouncementsPage() {
     })
   }
 
-  // 드래그로 선택한 글자를 [c:색상]...[/c] 태그로 감싼다. 선택된 글자가 없으면 알려주고 끝낸다.
-  function wrapSelectionWithColor(colorKey: string) {
+  // 드래그로 선택한 글자를 여는/닫는 태그로 감싼다 (굵게/색상/크기/폰트 공통). 선택된 글자가 없으면 알려주고 끝낸다.
+  // 태그는 중첩 가능해서(예: 이미 색칠된 글자를 다시 선택해서 굵게도 적용) 여러 번 눌러 겹쳐 쓸 수 있다.
+  function wrapSelection(openTag: string, closeTag: string) {
     const el = contentRef.current
     if (!el) return
     const start = el.selectionStart
     const end = el.selectionEnd
     if (start === end) {
-      alert('색칠할 글자를 먼저 드래그해서 선택한 다음 색상을 눌러주세요')
+      alert('먼저 꾸밀 글자를 드래그해서 선택한 다음 눌러주세요')
       return
     }
     const before = content.slice(0, start)
     const selected = content.slice(start, end)
     const after = content.slice(end)
-    const wrapped = `[c:${colorKey}]${selected}[/c]`
+    const wrapped = `${openTag}${selected}${closeTag}`
     setContent(before + wrapped + after)
     requestAnimationFrame(() => {
       el.focus()
@@ -194,23 +195,59 @@ export default function TeacherAnnouncementsPage() {
               placeholder="제목 (예: 8월 정기고사 대비 특강 안내)"
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
 
-            {/* 꾸미기 툴바 - 글자색은 텍스트를 드래그해서 선택한 후 색을 눌러야 적용됨 */}
-            <div className="flex items-center gap-1.5 flex-wrap bg-gray-50 rounded-xl p-2">
-              <span className="text-[10px] font-bold text-gray-400 mr-0.5 shrink-0">글자색</span>
-              {COLOR_PALETTE.map((c) => (
-                <button key={c.key} type="button" onClick={() => wrapSelectionWithColor(c.key)}
-                  title={`${c.label} - 글자를 선택한 후 눌러주세요`}
-                  className="w-6 h-6 rounded-full border-2 border-white shrink-0" style={{ background: c.hex, boxShadow: '0 0 0 1px #e5e7eb' }} />
-              ))}
-              <div className="w-px h-5 bg-gray-200 mx-1 shrink-0" />
-              <button type="button" onClick={() => setShowEmojiPicker((v) => !v)}
-                className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0', showEmojiPicker ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200')}>
-                😊 이모지
-              </button>
-              <label className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 cursor-pointer', uploadingImage ? 'bg-gray-200 text-gray-400' : 'bg-white text-gray-600 border border-gray-200')}>
-                {uploadingImage ? '업로드 중...' : '🖼 사진'}
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
-              </label>
+            {/* 꾸미기 툴바 - 진하기/크기/폰트/색상 모두 "먼저 글자를 드래그해서 선택한 다음" 눌러야 그 부분에만 적용됨 */}
+            <p className="text-[10px] text-gray-400 -mb-1.5">💡 꾸밀 글자를 먼저 드래그해서 선택한 다음 아래 버튼을 눌러주세요</p>
+            <div className="space-y-2 bg-gray-50 rounded-xl p-2.5">
+              {/* 굵기 */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold text-gray-400 w-10 shrink-0">굵기</span>
+                <button type="button" onClick={() => wrapSelection('[b]', '[/b]')}
+                  className="text-xs font-extrabold px-3 py-1 rounded-lg bg-white text-gray-700 border border-gray-200 shrink-0">
+                  가 굵게
+                </button>
+              </div>
+              {/* 크기 */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold text-gray-400 w-10 shrink-0">크기</span>
+                {SIZE_PALETTE.map((s) => (
+                  <button key={s.key} type="button" onClick={() => wrapSelection(`[sz:${s.key}]`, '[/sz]')}
+                    className="font-semibold px-3 py-1 rounded-lg bg-white text-gray-700 border border-gray-200 shrink-0"
+                    style={{ fontSize: Math.min(s.px, 16) }}>
+                    가 {s.label}
+                  </button>
+                ))}
+              </div>
+              {/* 폰트 */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold text-gray-400 w-10 shrink-0">글씨체</span>
+                {FONT_PALETTE.map((f) => (
+                  <button key={f.key} type="button" onClick={() => wrapSelection(`[f:${f.key}]`, '[/f]')}
+                    className="text-xs font-semibold px-3 py-1 rounded-lg bg-white text-gray-700 border border-gray-200 shrink-0"
+                    style={{ fontFamily: f.stack }}>
+                    가 {f.label}
+                  </button>
+                ))}
+              </div>
+              {/* 색상 */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold text-gray-400 w-10 shrink-0">글자색</span>
+                {COLOR_PALETTE.map((c) => (
+                  <button key={c.key} type="button" onClick={() => wrapSelection(`[c:${c.key}]`, '[/c]')}
+                    title={`${c.label} - 글자를 선택한 후 눌러주세요`}
+                    className="w-6 h-6 rounded-full border-2 border-white shrink-0" style={{ background: c.hex, boxShadow: '0 0 0 1px #e5e7eb' }} />
+                ))}
+              </div>
+              {/* 이모지/사진 */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-gray-200">
+                <button type="button" onClick={() => setShowEmojiPicker((v) => !v)}
+                  className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0', showEmojiPicker ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200')}>
+                  😊 이모지
+                </button>
+                <label className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 cursor-pointer', uploadingImage ? 'bg-gray-200 text-gray-400' : 'bg-white text-gray-600 border border-gray-200')}>
+                  {uploadingImage ? '업로드 중...' : '🖼 사진'}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+                </label>
+              </div>
             </div>
 
             {showEmojiPicker && (
