@@ -31,16 +31,16 @@ export function BottomNav({ items }: { items: NavItem[] }) {
 }
 
 export const STUDENT_NAV_ITEMS: NavItem[] = [
-  { href:'/student/dashboard', label:'오늘 과제', icon:'☐', activeIcon:'☑' },
+  { href:'/student/dashboard', label:'대시보드', icon:'☐', activeIcon:'☑' },
   { href:'/student/learning-notes', label:'배움노트', icon:'📓', activeIcon:'📓' },
-  { href:'/student/assignments', label:'전체 과제', icon:'◎', activeIcon:'●' },
-  { href:'/student/feedback', label:'알림장', icon:'○', activeIcon:'●' },
+  { href:'/student/assignments', label:'과제달성현황', icon:'◎', activeIcon:'●' },
+  { href:'/student/feedback', label:'피드백', icon:'○', activeIcon:'●' },
 ]
 
 export const PARENT_NAV_ITEMS: NavItem[] = [
-  { href:'/parent/dashboard', label:'현황', icon:'◎', activeIcon:'●' },
+  { href:'/parent/dashboard', label:'학습현황', icon:'◎', activeIcon:'●' },
   { href:'/parent/learning-notes', label:'배움노트', icon:'📓', activeIcon:'📓' },
   { href:'/parent/assignments', label:'과제', icon:'☐', activeIcon:'☑' },
-  { href:'/parent/reports', label:'보고서', icon:'◇', activeIcon:'◆' },
+  { href:'/parent/reports', label:'월별보고서', icon:'◇', activeIcon:'◆' },
   { href:'/parent/announcements', label:'공지사항', icon:'📢', activeIcon:'📢' },
 ]
