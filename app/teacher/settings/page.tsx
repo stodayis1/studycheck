@@ -62,48 +62,32 @@ export default function SettingsPage() {
     setAdding(true)
     setAddError('')
 
-    // Supabase Auth에 사용자 생성
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: newLoginId,
-      password: newPassword,
-      email_confirm: true,
-    })
+    // 브라우저에서 직접 supabase.auth.signUp()을 쓰면 방금 로그인된 관리자 세션이 새로 만든
+    // 계정 세션으로 바뀌어버리고, 그 상태로 users 테이블에 프로필을 쓰려고 하면 RLS 때문에
+    // 조용히 실패하는 문제가 있었다(에러 체크도 안 하고 있어서 "성공했다"고 잘못 표시됐음).
+    // 그래서 delete-account와 동일하게 서비스 롤 키를 쓰는 서버 라우트에서 처리한다.
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) { setAddError('로그인 정보를 확인할 수 없어요. 다시 로그인 후 시도해주세요.'); setAdding(false); return }
 
-    if (authError) {
-      // admin API 없으면 signUp 사용
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: newLoginId,
-        password: newPassword,
+      const res = await fetch('/api/create-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newName, email: newLoginId, password: newPassword, role: newRole }),
       })
-      if (signUpError) { setAddError('계정 생성 실패: ' + signUpError.message); setAdding(false); return }
+      const result = await res.json()
+      if (!res.ok) { setAddError(result.error ?? '계정 생성에 실패했어요.'); setAdding(false); return }
 
-      // profiles 테이블에 저장
-      const userId = signUpData.user?.id
-      if (userId) {
-        await supabase.from('users').upsert({
-          id: userId,
-          name: newName,
-          email: newLoginId,
-          role: newRole,
-        })
-      }
-    } else {
-      const userId = authData.user?.id
-      if (userId) {
-        await supabase.from('users').upsert({
-          id: userId,
-          name: newName,
-          email: newLoginId,
-          role: newRole,
-        })
-      }
+      setShowAddModal(false)
+      setNewName(''); setNewLoginId(''); setNewPassword(''); setNewRole('teacher')
+      showToast('✅ 계정이 추가됐어요!')
+      fetchProfiles()
+    } catch (err: any) {
+      setAddError('계정 생성 중 오류가 발생했어요: ' + (err.message ?? ''))
+    } finally {
+      setAdding(false)
     }
-
-    setAdding(false)
-    setShowAddModal(false)
-    setNewName(''); setNewLoginId(''); setNewPassword(''); setNewRole('teacher')
-    showToast('✅ 계정이 추가됐어요!')
-    fetchProfiles()
   }
 
   // 계정 완전 삭제 - Supabase Auth 삭제는 서비스 롤 키가 필요해서 브라우저에서 바로 못 하고
