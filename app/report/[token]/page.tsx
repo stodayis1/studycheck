@@ -3,6 +3,13 @@ import { createClient } from '@supabase/supabase-js'
 // 카카오톡 인앱 브라우저에서 클라이언트 fetch가 먹통이 되는 경우가 있어서
 // (링크는 오는데 눌러보면 빈 화면) 서버에서 미리 데이터를 읽어 HTML에 담아 보내도록 변경.
 // 이러면 인앱 브라우저의 JS 제약과 상관없이 화면이 바로 보인다.
+//
+// 토큰마다 매번 새로운 리포트라서 캐시되면 안 되는 페이지. force-dynamic이 없으면 Next.js가
+// 처음 접속했을 때 응답(예: 링크 생성 직후 아주 짧은 순간에 방문해서 "찾을 수 없어요"가 뜬 경우)을
+// 그대로 캐시해버려서, 데이터가 실제로 존재해도 계속 "리포트를 찾을 수 없어요"만 보이는 문제가 있었다.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
