@@ -357,6 +357,14 @@ export default function StudentDashboardPage() {
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 
+        {/* 데이터 업로드 안내 - 2026년 7월부터 순차 등록 중이라 그 이전 기록은 일부 누락될 수 있음을 고지 */}
+        <div className="rounded-2xl px-4 py-3 flex items-start gap-2" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+          <span className="text-sm shrink-0">⚠️</span>
+          <p className="text-[11px] leading-relaxed" style={{ color: '#92400E' }}>
+            학습 기록은 2026년 7월부터 순차적으로 등록되고 있어요. 그 이전 진행 내역이나 일부 교재 진도는 아직 반영되지 않았을 수 있습니다.
+          </p>
+        </div>
+
         {/* 학생 프로필 */}
         <div className="rounded-2xl p-4 flex items-center gap-4" style={{ background: '#FAECE7' }}>
           <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: '#F5C4B3' }}>
