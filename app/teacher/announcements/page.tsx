@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
+import { COLOR_PALETTE, EMOJI_PICKS, renderRichContent } from '@/lib/richContent'
 
 interface Announcement {
   id: string
@@ -31,6 +32,9 @@ export default function TeacherAnnouncementsPage() {
   const [endsAt, setEndsAt] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const contentRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -42,7 +46,7 @@ export default function TeacherAnnouncementsPage() {
   }
 
   function resetForm() {
-    setTitle(''); setContent(''); setEndsAt(''); setEditingId(null); setShowForm(false)
+    setTitle(''); setContent(''); setEndsAt(''); setEditingId(null); setShowForm(false); setShowEmojiPicker(false)
   }
 
   function startEdit(a: Announcement) {
@@ -51,6 +55,62 @@ export default function TeacherAnnouncementsPage() {
     setContent(a.content)
     setEndsAt(a.ends_at ? a.ends_at.slice(0, 10) : '')
     setShowForm(true)
+  }
+
+  // 커서 위치에 텍스트(이모지/이미지 태그)를 끼워넣는다. 커서 위치를 못 잡으면 그냥 맨 뒤에 붙인다.
+  function insertAtCursor(text: string) {
+    const el = contentRef.current
+    const pos = el ? el.selectionStart : content.length
+    const before = content.slice(0, pos)
+    const after = content.slice(pos)
+    const newContent = before + text + after
+    setContent(newContent)
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus()
+        const p = pos + text.length
+        el.setSelectionRange(p, p)
+      }
+    })
+  }
+
+  // 드래그로 선택한 글자를 [c:색상]...[/c] 태그로 감싼다. 선택된 글자가 없으면 알려주고 끝낸다.
+  function wrapSelectionWithColor(colorKey: string) {
+    const el = contentRef.current
+    if (!el) return
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    if (start === end) {
+      alert('색칠할 글자를 먼저 드래그해서 선택한 다음 색상을 눌러주세요')
+      return
+    }
+    const before = content.slice(0, start)
+    const selected = content.slice(start, end)
+    const after = content.slice(end)
+    const wrapped = `[c:${colorKey}]${selected}[/c]`
+    setContent(before + wrapped + after)
+    requestAnimationFrame(() => {
+      el.focus()
+      const p = before.length + wrapped.length
+      el.setSelectionRange(p, p)
+    })
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingImage(true)
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    const fileName = `announcements/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error } = await supabase.storage.from('feedback-images').upload(fileName, file)
+    if (!error) {
+      const { data: pub } = supabase.storage.from('feedback-images').getPublicUrl(fileName)
+      if (pub?.publicUrl) insertAtCursor(`\n[img]${pub.publicUrl}[/img]\n`)
+    } else {
+      alert('사진 업로드에 실패했어요: ' + error.message)
+    }
+    setUploadingImage(false)
+    e.target.value = ''
   }
 
   async function handleSave() {
@@ -103,7 +163,7 @@ export default function TeacherAnnouncementsPage() {
             items.filter((a) => a.is_active).map((a) => (
               <div key={a.id} className="bg-white rounded-2xl border border-gray-100 p-4">
                 <p className="text-sm font-bold text-gray-900">{a.title}</p>
-                <p className="text-xs text-gray-600 mt-1.5 whitespace-pre-wrap">{a.content}</p>
+                <div className="text-xs text-gray-600 mt-1.5" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
                 <p className="text-[10px] text-gray-400 mt-2">{fmtDate(a.created_at)}</p>
               </div>
             ))
@@ -133,10 +193,49 @@ export default function TeacherAnnouncementsPage() {
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
               placeholder="제목 (예: 8월 정기고사 대비 특강 안내)"
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-            <textarea value={content} onChange={(e) => setContent(e.target.value)}
-              placeholder="내용을 입력하세요"
-              rows={5}
+
+            {/* 꾸미기 툴바 - 글자색은 텍스트를 드래그해서 선택한 후 색을 눌러야 적용됨 */}
+            <div className="flex items-center gap-1.5 flex-wrap bg-gray-50 rounded-xl p-2">
+              <span className="text-[10px] font-bold text-gray-400 mr-0.5 shrink-0">글자색</span>
+              {COLOR_PALETTE.map((c) => (
+                <button key={c.key} type="button" onClick={() => wrapSelectionWithColor(c.key)}
+                  title={`${c.label} - 글자를 선택한 후 눌러주세요`}
+                  className="w-6 h-6 rounded-full border-2 border-white shrink-0" style={{ background: c.hex, boxShadow: '0 0 0 1px #e5e7eb' }} />
+              ))}
+              <div className="w-px h-5 bg-gray-200 mx-1 shrink-0" />
+              <button type="button" onClick={() => setShowEmojiPicker((v) => !v)}
+                className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0', showEmojiPicker ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200')}>
+                😊 이모지
+              </button>
+              <label className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 cursor-pointer', uploadingImage ? 'bg-gray-200 text-gray-400' : 'bg-white text-gray-600 border border-gray-200')}>
+                {uploadingImage ? '업로드 중...' : '🖼 사진'}
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+              </label>
+            </div>
+
+            {showEmojiPicker && (
+              <div className="flex flex-wrap gap-1 p-2 bg-gray-50 rounded-xl">
+                {EMOJI_PICKS.map((e) => (
+                  <button key={e} type="button" onClick={() => insertAtCursor(e)}
+                    className="text-lg w-8 h-8 flex items-center justify-center hover:bg-white rounded-lg transition-all">
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <textarea ref={contentRef} value={content} onChange={(e) => setContent(e.target.value)}
+              placeholder="내용을 입력하세요. 글자를 드래그해서 선택한 후 위 색상을 누르면 그 부분만 색칠돼요."
+              rows={6}
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
+
+            {content.trim() && (
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p className="text-[10px] font-bold text-gray-400 mb-1.5">미리보기</p>
+                <div className="text-xs text-gray-700" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(content)}</div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1.5">
                 노출 종료일 <span className="font-normal text-gray-400">(선택 - 비워두면 직접 종료할 때까지 계속 보여요)</span>
@@ -181,7 +280,7 @@ export default function TeacherAnnouncementsPage() {
                       <p className="text-sm font-bold text-gray-900">{a.title}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-600 whitespace-pre-wrap">{a.content}</p>
+                  <div className="text-xs text-gray-600" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
                   <p className="text-[10px] text-gray-400 mt-2">
                     {fmtDate(a.created_at)}{a.created_by ? ` · ${a.created_by}` : ''}{a.ends_at ? ` · ~${fmtDate(a.ends_at)}까지` : ''}
                   </p>

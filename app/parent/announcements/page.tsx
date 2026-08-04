@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { renderRichContent } from '@/lib/richContent'
 
 interface Announcement {
   id: string
@@ -56,7 +57,7 @@ export default function ParentAnnouncementsPage() {
           items.map((a) => (
             <div key={a.id} className="rounded-2xl p-4" style={{ background: '#FFF5F2', border: '1px solid #F5C4B3' }}>
               <p className="text-sm font-bold" style={{ color: '#712B13' }}>{a.title}</p>
-              <p className="text-xs mt-2 whitespace-pre-wrap" style={{ color: '#712B13' }}>{a.content}</p>
+              <div className="text-xs mt-2" style={{ color: '#712B13', whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
               <p className="text-[10px] mt-2.5" style={{ color: '#993C1D' }}>{fmtDate(a.created_at)}</p>
             </div>
           ))

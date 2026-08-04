@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import { stripRichTokens } from '@/lib/richContent'
 
 const DAYS = ['일','월','화','수','목','금','토']
 
@@ -169,7 +170,7 @@ export default function TeacherDashboardPage() {
               {announcements.map((a) => (
                 <Link key={a.id} href="/teacher/announcements" className="block px-4 py-2.5">
                   <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.title}</p>
-                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{a.content}</p>
+                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
                 </Link>
               ))}
             </div>

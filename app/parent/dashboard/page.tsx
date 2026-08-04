@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
+import { stripRichTokens } from '@/lib/richContent'
 
 interface StudentInfo {
   id: string
@@ -280,7 +281,7 @@ export default function ParentDashboardPage() {
               <span className="text-base shrink-0">📢</span>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{announcements[0].title}</p>
-                <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{announcements[0].content}</p>
+                <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(announcements[0].content)}</p>
               </div>
               {announcements.length > 1 && (
                 <span className="text-[10px] font-bold px-2 py-1 rounded-full shrink-0" style={{ background: '#712B13', color: 'white' }}>
