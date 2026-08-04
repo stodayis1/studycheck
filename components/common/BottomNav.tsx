@@ -34,7 +34,7 @@ export const STUDENT_NAV_ITEMS: NavItem[] = [
   { href:'/student/dashboard', label:'오늘 과제', icon:'☐', activeIcon:'☑' },
   { href:'/student/learning-notes', label:'배움노트', icon:'📓', activeIcon:'📓' },
   { href:'/student/assignments', label:'전체 과제', icon:'◎', activeIcon:'●' },
-  { href:'/student/feedback', label:'피드백', icon:'○', activeIcon:'●' },
+  { href:'/student/feedback', label:'알림장', icon:'○', activeIcon:'●' },
 ]
 
 export const PARENT_NAV_ITEMS: NavItem[] = [
