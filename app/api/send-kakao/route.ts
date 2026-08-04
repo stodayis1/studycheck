@@ -3,16 +3,20 @@ import { createClient } from '@supabase/supabase-js'
 import { SolapiMessageService } from 'solapi'
 import { randomBytes } from 'crypto'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 // 학부모에게 보낼 링크가 가리키는 공개 사이트 주소 (배포된 실제 주소로 고정)
 const APP_URL = 'https://studycheck-five.vercel.app'
 
 export async function POST(req: NextRequest) {
   try {
+    // 서버 전용 라우트라서 서비스 롤 키를 쓴다. report_links에 RLS가 걸려있어서
+    // anon 키로는 report_links insert가 막히기 때문(다른 테이블 읽기는 서비스 롤이 상위 권한이라 기존과 동일하게 다 됨).
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: '서버에 SUPABASE_SERVICE_ROLE_KEY가 설정돼 있지 않아요.' }, { status: 500 })
+    }
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
+
     const { sessionId, testPhone } = (await req.json()) as { sessionId?: string; testPhone?: string }
     if (!sessionId) {
       return NextResponse.json({ error: 'sessionId는 필수입니다.' }, { status: 400 })

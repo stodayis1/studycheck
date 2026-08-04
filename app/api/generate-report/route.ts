@@ -4,11 +4,6 @@ import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes } from 'crypto'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 function pad(n: number) { return String(n).padStart(2, '0') }
@@ -31,6 +26,15 @@ function monthRange(year: number, month: number) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 서버 전용 라우트라서 서비스 롤 키를 쓴다. report_links에 RLS가 걸려있어서
+    // anon 키로는 report_links insert가 막히기 때문(다른 테이블 읽기는 서비스 롤이 상위 권한이라 기존과 동일하게 다 됨).
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: '서버에 SUPABASE_SERVICE_ROLE_KEY가 설정돼 있지 않아요.' }, { status: 500 })
+    }
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
+
     const body = await req.json()
     const { studentId, type, year, month, quarter } = body as {
       studentId: string

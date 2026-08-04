@@ -64,7 +64,10 @@ interface ReportLink {
 
 export default async function PublicReportPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const { data, error } = await supabase.from('report_links').select('*').eq('token', token).single()
+  // report_links는 RLS로 보호되어 있어서 직접 select는 안 되고, 정확한 토큰 하나만 조회하는
+  // 전용 함수(get_report_by_token)로 읽는다 - 로그인 없이도 이 함수만으로 안전하게 조회 가능.
+  const { data: rows, error } = await supabase.rpc('get_report_by_token', { p_token: token })
+  const data = rows && rows.length > 0 ? rows[0] : null
   const link = (!error && data) ? (data as ReportLink) : null
 
   if (!link) {
