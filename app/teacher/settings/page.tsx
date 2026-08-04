@@ -14,7 +14,7 @@ interface Profile {
 }
 
 export default function SettingsPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, loading: authLoading } = useAuth()
   const router = useRouter()
 
   const [tab, setTab] = useState<'accounts' | 'system'>('accounts')
@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState('')
   const [editPassword, setEditPassword] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // 시스템 설정
   const [bulkEnabled, setBulkEnabled] = useState(false)
@@ -105,8 +106,34 @@ export default function SettingsPage() {
     fetchProfiles()
   }
 
-  async function toggleActive(profile: Profile) {
-    showToast('⚠ 계정 비활성화는 Supabase에서 직접 해주세요')
+  // 계정 완전 삭제 - Supabase Auth 삭제는 서비스 롤 키가 필요해서 브라우저에서 바로 못 하고
+  // 서버 라우트(app/api/delete-account)를 거쳐서 처리한다. 요청 보낼 때 지금 로그인 세션의
+  // access_token을 같이 보내서, 서버 쪽에서도 진짜 관리자가 보낸 요청인지 다시 한번 확인한다.
+  async function handleDeleteAccount(profile: Profile) {
+    if (!confirm(`"${profile.name}" (${profile.email}) 계정을 완전히 삭제할까요?\n로그인 자체가 안 되고, 되돌릴 수 없어요.`)) return
+    setDeletingId(profile.id)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) { showToast('❌ 로그인 정보를 확인할 수 없어요. 다시 로그인 후 시도해주세요.'); return }
+
+      const res = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId: profile.id }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        showToast('❌ 삭제 실패: ' + (result.error ?? '알 수 없는 오류'))
+        return
+      }
+      showToast('✅ 계정이 삭제됐어요')
+      fetchProfiles()
+    } catch (err: any) {
+      showToast('❌ 삭제 중 오류가 발생했어요: ' + (err.message ?? ''))
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   async function handleEditSave() {
@@ -142,6 +169,20 @@ export default function SettingsPage() {
     admin:   { bg: '#1a1a2e', color: 'white' },
     teacher: { bg: '#F0FBF7', color: '#085041' },
     staff:   { bg: '#FAEEDA', color: '#633806' },
+  }
+
+  // 계정 완전삭제 기능이 생겨서 이 페이지는 이제 관리자만 열 수 있어야 한다.
+  // (예전엔 이 체크가 없어서 강사 계정도 URL만 알면 계정관리 화면에 들어올 수 있었음)
+  if (!authLoading && !isAdmin()) {
+    return (
+      <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
+        <Header title="설정" subtitle="시스템 및 계정 관리" />
+        <div className="px-4 py-12 max-w-2xl mx-auto text-center">
+          <p className="text-3xl mb-3">🔒</p>
+          <p className="text-sm text-gray-500">이 페이지는 원장님만 볼 수 있어요.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -202,10 +243,10 @@ export default function SettingsPage() {
                           수정
                         </button>
                         {p.id !== currentUser?.id && (
-                          <button onClick={() => toggleActive(p)}
-                            className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all"
+                          <button onClick={() => handleDeleteAccount(p)} disabled={deletingId === p.id}
+                            className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all disabled:opacity-50"
                             style={{ background: '#fee2e2', color: '#991b1b' }}>
-                            삭제
+                            {deletingId === p.id ? '삭제 중...' : '삭제'}
                           </button>
                         )}
                       </div>
