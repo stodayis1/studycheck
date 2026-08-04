@@ -119,7 +119,6 @@ export default function ParentDashboardPage() {
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null)
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week')
@@ -407,58 +406,41 @@ export default function ParentDashboardPage() {
           )}
         </div>
 
-        {/* 알림장(피드백) — 선생님이 작성한 메시지 */}
-        {feedbacks.length > 0 && (
-          <div className="bg-white rounded-2xl border-2 shadow-sm overflow-hidden" style={{ borderColor: '#F5C4B3' }}>
-            <div className="px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #f5d6cc' }}>
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C4B3' }}>
-                  <i className="ti ti-message-circle" style={{ fontSize: 14, color: '#712B13' }} />
-                </div>
-                <span className="text-sm font-bold" style={{ color: '#712B13' }}>선생님 알림장</span>
-                <span className="text-[10px] ml-auto" style={{ color: '#993C1D' }}>{feedbacks.length}개</span>
-              </div>
-              <p className="text-[10px] mt-1 pl-9" style={{ color: '#993C1D' }}>
-                특이사항이 있을 때만 남겨요 · 매 수업마다 작성하는 건 아니에요
-              </p>
-            </div>
-            <div className="divide-y" style={{ borderColor: '#fde4dc' }}>
-              {feedbacks.map((fb) => {
-                // ai_message 필드에 JSON.stringify({ images: [...] }) 형태로 저장됨
-                let images: string[] = []
-                if (fb.ai_message) {
-                  try {
-                    const parsed = JSON.parse(fb.ai_message)
-                    if (parsed && Array.isArray(parsed.images)) images = parsed.images
-                  } catch {}
-                }
-                const dateStr = new Date(fb.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
-                return (
-                  <div key={fb.id} className="px-4 py-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[11px] font-semibold" style={{ color: '#993C1D' }}>
-                        <i className="ti ti-user" style={{ fontSize: 11, marginRight: 4 }} />
-                        {fb.teacher_name ?? '선생님'}
-                      </p>
-                      <p className="text-[10px] text-gray-400">{dateStr}</p>
-                    </div>
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{fb.content}</p>
-                    {images.length > 0 && (
-                      <div className="flex gap-2 flex-wrap mt-3">
-                        {images.map((url, idx) => (
-                          <a key={idx} href={url} target="_blank" rel="noopener noreferrer"
-                            className="block w-24 h-24 rounded-xl overflow-hidden border border-gray-200">
-                            <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                          </a>
-                        ))}
-                      </div>
-                    )}
+        {/* 알림장(피드백) — 미리보기만, 전체 기록은 '보고서' 탭(월별)에서 */}
+        {feedbacks.length > 0 && (() => {
+          const latest = feedbacks[0]
+          const dateStr = new Date(latest.created_at).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+          return (
+            <Link href="/parent/reports"
+              className="block bg-white rounded-2xl border-2 shadow-sm overflow-hidden" style={{ borderColor: '#F5C4B3' }}>
+              <div className="px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #f5d6cc' }}>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C4B3' }}>
+                    <i className="ti ti-message-circle" style={{ fontSize: 14, color: '#712B13' }} />
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+                  <span className="text-sm font-bold" style={{ color: '#712B13' }}>선생님 알림장</span>
+                  <span className="text-sm ml-auto" style={{ color: '#712B13' }}>›</span>
+                </div>
+                <p className="text-[10px] mt-1 pl-9" style={{ color: '#993C1D' }}>
+                  특이사항이 있을 때만 남겨요 · 매 수업마다 작성하는 건 아니에요
+                </p>
+              </div>
+              <div className="px-4 py-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[11px] font-semibold" style={{ color: '#993C1D' }}>
+                    <i className="ti ti-user" style={{ fontSize: 11, marginRight: 4 }} />
+                    {latest.teacher_name ?? '선생님'}
+                  </p>
+                  <p className="text-[10px] text-gray-400">{dateStr}</p>
+                </div>
+                <p className="text-sm text-gray-700 line-clamp-2 leading-relaxed">{latest.content}</p>
+                {feedbacks.length > 1 && (
+                  <p className="text-[10px] text-gray-400 mt-1.5">외 {feedbacks.length - 1}개 더 · 보고서 탭에서 전체보기</p>
+                )}
+              </div>
+            </Link>
+          )
+        })()}
 
         {/* 레벨학습지 현황 — 보고서와 동일 */}
         {recentWS.length > 0 && (
@@ -508,14 +490,15 @@ export default function ParentDashboardPage() {
           const myTBs = textbooks.filter(t => t.grade && t.textbook_type !== '연산서')
           if (myTBs.length === 0) return null
           return (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <Link href="/parent/reports" className="block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
                   <i className="ti ti-books" style={{ fontSize: 14, color: '#993C1D' }} />
                 </div>
                 <span className="text-sm font-bold text-gray-800">교재 진도 현황</span>
+                <span className="text-sm ml-auto" style={{ color: '#993C1D' }}>›</span>
               </div>
-              <div className="px-4 py-4 space-y-5">
+              <div className="px-4 py-4 space-y-3">
                 {myTBs
                   .sort((a, b) => (TYPE_ORDER[a.textbook_type] ?? 9) - (TYPE_ORDER[b.textbook_type] ?? 9))
                   .map(tb => {
@@ -530,11 +513,10 @@ export default function ParentDashboardPage() {
                     )
                     const rate = tb.status === 'completed' ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
                     const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
-                    const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
                     const isCompleted = tb.status === 'completed'
                     return (
                       <div key={tb.id}>
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-1.5">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: style.dot, color: '#fff' }}>
                             {style.label}
                           </span>
@@ -546,52 +528,15 @@ export default function ParentDashboardPage() {
                             <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
                           )}
                         </div>
-                        <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
+                        <div className="h-1.5 rounded-full" style={{ background: '#f3f0ea' }}>
                           <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
                         </div>
-                        {isCompleted ? (
-                          <p className="text-[10px] text-gray-400">완료 처리된 교재예요 · 개념별 진도는 표시하지 않아요</p>
-                        ) : (
-                          <>
-                            <div className="space-y-2">
-                              {chapters.map(ch => {
-                                const chConcepts = tbConcepts.filter(c => c.chapter === ch)
-                                return (
-                                  <div key={ch}>
-                                    <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
-                                    <div className="flex flex-wrap gap-1">
-                                      {chConcepts.map(c => {
-                                        const check = myChecks.find(p => p.concept_id === c.id)
-                                        const done = check && check.check_count >= 1
-                                        const partial = false
-                                        return (
-                                          <div key={c.id} title={c.concept_name} style={{
-                                            width: 16, height: 16, borderRadius: 3, flexShrink: 0,
-                                            background: done ? style.dot : partial ? style.fill : '#f3f0ea',
-                                            border: `1px solid ${done ? style.dot : partial ? style.dot + '80' : '#e5d5c5'}`,
-                                          }} />
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                            <div className="flex gap-3 mt-2">
-                              {[['완료', style.dot, ''], ['진행중', style.fill, `1px solid ${style.dot}80`], ['미진도', '#f3f0ea', '1px solid #e5d5c5']].map(([label, bg, border]) => (
-                                <div key={label} className="flex items-center gap-1">
-                                  <div style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: border || 'none' }} />
-                                  <span className="text-[9px] text-gray-500">{label}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
                       </div>
                     )
                   })}
+                <p className="text-[10px] text-gray-400 pt-1">단원별 상세 진도는 보고서 탭에서 볼 수 있어요</p>
               </div>
-            </div>
+            </Link>
           )
         })()}
 
@@ -634,45 +579,21 @@ export default function ParentDashboardPage() {
           </div>
         )}
 
-        {/* 최근 수업 기록 - 날짜 탭 */}
-        {sessions.length > 0 && (() => {
-          // 같은 날짜 중 가장 최근 session만 (중복 날짜 제거)
-          const seenDates = new Set<string>()
-          const recentSessions = sessions.filter(s => {
-            if (seenDates.has(s.session_date)) return false
-            seenDates.add(s.session_date)
-            return true
-          }).slice(0, 7)
-          const activeDate = selectedSessionDate ?? recentSessions[0]?.session_date
-          const activeSession = recentSessions.find(s => s.session_date === activeDate)
+        {/* 오늘 수업 기록 - 과거 기록은 배움노트/보고서 탭에서 확인 */}
+        {(() => {
+          const activeSession = todaySession
           const activeNote = activeSession ? notes.find(n => n.session_id === activeSession.id) : null
+          if (!activeSession) return null
           return (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
                 <i className="ti ti-notebook" style={{ fontSize: 16, color: '#993C1D' }} />
-                <h3 className="text-sm font-bold text-gray-700">최근 수업 기록</h3>
+                <h3 className="text-sm font-bold text-gray-700">오늘 수업 기록</h3>
+                <Link href="/parent/learning-notes" className="text-[10px] font-semibold ml-auto" style={{ color: '#993C1D' }}>
+                  지난 기록 보기 ›
+                </Link>
               </div>
-              {/* 날짜 탭 */}
-              <div className="flex gap-2 overflow-x-auto px-3 py-2.5 no-scrollbar" style={{ borderBottom: '1px solid #f0f0f0' }}>
-                {recentSessions.map(session => {
-                  const d = new Date(session.session_date)
-                  const isToday = session.session_date === todayStr
-                  const isSelected = activeDate === session.session_date
-                  return (
-                    <button key={session.session_date}
-                      onClick={() => setSelectedSessionDate(session.session_date)}
-                      className="flex flex-col items-center px-3 py-1.5 rounded-xl shrink-0 transition-all"
-                      style={isSelected
-                        ? { background: '#F5C4B3', color: '#712B13' }
-                        : { background: '#f3f4f6', color: '#9ca3af' }}>
-                      <span className="text-[10px] font-semibold">{DAYS[d.getDay()]}요일</span>
-                      <span className="text-sm font-black">{d.getMonth()+1}/{d.getDate()}</span>
-                      {isToday && <span className="text-[9px] font-bold" style={{ color: isSelected ? '#712B13' : '#993C1D' }}>오늘</span>}
-                    </button>
-                  )
-                })}
-              </div>
-              {/* 선택된 날짜 내용 */}
+              {/* 오늘 내용 */}
               {activeSession && (
                 <div className="px-4 py-3 space-y-3">
                   {/* 출결 */}

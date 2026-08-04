@@ -43,7 +43,41 @@ interface Feedback {
   created_at: string
 }
 
+interface Concept {
+  id: string
+  grade: string
+  semester: number
+  chapter: string
+  sub_chapter: string
+  concept_name: string
+  concept_order: number
+}
+
+interface ProgressCheck {
+  id: string
+  student_id: string
+  concept_id: string
+  check_count: number
+  student_textbook_id?: string | null
+}
+
+interface StudentTextbook {
+  id: string
+  textbook_name: string
+  textbook_type: string
+  grade: string | null
+  semester: number | null
+  status: string
+}
+
 const DAYS = ['일','월','화','수','목','금','토']
+const TYPE_ORDER: Record<string, number> = { '개념서': 0, '유형서': 1, '심화서': 2, '연산서': 3 }
+const TYPE_STYLE: Record<string, { dot: string; fill: string; label: string }> = {
+  '개념서': { dot: '#EF9F27', fill: '#FAEEDA', label: '개념' },
+  '유형서': { dot: '#639922', fill: '#EAF3DE', label: '유형' },
+  '심화서': { dot: '#dc2626', fill: '#fee2e2', label: '심화' },
+  '연산서': { dot: '#7c3aed', fill: '#ede9fe', label: '연산' },
+}
 
 export default function ParentReportsPage() {
   const router = useRouter()
@@ -52,6 +86,9 @@ export default function ParentReportsPage() {
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  const [concepts, setConcepts] = useState<Concept[]>([])
+  const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
+  const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date()
@@ -70,16 +107,22 @@ export default function ParentReportsPage() {
           .from('students').select('name, grade').eq('id', session.id).single()
         if (studentData) setStudentName(studentData.name)
 
-        const [{ data: ssData }, { data: nData }, { data: wsData }, { data: fbData }] = await Promise.all([
+        const [{ data: ssData }, { data: nData }, { data: wsData }, { data: fbData }, { data: cData }, { data: pcData }, { data: tbData }] = await Promise.all([
           supabase.from('class_sessions').select('*').eq('student_id', session.id).order('session_date'),
           supabase.from('learning_notes').select('*').eq('student_id', session.id),
           supabase.from('student_worksheets').select('*').eq('student_id', session.id).order('assigned_at'),
           supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }),
+          supabase.from('concepts').select('*').order('concept_order'),
+          supabase.from('progress_checks').select('*').eq('student_id', session.id),
+          supabase.from('student_textbooks').select('*').eq('student_id', session.id).not('status', 'in', '("checked")'),
         ])
         if (ssData) setSessions(ssData)
         if (nData) setNotes(nData)
         if (wsData) setWorksheets(wsData)
         if (fbData) setFeedbacks(fbData)
+        if (cData) setConcepts(cData)
+        if (pcData) setProgressChecks(pcData)
+        if (tbData) setTextbooks(tbData)
       } catch { router.push('/auth/login') }
       setLoading(false)
     }
@@ -140,6 +183,9 @@ export default function ParentReportsPage() {
   const [y, mo] = selectedMonth.split('-')
   const monthLabel = `${parseInt(mo)}월`
 
+  // 교재 진도 현황 - 월과 무관하게 현재 배정된 교재 기준 (연산서는 진도율 관리 방식이 달라 제외)
+  const myTBs = textbooks.filter(t => t.grade && t.textbook_type !== '연산서')
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <span className="w-8 h-8 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin" />
@@ -168,6 +214,93 @@ export default function ParentReportsPage() {
             )
           })}
         </div>
+
+        {/* 교재 진도 현황 - 현재 배정된 교재 기준, 월 선택과 무관하게 항상 표시 */}
+        {myTBs.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#FAECE7' }}>
+                <i className="ti ti-books" style={{ fontSize: 14, color: '#993C1D' }} />
+              </div>
+              <span className="text-sm font-bold text-gray-800">교재 진도 현황</span>
+            </div>
+            <div className="px-4 py-4 space-y-5">
+              {myTBs
+                .sort((a, b) => (TYPE_ORDER[a.textbook_type] ?? 9) - (TYPE_ORDER[b.textbook_type] ?? 9))
+                .map(tb => {
+                  if (!tb.grade) return null
+                  const tbConcepts = concepts.filter(c => c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true))
+                  if (tbConcepts.length === 0) return null
+                  const myChecks = progressChecks.filter(p =>
+                    p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서')
+                  )
+                  const checkedConcepts = tbConcepts.filter(c =>
+                    myChecks.some(p => p.concept_id === c.id && p.check_count >= 1)
+                  )
+                  const rate = tb.status === 'completed' ? 100 : Math.round(checkedConcepts.length / tbConcepts.length * 100)
+                  const style = TYPE_STYLE[tb.textbook_type] ?? TYPE_STYLE['개념서']
+                  const chapters = [...new Set(tbConcepts.map(c => c.chapter))]
+                  const isCompleted = tb.status === 'completed'
+                  return (
+                    <div key={tb.id}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: style.dot, color: '#fff' }}>
+                          {style.label}
+                        </span>
+                        <span className="text-xs font-bold text-gray-800">{tb.textbook_name}</span>
+                        <span className="text-[10px] text-gray-400">{tb.grade} {tb.semester}학기</span>
+                        {isCompleted ? (
+                          <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: style.dot, color: '#fff' }}>완료</span>
+                        ) : (
+                          <span className="ml-auto text-xs font-bold" style={{ color: style.dot }}>{rate}%</span>
+                        )}
+                      </div>
+                      <div className="h-1.5 rounded-full mb-3" style={{ background: '#f3f0ea' }}>
+                        <div className="h-1.5 rounded-full" style={{ width: `${rate}%`, background: style.dot }} />
+                      </div>
+                      {isCompleted ? (
+                        <p className="text-[10px] text-gray-400">완료 처리된 교재예요 · 개념별 진도는 표시하지 않아요</p>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            {chapters.map(ch => {
+                              const chConcepts = tbConcepts.filter(c => c.chapter === ch)
+                              return (
+                                <div key={ch}>
+                                  <p className="text-[10px] text-gray-500 mb-1">{ch}</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {chConcepts.map(c => {
+                                      const check = myChecks.find(p => p.concept_id === c.id)
+                                      const done = check && check.check_count >= 1
+                                      return (
+                                        <div key={c.id} title={c.concept_name} style={{
+                                          width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                                          background: done ? style.dot : '#f3f0ea',
+                                          border: `1px solid ${done ? style.dot : '#e5d5c5'}`,
+                                        }} />
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <div className="flex gap-3 mt-2">
+                            {[['완료', style.dot, ''], ['미진도', '#f3f0ea', '1px solid #e5d5c5']].map(([label, bg, border]) => (
+                              <div key={label} className="flex items-center gap-1">
+                                <div style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: border || 'none' }} />
+                                <span className="text-[9px] text-gray-500">{label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        )}
 
         {total === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
@@ -328,10 +461,13 @@ export default function ParentReportsPage() {
             {/* 선생님 피드백 */}
             {monthFeedbacks.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
-                  <i className="ti ti-message-circle" style={{ fontSize: 16, color: '#993C1D' }} />
-                  <h3 className="text-sm font-bold text-gray-700">선생님 피드백</h3>
-                  <span className="text-[10px] text-gray-400 ml-1">{monthFeedbacks.length}개</span>
+                <div className="px-4 py-3" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
+                  <div className="flex items-center gap-2">
+                    <i className="ti ti-message-circle" style={{ fontSize: 16, color: '#993C1D' }} />
+                    <h3 className="text-sm font-bold text-gray-700">선생님 피드백</h3>
+                    <span className="text-[10px] text-gray-400 ml-1">{monthFeedbacks.length}개</span>
+                  </div>
+                  <p className="text-[10px] mt-1 pl-6 text-gray-400">특이사항이 있을 때만 남겨요 · 매 수업마다 작성하는 건 아니에요</p>
                 </div>
                 <div className="divide-y divide-gray-50">
                   {monthFeedbacks.map(fb => {
@@ -351,33 +487,43 @@ export default function ParentReportsPage() {
                             <p className="text-[10px] text-gray-400">{dateLabel}</p>
                             {!isExpanded && (
                               <p className="text-[10px] text-gray-500 mt-0.5 truncate">
-                                {fb.ai_message ?? fb.content}
+                                {fb.content}
                               </p>
                             )}
                           </div>
                           <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'}`}
                             style={{ fontSize: 14, color: '#9ca3af', flexShrink: 0 }} />
                         </button>
-                        {isExpanded && (
-                          <div className="px-4 pb-4 space-y-2" style={{ borderTop: '1px solid #f5f5f5' }}>
-                            {fb.ai_message && (
+                        {isExpanded && (() => {
+                          // ai_message 필드는 메시지 텍스트가 아니라 이미지 URL을 담은 JSON({ images: [...] })
+                          let fbImages: string[] = []
+                          if (fb.ai_message) {
+                            try {
+                              const parsed = JSON.parse(fb.ai_message)
+                              if (parsed && Array.isArray(parsed.images)) fbImages = parsed.images
+                            } catch {}
+                          }
+                          return (
+                            <div className="px-4 pb-4" style={{ borderTop: '1px solid #f5f5f5' }}>
                               <div className="rounded-xl px-4 py-3 mt-3 text-xs leading-relaxed"
                                 style={{ background: '#FFF5F2', border: '1px solid #F5C4B3', color: '#712B13' }}>
-                                {fb.ai_message.split('\n').map((line, i) => (
-                                  <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
-                                ))}
-                              </div>
-                            )}
-                            {fb.content && (
-                              <div className="rounded-xl px-4 py-3 text-xs leading-relaxed"
-                                style={{ background: '#fafafa', border: '1px solid #f0f0f0', color: '#6b7280' }}>
                                 {fb.content.split('\n').map((line, i) => (
                                   <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                        )}
+                              {fbImages.length > 0 && (
+                                <div className="flex gap-2 flex-wrap mt-2.5">
+                                  {fbImages.map((url, idx) => (
+                                    <a key={idx} href={url} target="_blank" rel="noopener noreferrer"
+                                      className="block w-20 h-20 rounded-xl overflow-hidden border border-gray-200">
+                                      <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })}
