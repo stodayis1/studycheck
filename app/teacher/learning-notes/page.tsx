@@ -13,6 +13,7 @@ interface Student {
   grade: string
   teacher_name: string
   wise_step: string
+  parent_phone?: string | null
 }
 
 interface Schedule {
@@ -173,15 +174,21 @@ export default function TeacherLearningNotesPage() {
   const [justSavedNote, setJustSavedNote] = useState(false) // 저장 성공 시 잠깐 보여줄 확인 표시 (성공해도 화면이 그대로라 "저장 안 됐나?" 하고 헷갈리는 것 방지)
   const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
 
-  async function handleSendKakao(sessionId: string, studentName: string) {
+  async function handleSendKakao(sessionId: string, studentName: string, parentPhone?: string | null) {
     if (!isAdmin()) { alert('카톡 발송은 원장님만 하실 수 있어요.'); return }
-    if (!confirm(`${studentName} 학생 학부모님께 오늘 학습 안내 카톡을 보낼까요?`)) return
+    // 받는 번호를 보여주고, 필요하면 다른 번호(예: 테스트용 본인 번호)로 바꿔서 보낼 수 있게 함
+    const target = prompt(
+      `${studentName} 학생 학부모님께 오늘 학습 안내 카톡을 보낼 번호를 확인해주세요.\n(테스트로 다른 번호에 보내려면 여기서 바꿔주세요)`,
+      parentPhone ?? ''
+    )
+    if (target == null) return // 취소
+    if (!target.trim()) { alert('보낼 번호를 입력해주세요.'); return }
     setSendingKakao(sessionId)
     try {
       const res = await fetch('/api/send-kakao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({ sessionId, testPhone: target.trim() }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -1185,7 +1192,7 @@ export default function TeacherLearningNotesPage() {
                               return (
                                 <>
                                   {isComplete && isAdmin() && (
-                                    <button onClick={() => handleSendKakao(session.id, student.name)}
+                                    <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone)}
                                       disabled={sendingKakao === session.id}
                                       className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
                                       style={{ background: '#FEE500' }}>
