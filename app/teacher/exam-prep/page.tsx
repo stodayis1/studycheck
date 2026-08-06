@@ -57,8 +57,19 @@ const STATUS_STYLE: Record<string, { label: string; bg: string; color: string }>
   done:        { label: '완료',    bg: '#EAF3DE', color: '#27500A' },
 }
 
+const EXAM_SEASONS = ['1학기 중간고사', '1학기 기말고사', '2학기 중간고사', '2학기 기말고사'] as const
+
+// 현재 시점 기준 가장 관련 있는 시험 시즌을 기본 탭으로 잡는다 (학사일정 대략 기준: 중간고사 4월/10월, 기말고사 6~7월/12월)
+function getDefaultExamSeason(): string {
+  const month = new Date().getMonth() + 1
+  if (month >= 3 && month <= 5) return '1학기 중간고사'
+  if (month >= 6 && month <= 7) return '1학기 기말고사'
+  if (month >= 8 && month <= 10) return '2학기 중간고사'
+  return '2학기 기말고사'
+}
+
 export default function TeacherExamPrepPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [innerEnough, setInnerEnough] = useState<InnerEnough[]>([])
   const [assignments, setAssignments] = useState<StudentExamPrep[]>([])
@@ -93,6 +104,8 @@ export default function TeacherExamPrepPage() {
   const [schName, setSchName] = useState('1학기 중간고사')
   const [schDate, setSchDate] = useState('')
   const [savingSchedule, setSavingSchedule] = useState(false)
+  // 시험 일정 탭 - 지난 시즌 일정이 계속 섞여 보이지 않도록 학기/중간·기말별로 나눠서 봄
+  const [scheduleTab, setScheduleTab] = useState<string>(getDefaultExamSeason())
 
   useEffect(() => { fetchAll() }, [])
 
@@ -115,8 +128,9 @@ export default function TeacherExamPrepPage() {
     setLoading(false)
   }
 
+  // 직원(행정)도 시험대비 배정/현황/시험일정 관리를 할 수 있어야 함
   const myStudents = students.filter((s) => {
-    if (isAdmin()) return true
+    if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
@@ -590,26 +604,44 @@ export default function TeacherExamPrepPage() {
         {/* ── 시험 일정 ── */}
         {viewTab === 'schedule' && (
           <div className="space-y-3">
-            <button onClick={() => setShowScheduleModal(true)}
+            <button onClick={() => { setSchName(scheduleTab); setShowScheduleModal(true) }}
               className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
               style={{ background: '#F5C4B3', color: '#712B13' }}>
               <i className="ti ti-plus" style={{ fontSize: 16 }} />
               시험 일정 추가
             </button>
 
-            {examSchedules.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                <i className="ti ti-calendar-event" style={{ fontSize: 32, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
-                <p className="text-sm text-gray-500">등록된 시험 일정이 없어요</p>
-              </div>
-            ) : (
+            {/* 학기/중간·기말 탭 - 지난 시즌 일정이 계속 섞여 보이지 않게 나눠서 표시 */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {EXAM_SEASONS.map(season => (
+                <button key={season} onClick={() => setScheduleTab(season)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all"
+                  style={scheduleTab === season
+                    ? { background: '#712B13', color: 'white' }
+                    : { background: '#f3f4f6', color: '#6b7280' }}>
+                  {season}
+                </button>
+              ))}
+            </div>
+
+            {(() => {
+              const seasonSchedules = examSchedules.filter(es => es.exam_name === scheduleTab)
+              if (seasonSchedules.length === 0) {
+                return (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                    <i className="ti ti-calendar-event" style={{ fontSize: 32, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
+                    <p className="text-sm text-gray-500">{scheduleTab}에 등록된 시험 일정이 없어요</p>
+                  </div>
+                )
+              }
+              return (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#f5f5f4', borderBottom: '1px solid #f0f0f0' }}>
                   <i className="ti ti-calendar-event" style={{ fontSize: 16, color: '#993C1D' }} />
-                  <h3 className="text-sm font-bold text-gray-700">시험 일정</h3>
+                  <h3 className="text-sm font-bold text-gray-700">{scheduleTab} 일정</h3>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {examSchedules.map(es => (
+                  {seasonSchedules.map(es => (
                     <div key={es.id} className="px-4 py-3 flex items-center gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-0.5">
@@ -632,7 +664,8 @@ export default function TeacherExamPrepPage() {
                   ))}
                 </div>
               </div>
-            )}
+              )
+            })()}
           </div>
         )}
       </div>
