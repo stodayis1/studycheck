@@ -174,8 +174,18 @@ export default function TeacherExamsPage() {
     setCoreExistingIds({})
     if (!coreGrade || !coreTitle) return
 
+    // '예비 1회' 같은 회차 이름은 2개월마다(코어테스트 주기) 반복해서 쓰이므로, title만으로 매치하면
+    // 훨씬 이전 회차(예: 지난 6월 예비 1회) 기록까지 잘못 끌려온다. "이번 회차"로 볼 수 있게
+    // 오늘 기준 최근 30일 이내에 응시한 기록만 매치한다 (한 회차가 며칠~2주 정도 걸리는 걸 감안).
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
+    const nowMs = Date.now()
     const gradeStudentIds = new Set(students.filter((s) => s.grade === coreGrade).map((s) => s.id))
-    const matches = exams.filter((e) => e.exam_type === '코어테스트' && e.title === coreTitle && gradeStudentIds.has(e.student_id))
+    const matches = exams.filter((e) => {
+      if (e.exam_type !== '코어테스트' || e.title !== coreTitle) return false
+      if (!gradeStudentIds.has(e.student_id)) return false
+      const diff = Math.abs(new Date(e.exam_date).getTime() - nowMs)
+      return diff <= THIRTY_DAYS
+    })
     if (matches.length === 0) return
 
     setCoreRangeText((prev) => prev || (matches.find((e) => e.unit_name)?.unit_name ?? ''))
