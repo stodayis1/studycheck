@@ -132,6 +132,10 @@ export default function TeacherExamsPage() {
   // 코어테스트는 하루에 다 같이 보는 게 아니라 기간을 두고 학생마다 다른 날 보는 경우가 있어서,
   // 상단 "기본 날짜"를 대부분 학생에게 적용하고, 필요한 학생만 개별로 날짜를 바꿀 수 있게 함
   const [coreScoreDates, setCoreScoreDates] = useState<Record<string, string>>({}) // studentId → date (없으면 coreDate 사용)
+  // 이미 저장된 학생의 exams row id (student_id → exam id) - 있으면 새로 만들지 않고 그 행을 업데이트한다.
+  // 담당 학생 15명 중 1명만 입력하고 나중에 다시 열어서 나머지를 입력해도, 먼저 입력한 학생 점수가
+  // 그대로 남아있게(=중복 저장되지 않게) 하기 위함.
+  const [coreExistingIds, setCoreExistingIds] = useState<Record<string, string>>({})
   const [coreSaving, setCoreSaving] = useState(false)
   const [coreSemester, setCoreSemester] = useState(1) // 초/중 단원은 학기별로 나뉘어 있어 구분 필요
 
@@ -158,6 +162,43 @@ export default function TeacherExamsPage() {
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
   })
+
+  // 코어테스트 일괄입력 모달: 학년 또는 회차를 고르면(혹은 모달을 다시 열면) 이미 저장된 기록을 불러와 미리 채운다.
+  // - 시험범위는 같은 학년+회차라면 어느 선생님이 입력했든(전체 students 기준) 가져와서 재입력할 필요가 없게 함
+  // - 점수/날짜/기존 행 id는 화면에 보이는 담당 학생(myStudents)만 채움 - 담당 학생만 보이는 목록 자체는 그대로 유지
+  // - 학년·회차가 바뀔 때는 이전 선택의 값이 섞여 들어가지 않도록 먼저 비우고 새로 채운다
+  useEffect(() => {
+    if (!showCoreModal) return
+    setCoreScores({})
+    setCoreScoreDates({})
+    setCoreExistingIds({})
+    if (!coreGrade || !coreTitle) return
+
+    const gradeStudentIds = new Set(students.filter((s) => s.grade === coreGrade).map((s) => s.id))
+    const matches = exams.filter((e) => e.exam_type === '코어테스트' && e.title === coreTitle && gradeStudentIds.has(e.student_id))
+    if (matches.length === 0) return
+
+    setCoreRangeText((prev) => prev || (matches.find((e) => e.unit_name)?.unit_name ?? ''))
+
+    const scoreUpdates: Record<string, string> = {}
+    const dateUpdates: Record<string, string> = {}
+    const idUpdates: Record<string, string> = {}
+    myStudents.forEach((s) => {
+      if (s.grade !== coreGrade) return
+      const existing = matches.find((e) => e.student_id === s.id)
+      if (existing) {
+        idUpdates[s.id] = existing.id
+        if (existing.score != null) scoreUpdates[s.id] = String(existing.score)
+        dateUpdates[s.id] = existing.exam_date
+      }
+    })
+    if (Object.keys(idUpdates).length > 0) {
+      setCoreExistingIds(idUpdates)
+      setCoreScores(scoreUpdates)
+      setCoreScoreDates(dateUpdates)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCoreModal, coreGrade, coreTitle])
 
   const filteredStudents = myStudents.filter((s) => {
     const matchGrade = gradeGroup === '전체' || (gradeGroup === '초등' && s.grade.includes('초')) ||
@@ -266,24 +307,30 @@ export default function TeacherExamsPage() {
     const rangeUnits = coreRangeText.trim()
 
     // 점수 입력된 학생만 저장 - 날짜는 학생별로 따로 지정했으면 그 날짜, 아니면 기본 날짜(coreDate) 사용
+    // 이미 저장된 학생(coreExistingIds에 id가 있음)은 새로 추가하지 않고 그 기록을 업데이트한다.
+    // - 담당 학생 15명 중 1명만 먼저 입력하고 나중에 나머지를 입력해도 중복 저장되지 않고,
+    //   먼저 입력한 학생의 점수가 그대로 남아있게 하기 위함.
     const entries = Object.entries(coreScores).filter(([, s]) => s !== '')
-    await Promise.all(entries.map(([studentId, score]) =>
-      supabase.from('exams').insert({
-        student_id: studentId,
-        exam_type: '코어테스트',
+    await Promise.all(entries.map(([studentId, score]) => {
+      const payload = {
         exam_date: coreScoreDates[studentId] || coreDate,
         title: coreTitle,
         unit_name: rangeUnits || null,
         score: parseFloat(score),
         total_score: parseFloat(coreTotalScore) || 100,
         teacher_name: currentUser?.name ?? null,
-      })
-    ))
+      }
+      const existingId = coreExistingIds[studentId]
+      return existingId
+        ? supabase.from('exams').update(payload).eq('id', existingId)
+        : supabase.from('exams').insert({ student_id: studentId, exam_type: '코어테스트', ...payload })
+    }))
 
     setCoreSaving(false)
     setShowCoreModal(false)
     setCoreScores({})
     setCoreScoreDates({})
+    setCoreExistingIds({})
     setCoreActiveUnits([])
     setCoreActiveSubTabs([])
     setCoreRangeText('')
