@@ -90,12 +90,17 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
       <div className="min-h-screen py-8 px-4" style={{ background: '#f5f5f5', fontFamily: 'Pretendard, sans-serif' }}>
         <div className="max-w-md mx-auto">
           <div style={{ background: '#0f3460', borderRadius: 20, padding: 28, color: 'white' }}>
-            <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
-              수학의지혜 · STUDY CHECK
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>{dd.studentName}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2, marginBottom: 20 }}>
-              {dd.studentGrade} · {dateLabel} 학습 안내
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <img src="/icon-192.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
+                  수학의지혜 · STUDY CHECK
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>{dd.studentName}</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                  {dd.studentGrade} · {dateLabel} 학습 안내
+                </div>
+              </div>
             </div>
             <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20, opacity: 0.4 }} />
 
@@ -171,12 +176,15 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
         <div style={{ background: '#0f3460', borderRadius: 20, padding: 28, color: 'white' }}>
           {/* 헤더 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-            <div>
-              <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
-                수학의지혜 · {isQuarterly ? 'QUARTERLY REPORT' : 'MONTHLY REPORT'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src="/icon-192.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
+                  수학의지혜 · {isQuarterly ? 'QUARTERLY REPORT' : 'MONTHLY REPORT'}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>{d.studentName}</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{d.studentGrade}</div>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>{d.studentName}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{d.studentGrade}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{link.period_label}</div>
