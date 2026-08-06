@@ -12,6 +12,7 @@ interface Announcement {
   title: string
   content: string
   is_active: boolean
+  is_important: boolean
   ends_at: string | null
   created_by: string | null
   created_at: string
@@ -23,17 +24,19 @@ function fmtDate(iso: string) {
 }
 
 export default function TeacherAnnouncementsPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
   const [items, setItems] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [endsAt, setEndsAt] = useState('')
+  const [isImportant, setIsImportant] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const contentRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => { fetchData() }, [])
@@ -46,7 +49,7 @@ export default function TeacherAnnouncementsPage() {
   }
 
   function resetForm() {
-    setTitle(''); setContent(''); setEndsAt(''); setEditingId(null); setShowForm(false); setShowEmojiPicker(false)
+    setTitle(''); setContent(''); setEndsAt(''); setIsImportant(false); setEditingId(null); setShowForm(false); setShowEmojiPicker(false)
   }
 
   function startEdit(a: Announcement) {
@@ -54,6 +57,7 @@ export default function TeacherAnnouncementsPage() {
     setTitle(a.title)
     setContent(a.content)
     setEndsAt(a.ends_at ? a.ends_at.slice(0, 10) : '')
+    setIsImportant(!!a.is_important)
     setShowForm(true)
   }
 
@@ -121,6 +125,7 @@ export default function TeacherAnnouncementsPage() {
       title: title.trim(),
       content: content.trim(),
       ends_at: endsAt ? new Date(endsAt + 'T23:59:59').toISOString() : null,
+      is_important: isImportant,
       updated_at: new Date().toISOString(),
     }
     if (editingId) {
@@ -144,13 +149,14 @@ export default function TeacherAnnouncementsPage() {
     fetchData()
   }
 
-  if (!isAdmin()) {
+  if (!canManageAllStudents()) {
     // 강사는 관리 권한이 없어서 읽기 전용 목록만 보여준다 (작성/수정/삭제 버튼 자체를 노출하지 않음)
+    // 직원(행정)은 운영 전반과 관련된 공지사항 관리 업무를 하므로 아래로 내려가 관리 화면을 그대로 사용함
     return (
       <div style={{ background: '#ffffff', minHeight: '100vh' }}>
         <Header title="공지사항" subtitle="학부모/교사 대시보드에 표시되는 공지" />
         <div className="px-4 py-4 space-y-3 md:px-6 max-w-2xl">
-          <p className="text-xs text-gray-400 px-1">공지사항 작성·수정은 원장님만 가능해요</p>
+          <p className="text-xs text-gray-400 px-1">공지사항 작성·수정은 원장님/직원만 가능해요</p>
           {loading ? (
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
@@ -163,7 +169,7 @@ export default function TeacherAnnouncementsPage() {
           ) : (
             items.filter((a) => a.is_active).map((a) => (
               <div key={a.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                <p className="text-sm font-bold text-gray-900">{a.title}</p>
+                <p className="text-sm font-bold text-gray-900">{a.is_important && '⭐ '}{a.title}</p>
                 <div className="text-xs text-gray-600 mt-1.5" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
                 <p className="text-[10px] text-gray-400 mt-2">{fmtDate(a.created_at)}</p>
               </div>
@@ -280,6 +286,12 @@ export default function TeacherAnnouncementsPage() {
               <input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)}
                 className="px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={isImportant} onChange={(e) => setIsImportant(e.target.checked)}
+                className="w-4 h-4 accent-orange-500" />
+              <span className="text-xs font-bold text-gray-700">⭐ 중요 공지로 표시</span>
+              <span className="text-[10px] text-gray-400">(학부모/학생/강사 화면 상단에 우선 노출돼요)</span>
+            </label>
             <div className="flex gap-2">
               <button onClick={handleSave} disabled={!title.trim() || !content.trim() || saving}
                 className="flex-1 py-2.5 bg-green-600 text-white text-sm font-bold rounded-xl disabled:opacity-50">
@@ -302,42 +314,72 @@ export default function TeacherAnnouncementsPage() {
             <p className="text-sm text-gray-500">등록된 공지사항이 없어요</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {items.map((a) => {
-              const expired = a.ends_at ? new Date(a.ends_at) < new Date() : false
-              const showsNow = a.is_active && !expired
-              return (
-                <div key={a.id} className={cx('rounded-2xl border p-4', showsNow ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-200')}>
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0',
-                        showsNow ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500')}>
-                        {showsNow ? '표시중' : a.is_active ? '기간만료' : '종료됨'}
+          // 게시판 형태 - 한 줄(번호/제목/등록자/등록일)로 목록을 쭉 훑어보고, 필요한 것만 눌러서 펼쳐봄
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="hidden sm:flex px-4 py-2 text-[10px] font-bold text-gray-400 bg-gray-50 border-b border-gray-100">
+              <span className="w-8 shrink-0">No</span>
+              <span className="flex-1">제목</span>
+              <span className="w-20 shrink-0 text-center">등록자</span>
+              <span className="w-24 shrink-0 text-center">등록일</span>
+              <span className="w-16 shrink-0 text-center">상태</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {items.map((a, idx) => {
+                const expired = a.ends_at ? new Date(a.ends_at) < new Date() : false
+                const showsNow = a.is_active && !expired
+                const isOpen = expandedId === a.id
+                const hasImage = a.content.includes('[img]')
+                return (
+                  <div key={a.id} className={showsNow ? '' : 'bg-gray-50'}>
+                    <button onClick={() => setExpandedId(isOpen ? null : a.id)}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-all">
+                      <span className="w-8 shrink-0 text-[11px] text-gray-400">{items.length - idx}</span>
+                      <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                        {a.is_important && <span className="shrink-0">⭐</span>}
+                        {hasImage && <span className="shrink-0 text-xs">🖼</span>}
+                        <span className="text-sm font-semibold text-gray-800 truncate">{a.title}</span>
                       </span>
-                      <p className="text-sm font-bold text-gray-900">{a.title}</p>
-                    </div>
+                      <span className="hidden sm:block w-20 shrink-0 text-center text-[11px] text-gray-400">{a.created_by ?? '-'}</span>
+                      <span className="hidden sm:block w-24 shrink-0 text-center text-[11px] text-gray-400">{fmtDate(a.created_at)}</span>
+                      <span className="w-16 shrink-0 flex justify-center">
+                        <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full',
+                          showsNow ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500')}>
+                          {showsNow ? '표시중' : a.is_active ? '기간만료' : '종료됨'}
+                        </span>
+                      </span>
+                      <i className={cx('ti', isOpen ? 'ti-chevron-up' : 'ti-chevron-down')} style={{ fontSize: 14, color: '#9ca3af' }} />
+                    </button>
+                    {isOpen && (
+                      <div className="px-4 pb-4">
+                        <div className="text-xs text-gray-600 sm:hidden mb-2">
+                          {a.created_by ?? '-'} · {fmtDate(a.created_at)}
+                        </div>
+                        <div className="text-xs text-gray-600 rounded-xl bg-gray-50 p-3" style={{ whiteSpace: 'pre-wrap' }}>
+                          {renderRichContent(a.content)}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-2">
+                          {a.ends_at ? `~${fmtDate(a.ends_at)}까지 노출` : '종료일 없음 (직접 종료할 때까지 계속 노출)'}
+                        </p>
+                        <div className="flex gap-2 mt-2.5">
+                          <button onClick={() => startEdit(a)}
+                            className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600">
+                            수정
+                          </button>
+                          <button onClick={() => handleToggleActive(a)}
+                            className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600">
+                            {a.is_active ? '종료하기' : '다시 표시'}
+                          </button>
+                          <button onClick={() => handleDelete(a.id)}
+                            className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-red-50 text-red-500">
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-600" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
-                  <p className="text-[10px] text-gray-400 mt-2">
-                    {fmtDate(a.created_at)}{a.created_by ? ` · ${a.created_by}` : ''}{a.ends_at ? ` · ~${fmtDate(a.ends_at)}까지` : ''}
-                  </p>
-                  <div className="flex gap-2 mt-2.5">
-                    <button onClick={() => startEdit(a)}
-                      className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600">
-                      수정
-                    </button>
-                    <button onClick={() => handleToggleActive(a)}
-                      className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600">
-                      {a.is_active ? '종료하기' : '다시 표시'}
-                    </button>
-                    <button onClick={() => handleDelete(a.id)}
-                      className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-red-50 text-red-500">
-                      삭제
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

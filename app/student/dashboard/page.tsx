@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
+import { stripRichTokens } from '@/lib/richContent'
+import { pickDisplayAnnouncements } from '@/lib/announcements'
 
 interface StudentInfo {
   id: string
@@ -13,6 +15,14 @@ interface StudentInfo {
   school: string
   grade: string
   teacher_name: string
+}
+
+interface Announcement {
+  id: string
+  title: string
+  content: string
+  created_at: string
+  is_important?: boolean
 }
 
 interface ClassSession {
@@ -104,6 +114,7 @@ export default function StudentDashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [feedbacks, setFeedbacks] = useState<any[]>([])
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
 
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -153,6 +164,13 @@ export default function StudentDashboardPage() {
     if (cData) setConcepts(cData)
     if (pcData) setProgressChecks(pcData)
     if (fbData) setFeedbacks(fbData)
+
+    // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
+    const nowIso = new Date().toISOString()
+    const { data: anData } = await supabase.from('announcements')
+      .select('id, title, content, created_at, is_important').eq('is_active', true)
+      .or(`ends_at.is.null,ends_at.gte.${nowIso}`).order('created_at', { ascending: false })
+    if (anData) setAnnouncements(pickDisplayAnnouncements(anData))
 
     // 시험대비 (이너프원) - 4주 이내 시험 있는 것만
     const today = new Date()
@@ -310,6 +328,29 @@ export default function StudentDashboardPage() {
             학습 기록은 2026년 7월부터 순차적으로 등록되고 있어요. 그 이전 진행 내역이나 일부 교재 진도는 아직 반영되지 않았을 수 있습니다.
           </p>
         </div>
+
+        {/* 공지사항 - 최신 2개, 중요 공지가 있으면 최대 3개까지. 나머지는 "전체보기"로 들어가서 확인 */}
+        {announcements.length > 0 && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F5C4B3', background: '#FFF5F2' }}>
+            <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: '#F5C4B3' }}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">📢</span>
+                <span className="text-xs font-bold" style={{ color: '#712B13' }}>공지사항</span>
+              </div>
+              <Link href="/student/announcements" className="text-[10px] font-semibold" style={{ color: '#712B13' }}>
+                전체보기 ›
+              </Link>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#F5C4B360' }}>
+              {announcements.map((a) => (
+                <Link key={a.id} href="/student/announcements" className="block px-4 py-2.5">
+                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && '⭐ '}{a.title}</p>
+                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 학생 프로필 */}
         <div className="rounded-2xl p-4 flex items-center gap-4" style={{ background: '#FAECE7' }}>

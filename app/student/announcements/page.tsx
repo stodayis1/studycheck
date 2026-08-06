@@ -19,7 +19,7 @@ function fmtDate(iso: string) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
 }
 
-export default function ParentAnnouncementsPage() {
+export default function StudentAnnouncementsPage() {
   const router = useRouter()
   const [items, setItems] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)

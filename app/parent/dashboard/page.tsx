@@ -7,6 +7,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 import { stripRichTokens } from '@/lib/richContent'
+import { pickDisplayAnnouncements } from '@/lib/announcements'
 
 interface StudentInfo {
   id: string
@@ -95,6 +96,7 @@ interface Announcement {
   title: string
   content: string
   created_at: string
+  is_important?: boolean
 }
 
 const DAYS = ['일','월','화','수','목','금','토']
@@ -146,7 +148,7 @@ export default function ParentDashboardPage() {
           supabase.from('progress_checks').select('*').eq('student_id', session.id),
           supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(20),
           // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
-          supabase.from('announcements').select('id, title, content, created_at').eq('is_active', true)
+          supabase.from('announcements').select('id, title, content, created_at, is_important').eq('is_active', true)
             .or(`ends_at.is.null,ends_at.gte.${nowIso}`).order('created_at', { ascending: false }),
         ])
         if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
@@ -157,7 +159,7 @@ export default function ParentDashboardPage() {
         if (cData) setConcepts(cData)
         if (pcData) setProgressChecks(pcData)
         if (fbData) setFeedbacks(fbData)
-        if (anData) setAnnouncements(anData)
+        if (anData) setAnnouncements(pickDisplayAnnouncements(anData))
 
         // 시험대비 - NULL이거나 4주 이내 시험
         const maxDate = new Date(Date.now() + 35*86400000).toISOString().split('T')[0]
@@ -279,25 +281,28 @@ export default function ParentDashboardPage() {
           </p>
         </div>
 
-        {/* 공지사항 배너 - 원장님이 올린 학원 공지 (시험/방학/휴강 등). 카톡채널 공지를 잘 안 보셔서 앱 상단에 노출 */}
+        {/* 공지사항 - 원장님이 올린 학원 공지 (시험/방학/휴강 등). 최신 2개, 중요 공지가 있으면 최대 3개까지.
+            나머지는 "전체보기"로 들어가서 확인 - 카톡채널 공지를 잘 안 보셔서 앱 상단에 노출 */}
         {announcements.length > 0 && (
-          <Link href="/parent/announcements"
-            className="block rounded-2xl p-4"
-            style={{ background: '#F5C4B3' }}>
-            <div className="flex items-center gap-2">
-              <span className="text-base shrink-0">📢</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{announcements[0].title}</p>
-                <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(announcements[0].content)}</p>
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F5C4B3', background: '#FFF5F2' }}>
+            <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: '#F5C4B3' }}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">📢</span>
+                <span className="text-xs font-bold" style={{ color: '#712B13' }}>공지사항</span>
               </div>
-              {announcements.length > 1 && (
-                <span className="text-[10px] font-bold px-2 py-1 rounded-full shrink-0" style={{ background: '#712B13', color: 'white' }}>
-                  +{announcements.length - 1}
-                </span>
-              )}
-              <span className="text-sm shrink-0" style={{ color: '#712B13' }}>›</span>
+              <Link href="/parent/announcements" className="text-[10px] font-semibold" style={{ color: '#712B13' }}>
+                전체보기 ›
+              </Link>
             </div>
-          </Link>
+            <div className="divide-y" style={{ borderColor: '#F5C4B360' }}>
+              {announcements.map((a) => (
+                <Link key={a.id} href="/parent/announcements" className="block px-4 py-2.5">
+                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && '⭐ '}{a.title}</p>
+                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* 프로필 카드 */}

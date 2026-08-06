@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { stripRichTokens } from '@/lib/richContent'
+import { pickDisplayAnnouncements } from '@/lib/announcements'
 
 const DAYS = ['일','월','화','수','목','금','토']
 
@@ -15,6 +16,7 @@ interface Announcement {
   content: string
   ends_at: string | null
   created_at: string
+  is_important?: boolean
 }
 
 export default function TeacherDashboardPage() {
@@ -34,12 +36,12 @@ export default function TeacherDashboardPage() {
   async function fetchAnnouncements() {
     const nowIso = new Date().toISOString()
     const { data } = await supabase.from('announcements')
-      .select('id, title, content, ends_at, created_at')
+      .select('id, title, content, ends_at, created_at, is_important')
       .eq('is_active', true)
       .or(`ends_at.is.null,ends_at.gte.${nowIso}`)
       .order('created_at', { ascending: false })
-      .limit(3)
-    if (data) setAnnouncements(data)
+    // 최신 2개, 중요 공지가 있으면 그걸 우선해서 최대 3개까지만 대시보드에 노출 (나머지는 공지사항 메뉴에서)
+    if (data) setAnnouncements(pickDisplayAnnouncements(data))
   }
 
   async function fetchBulkSetting() {
@@ -169,7 +171,7 @@ export default function TeacherDashboardPage() {
             <div className="divide-y" style={{ borderColor: '#F5C4B360' }}>
               {announcements.map((a) => (
                 <Link key={a.id} href="/teacher/announcements" className="block px-4 py-2.5">
-                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.title}</p>
+                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && '⭐ '}{a.title}</p>
                   <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
                 </Link>
               ))}
