@@ -121,12 +121,14 @@ export default function TeacherCurriculumPage() {
 
   // 교재 카탈로그
   const [catalog, setCatalog] = useState<TextbookCatalog[]>([])
-  // 관리자 교재 관리
+  // 교재 목록 관리 (교재 배정은 강사가, 교재 "목록" 추가/수정/삭제는 행정직원도 가능해야 함)
   const [showCatalogManager, setShowCatalogManager] = useState(false)
   const [newTBLevel, setNewTBLevel] = useState('초등')
   const [newTBType, setNewTBType] = useState('개념서')
   const [newTBName, setNewTBName] = useState('')
   const [addingTB, setAddingTB] = useState(false)
+  const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null)
+  const [editingCatalogName, setEditingCatalogName] = useState('')
 
   const [showTBModal, setShowTBModal] = useState(false)
   const [tbStudent, setTbStudent] = useState<Student | null>(null)
@@ -415,10 +417,24 @@ export default function TeacherCurriculumPage() {
     fetchData()
   }
 
-  // 교재 카탈로그 삭제 (관리자)
+  // 교재 카탈로그 삭제
   async function handleDeleteCatalog(id: string, name: string) {
     if (!confirm(`"${name}" 교재를 목록에서 삭제할까요?`)) return
     await supabase.from('textbook_catalog').update({ is_active: false }).eq('id', id)
+    fetchData()
+  }
+
+  // 교재 카탈로그 이름 수정 - 이미 배정된 학생들의 기록(student_textbooks.textbook_name)은 과거 스냅샷이라
+  // 그대로 두고, 목록에 앞으로 뜨는 이름만 바뀐다 (기존 배정 데이터 보존)
+  function startEditCatalog(item: TextbookCatalog) {
+    setEditingCatalogId(item.id)
+    setEditingCatalogName(item.textbook_name)
+  }
+  async function handleUpdateCatalog() {
+    if (!editingCatalogId || !editingCatalogName.trim()) return
+    await supabase.from('textbook_catalog').update({ textbook_name: editingCatalogName.trim() }).eq('id', editingCatalogId)
+    setEditingCatalogId(null)
+    setEditingCatalogName('')
     fetchData()
   }
 
@@ -483,7 +499,7 @@ export default function TeacherCurriculumPage() {
         action={
           progressTab === 'textbook' ? (
             <div className="flex gap-2">
-              {isAdmin() && (
+              {canManageAllStudents() && (
                 <button onClick={() => setShowCatalogManager(true)}
                   className="px-3 py-1.5 bg-gray-700 text-white text-xs font-semibold rounded-lg">
                   📋 교재 목록
@@ -1029,8 +1045,8 @@ export default function TeacherCurriculumPage() {
         ))}
       </div>
 
-      {/* 관리자 교재 목록 관리 모달 */}
-      {showCatalogManager && isAdmin() && (
+      {/* 교재 목록 관리 모달 (관리자·직원 공통 - 교재 배정과 달리 목록 자체는 행정 업무) */}
+      {showCatalogManager && canManageAllStudents() && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setShowCatalogManager(false)}>
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
@@ -1086,11 +1102,24 @@ export default function TeacherCurriculumPage() {
                         <p className="text-[10px] font-semibold text-gray-400 mb-1 ml-1">{type}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {items.map((item) => (
-                            <div key={item.id} className="flex items-center gap-1 bg-gray-100 rounded-lg px-2.5 py-1">
-                              <span className="text-xs text-gray-700">{item.textbook_name}</span>
-                              <button onClick={() => handleDeleteCatalog(item.id, item.textbook_name)}
-                                className="text-red-400 hover:text-red-600 text-xs ml-1 font-bold">✕</button>
-                            </div>
+                            editingCatalogId === item.id ? (
+                              <div key={item.id} className="flex items-center gap-1 bg-white border border-green-400 rounded-lg px-1.5 py-1">
+                                <input value={editingCatalogName} onChange={(e) => setEditingCatalogName(e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateCatalog(); if (e.key === 'Escape') setEditingCatalogId(null) }}
+                                  autoFocus
+                                  className="text-xs px-1 py-0.5 rounded border border-gray-200 focus:outline-none w-24" />
+                                <button onClick={handleUpdateCatalog} className="text-green-600 hover:text-green-800 text-xs font-bold px-1">✓</button>
+                                <button onClick={() => setEditingCatalogId(null)} className="text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
+                              </div>
+                            ) : (
+                              <div key={item.id} className="flex items-center gap-1 bg-gray-100 rounded-lg px-2.5 py-1">
+                                <button onClick={() => startEditCatalog(item)} className="text-xs text-gray-700 hover:underline">
+                                  {item.textbook_name}
+                                </button>
+                                <button onClick={() => handleDeleteCatalog(item.id, item.textbook_name)}
+                                  className="text-red-400 hover:text-red-600 text-xs ml-1 font-bold">✕</button>
+                              </div>
+                            )
                           ))}
                         </div>
                       </div>
