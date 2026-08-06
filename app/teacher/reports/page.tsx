@@ -85,7 +85,7 @@ const EXAM_CONFIG: Record<string, { color: string; bg: string; dot: string }> = 
 }
 
 export default function TeacherReportsPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
   const [exams, setExams] = useState<Exam[]>([])
@@ -198,8 +198,9 @@ export default function TeacherReportsPage() {
     students.flatMap((s) => (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).filter(Boolean))
   )].sort()
 
+  // 직원(행정)도 보고서 발송 업무를 할 수 있어야 함
   const myStudents = students.filter((s) => {
-    if (isAdmin()) return true
+    if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const ts = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return ts.includes(currentUser.name)
@@ -527,7 +528,7 @@ export default function TeacherReportsPage() {
   }
 
   const myStudentsForGrade = students.filter((s) => {
-    if (isAdmin()) return true
+    if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     return s.teacher_name.split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
   }).filter((s) => s.name.includes(gSearchText) || s.school?.includes(gSearchText))
@@ -545,7 +546,7 @@ export default function TeacherReportsPage() {
   }
 
   const myStudentsForMonthly = students.filter((s) => {
-    if (isAdmin()) return true
+    if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     return s.teacher_name.split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
   }).filter((s) => s.name.includes(mSearchText) || s.school?.includes(mSearchText))
