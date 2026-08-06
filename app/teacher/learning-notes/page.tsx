@@ -102,7 +102,7 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; sub: string }> 
 }
 
 export default function TeacherLearningNotesPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [sessions, setSessions] = useState<ClassSession[]>([])
@@ -187,8 +187,8 @@ export default function TeacherLearningNotesPage() {
   const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
 
   async function handleSendKakao(sessionId: string, studentName: string, parentPhone?: string | null) {
-    // 학습보고서(일일) 카톡 발송도 행정직원 업무 - 화면에는 본인 관 소속 학생만 보이므로 그 범위 안에서만 실제로 쓰임
-    if (!canManageAllStudents()) { alert('카톡 발송은 원장님 또는 직원만 하실 수 있어요.'); return }
+    // 카톡 발송은 원장님만 - 강사/직원에게는 버튼 자체를 안 보여주고, 혹시 몰라 여기서도 한 번 더 막음
+    if (!isAdmin()) { alert('카톡 발송은 원장님만 하실 수 있어요.'); return }
     // 받는 번호를 보여주고, 필요하면 다른 번호(예: 테스트용 본인 번호)로 바꿔서 보낼 수 있게 함
     const target = prompt(
       `${studentName} 학생 학부모님께 오늘 학습 안내 카톡을 보낼 번호를 확인해주세요.\n(테스트로 다른 번호에 보내려면 여기서 바꿔주세요)`,
@@ -1241,7 +1241,7 @@ export default function TeacherLearningNotesPage() {
                               const editable = canEditNote(session.session_date)
                               return (
                                 <>
-                                  {isComplete && canManageAllStudents() && (
+                                  {isComplete && isAdmin() && (
                                     <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone)}
                                       disabled={sendingKakao === session.id}
                                       className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
