@@ -78,7 +78,7 @@ function ElementaryEntryPanel({ unitKey, unitLabel, entry, examTotalScore, tab, 
 }
 
 export default function TeacherExamsPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
@@ -156,8 +156,9 @@ export default function TeacherExamsPage() {
     setLoading(false)
   }
 
+  // 직원(행정)도 평가관리에서 점수 입력·단원(범위) 설정이 가능해야 함 - 특히 입학테스트 점수 기록이 주 업무
   const myStudents = students.filter((s) => {
-    if (isAdmin()) return true
+    if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
