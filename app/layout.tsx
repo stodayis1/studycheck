@@ -48,6 +48,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
+      <head>
+        {/* 'Pretendard'를 폰트로 지정한 곳이 여러 군데(전역 CSS, 리포트 카드 등) 있지만 실제로
+            그 글꼴 파일을 불러오는 곳이 없어서, 지금까지는 기기 기본 글꼴(아이폰=San Francisco,
+            안드로이드=Roboto 등)로만 보이고 있었다. CDN에서 실제 Pretendard를 불러와야 의도한
+            글씨체가 학부모/학생 화면에 그대로 보인다. */}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+      </head>
       <body className="bg-gray-50 text-gray-900 antialiased">
         {children}
       </body>

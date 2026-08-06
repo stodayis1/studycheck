@@ -15,6 +15,27 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// 흰 배경 + 네이비/오렌지 배색 (2026-08 원장님 확정) - 점수/출결 등 상태 표시는 네이비(양호)/
+// 오렌지(주의)/빨강(결석·저점수, 경고 신호라서 유지)의 3단계 톤을 그대로 씀
+const NAVY = '#0f3460'
+const NAVY_DIM = 'rgba(15,52,96,0.15)'
+const ORANGE = '#D85A30'
+const ORANGE_DEEP = '#712B13'
+const ORANGE_MID = '#993C1D'
+const ORANGE_BG = '#FAECE7'
+const RED = '#dc2626'
+const BOX_BG = '#f7f8fa'
+const BORDER = '#e5e7eb'
+const TEXT_BODY = '#374151'
+const TEXT_MUTED = '#9ca3af'
+
+function tierColor(pct: number | null, good = 85, mid = 70) {
+  if (pct == null) return TEXT_MUTED
+  if (pct >= good) return NAVY
+  if (pct >= mid) return ORANGE
+  return RED
+}
+
 interface DailyReportData {
   studentName: string
   studentGrade: string
@@ -83,37 +104,37 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   if (link.report_type === 'daily') {
     const dd = link.data as DailyReportData
     // '결과' 칸은 지난 시간 과제였던 학습지를 오늘 채점한 점수만 보여준다 (데일리테스트는 아래 별도 칸에 이미 나오므로 여기서 섞지 않음)
-    const scoreColor = dd.worksheetScore == null ? '#9FE1CB' : dd.worksheetScore >= 85 ? '#9FE1CB' : dd.worksheetScore >= 70 ? '#FAEEDA' : '#F5C4B3'
+    const scoreColor = tierColor(dd.worksheetScore)
     const dateLabel = `${Number(dd.sessionDate.slice(5, 7))}월 ${Number(dd.sessionDate.slice(8, 10))}일`
     const hwParts = [dd.hwTextbookName, dd.hwTextbookPage, dd.hwWorksheetRange].filter(Boolean)
     return (
       <div className="min-h-screen py-8 px-4" style={{ background: '#f5f5f5', fontFamily: 'Pretendard, sans-serif' }}>
         <div className="max-w-md mx-auto">
-          <div style={{ background: '#0f3460', borderRadius: 20, padding: 28, color: 'white' }}>
+          <div style={{ background: 'white', borderRadius: 20, padding: 28, border: `1px solid ${BORDER}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
               <img src="/icon-192.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
               <div>
-                <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
+                <div style={{ fontSize: 10, color: ORANGE, fontWeight: 500, letterSpacing: 2, marginBottom: 4 }}>
                   수학의지혜 · STUDY CHECK
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{dd.studentName}</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                <div style={{ fontSize: 22, fontWeight: 500, color: NAVY }}>{dd.studentName}</div>
+                <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
                   {dd.studentGrade} · {dateLabel} 학습 안내
                 </div>
               </div>
             </div>
-            <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20, opacity: 0.4 }} />
+            <div style={{ height: 1, background: NAVY_DIM, marginBottom: 20 }} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>출결</div>
-                <div style={{ fontSize: 16, fontWeight: 900 }}>{dd.attendance}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}` }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>출결</div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: NAVY }}>{dd.attendance}</div>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>지난 학습지</div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: scoreColor }}>{dd.worksheetScore != null ? `${dd.worksheetScore}점` : '-'}</div>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}` }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>지난 학습지</div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: scoreColor }}>{dd.worksheetScore != null ? `${dd.worksheetScore}점` : '-'}</div>
                 {(dd.worksheetUnit || dd.worksheetLevel) && (
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>
+                  <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 3 }}>
                     {[dd.worksheetUnit, dd.worksheetLevel].filter(Boolean).join(' · ')}
                   </div>
                 )}
@@ -121,45 +142,45 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
             </div>
 
             {dd.achievementText && (
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.9)' }}>{dd.achievementText}</div>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: TEXT_BODY }}>{dd.achievementText}</div>
               </div>
             )}
 
             {dd.progressContent && (
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>오늘 진도</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>{dd.progressContent}</div>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>오늘 진도</div>
+                <div style={{ fontSize: 12, color: TEXT_BODY, lineHeight: 1.6 }}>{dd.progressContent}</div>
               </div>
             )}
 
             {dd.dailyTestScore != null && (
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>데일리테스트</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>데일리테스트</div>
+                <div style={{ fontSize: 12, color: TEXT_BODY, lineHeight: 1.6 }}>
                   {dd.dailyTestUnit ? `${dd.dailyTestUnit} · ` : ''}{dd.dailyTestScore}점
                 </div>
               </div>
             )}
 
             {hwParts.length > 0 && (
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>오늘의 과제 (다음 시간까지)</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{hwParts.join('\n')}</div>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>오늘의 과제 (다음 시간까지)</div>
+                <div style={{ fontSize: 12, color: TEXT_BODY, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{hwParts.join('\n')}</div>
               </div>
             )}
 
             {dd.memo && (
-              <div style={{ background: 'rgba(159,225,203,0.1)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.3)' }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>메모</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>{dd.memo}</div>
+              <div style={{ background: ORANGE_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${ORANGE}` }}>
+                <div style={{ fontSize: 9, color: ORANGE_MID, fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>메모</div>
+                <div style={{ fontSize: 11, color: ORANGE_DEEP, lineHeight: 1.7 }}>{dd.memo}</div>
               </div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>수학의지혜 학원</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{dd.sessionDate}</div>
+              <div style={{ fontSize: 9, color: TEXT_MUTED }}>수학의지혜 학원</div>
+              <div style={{ fontSize: 9, color: TEXT_MUTED }}>{dd.sessionDate}</div>
             </div>
           </div>
         </div>
@@ -173,41 +194,41 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   return (
     <div className="min-h-screen py-8 px-4" style={{ background: '#f5f5f5', fontFamily: 'Pretendard, sans-serif' }}>
       <div className="max-w-md mx-auto">
-        <div style={{ background: '#0f3460', borderRadius: 20, padding: 28, color: 'white' }}>
+        <div style={{ background: 'white', borderRadius: 20, padding: 28, border: `1px solid ${BORDER}` }}>
           {/* 헤더 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <img src="/icon-192.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
               <div>
-                <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>
+                <div style={{ fontSize: 10, color: ORANGE, fontWeight: 500, letterSpacing: 2, marginBottom: 4 }}>
                   수학의지혜 · {isQuarterly ? 'QUARTERLY REPORT' : 'MONTHLY REPORT'}
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{d.studentName}</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{d.studentGrade}</div>
+                <div style={{ fontSize: 22, fontWeight: 500, color: NAVY }}>{d.studentName}</div>
+                <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>{d.studentGrade}</div>
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{link.period_label}</div>
+              <div style={{ fontSize: 10, color: TEXT_MUTED }}>{link.period_label}</div>
             </div>
           </div>
-          <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20 }} />
+          <div style={{ height: 1, background: NAVY_DIM, marginBottom: 20 }} />
 
           {/* 출결 + 과제 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>출결 현황</div>
-              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>{d.totalSessions}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 2 }}>회</span></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+            <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}` }}>
+              <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>출결 현황</div>
+              <div style={{ fontSize: 20, fontWeight: 500, marginBottom: 4, color: NAVY }}>{d.totalSessions}<span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 2 }}>회</span></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ fontSize: 10, color: '#9FE1CB' }}>정시 {d.attendance.정시}</span>
-                <span style={{ fontSize: 10, color: '#FAEEDA' }}>지각 {d.attendance.지각}</span>
-                <span style={{ fontSize: 10, color: '#F5C4B3' }}>결석 {d.attendance.결석}</span>
+                <span style={{ fontSize: 10, color: NAVY }}>정시 {d.attendance.정시}</span>
+                <span style={{ fontSize: 10, color: ORANGE }}>지각 {d.attendance.지각}</span>
+                <span style={{ fontSize: 10, color: RED }}>결석 {d.attendance.결석}</span>
               </div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
-              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>{d.hwRate}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 1 }}>%</span></div>
-              <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                <div style={{ height: 4, borderRadius: 4, width: `${d.hwRate}%`, background: d.hwRate >= 80 ? '#9FE1CB' : d.hwRate >= 60 ? '#FAEEDA' : '#F5C4B3' }} />
+            <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}` }}>
+              <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
+              <div style={{ fontSize: 20, fontWeight: 500, marginBottom: 6, color: NAVY }}>{d.hwRate}<span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 1 }}>%</span></div>
+              <div style={{ height: 4, background: '#e9edf3', borderRadius: 4 }}>
+                <div style={{ height: 4, borderRadius: 4, width: `${d.hwRate}%`, background: d.hwRate >= 80 ? NAVY : d.hwRate >= 60 ? ORANGE : RED }} />
               </div>
             </div>
           </div>
@@ -216,8 +237,8 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
           {d.attendanceDetail && d.attendanceDetail.length > 0 && (() => {
             const absentDates = d.attendanceDetail.filter(a => a.status === '결석')
             return (
-              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>수업 일정</div>
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>수업 일정</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {d.attendanceDetail.map((a, i) => {
                     const isAbsent = a.status === '결석'
@@ -227,19 +248,19 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
                       <div key={i} title={`${a.date} (${a.dow}) · ${a.status}`}
                         style={{
                           minWidth: 34, textAlign: 'center', borderRadius: 8, padding: '4px 5px',
-                          background: isAbsent ? 'rgba(245,196,179,0.25)' : noEntry ? 'rgba(255,255,255,0.04)' : 'rgba(159,225,203,0.12)',
-                          border: isAbsent ? '1px solid #F5C4B3' : '1px solid rgba(255,255,255,0.08)',
+                          background: isAbsent ? '#fee2e2' : noEntry ? '#f1f2f4' : 'white',
+                          border: isAbsent ? `1px solid ${RED}` : '1px solid #e9edf3',
                         }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: isAbsent ? '#F5C4B3' : isLate ? '#FAEEDA' : noEntry ? 'rgba(255,255,255,0.3)' : '#9FE1CB' }}>
+                        <div style={{ fontSize: 9, fontWeight: 500, color: isAbsent ? RED : isLate ? ORANGE : noEntry ? TEXT_MUTED : NAVY }}>
                           {Number(a.date.slice(5,7))}/{Number(a.date.slice(8,10))}
                         </div>
-                        <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{a.dow}</div>
+                        <div style={{ fontSize: 8, color: TEXT_MUTED, marginTop: 1 }}>{a.dow}</div>
                       </div>
                     )
                   })}
                 </div>
                 {absentDates.length > 0 && (
-                  <div style={{ marginTop: 10, fontSize: 10, color: '#F5C4B3', lineHeight: 1.6 }}>
+                  <div style={{ marginTop: 10, fontSize: 10, color: RED, lineHeight: 1.6 }}>
                     결석 {absentDates.length}회 · {absentDates.map(a => `${Number(a.date.slice(5,7))}/${Number(a.date.slice(8,10))}(${a.dow})`).join(', ')}
                   </div>
                 )}
@@ -249,27 +270,27 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
           {/* 데일리테스트 - 고등부는 학습지보다 매 수업 데일리테스트가 핵심이라 별도 섹션으로 표시 */}
           {d.dailyTests && d.dailyTests.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>데일리테스트</div>
+            <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>데일리테스트</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center', marginBottom: 10 }}>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 900 }}>{d.dailyTests.length}</div>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>응시 횟수</div>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: NAVY }}>{d.dailyTests.length}</div>
+                  <div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2 }}>응시 횟수</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: d.avgDailyTest != null ? (d.avgDailyTest >= 85 ? '#9FE1CB' : d.avgDailyTest >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: tierColor(d.avgDailyTest ?? null) }}>
                     {d.avgDailyTest ?? '-'}
                   </div>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div>
+                  <div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2 }}>평균점수</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid #e9edf3' }}>
                 {d.dailyTests.map((t, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 10, color: TEXT_BODY, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {Number(t.date.slice(5,7))}/{Number(t.date.slice(8,10))}{t.unit ? ` · ${t.unit}` : ''}
                     </span>
-                    <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: t.score >= 85 ? '#9FE1CB' : t.score >= 70 ? '#FAEEDA' : '#F5C4B3' }}>
+                    <span style={{ fontSize: 10, fontWeight: 500, flexShrink: 0, color: tierColor(t.score) }}>
                       {t.score}점
                     </span>
                   </div>
@@ -280,21 +301,21 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
           {/* 학습지 */}
           {d.periodCount > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>학습지 현황</div>
+            <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>학습지 현황</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
-                <div><div style={{ fontSize: 18, fontWeight: 900 }}>{d.periodCount}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>총 학습지</div></div>
-                <div><div style={{ fontSize: 18, fontWeight: 900, color: d.avgScore != null ? (d.avgScore >= 85 ? '#9FE1CB' : d.avgScore >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>{d.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div></div>
-                <div><div style={{ fontSize: 18, fontWeight: 900, color: d.passRate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{d.passRate}%</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>통과율</div></div>
+                <div><div style={{ fontSize: 18, fontWeight: 500, color: NAVY }}>{d.periodCount}</div><div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2 }}>총 학습지</div></div>
+                <div><div style={{ fontSize: 18, fontWeight: 500, color: tierColor(d.avgScore) }}>{d.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2 }}>평균점수</div></div>
+                <div><div style={{ fontSize: 18, fontWeight: 500, color: d.passRate >= 80 ? NAVY : ORANGE }}>{d.passRate}%</div><div style={{ fontSize: 9, color: TEXT_MUTED, marginTop: 2 }}>통과율</div></div>
               </div>
               {d.worksheetDetail?.length > 0 && (
-                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e9edf3', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {d.worksheetDetail.map((w: any, i: number) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 10, color: TEXT_BODY, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {w.unit} · {w.level}레벨{w.isSimilar ? ' (오답유사)' : ''}
                       </span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: w.score != null ? (w.score >= 85 ? '#9FE1CB' : w.score >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 500, color: w.score != null ? tierColor(w.score) : TEXT_MUTED, flexShrink: 0 }}>
                         {w.score != null ? `${w.score}점` : w.status}
                       </span>
                     </div>
@@ -306,30 +327,30 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
           {/* 교재 진도 - 기록이 있는 학년/학기만, 회차 + 진행률로 압축해서 보여줌 */}
           {((d.curriculumProgress?.length ?? 0) > 0 || d.calcProgress.length > 0) && (
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
+            <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {(d.curriculumProgress ?? []).map((g, i) => (
                   <div key={i}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)' }}>{g.grade} {g.semester}학기</span>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#085041', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>{g.round}회독</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA', marginLeft: 'auto' }}>{g.rate}%</span>
+                      <span style={{ fontSize: 10, color: TEXT_BODY }}>{g.grade} {g.semester}학기</span>
+                      <span style={{ fontSize: 9, fontWeight: 500, color: NAVY, background: '#e6ecf5', borderRadius: 8, padding: '1px 6px' }}>{g.round}회독</span>
+                      <span style={{ fontSize: 10, fontWeight: 500, color: g.rate >= 80 ? NAVY : ORANGE, marginLeft: 'auto' }}>{g.rate}%</span>
                     </div>
-                    <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                      <div style={{ height: 4, borderRadius: 4, width: `${g.rate}%`, background: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
+                    <div style={{ height: 4, background: '#e9edf3', borderRadius: 4 }}>
+                      <div style={{ height: 4, borderRadius: 4, width: `${g.rate}%`, background: g.rate >= 80 ? NAVY : ORANGE }} />
                     </div>
                   </div>
                 ))}
                 {d.calcProgress.map((tb, i) => (
-                  <div key={`c${i}`} style={{ borderTop: i === 0 && (d.curriculumProgress?.length ?? 0) > 0 ? '1px solid rgba(255,255,255,0.1)' : undefined, paddingTop: i === 0 && (d.curriculumProgress?.length ?? 0) > 0 ? 8 : 0 }}>
+                  <div key={`c${i}`} style={{ borderTop: i === 0 && (d.curriculumProgress?.length ?? 0) > 0 ? '1px solid #e9edf3' : undefined, paddingTop: i === 0 && (d.curriculumProgress?.length ?? 0) > 0 ? 8 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', borderRadius: 8, padding: '1px 6px' }}>연산서</span>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}{tb.grade ? ` · ${tb.grade}${tb.semester ? ` ${tb.semester}학기` : ''}` : ''}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd', marginLeft: 'auto' }}>{tb.percent}%</span>
+                      <span style={{ fontSize: 9, fontWeight: 500, color: ORANGE_MID, background: ORANGE_BG, borderRadius: 8, padding: '1px 6px' }}>연산서</span>
+                      <span style={{ fontSize: 10, color: TEXT_BODY }}>{tb.name}{tb.grade ? ` · ${tb.grade}${tb.semester ? ` ${tb.semester}학기` : ''}` : ''}</span>
+                      <span style={{ fontSize: 10, fontWeight: 500, color: ORANGE, marginLeft: 'auto' }}>{tb.percent}%</span>
                     </div>
-                    <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                      <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: '#c4b5fd' }} />
+                    <div style={{ height: 4, background: '#e9edf3', borderRadius: 4 }}>
+                      <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: ORANGE }} />
                     </div>
                   </div>
                 ))}
@@ -339,16 +360,16 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
           {/* 평가 */}
           {d.exams.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>평가 성적</div>
+            <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>평가 성적</div>
               {d.exams.map((e: any) => {
                 const pct = e.total_score > 0 ? Math.round(e.score / e.total_score * 100) : null
                 return (
                   <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
+                    <span style={{ fontSize: 10, color: TEXT_BODY }}>
                       {[e.exam_type, e.title, e.unit, e.unit_name].filter(Boolean).join(' · ')}
                     </span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: pct != null ? (pct >= 85 ? '#9FE1CB' : pct >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: e.score != null ? tierColor(pct) : TEXT_MUTED }}>
                       {e.score != null ? `${e.score}/${e.total_score} (${pct}%)` : '미채점'}
                     </span>
                   </div>
@@ -359,16 +380,16 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
           {/* 한 줄 평 */}
           {link.ai_comment && (
-            <div style={{ background: 'rgba(159,225,203,0.1)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.3)', marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>선생님 코멘트</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>{link.ai_comment}</div>
+            <div style={{ background: ORANGE_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${ORANGE}`, marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: ORANGE_MID, fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>선생님 코멘트</div>
+              <div style={{ fontSize: 11, color: ORANGE_DEEP, lineHeight: 1.7 }}>{link.ai_comment}</div>
             </div>
           )}
 
           {/* 푸터 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>수학의지혜 학원</div>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{link.period_start} ~ {link.period_end}</div>
+            <div style={{ fontSize: 9, color: TEXT_MUTED }}>수학의지혜 학원</div>
+            <div style={{ fontSize: 9, color: TEXT_MUTED }}>{link.period_start} ~ {link.period_end}</div>
           </div>
         </div>
       </div>
