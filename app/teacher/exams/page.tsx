@@ -129,6 +129,9 @@ export default function TeacherExamsPage() {
   const [coreActiveSubTabs, setCoreActiveSubTabs] = useState<string[]>([])
   const [coreRangeText, setCoreRangeText] = useState('') // 시험범위 - 같은 학년 전체가 같은 범위로 일괄 치르므로 체크박스 대신 직접 입력
   const [coreScores, setCoreScores] = useState<Record<string, string>>({}) // studentId → score
+  // 코어테스트는 하루에 다 같이 보는 게 아니라 기간을 두고 학생마다 다른 날 보는 경우가 있어서,
+  // 상단 "기본 날짜"를 대부분 학생에게 적용하고, 필요한 학생만 개별로 날짜를 바꿀 수 있게 함
+  const [coreScoreDates, setCoreScoreDates] = useState<Record<string, string>>({}) // studentId → date (없으면 coreDate 사용)
   const [coreSaving, setCoreSaving] = useState(false)
   const [coreSemester, setCoreSemester] = useState(1) // 초/중 단원은 학기별로 나뉘어 있어 구분 필요
 
@@ -262,13 +265,13 @@ export default function TeacherExamsPage() {
     // 빠뜨릴 일도 없음 - 성적표 화면에서 이 값을 "시험범위"로 그대로 보여줌)
     const rangeUnits = coreRangeText.trim()
 
-    // 점수 입력된 학생만 저장
+    // 점수 입력된 학생만 저장 - 날짜는 학생별로 따로 지정했으면 그 날짜, 아니면 기본 날짜(coreDate) 사용
     const entries = Object.entries(coreScores).filter(([, s]) => s !== '')
     await Promise.all(entries.map(([studentId, score]) =>
       supabase.from('exams').insert({
         student_id: studentId,
         exam_type: '코어테스트',
-        exam_date: coreDate,
+        exam_date: coreScoreDates[studentId] || coreDate,
         title: coreTitle,
         unit_name: rangeUnits || null,
         score: parseFloat(score),
@@ -280,6 +283,7 @@ export default function TeacherExamsPage() {
     setCoreSaving(false)
     setShowCoreModal(false)
     setCoreScores({})
+    setCoreScoreDates({})
     setCoreActiveUnits([])
     setCoreActiveSubTabs([])
     setCoreRangeText('')
@@ -998,12 +1002,13 @@ export default function TeacherExamsPage() {
             </div>
 
             <div className="px-5 py-4 space-y-4">
-              {/* 날짜 + 만점 */}
+              {/* 기본 날짜 + 만점 */}
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">날짜</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">기본 날짜</label>
                   <input type="date" value={coreDate} onChange={e => setCoreDate(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+                  <p className="text-[10px] text-gray-400 mt-1">대부분 이 날짜로 저장돼요. 학생마다 시험 본 날이 다르면 아래 목록에서 개별로 바꿀 수 있어요.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">만점</label>
@@ -1061,27 +1066,48 @@ export default function TeacherExamsPage() {
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">
                     학생별 점수 입력 <span className="font-normal text-gray-400">({coreGrade} 학생만 표시)</span>
                   </label>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {myStudents.filter(s => s.grade === coreGrade || s.grade.startsWith(coreGrade)).map(s => (
-                      <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-xl"
-                        style={{ background: coreScores[s.id] ? '#EAF3DE' : '#fafafa', border: '1px solid #f3f4f6' }}>
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                          style={{ background: '#EAF3DE', color: '#27500A' }}>
-                          {s.name[0]}
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {myStudents.filter(s => s.grade === coreGrade || s.grade.startsWith(coreGrade)).map(s => {
+                      const customDate = coreScoreDates[s.id]
+                      return (
+                        <div key={s.id} className="px-3 py-2 rounded-xl"
+                          style={{ background: coreScores[s.id] ? '#EAF3DE' : '#fafafa', border: '1px solid #f3f4f6' }}>
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                              style={{ background: '#EAF3DE', color: '#27500A' }}>
+                              {s.name[0]}
+                            </div>
+                            <span className="text-sm font-semibold flex-1 text-gray-800">{s.name}</span>
+                            <span className="text-[10px] text-gray-400">{s.grade}</span>
+                            <input
+                              type="number" min="0" max={coreTotalScore}
+                              value={coreScores[s.id] ?? ''}
+                              onChange={e => setCoreScores(prev => ({ ...prev, [s.id]: e.target.value }))}
+                              placeholder="-"
+                              className="w-16 px-2 py-1.5 rounded-xl border text-sm text-center focus:outline-none"
+                              style={{ borderColor: coreScores[s.id] ? '#639922' : '#e5e7eb' }}
+                            />
+                            <span className="text-[10px] text-gray-400">/{coreTotalScore}</span>
+                          </div>
+                          {/* 이 학생만 다른 날짜로 시험 봤을 때 - 기본은 안 보이고 필요할 때만 펼침 */}
+                          <div className="flex items-center gap-2 mt-1.5 pl-10">
+                            {customDate ? (
+                              <>
+                                <input type="date" value={customDate}
+                                  onChange={e => setCoreScoreDates(prev => ({ ...prev, [s.id]: e.target.value }))}
+                                  className="px-2 py-1 rounded-lg border text-[11px] focus:outline-none"
+                                  style={{ borderColor: '#639922' }} />
+                                <button onClick={() => setCoreScoreDates(prev => { const n = { ...prev }; delete n[s.id]; return n })}
+                                  className="text-[10px] text-gray-400 hover:text-red-400">기본 날짜로</button>
+                              </>
+                            ) : (
+                              <button onClick={() => setCoreScoreDates(prev => ({ ...prev, [s.id]: coreDate }))}
+                                className="text-[10px] text-gray-400 hover:text-gray-600">📅 이 학생만 다른 날짜였어요</button>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-sm font-semibold flex-1 text-gray-800">{s.name}</span>
-                        <span className="text-[10px] text-gray-400">{s.grade}</span>
-                        <input
-                          type="number" min="0" max={coreTotalScore}
-                          value={coreScores[s.id] ?? ''}
-                          onChange={e => setCoreScores(prev => ({ ...prev, [s.id]: e.target.value }))}
-                          placeholder="-"
-                          className="w-16 px-2 py-1.5 rounded-xl border text-sm text-center focus:outline-none"
-                          style={{ borderColor: coreScores[s.id] ? '#639922' : '#e5e7eb' }}
-                        />
-                        <span className="text-[10px] text-gray-400">/{coreTotalScore}</span>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
