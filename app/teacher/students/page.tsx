@@ -42,7 +42,7 @@ function formatLastLogin(dateStr?: string | null): string | null {
 }
 
 export default function TeacherStudentsPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
@@ -76,9 +76,9 @@ export default function TeacherStudentsPage() {
 
   useEffect(() => { fetchStudents() }, [])
 
-  // 담당 학생 필터
+  // 담당 학생 필터 - 관리자와 직원(행정 업무상 전체 학생을 다뤄야 함)은 전체, 강사는 본인 담당만
   const myStudents = students.filter((s) => {
-    if (isAdmin()) return true
+    if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)

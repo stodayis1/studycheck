@@ -118,6 +118,10 @@ export default function TeacherLearningNotesPage() {
 
   // 수업일지 필드
   const [noteProgress, setNoteProgress] = useState('')
+  // 교재 진도를 안 나간 날(오답정리, 별도 학습지 등으로 시간을 쓴 경우) - 켜면 교재 선택 UI를 끄고
+  // 메모칸에 수기로 오늘 한 일을 적게 해서, 그게 그대로 "오늘 진도"로 저장되게 함
+  // (그래야 학생/학부모 화면이나 완료 표시에서 "아무것도 안 한 날"처럼 보이지 않음)
+  const [noteNoTextbook, setNoteNoTextbook] = useState(false)
   // 개념DB 기반 진도 선택
   const [concepts, setConcepts] = useState<any[]>([])
   const [studentTextbooks, setStudentTextbooks] = useState<any[]>([])
@@ -445,7 +449,11 @@ export default function TeacherLearningNotesPage() {
     })
     setNoteSession(session ?? null)
     setNoteTab('basic')
-    setNoteProgress(session?.progress_content ?? session?.today_textbook_name ?? '')
+    const savedProgress = session?.progress_content ?? session?.today_textbook_name ?? ''
+    setNoteProgress(savedProgress)
+    // 교재 선택 형식은 항상 "[개념서]/[유형서]/[심화서] ..."로 시작하므로, 그 형식이 아닌 텍스트가
+    // 저장돼 있으면 그때 수기로 적은 진도(교재 진도 안 나간 날)로 판단해 토글을 자동으로 켜준다
+    setNoteNoTextbook(!!savedProgress && !/^\[(개념서|유형서|심화서)\]/.test(savedProgress))
     // 기존 세션이 있으면 진도 데이터 초기화하지 않음 (탭 전환 시 유지)
     if (!session) setNoteProgressByTB({})
     setNoteActiveTBId('')
@@ -494,13 +502,33 @@ export default function TeacherLearningNotesPage() {
     setShowNoteModal(true)
   }
 
+  // 학습일지에서 결석 체크가 저장되면 OPS(학원 행정 프로그램)에도 실시간으로 결석을 알려서
+  // 행정팀이 같은 결석을 또 손으로 입력하는 이중작업을 없앤다. 실패해도 학습일지 저장 자체는
+  // 이미 끝난 뒤라 화면에 영향 없음 — 실패는 콘솔에만 남기고 조용히 넘어감.
+  function syncAbsenceToOPS(student: Student, absentDate: string) {
+    fetch('/api/sync-absence-to-ops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_name: student.name,
+        grade: student.grade,
+        school: student.school,
+        parent_phone: student.parent_phone,
+        absent_date: absentDate,
+        reason: '스터디체크 학습일지 결석 체크',
+      }),
+    }).catch((e) => console.error('OPS 결석 동기화 요청 실패:', e))
+  }
+
   async function handleSaveNote() {
     if (!noteStudent) return
     setSavingNote(true)
     try {
     // 진도 텍스트 - "대단원번호-중단원번호 첫개념~마지막개념" 형식
+    // 교재 진도를 안 나간 날(noteNoTextbook)은 교재 선택값이 남아있어도 무시하고, 메모칸(noteProgress)에
+    // 수기로 적은 오늘 수업 내용을 그대로 "오늘 진도"로 저장한다.
     const myTBsForText = studentTextbooks.filter((t) => t.student_id === noteStudent.id)
-    const progressParts = Object.entries(noteProgressByTB)
+    const progressParts = noteNoTextbook ? [] : Object.entries(noteProgressByTB)
       .filter(([, sel]) => sel.conceptIds.length > 0 || sel.subChapters.length > 0)
       .map(([tbId, sel]) => {
         const tb = myTBsForText.find((t) => t.id === tbId)
@@ -529,9 +557,12 @@ export default function TeacherLearningNotesPage() {
         const subStr = subNums.length > 0 ? `-${subNums.join('+')}` : ''
         return `[${tb.textbook_type}] ${chNum}${subStr}${conceptRange}`
       }).filter(Boolean)
+    // noteMemo(메모칸)가 비어있으면 예전에 저장돼 있던 progress_content(noteProgress)를 그대로 유지 -
+    // 메모가 progress_content랑 다른 필드(학습일지 memo)라서, 토글만 켜고 아무것도 안 적은 채 저장해도
+    // 기존에 저장돼 있던 진도 내용이 빈 값으로 덮어써지지 않게 안전장치를 둠
     const progressText = progressParts.length > 0
       ? progressParts.join(' / ')
-      : noteProgress || null
+      : (noteNoTextbook ? (noteMemo || noteProgress) : noteProgress) || null
 
     // session 없으면 생성, 있으면 업데이트
     let sessionId = noteSession?.id
@@ -714,6 +745,8 @@ export default function TeacherLearningNotesPage() {
       return
     }
 
+    if (isAbsent) syncAbsenceToOPS(noteStudent, todayStr)
+
     fetchData()
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
     // 화면이 그대로라 저장이 됐는지 안 됐는지 헷갈릴 수 있어 잠깐 확인 표시를 보여줌
@@ -762,6 +795,7 @@ export default function TeacherLearningNotesPage() {
       alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
       return
     }
+    syncAbsenceToOPS(student, todayStr)
     fetchData()
   }
 
@@ -1556,9 +1590,25 @@ export default function TeacherLearningNotesPage() {
 
                   return (
                     <div className="space-y-2.5">
-                      <label className="block text-xs font-bold text-gray-700">진도 내용</label>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-gray-700">진도 내용</label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input type="checkbox" checked={noteNoTextbook}
+                            onChange={(e) => setNoteNoTextbook(e.target.checked)}
+                            className="w-3.5 h-3.5 accent-[#F5C4B3]" />
+                          <span className="text-[11px] font-semibold text-gray-500">오늘은 교재 진도 대신 다른 수업을 했어요</span>
+                        </label>
+                      </div>
 
-                      {myTextbooks.length === 0 ? (
+                      {noteNoTextbook ? (
+                        <div className="space-y-1.5">
+                          <textarea value={noteMemo} onChange={(e) => setNoteMemo(e.target.value)}
+                            rows={3} placeholder="예: 지난 학습지 오답정리 위주로 진행 / 별도 프린트 출력해서 개념 설명 / 데일리테스트 오답 풀이 등"
+                            className="w-full px-3.5 py-2.5 rounded-xl border-2 text-sm resize-none focus:outline-none"
+                            style={{ borderColor: '#F5C4B3', background: '#FFF9F6' }} />
+                          <p className="text-[10px] text-gray-400 px-1">여기 적은 내용이 오늘 진도로 저장되고, 리포트에도 그대로 나가요 (아래 메모칸과 같은 내용이에요)</p>
+                        </div>
+                      ) : myTextbooks.length === 0 ? (
                         <p className="text-xs text-gray-400 px-1">과정관리에서 교재를 먼저 배정해주세요</p>
                       ) : (
                         <div className="space-y-2">
@@ -1857,13 +1907,16 @@ export default function TeacherLearningNotesPage() {
                   )}
                 </div>
 
-                {/* 메모 */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">메모 <span className="text-gray-400 font-normal">(선택)</span></label>
-                  <textarea value={noteMemo} onChange={(e) => setNoteMemo(e.target.value)}
-                    rows={2} placeholder="특이사항, 다음 수업 준비사항 등"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
-                </div>
+                {/* 메모 - 교재 진도 대신 오늘 수업 내용을 적는 중이면(noteNoTextbook) 위 "진도 내용" 칸에서
+                    같은 noteMemo를 이미 입력하고 있으므로 여기서 중복으로 보여주지 않음 */}
+                {!noteNoTextbook && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2">메모 <span className="text-gray-400 font-normal">(선택)</span></label>
+                    <textarea value={noteMemo} onChange={(e) => setNoteMemo(e.target.value)}
+                      rows={2} placeholder="특이사항, 다음 수업 준비사항 등"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
+                  </div>
+                )}
 
                 {/* 시험대비 (이너프원) */}
                 {(() => {

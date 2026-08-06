@@ -90,6 +90,14 @@ export function useAuth() {
     return adminMode
   }
 
+  // 직원(staff)은 삭제 등 관리자 전용 기능은 못 쓰지만, 학생 목록/학생 정보 수정/수업(시간표) 배정/
+  // 교재·학습지 배정 화면에서는 담당 강사로 지정된 학생만이 아니라 전체 학생을 보고 다뤄야 하는
+  // 행정 업무 특성상 admin과 동일하게 전체 학생이 보여야 함. (관리자가 강사모드로 전환했을 때는
+  // 여전히 본인 담당 학생만 보이도록 isAdmin()의 adminMode 로직은 그대로 둠)
+  function canManageAllStudents() {
+    return isAdmin() || currentUser?.role === 'staff'
+  }
+
   // 관리자 모드 토글
   function toggleAdminMode() {
     const newMode = !adminMode
@@ -97,5 +105,5 @@ export function useAuth() {
     localStorage.setItem(ADMIN_MODE_KEY, String(newMode))
   }
 
-  return { currentUser, currentStudent, loading, role, signIn, signOut, isAdmin, adminMode, toggleAdminMode }
+  return { currentUser, currentStudent, loading, role, signIn, signOut, isAdmin, canManageAllStudents, adminMode, toggleAdminMode }
 }
