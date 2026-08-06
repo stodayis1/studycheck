@@ -39,6 +39,8 @@ interface StudentTextbook {
   status: string
   memo: string | null
   assigned_at: string
+  grade?: string
+  semester?: number
 }
 
 interface Concept {
@@ -1345,7 +1347,15 @@ export default function TeacherAssignmentsPage() {
                       placeholder="이름 검색" className="w-full text-sm rounded-xl px-3 py-2 mb-2 outline-none"
                       style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
                     <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                      {myStudents.filter(s => (s.grade.includes('중') || s.grade.includes('고')) && (twinSearch === '' || s.name.includes(twinSearch))).map(s => (
+                      {myStudents.filter(s => {
+                        const middleOrHigh = s.grade.includes('중') || s.grade.includes('고')
+                        // 초등학생이어도 실제 배정된 교재가 중등(또는 고등) 과정이면 쌍둥이학습지 대상에 포함
+                        // (예: 초6인데 중1 과정 교재를 배정받은 학생)
+                        const onAdvancedCurriculum = textbooks.some(t =>
+                          t.student_id === s.id && (t.status === 'assigned' || t.status === 'completed') &&
+                          (t.grade?.includes('중') || t.grade?.includes('고')))
+                        return (middleOrHigh || onAdvancedCurriculum) && (twinSearch === '' || s.name.includes(twinSearch))
+                      }).map(s => (
                         <button key={s.id} onClick={() => setTwinStudent(s)}
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#FAECE7', color: '#993C1D' }}>{s.name[0]}</div>
