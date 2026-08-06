@@ -127,6 +127,7 @@ export default function TeacherExamsPage() {
   const [coreTotalScore, setCoreTotalScore] = useState('100')
   const [coreActiveUnits, setCoreActiveUnits] = useState<string[]>([])
   const [coreActiveSubTabs, setCoreActiveSubTabs] = useState<string[]>([])
+  const [coreRangeText, setCoreRangeText] = useState('') // 시험범위 - 같은 학년 전체가 같은 범위로 일괄 치르므로 체크박스 대신 직접 입력
   const [coreScores, setCoreScores] = useState<Record<string, string>>({}) // studentId → score
   const [coreSaving, setCoreSaving] = useState(false)
   const [coreSemester, setCoreSemester] = useState(1) // 초/중 단원은 학기별로 나뉘어 있어 구분 필요
@@ -256,21 +257,10 @@ export default function TeacherExamsPage() {
     if (!coreGrade || !coreTitle) return
     setCoreSaving(true)
 
-    // 범위 계산
-    const gradeConcepts = concepts.filter(c => c.grade === coreGrade)
-    const isElem = coreGrade.includes('초')
-    let selectedRangeKeys: string[] = []
-    if (isElem) {
-      selectedRangeKeys = coreActiveUnits
-    } else {
-      const unitsWithSub = new Set(coreActiveSubTabs.map(k => k.split('__')[0]))
-      const unitsOnly = coreActiveUnits.filter(u => !unitsWithSub.has(u))
-      selectedRangeKeys = [...coreActiveSubTabs, ...unitsOnly]
-    }
-    // 선택한 순서가 아니라 교육과정 순서 기준으로 "첫구간~마지막구간" 형태로 압축
-    const orderedLabels = [...new Set(gradeConcepts.map((c) => c.sub_chapter || c.chapter))]
-    const selectedLabels = selectedRangeKeys.map(k => k.includes('__') ? k.split('__')[1] : k)
-    const rangeUnits = compressRangeLabels(orderedLabels, selectedLabels)
+    // 시험범위는 체크박스 대신 직접 입력한 텍스트를 그대로 저장 (같은 학년 학생 전체가 같은 범위로
+    // 일괄로 치르는 시험이라 대단원/중단원 체크박스를 일일이 고르는 것보다 직접 입력이 훨씬 간단하고
+    // 빠뜨릴 일도 없음 - 성적표 화면에서 이 값을 "시험범위"로 그대로 보여줌)
+    const rangeUnits = coreRangeText.trim()
 
     // 점수 입력된 학생만 저장
     const entries = Object.entries(coreScores).filter(([, s]) => s !== '')
@@ -292,6 +282,7 @@ export default function TeacherExamsPage() {
     setCoreScores({})
     setCoreActiveUnits([])
     setCoreActiveSubTabs([])
+    setCoreRangeText('')
     fetchData()
   }
 
@@ -1039,10 +1030,10 @@ export default function TeacherExamsPage() {
 
               {/* 학년 선택 */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">학년 (단원 기준)</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">학년</label>
                 <div className="flex flex-wrap gap-2">
                   {['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3'].map(g => (
-                    <button key={g} onClick={() => { setCoreGrade(g); setCoreActiveUnits([]); setCoreActiveSubTabs([]); setCoreSemester(1) }}
+                    <button key={g} onClick={() => { setCoreGrade(g); setCoreRangeText('') }}
                       className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
                       style={coreGrade === g
                         ? { background: '#27500A', color: 'white', borderColor: '#27500A' }
@@ -1053,73 +1044,16 @@ export default function TeacherExamsPage() {
                 </div>
               </div>
 
-              {/* 단원 범위 */}
-              {coreGrade && (() => {
-                const hasSemester = coreGrade.startsWith('초') || coreGrade.startsWith('중')
-                const gradeConcepts = concepts.filter(c => c.grade === coreGrade && (!hasSemester || c.semester === coreSemester))
-                const chapters = [...new Set(gradeConcepts.map(c => c.chapter))]
-                const isElem = coreGrade.includes('초')
-                return (
-                  <div>
-                    {hasSemester && (
-                      <div className="flex gap-2 mb-2">
-                        {[1, 2].map(sem => (
-                          <button key={sem} onClick={() => { setCoreSemester(sem); setCoreActiveUnits([]); setCoreActiveSubTabs([]) }}
-                            className="flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all"
-                            style={coreSemester === sem
-                              ? { background: '#27500A', color: 'white', borderColor: '#27500A' }
-                              : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                            {sem}학기
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5">시험 범위</label>
-                    <div className="flex flex-wrap gap-1 mb-2 max-h-28 overflow-y-auto">
-                      {chapters.map(ch => (
-                        <button key={ch} onClick={() => setCoreActiveUnits(prev =>
-                          prev.includes(ch) ? prev.filter(x => x !== ch) : [...prev, ch]
-                        )}
-                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all"
-                          style={coreActiveUnits.includes(ch)
-                            ? { background: '#639922', color: 'white', borderColor: '#639922' }
-                            : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                          {ch.slice(0, 14)}
-                        </button>
-                      ))}
-                    </div>
-                    {!isElem && coreActiveUnits.length > 0 && (
-                      <div className="space-y-1">
-                        {coreActiveUnits.map(ch => {
-                          const subChapters = [...new Set(gradeConcepts.filter(c => c.chapter === ch).map(c => c.sub_chapter).filter(Boolean))]
-                          if (subChapters.length === 0) return null
-                          return (
-                            <div key={ch}>
-                              <p className="text-[10px] font-bold text-gray-500 mb-1">{ch} 중단원</p>
-                              <div className="flex flex-wrap gap-1">
-                                {subChapters.map(sub => {
-                                  const key = ch + '__' + sub
-                                  return (
-                                    <button key={key} onClick={() => setCoreActiveSubTabs(prev =>
-                                      prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key]
-                                    )}
-                                      className="px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all"
-                                      style={coreActiveSubTabs.includes(key)
-                                        ? { background: '#EAF3DE', color: '#27500A', borderColor: '#639922' }
-                                        : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                                      {sub}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
+              {/* 시험범위 - 같은 학년 학생 전체가 같은 범위로 일괄 응시하므로 직접 입력이 체크박스보다 빠르고 정확함 */}
+              {coreGrade && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">시험범위</label>
+                  <input value={coreRangeText} onChange={e => setCoreRangeText(e.target.value)}
+                    placeholder="예: 도형의 성질 ~ 도형의 닮음"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+                  <p className="text-[10px] text-gray-400 mt-1">여기 입력한 범위가 성적표에 그대로 표시돼요</p>
+                </div>
+              )}
 
               {/* 학생별 점수 입력 */}
               {coreGrade && (

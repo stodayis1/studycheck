@@ -494,24 +494,6 @@ export default function TeacherLearningNotesPage() {
     setShowNoteModal(true)
   }
 
-  // 학습일지에서 결석 체크가 저장되면 OPS(학원 행정 프로그램)에도 실시간으로 결석을 알려서
-  // 행정팀이 같은 결석을 또 손으로 입력하는 이중작업을 없앤다. 실패해도 학습일지 저장 자체는
-  // 이미 끝난 뒤라 화면에 영향 없음 — 실패는 콘솔에만 남기고 조용히 넘어감.
-  function syncAbsenceToOPS(student: Student, absentDate: string) {
-    fetch('/api/sync-absence-to-ops', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        student_name: student.name,
-        grade: student.grade,
-        school: student.school,
-        parent_phone: student.parent_phone,
-        absent_date: absentDate,
-        reason: '스터디체크 학습일지 결석 체크',
-      }),
-    }).catch((e) => console.error('OPS 결석 동기화 요청 실패:', e))
-  }
-
   async function handleSaveNote() {
     if (!noteStudent) return
     setSavingNote(true)
@@ -732,8 +714,6 @@ export default function TeacherLearningNotesPage() {
       return
     }
 
-    if (isAbsent) syncAbsenceToOPS(noteStudent, todayStr)
-
     fetchData()
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
     // 화면이 그대로라 저장이 됐는지 안 됐는지 헷갈릴 수 있어 잠깐 확인 표시를 보여줌
@@ -782,7 +762,6 @@ export default function TeacherLearningNotesPage() {
       alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
       return
     }
-    syncAbsenceToOPS(student, todayStr)
     fetchData()
   }
 

@@ -464,7 +464,11 @@ export default function TeacherReportsPage() {
     const recentCore = coreTests.slice(-6) // 최근 6회까지만 추이 차트에 표시
     const pct = (e: any) => e.total_score > 0 ? Math.round((e.score / e.total_score) * 100) : null
     const corePts = recentCore.map((e: any) => ({
-      date: e.exam_date, label: e.title || e.exam_date.slice(5).replace('-', '/'), pct: pct(e), score: e.score, total: e.total_score,
+      date: e.exam_date,
+      dateLabel: `${Number(e.exam_date.slice(5, 7))}/${Number(e.exam_date.slice(8, 10))}`,
+      title: e.title || '코어테스트',
+      range: e.unit_name || null, // 시험범위 - 코어테스트 일괄입력 시 직접 입력한 값
+      pct: pct(e), score: e.score, total: e.total_score,
     }))
     const latestCore = recentCore[recentCore.length - 1] ?? null
     const prevCore = recentCore.length > 1 ? recentCore[recentCore.length - 2] : null
@@ -907,7 +911,7 @@ export default function TeacherReportsPage() {
                       <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
                         <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>코어테스트 점수 추이 (최근 {gData.coreTests.length}회)</div>
                         {(() => {
-                          const chartW = 400, chartH = 130, padL = 26, padR = 10, padT = 16, padB = 30
+                          const chartW = 400, chartH = 140, padL = 26, padR = 10, padT = 16, padB = 40
                           const innerW = chartW - padL - padR, innerH = chartH - padT - padB
                           const n = gData.coreTests.length
                           const gap = innerW / n
@@ -933,12 +937,26 @@ export default function TeacherReportsPage() {
                                 <g key={i}>
                                   <circle cx={p.cx} cy={p.cy} r={3.5} fill="#9FE1CB" />
                                   <text x={p.cx} y={p.cy - 9} textAnchor="middle" fontSize={9} fontWeight="700" fill="white">{p.pct}%</text>
-                                  <text x={p.cx} y={padT + innerH + 14} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.5)">{p.label}</text>
+                                  <text x={p.cx} y={padT + innerH + 14} textAnchor="middle" fontSize={8.5} fontWeight="700" fill="rgba(255,255,255,0.7)">{p.dateLabel}</text>
+                                  <text x={p.cx} y={padT + innerH + 25} textAnchor="middle" fontSize={7.5} fill="rgba(255,255,255,0.45)">{p.title}</text>
                                 </g>
                               ))}
                             </svg>
                           )
                         })()}
+                        {/* 회차별 상세 - 날짜/회차/시험범위를 목록으로도 보여줘 차트 라벨보다 명확하게 확인 가능 */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                          {gData.coreTests.map((c: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', flexShrink: 0, width: 34 }}>{c.dateLabel}</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: '#9FE1CB', flexShrink: 0 }}>{c.title}</span>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {c.range || '시험범위 미입력'}
+                              </span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: (c.pct ?? 0) >= 85 ? '#9FE1CB' : (c.pct ?? 0) >= 70 ? '#FAEEDA' : '#F5C4B3', flexShrink: 0 }}>{c.pct}%</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
