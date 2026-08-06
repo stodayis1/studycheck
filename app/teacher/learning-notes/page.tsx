@@ -16,6 +16,14 @@ interface Student {
   parent_phone?: string | null
 }
 
+// 강사/직원 이름 → 관(코어관/프라임관) 매핑. 학생별로 관을 따로 입력하지 않고,
+// 담당 강사 기준으로 학생의 소속 관을 판단한다 (원장님 확인 완료: 2026-08-06).
+// 직원(staff)의 "학습관리" 화면 방문 시 본인이 근무하는 관의 학생만 보이게 하는 데 사용.
+const TEACHER_CAMPUS: Record<string, '코어관' | '프라임관'> = {
+  '이규숙': '코어관', '최윤정': '코어관', '주한': '코어관', '조윤희': '코어관', '윤주희': '코어관', '김정은': '코어관',
+  '신애진': '프라임관', '김은수': '프라임관', '박경미': '프라임관', '윤지혜': '프라임관', '승민정': '프라임관',
+}
+
 interface Schedule {
   id: string
   student_id: string
@@ -358,6 +366,13 @@ export default function TeacherLearningNotesPage() {
     if (!currentUser?.name || !s.teacher_name) return false
     // 콤마/공백으로 구분된 여러 강사명에서 본인 이름 찾기
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    // 직원(행정)은 본인 담당 학생이 따로 없으므로, 본인이 근무하는 관과 같은 관 소속
+    // 담당 강사의 학생이면 모두 보이게 한다 (예: 코어관 근무 직원 → 코어관 강사진 학생 전체)
+    if (currentUser.role === 'staff') {
+      const myCampus = TEACHER_CAMPUS[currentUser.name]
+      if (!myCampus) return false
+      return teachers.some((t) => TEACHER_CAMPUS[t] === myCampus)
+    }
     return teachers.includes(currentUser.name)
   })
   const todayDayIndex = new Date().getDay()
