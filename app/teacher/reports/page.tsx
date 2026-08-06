@@ -441,7 +441,7 @@ export default function TeacherReportsPage() {
   async function saveAsImage() {
     if (!reportRef.current) return
     const html2canvas = (await import('html2canvas')).default
-    const el = reportRef.current; const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#0f3460', width: el.offsetWidth, height: el.offsetHeight, windowWidth: el.offsetWidth, windowHeight: el.offsetHeight, imageTimeout: 0, allowTaint: true })
+    const el = reportRef.current; const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: 'white', width: el.offsetWidth, height: el.offsetHeight, windowWidth: el.offsetWidth, windowHeight: el.offsetHeight, imageTimeout: 0, allowTaint: true })
     const url = canvas.toDataURL('image/png')
     const a = document.createElement('a')
     a.href = url
@@ -537,7 +537,7 @@ export default function TeacherReportsPage() {
     if (!gradeRef.current) return
     const html2canvas = (await import('html2canvas')).default
     const el = gradeRef.current
-    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#0f3460', width: el.offsetWidth, height: el.offsetHeight, windowWidth: el.offsetWidth, windowHeight: el.offsetHeight, imageTimeout: 0, allowTaint: true })
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: 'white', width: el.offsetWidth, height: el.offsetHeight, windowWidth: el.offsetWidth, windowHeight: el.offsetHeight, imageTimeout: 0, allowTaint: true })
     const url = canvas.toDataURL('image/png')
     const a = document.createElement('a')
     a.href = url
@@ -638,41 +638,41 @@ export default function TeacherReportsPage() {
                   </div>
                 )}
 
-                {/* 보고서 카드 (이미지 캡처 대상) */}
-                <div ref={reportRef} style={{ background: '#0f3460', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', color: 'white' }}>
+                {/* 보고서 카드 (이미지 캡처 대상) - 흰 배경 + 네이비/오렌지 배색 */}
+                <div ref={reportRef} style={{ background: 'white', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', border: '1px solid #e5e7eb' }}>
                   {/* 헤더 */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <img src="/icon-192.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
                       <div>
-                        <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 4 }}>수학의지혜 · MONTHLY REPORT</div>
-                        <div style={{ fontSize: 22, fontWeight: 900 }}>{mData.student.name}</div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{mData.student.school} · {mData.student.grade} · {currentUser?.name} 선생님</div>
+                        <div style={{ fontSize: 10, color: '#D85A30', fontWeight: 500, letterSpacing: 2, marginBottom: 4 }}>수학의지혜 · MONTHLY REPORT</div>
+                        <div style={{ fontSize: 22, fontWeight: 500, color: '#0f3460' }}>{mData.student.name}</div>
+                        <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{mData.student.school} · {mData.student.grade} · {currentUser?.name} 선생님</div>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 32, fontWeight: 900, color: '#9FE1CB', lineHeight: 1 }}>{mData.month}</div>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>월 보고서 · {mData.year}</div>
+                      <div style={{ fontSize: 32, fontWeight: 500, color: '#0f3460', lineHeight: 1 }}>{mData.month}</div>
+                      <div style={{ fontSize: 10, color: '#9ca3af' }}>월 보고서 · {mData.year}</div>
                     </div>
                   </div>
-                  <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20 }} />
+                  <div style={{ height: 1, background: 'rgba(15,52,96,0.15)', marginBottom: 20 }} />
 
                   {/* 출결 + 과제 */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>출결 현황</div>
-                      <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>{mData.totalSessions}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 2 }}>회</span></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                    <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460' }}>
+                      <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>출결 현황</div>
+                      <div style={{ fontSize: 20, fontWeight: 500, marginBottom: 4, color: '#0f3460' }}>{mData.totalSessions}<span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 2 }}>회</span></div>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <span style={{ fontSize: 10, color: '#9FE1CB' }}>정시 {mData.attendance.정시}</span>
-                        <span style={{ fontSize: 10, color: '#FAEEDA' }}>지각 {mData.attendance.지각}</span>
-                        <span style={{ fontSize: 10, color: '#F5C4B3' }}>결석 {mData.attendance.결석}</span>
+                        <span style={{ fontSize: 10, color: '#0f3460' }}>정시 {mData.attendance.정시}</span>
+                        <span style={{ fontSize: 10, color: '#D85A30' }}>지각 {mData.attendance.지각}</span>
+                        <span style={{ fontSize: 10, color: '#dc2626' }}>결석 {mData.attendance.결석}</span>
                       </div>
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
-                      <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>{mData.hwRate}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 1 }}>%</span></div>
-                      <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                        <div style={{ height: 4, borderRadius: 4, width: `${mData.hwRate}%`, background: mData.hwRate >= 80 ? '#9FE1CB' : mData.hwRate >= 60 ? '#FAEEDA' : '#F5C4B3' }} />
+                    <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460' }}>
+                      <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>과제 달성률</div>
+                      <div style={{ fontSize: 20, fontWeight: 500, marginBottom: 6, color: '#0f3460' }}>{mData.hwRate}<span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 1 }}>%</span></div>
+                      <div style={{ height: 4, background: '#e9edf3', borderRadius: 4 }}>
+                        <div style={{ height: 4, borderRadius: 4, width: `${mData.hwRate}%`, background: mData.hwRate >= 80 ? '#0f3460' : mData.hwRate >= 60 ? '#D85A30' : '#dc2626' }} />
                       </div>
                     </div>
                   </div>
@@ -681,8 +681,8 @@ export default function TeacherReportsPage() {
                   {mData.attendanceDetail && mData.attendanceDetail.length > 0 && (() => {
                     const absentDates = mData.attendanceDetail.filter((a: any) => a.status === '결석')
                     return (
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>수업 일정</div>
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>수업 일정</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                           {mData.attendanceDetail.map((a: any, i: number) => {
                             const isAbsent = a.status === '결석'
@@ -692,19 +692,19 @@ export default function TeacherReportsPage() {
                               <div key={i} title={`${a.date} (${a.dow}) · ${a.status}`}
                                 style={{
                                   minWidth: 34, textAlign: 'center', borderRadius: 8, padding: '4px 5px',
-                                  background: isAbsent ? 'rgba(245,196,179,0.25)' : noEntry ? 'rgba(255,255,255,0.04)' : 'rgba(159,225,203,0.12)',
-                                  border: isAbsent ? '1px solid #F5C4B3' : '1px solid rgba(255,255,255,0.08)',
+                                  background: isAbsent ? '#fee2e2' : noEntry ? '#f1f2f4' : 'white',
+                                  border: isAbsent ? '1px solid #dc2626' : '1px solid #e9edf3',
                                 }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: isAbsent ? '#F5C4B3' : isLate ? '#FAEEDA' : noEntry ? 'rgba(255,255,255,0.3)' : '#9FE1CB' }}>
+                                <div style={{ fontSize: 9, fontWeight: 500, color: isAbsent ? '#dc2626' : isLate ? '#D85A30' : noEntry ? '#9ca3af' : '#0f3460' }}>
                                   {Number(a.date.slice(5,7))}/{Number(a.date.slice(8,10))}
                                 </div>
-                                <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{a.dow}</div>
+                                <div style={{ fontSize: 8, color: '#9ca3af', marginTop: 1 }}>{a.dow}</div>
                               </div>
                             )
                           })}
                         </div>
                         {absentDates.length > 0 && (
-                          <div style={{ marginTop: 10, fontSize: 10, color: '#F5C4B3', lineHeight: 1.6 }}>
+                          <div style={{ marginTop: 10, fontSize: 10, color: '#dc2626', lineHeight: 1.6 }}>
                             결석 {absentDates.length}회 · {absentDates.map((a: any) => `${Number(a.date.slice(5,7))}/${Number(a.date.slice(8,10))}(${a.dow})`).join(', ')}
                           </div>
                         )}
@@ -714,27 +714,27 @@ export default function TeacherReportsPage() {
 
                   {/* 데일리테스트 - 고등부는 학습지보다 매 수업 데일리테스트가 핵심이라 별도 섹션으로 표시 */}
                   {mData.dailyTests?.length > 0 && (
-                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>데일리테스트</div>
+                    <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>데일리테스트</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center', marginBottom: 10 }}>
                         <div>
-                          <div style={{ fontSize: 18, fontWeight: 900 }}>{mData.dailyTests.length}</div>
-                          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>응시 횟수</div>
+                          <div style={{ fontSize: 18, fontWeight: 500, color: '#0f3460' }}>{mData.dailyTests.length}</div>
+                          <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>응시 횟수</div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 18, fontWeight: 900, color: mData.avgDailyTest != null ? (mData.avgDailyTest >= 85 ? '#9FE1CB' : mData.avgDailyTest >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
+                          <div style={{ fontSize: 18, fontWeight: 500, color: mData.avgDailyTest != null ? (mData.avgDailyTest >= 85 ? '#0f3460' : mData.avgDailyTest >= 70 ? '#D85A30' : '#dc2626') : '#9ca3af' }}>
                             {mData.avgDailyTest ?? '-'}
                           </div>
-                          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div>
+                          <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>평균점수</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid #e9edf3' }}>
                         {mData.dailyTests.map((t: any, i: number) => (
                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 10, color: '#374151', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {Number(t.session_date.slice(5,7))}/{Number(t.session_date.slice(8,10))}{t.daily_test_unit ? ` · ${t.daily_test_unit}` : ''}
                             </span>
-                            <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: t.daily_test_score >= 85 ? '#9FE1CB' : t.daily_test_score >= 70 ? '#FAEEDA' : '#F5C4B3' }}>
+                            <span style={{ fontSize: 10, fontWeight: 500, flexShrink: 0, color: t.daily_test_score >= 85 ? '#0f3460' : t.daily_test_score >= 70 ? '#D85A30' : '#dc2626' }}>
                               {t.daily_test_score}점
                             </span>
                           </div>
@@ -745,21 +745,21 @@ export default function TeacherReportsPage() {
 
                   {/* 학습지 */}
                   {mData.monthWS > 0 && (
-                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>학습지 현황</div>
+                    <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>학습지 현황</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
-                        <div><div style={{ fontSize: 18, fontWeight: 900 }}>{mData.monthWS}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>총 학습지</div></div>
-                        <div><div style={{ fontSize: 18, fontWeight: 900, color: mData.avgScore != null ? (mData.avgScore >= 85 ? '#9FE1CB' : mData.avgScore >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>{mData.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div></div>
-                        <div><div style={{ fontSize: 18, fontWeight: 900, color: mData.passRate >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{mData.passRate}%</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>통과율</div></div>
+                        <div><div style={{ fontSize: 18, fontWeight: 500, color: '#0f3460' }}>{mData.monthWS}</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>총 학습지</div></div>
+                        <div><div style={{ fontSize: 18, fontWeight: 500, color: mData.avgScore != null ? (mData.avgScore >= 85 ? '#0f3460' : mData.avgScore >= 70 ? '#D85A30' : '#dc2626') : '#9ca3af' }}>{mData.avgScore ?? '-'}</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>평균점수</div></div>
+                        <div><div style={{ fontSize: 18, fontWeight: 500, color: mData.passRate >= 80 ? '#0f3460' : '#D85A30' }}>{mData.passRate}%</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>통과율</div></div>
                       </div>
                       {mData.worksheetDetail?.length > 0 && (
-                        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e9edf3', display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {mData.worksheetDetail.map((w: any, i: number) => (
                             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 10, color: '#374151', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {w.unit} · {w.level}레벨{w.isSimilar ? ' (오답유사)' : ''}
                               </span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: w.score != null ? (w.score >= 85 ? '#9FE1CB' : w.score >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                              <span style={{ fontSize: 10, fontWeight: 500, color: w.score != null ? (w.score >= 85 ? '#0f3460' : w.score >= 70 ? '#D85A30' : '#dc2626') : '#9ca3af', flexShrink: 0 }}>
                                 {w.score != null ? `${w.score}점` : w.status}
                               </span>
                             </div>
@@ -771,30 +771,30 @@ export default function TeacherReportsPage() {
 
                   {/* 교재 진도 - 기록이 있는 학년/학기만, 회차 + 진행률로 압축해서 보여줌 (실제 발송 보고서와 동일 로직) */}
                   {(mData.curriculumProgress.length > 0 || mData.calcProgress.length > 0) && (
-                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
+                    <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>교재 진도</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {mData.curriculumProgress.map((g: any, i: number) => (
                           <div key={i}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)' }}>{g.grade} {g.semester}학기</span>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: '#085041', background: '#9FE1CB', borderRadius: 8, padding: '1px 6px' }}>{g.round}회독</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA', marginLeft: 'auto' }}>{g.rate}%</span>
+                              <span style={{ fontSize: 10, color: '#374151' }}>{g.grade} {g.semester}학기</span>
+                              <span style={{ fontSize: 9, fontWeight: 500, color: '#0f3460', background: '#e6ecf5', borderRadius: 8, padding: '1px 6px' }}>{g.round}회독</span>
+                              <span style={{ fontSize: 10, fontWeight: 500, color: g.rate >= 80 ? '#0f3460' : '#D85A30', marginLeft: 'auto' }}>{g.rate}%</span>
                             </div>
-                            <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                              <div style={{ height: 4, borderRadius: 4, width: `${g.rate}%`, background: g.rate >= 80 ? '#9FE1CB' : '#FAEEDA' }} />
+                            <div style={{ height: 4, background: '#e9edf3', borderRadius: 4 }}>
+                              <div style={{ height: 4, borderRadius: 4, width: `${g.rate}%`, background: g.rate >= 80 ? '#0f3460' : '#D85A30' }} />
                             </div>
                           </div>
                         ))}
                         {mData.calcProgress.map((tb: any, i: number) => (
-                          <div key={`c${i}`} style={{ borderTop: i === 0 && mData.curriculumProgress.length > 0 ? '1px solid rgba(255,255,255,0.1)' : undefined, paddingTop: i === 0 && mData.curriculumProgress.length > 0 ? 8 : 0 }}>
+                          <div key={`c${i}`} style={{ borderTop: i === 0 && mData.curriculumProgress.length > 0 ? '1px solid #e9edf3' : undefined, paddingTop: i === 0 && mData.curriculumProgress.length > 0 ? 8 : 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', borderRadius: 8, padding: '1px 6px' }}>연산서</span>
-                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)' }}>{tb.name}{tb.grade ? ` · ${tb.grade}${tb.semester ? ` ${tb.semester}학기` : ''}` : ''}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#c4b5fd', marginLeft: 'auto' }}>{tb.percent}%</span>
+                              <span style={{ fontSize: 9, fontWeight: 500, color: '#993C1D', background: '#FAECE7', borderRadius: 8, padding: '1px 6px' }}>연산서</span>
+                              <span style={{ fontSize: 10, color: '#374151' }}>{tb.name}{tb.grade ? ` · ${tb.grade}${tb.semester ? ` ${tb.semester}학기` : ''}` : ''}</span>
+                              <span style={{ fontSize: 10, fontWeight: 500, color: '#D85A30', marginLeft: 'auto' }}>{tb.percent}%</span>
                             </div>
-                            <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                              <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: '#c4b5fd' }} />
+                            <div style={{ height: 4, background: '#e9edf3', borderRadius: 4 }}>
+                              <div style={{ height: 4, borderRadius: 4, width: `${tb.percent}%`, background: '#D85A30' }} />
                             </div>
                           </div>
                         ))}
@@ -804,16 +804,16 @@ export default function TeacherReportsPage() {
 
                   {/* 평가 */}
                   {mData.monthExams.length > 0 && (
-                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>평가 성적</div>
+                    <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>평가 성적</div>
                       {mData.monthExams.map((e: any) => {
                         const pct = e.total_score > 0 ? Math.round(e.score / e.total_score * 100) : null
                         return (
                           <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
+                            <span style={{ fontSize: 10, color: '#374151' }}>
                               {[e.exam_type, e.title, e.unit, e.unit_name].filter(Boolean).join(' · ')}
                             </span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: pct != null ? (pct >= 85 ? '#9FE1CB' : pct >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>
+                            <span style={{ fontSize: 11, fontWeight: 500, color: pct != null ? (pct >= 85 ? '#0f3460' : pct >= 70 ? '#D85A30' : '#dc2626') : '#9ca3af' }}>
                               {e.score != null ? `${e.score}/${e.total_score} (${pct}%)` : '미채점'}
                             </span>
                           </div>
@@ -824,16 +824,16 @@ export default function TeacherReportsPage() {
 
                   {/* 한 줄 평 */}
                   {mComment && (
-                    <div style={{ background: 'rgba(159,225,203,0.1)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.3)', marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>선생님 코멘트</div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>{mComment}</div>
+                    <div style={{ background: '#FAECE7', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #D85A30', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: '#993C1D', fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>선생님 코멘트</div>
+                      <div style={{ fontSize: 11, color: '#712B13', lineHeight: 1.7 }}>{mComment}</div>
                     </div>
                   )}
 
                   {/* 푸터 */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>수학의지혜 학원</div>
-                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{mData.year}.{String(mData.month).padStart(2,'0')}</div>
+                    <div style={{ fontSize: 9, color: '#9ca3af' }}>수학의지혜 학원</div>
+                    <div style={{ fontSize: 9, color: '#9ca3af' }}>{mData.year}.{String(mData.month).padStart(2,'0')}</div>
                   </div>
                 </div>
 
@@ -877,40 +877,40 @@ export default function TeacherReportsPage() {
                 </div>
               ) : (
                 <>
-                  <div ref={gradeRef} style={{ background: '#0f3460', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', color: 'white' }}>
+                  <div ref={gradeRef} style={{ background: 'white', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', border: '1px solid #e5e7eb' }}>
                     {/* 헤더 */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                       <img src="/icon-192.png" alt="" style={{ width: 36, height: 36, borderRadius: 9 }} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 10, color: '#9FE1CB', fontWeight: 700, letterSpacing: 2, marginBottom: 2 }}>수학의지혜 · 성적표</div>
-                        <div style={{ fontSize: 20, fontWeight: 900 }}>{gData.student.name}</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{gData.student.school} · {gData.student.grade}</div>
+                        <div style={{ fontSize: 10, color: '#D85A30', fontWeight: 500, letterSpacing: 2, marginBottom: 2 }}>수학의지혜 · 성적표</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: '#0f3460' }}>{gData.student.name}</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>{gData.student.school} · {gData.student.grade}</div>
                       </div>
                     </div>
-                    <div style={{ height: 1, background: '#9FE1CB', marginBottom: 20 }} />
+                    <div style={{ height: 1, background: 'rgba(15,52,96,0.15)', marginBottom: 20 }} />
 
                     {/* 요약 지표 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>최근 코어테스트</div>
-                        <div style={{ fontSize: 20, fontWeight: 900 }}>{gData.latestCorePct ?? '-'}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 2 }}>{gData.latestCorePct != null ? '%' : ''}</span></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460' }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>최근 코어테스트</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: '#0f3460' }}>{gData.latestCorePct ?? '-'}<span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 2 }}>{gData.latestCorePct != null ? '%' : ''}</span></div>
                         {gData.coreTrend && (
-                          <div style={{ fontSize: 10, marginTop: 4, fontWeight: 700, color: gData.coreTrend === '상승' ? '#9FE1CB' : gData.coreTrend === '하락' ? '#F5C4B3' : '#FAEEDA' }}>
+                          <div style={{ fontSize: 10, marginTop: 4, fontWeight: 500, color: gData.coreTrend === '상승' ? '#0f3460' : gData.coreTrend === '하락' ? '#dc2626' : '#D85A30' }}>
                             {gData.coreTrend === '상승' ? '▲ 상승' : gData.coreTrend === '하락' ? '▼ 하락' : '● 유지'}
                           </div>
                         )}
                       </div>
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)' }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>{gData.coreTests.length}회 평균 · 최고</div>
-                        <div style={{ fontSize: 20, fontWeight: 900 }}>{gData.coreAvgPct ?? '-'}<span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 2 }}>%</span></div>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>최고 {gData.coreBestPct ?? '-'}%</div>
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460' }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>{gData.coreTests.length}회 평균 · 최고</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: '#0f3460' }}>{gData.coreAvgPct ?? '-'}<span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 2 }}>%</span></div>
+                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>최고 {gData.coreBestPct ?? '-'}%</div>
                       </div>
                     </div>
 
                     {/* 코어테스트 추이 차트 */}
                     {gData.coreTests.length > 0 && (
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>코어테스트 점수 추이 (최근 {gData.coreTests.length}회)</div>
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>코어테스트 점수 추이 (최근 {gData.coreTests.length}회)</div>
                         {(() => {
                           const chartW = 400, chartH = 140, padL = 26, padR = 10, padT = 16, padB = 40
                           const innerW = chartW - padL - padR, innerH = chartH - padT - padB
@@ -928,33 +928,33 @@ export default function TeacherReportsPage() {
                                 const y = padT + innerH - (v / 100) * innerH
                                 return (
                                   <g key={v}>
-                                    <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke={v === 85 ? 'rgba(159,225,203,0.5)' : 'rgba(255,255,255,0.1)'} strokeWidth={v === 85 ? 1 : 0.6} strokeDasharray="4 3" />
-                                    <text x={padL - 3} y={y + 3} textAnchor="end" fontSize={7.5} fill="rgba(255,255,255,0.35)">{v}</text>
+                                    <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke={v === 85 ? 'rgba(15,52,96,0.35)' : '#e5e7eb'} strokeWidth={v === 85 ? 1 : 0.6} strokeDasharray="4 3" />
+                                    <text x={padL - 3} y={y + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">{v}</text>
                                   </g>
                                 )
                               })}
-                              <path d={d} fill="none" stroke="#9FE1CB" strokeWidth={2} />
+                              <path d={d} fill="none" stroke="#0f3460" strokeWidth={2} />
                               {pts.map((p: any, i: number) => (
                                 <g key={i}>
-                                  <circle cx={p.cx} cy={p.cy} r={3.5} fill="#9FE1CB" />
-                                  <text x={p.cx} y={p.cy - 9} textAnchor="middle" fontSize={9} fontWeight="700" fill="white">{p.pct}%</text>
-                                  <text x={p.cx} y={padT + innerH + 14} textAnchor="middle" fontSize={8.5} fontWeight="700" fill="rgba(255,255,255,0.7)">{p.dateLabel}</text>
-                                  <text x={p.cx} y={padT + innerH + 25} textAnchor="middle" fontSize={7.5} fill="rgba(255,255,255,0.45)">{p.title}</text>
+                                  <circle cx={p.cx} cy={p.cy} r={3.5} fill="#0f3460" />
+                                  <text x={p.cx} y={p.cy - 9} textAnchor="middle" fontSize={9} fontWeight="500" fill="#0f3460">{p.pct}%</text>
+                                  <text x={p.cx} y={padT + innerH + 14} textAnchor="middle" fontSize={8.5} fontWeight="500" fill="#374151">{p.dateLabel}</text>
+                                  <text x={p.cx} y={padT + innerH + 25} textAnchor="middle" fontSize={7.5} fill="#9ca3af">{p.title}</text>
                                 </g>
                               ))}
                             </svg>
                           )
                         })()}
                         {/* 회차별 상세 - 날짜/회차/시험범위를 목록으로도 보여줘 차트 라벨보다 명확하게 확인 가능 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid #e9edf3' }}>
                           {gData.coreTests.map((c: any, i: number) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', flexShrink: 0, width: 34 }}>{c.dateLabel}</span>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: '#9FE1CB', flexShrink: 0 }}>{c.title}</span>
-                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 9, color: '#9ca3af', flexShrink: 0, width: 34 }}>{c.dateLabel}</span>
+                              <span style={{ fontSize: 9, fontWeight: 500, color: '#0f3460', flexShrink: 0 }}>{c.title}</span>
+                              <span style={{ fontSize: 10, color: '#374151', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {c.range || '시험범위 미입력'}
                               </span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: (c.pct ?? 0) >= 85 ? '#9FE1CB' : (c.pct ?? 0) >= 70 ? '#FAEEDA' : '#F5C4B3', flexShrink: 0 }}>{c.pct}%</span>
+                              <span style={{ fontSize: 10, fontWeight: 500, color: (c.pct ?? 0) >= 85 ? '#0f3460' : (c.pct ?? 0) >= 70 ? '#D85A30' : '#dc2626', flexShrink: 0 }}>{c.pct}%</span>
                             </div>
                           ))}
                         </div>
@@ -963,17 +963,17 @@ export default function TeacherReportsPage() {
 
                     {/* 학습지 단원별 평균 */}
                     {gData.unitStats.length > 0 && (
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>학습지 단원별 평균 (최근 {gData.unitStats.length}개 단원)</div>
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>학습지 단원별 평균 (최근 {gData.unitStats.length}개 단원)</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {gData.unitStats.map((u: any, i: number) => (
                             <div key={i}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>{u.unit}</span>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: u.avg >= 85 ? '#9FE1CB' : u.avg >= 70 ? '#FAEEDA' : '#F5C4B3', flexShrink: 0 }}>{u.avg}점</span>
+                                <span style={{ fontSize: 10, color: '#374151', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>{u.unit}</span>
+                                <span style={{ fontSize: 10, fontWeight: 500, color: u.avg >= 85 ? '#0f3460' : u.avg >= 70 ? '#D85A30' : '#dc2626', flexShrink: 0 }}>{u.avg}점</span>
                               </div>
-                              <div style={{ height: 5, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                                <div style={{ height: 5, borderRadius: 4, width: `${u.avg}%`, background: u.avg >= 85 ? '#9FE1CB' : u.avg >= 70 ? '#FAEEDA' : '#F5C4B3' }} />
+                              <div style={{ height: 5, background: '#e9edf3', borderRadius: 4 }}>
+                                <div style={{ height: 5, borderRadius: 4, width: `${u.avg}%`, background: u.avg >= 85 ? '#0f3460' : u.avg >= 70 ? '#D85A30' : '#dc2626' }} />
                               </div>
                             </div>
                           ))}
@@ -983,28 +983,28 @@ export default function TeacherReportsPage() {
 
                     {/* 학습지 요약 */}
                     {gData.wsCount > 0 && (
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.2)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>학습지 전체 현황</div>
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>학습지 전체 현황</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
-                          <div><div style={{ fontSize: 18, fontWeight: 900 }}>{gData.wsCount}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>총 학습지</div></div>
-                          <div><div style={{ fontSize: 18, fontWeight: 900, color: gData.wsAvg != null ? (gData.wsAvg >= 85 ? '#9FE1CB' : gData.wsAvg >= 70 ? '#FAEEDA' : '#F5C4B3') : 'rgba(255,255,255,0.4)' }}>{gData.wsAvg ?? '-'}</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>평균점수</div></div>
-                          <div><div style={{ fontSize: 18, fontWeight: 900, color: (gData.wsPassRate ?? 0) >= 80 ? '#9FE1CB' : '#FAEEDA' }}>{gData.wsPassRate ?? '-'}%</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>통과율</div></div>
+                          <div><div style={{ fontSize: 18, fontWeight: 500, color: '#0f3460' }}>{gData.wsCount}</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>총 학습지</div></div>
+                          <div><div style={{ fontSize: 18, fontWeight: 500, color: gData.wsAvg != null ? (gData.wsAvg >= 85 ? '#0f3460' : gData.wsAvg >= 70 ? '#D85A30' : '#dc2626') : '#9ca3af' }}>{gData.wsAvg ?? '-'}</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>평균점수</div></div>
+                          <div><div style={{ fontSize: 18, fontWeight: 500, color: (gData.wsPassRate ?? 0) >= 80 ? '#0f3460' : '#D85A30' }}>{gData.wsPassRate ?? '-'}%</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>통과율</div></div>
                         </div>
                       </div>
                     )}
 
                     {/* 분석 코멘트 */}
                     {gData.comment && (
-                      <div style={{ background: 'rgba(159,225,203,0.1)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(159,225,203,0.3)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 9, color: '#9FE1CB', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>학습 분석</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>{gData.comment}</div>
+                      <div style={{ background: '#FAECE7', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #D85A30', marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: '#993C1D', fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>학습 분석</div>
+                        <div style={{ fontSize: 11, color: '#712B13', lineHeight: 1.7 }}>{gData.comment}</div>
                       </div>
                     )}
 
                     {/* 푸터 */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>수학의지혜 학원</div>
-                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{new Date().toISOString().slice(0,10)}</div>
+                      <div style={{ fontSize: 9, color: '#9ca3af' }}>수학의지혜 학원</div>
+                      <div style={{ fontSize: 9, color: '#9ca3af' }}>{new Date().toISOString().slice(0,10)}</div>
                     </div>
                   </div>
 
