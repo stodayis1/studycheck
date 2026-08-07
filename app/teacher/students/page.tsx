@@ -28,17 +28,29 @@ interface Student {
 }
 
 // OPS(sumath-admin)로 학생정보 변경사항을 동기화. 연동 안 된 학생(ops_student_id 없음)은 조용히 스킵.
-// 실패해도 StudyCheck 쪽 저장 자체는 이미 끝난 상태이므로 알림 없이 콘솔 로그만 남김.
-async function syncStudentToOps(opsStudentId: string | null | undefined, fields: Record<string, any>, teacherName?: string) {
-  if (!opsStudentId) return
+// StudyCheck 쪽 저장 자체는 이미 끝난 상태라 이 함수가 실패해도 화면을 막지는 않지만,
+// 실패를 콘솔에만 남기면 아무도 못 알아채고 OPS 데이터가 조용히 stale해지는 문제가 있었어서
+// 결과를 반환해 호출부에서 알림을 띄울 수 있게 한다.
+async function syncStudentToOps(opsStudentId: string | null | undefined, fields: Record<string, any>, teacherName?: string): Promise<{ ok: boolean; error?: string }> {
+  if (!opsStudentId) return { ok: true }
   try {
-    await fetch('/api/sync-student-to-ops', {
+    const res = await fetch('/api/sync-student-to-ops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ opsStudentId, fields, teacherName }),
     })
-  } catch (e) {
+    let data: any = null
+    try { data = await res.json() } catch {}
+    if (!res.ok || !data?.ok) {
+      const error = data?.error || `OPS 동기화 실패 (status ${res.status})`
+      console.error('OPS 동기화 실패:', error)
+      return { ok: false, error }
+    }
+    if (data?.skipped) return { ok: true }
+    return { ok: true }
+  } catch (e: any) {
     console.error('OPS 동기화 실패:', e)
+    return { ok: false, error: e?.message || '네트워크 오류' }
   }
 }
 
@@ -199,7 +211,7 @@ export default function TeacherStudentsPage() {
     await supabase.from('students').update({ class_time: classTimeText }).eq('id', editStudent.id)
 
     // OPS 동기화 (연동된 학생만)
-    await syncStudentToOps(editStudent.ops_student_id, {
+    const syncResult = await syncStudentToOps(editStudent.ops_student_id, {
       name: editStudent.name, school: editStudent.school, grade: editStudent.grade,
       parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
       class_time: classTimeText,
@@ -207,6 +219,10 @@ export default function TeacherStudentsPage() {
 
     setShowEditModal(false)
     fetchStudents()
+
+    if (!syncResult.ok) {
+      alert(`학생 정보는 저장됐지만, OPS(행정시스템)로 반영은 실패했어요.\n\n${syncResult.error}\n\nOPS 쪽에는 이 수정사항이 안 보일 수 있어요 — 원장님께 알려주세요.`)
+    }
   }
 
   async function handleAddStudent() {
@@ -272,8 +288,11 @@ export default function TeacherStudentsPage() {
     const { error } = await supabase.from('students').update({ is_active: false }).eq('id', studentId)
     if (!error) {
       const target = students.find(s => s.id === studentId)
-      await syncStudentToOps(target?.ops_student_id, { is_active: false })
+      const syncResult = await syncStudentToOps(target?.ops_student_id, { is_active: false })
       fetchStudents()
+      if (!syncResult.ok) {
+        alert(`${name} 학생 삭제는 됐지만, OPS(행정시스템)에는 반영이 안 됐어요.\n\n${syncResult.error}\n\nOPS 쪽 학생목록엔 여전히 재원생으로 남아있을 수 있어요 — 원장님께 알려주세요.`)
+      }
     }
     else alert('삭제 중 오류가 발생했습니다.')
   }
