@@ -24,6 +24,22 @@ interface Student {
   assigned_seen?: boolean
   student_last_login_at?: string | null
   parent_last_login_at?: string | null
+  ops_student_id?: string | null
+}
+
+// OPS(sumath-admin)로 학생정보 변경사항을 동기화. 연동 안 된 학생(ops_student_id 없음)은 조용히 스킵.
+// 실패해도 StudyCheck 쪽 저장 자체는 이미 끝난 상태이므로 알림 없이 콘솔 로그만 남김.
+async function syncStudentToOps(opsStudentId: string | null | undefined, fields: Record<string, any>, teacherName?: string) {
+  if (!opsStudentId) return
+  try {
+    await fetch('/api/sync-student-to-ops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opsStudentId, fields, teacherName }),
+    })
+  } catch (e) {
+    console.error('OPS 동기화 실패:', e)
+  }
 }
 
 // 상대적인 "n일 전" 형식으로 마지막 로그인 시간을 표시. 로그인 기록이 없으면 null 반환.
@@ -182,6 +198,13 @@ export default function TeacherStudentsPage() {
       .join(', ')
     await supabase.from('students').update({ class_time: classTimeText }).eq('id', editStudent.id)
 
+    // OPS 동기화 (연동된 학생만)
+    await syncStudentToOps(editStudent.ops_student_id, {
+      name: editStudent.name, school: editStudent.school, grade: editStudent.grade,
+      parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
+      class_time: classTimeText,
+    }, editStudent.teacher_name)
+
     setShowEditModal(false)
     fetchStudents()
   }
@@ -247,7 +270,11 @@ export default function TeacherStudentsPage() {
     if (!isAdmin()) { alert('학생 삭제는 원장님만 하실 수 있어요.'); return }
     if (!confirm(`${name} 학생을 삭제할까요?`)) return
     const { error } = await supabase.from('students').update({ is_active: false }).eq('id', studentId)
-    if (!error) fetchStudents()
+    if (!error) {
+      const target = students.find(s => s.id === studentId)
+      await syncStudentToOps(target?.ops_student_id, { is_active: false })
+      fetchStudents()
+    }
     else alert('삭제 중 오류가 발생했습니다.')
   }
 
