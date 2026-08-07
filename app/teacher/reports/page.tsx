@@ -447,6 +447,21 @@ export default function TeacherReportsPage() {
     a.href = url
     a.download = `${mData?.student?.name}_${mData?.year}년${mData?.month}월_학습보고서.png`
     a.click()
+    // 이미지를 저장(=발송 준비)하는 시점에 앱 알림을 켜둔 학부모/학생에게도 푸시 발송
+    if (mData?.student?.id) {
+      fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: { studentIds: [mData.student.id] },
+          payload: {
+            title: `${mData.student.name} 학생 ${mData.year}년 ${mData.month}월 학습보고서`,
+            body: '이번 달 학습보고서가 도착했어요. 눌러서 확인해보세요.',
+            tag: 'monthly-report',
+          },
+        }),
+      }).catch(() => {})
+    }
   }
 
   // ── 성적표(코어테스트+학습지) 데이터 로딩 ──
@@ -543,6 +558,21 @@ export default function TeacherReportsPage() {
     a.href = url
     a.download = `${gData?.student?.name}_성적표.png`
     a.click()
+    // 이미지를 저장(=발송 준비)하는 시점에 앱 알림을 켜둔 학부모/학생에게도 푸시 발송
+    if (gData?.student?.id) {
+      fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: { studentIds: [gData.student.id] },
+          payload: {
+            title: `${gData.student.name} 학생 성적표`,
+            body: '새 성적표가 도착했어요. 눌러서 확인해보세요.',
+            tag: 'grade-report',
+          },
+        }),
+      }).catch(() => {})
+    }
   }
 
   const myStudentsForMonthly = students.filter((s) => {

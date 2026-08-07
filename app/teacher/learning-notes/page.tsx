@@ -186,7 +186,7 @@ export default function TeacherLearningNotesPage() {
   const [justSavedNote, setJustSavedNote] = useState(false) // 저장 성공 시 잠깐 보여줄 확인 표시 (성공해도 화면이 그대로라 "저장 안 됐나?" 하고 헷갈리는 것 방지)
   const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
 
-  async function handleSendKakao(sessionId: string, studentName: string, parentPhone?: string | null) {
+  async function handleSendKakao(sessionId: string, studentName: string, parentPhone?: string | null, studentId?: string) {
     // 카톡 발송은 원장님만 - 강사/직원에게는 버튼 자체를 안 보여주고, 혹시 몰라 여기서도 한 번 더 막음
     if (!isAdmin()) { alert('카톡 발송은 원장님만 하실 수 있어요.'); return }
     // 받는 번호를 보여주고, 필요하면 다른 번호(예: 테스트용 본인 번호)로 바꿔서 보낼 수 있게 함
@@ -209,6 +209,21 @@ export default function TeacherLearningNotesPage() {
         return
       }
       alert('카톡을 보냈어요!')
+      // 카톡과 별도로, 앱 알림을 켜둔 학부모/학생에게도 푸시 발송 (실패해도 카톡 발송 자체는 이미 성공했으므로 조용히 무시)
+      if (studentId) {
+        fetch('/api/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            target: { studentIds: [studentId] },
+            payload: {
+              title: `${studentName} 학생 오늘 학습 안내`,
+              body: '오늘의 학습 리포트가 도착했어요. 눌러서 확인해보세요.',
+              tag: 'daily-report',
+            },
+          }),
+        }).catch(() => {})
+      }
     } catch (err) {
       console.error('카톡 발송 오류:', err)
       alert('카톡 발송 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
@@ -1242,7 +1257,7 @@ export default function TeacherLearningNotesPage() {
                               return (
                                 <>
                                   {isComplete && isAdmin() && (
-                                    <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone)}
+                                    <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id)}
                                       disabled={sendingKakao === session.id}
                                       className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
                                       style={{ background: '#FEE500' }}>

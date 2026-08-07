@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
+import PushSubscribeButton from '@/components/PushSubscribeButton'
 
 interface StudentInfo {
   id: string
@@ -269,7 +270,12 @@ export default function ParentDashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header title={`${student.name} 학생`} subtitle="학습 현황"
-        action={<button onClick={signOut} className="text-xs text-gray-400 hover:text-gray-600">로그아웃</button>} />
+        action={(
+          <div className="flex items-center gap-2">
+            <PushSubscribeButton role="parent" studentId={student.id} />
+            <button onClick={signOut} className="text-xs text-gray-400 hover:text-gray-600">로그아웃</button>
+          </div>
+        )} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 

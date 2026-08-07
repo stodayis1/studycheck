@@ -5,7 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
-import { COLOR_PALETTE, SIZE_PALETTE, FONT_PALETTE, EMOJI_PICKS, renderRichContent } from '@/lib/richContent'
+import { COLOR_PALETTE, SIZE_PALETTE, FONT_PALETTE, EMOJI_PICKS, renderRichContent, stripRichTokens } from '@/lib/richContent'
 
 interface Announcement {
   id: string
@@ -132,6 +132,19 @@ export default function TeacherAnnouncementsPage() {
       await supabase.from('announcements').update(payload).eq('id', editingId)
     } else {
       await supabase.from('announcements').insert({ ...payload, created_by: currentUser?.name ?? '원장' })
+      // 새 공지사항 등록 시 전체 구독자(학부모/학생/강사)에게 앱 푸시 알림 발송. 실패해도 공지 저장 자체는 이미 끝났으므로 조용히 무시.
+      fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: { broadcast: true },
+          payload: {
+            title: (isImportant ? '📢 [중요] ' : '📢 ') + title.trim(),
+            body: stripRichTokens(content.trim()).slice(0, 80),
+            tag: 'announcement',
+          },
+        }),
+      }).catch(() => {})
     }
     setSaving(false)
     resetForm()

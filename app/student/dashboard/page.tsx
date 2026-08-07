@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
+import PushSubscribeButton from '@/components/PushSubscribeButton'
 
 interface StudentInfo {
   id: string
@@ -317,7 +318,8 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="오늘 학습" subtitle={`${student.name} 학생`} />
+      <Header title="오늘 학습" subtitle={`${student.name} 학생`}
+        action={<PushSubscribeButton role="student" studentId={student.id} />} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 

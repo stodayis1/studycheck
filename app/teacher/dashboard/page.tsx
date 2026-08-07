@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
+import PushSubscribeButton from '@/components/PushSubscribeButton'
 
 const DAYS = ['일','월','화','수','목','금','토']
 
@@ -152,7 +153,10 @@ export default function TeacherDashboardPage() {
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
       <Header title={`${currentUser?.name ?? ''} 선생님`}
-        subtitle={isAdmin() ? '관리자 대시보드' : '수업일지 · 진도관리'} />
+        subtitle={isAdmin() ? '관리자 대시보드' : '수업일지 · 진도관리'}
+        action={currentUser?.id ? (
+          <PushSubscribeButton role={(currentUser.role as any) || 'teacher'} userId={currentUser.id} />
+        ) : undefined} />
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
 

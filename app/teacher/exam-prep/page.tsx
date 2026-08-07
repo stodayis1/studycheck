@@ -256,6 +256,26 @@ export default function TeacherExamPrepPage() {
       created_by: currentUser?.name,
     })
     setSavingSchedule(false); setShowScheduleModal(false)
+
+    // 해당 학교+학년 학생(및 학부모)에게 새 시험 일정 등록 푸시 알림
+    const { data: targetStudents } = await supabase
+      .from('students').select('id').eq('school', schSchool).eq('grade', schGrade).eq('is_active', true)
+    const targetIds = (targetStudents ?? []).map((s: any) => s.id)
+    if (targetIds.length > 0) {
+      fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: { studentIds: targetIds },
+          payload: {
+            title: `${schSchool} ${schName} 일정 등록`,
+            body: `시험일: ${schDate}. 눌러서 시험대비 현황을 확인해보세요.`,
+            tag: 'exam-schedule',
+          },
+        }),
+      }).catch(() => {})
+    }
+
     setSchSchool(''); setSchGrade(''); setSchDate('')
     fetchAll()
   }
