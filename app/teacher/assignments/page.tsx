@@ -250,7 +250,7 @@ export default function TeacherAssignmentsPage() {
     .sort((a, b) => new Date(b.updated_at ?? b.assigned_at).getTime() - new Date(a.updated_at ?? a.assigned_at).getTime())
 
   const activeTextbooks = textbooks.filter((t) =>
-    myStudentIds.has(t.student_id) && t.status !== 'checked' &&
+    myStudentIds.has(t.student_id) && t.status !== 'checked' && t.status !== 'paused' && t.status !== 'completed' &&
     (searchText === '' || getStudentName(t.student_id).includes(searchText))
   )
 
