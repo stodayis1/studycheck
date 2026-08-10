@@ -2304,12 +2304,14 @@ export default function TeacherLearningNotesPage() {
                   )
                 })()}
 
-                {/* 학습지 과제 - 학습지관리탭 연동 */}
+                {/* 학습지 과제 - 학습지관리탭 연동
+                    학습지관리 화면의 "진행중" 기준(= 완료(passed) 전까지는 전부 진행중)과 다르게
+                    여기는 '배정' 상태만 진행중으로 쳐서, 학생이 그 자리에서 바로 풀어 제출한(채점대기)
+                    학습지는 학습지관리엔 "진행중"으로 보이는데 여기엔 안 뜨는 불일치가 있었다 - 기준을 통일. */}
                 {(() => {
                   const myWSList = noteStudent
                     ? worksheets.filter((w) =>
-                        w.student_id === noteStudent.id &&
-                        (w.status === 'assigned' || w.status === 'similar_assigned')
+                        w.student_id === noteStudent.id && w.status !== 'passed'
                       )
                     : []
 
