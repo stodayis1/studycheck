@@ -98,6 +98,8 @@ export default function TeacherReportsPage() {
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [studentTextbooks, setStudentTextbooks] = useState<StudentTextbook[]>([])
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
+  // 학생 목록에서 "과제기록 있는 학생 진하게 표시"용 - 전체 학습지 내용은 필요 없고 학생별 존재 여부만 있으면 됨
+  const [worksheetHasRecordIds, setWorksheetHasRecordIds] = useState<Set<string>>(new Set())
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
   const [dailyTestSessions, setDailyTestSessions] = useState<{ session_date: string; daily_test_unit: string | null; daily_test_score: number }[]>([])
@@ -127,11 +129,17 @@ export default function TeacherReportsPage() {
     if (!selectedStudent) return
     const sid = selectedStudent.id
     async function fetchStudentProgress() {
-      const [{ data: pcData }, { data: tbData }, { data: dtData }] = await Promise.all([
+      // 학습지/진도체크/교재/평가 기록은 전부 이 학생 것만 걸러서 가져온다 - 예전엔 전체 학생의
+      // 진도체크(16,000행+)를 페이지 열 때마다 통째로 불러왔는데, 실제로는 화면에 학생을 선택했을 때
+      // 그 학생 것만 쓰였어서 낭비였음
+      const [{ data: pcData }, { data: tbData }, { data: dtData }, { data: wsData }, { data: examData }, { data: epData }] = await Promise.all([
         supabase.from('progress_checks').select('*').eq('student_id', sid),
         supabase.from('student_textbooks').select('*').eq('student_id', sid),
         supabase.from('class_sessions').select('session_date, daily_test_unit, daily_test_score')
           .eq('student_id', sid).not('daily_test_score', 'is', null).order('session_date', { ascending: false }),
+        supabase.from('student_worksheets').select('*').eq('student_id', sid),
+        supabase.from('exams').select('*').eq('student_id', sid).order('exam_date', { ascending: true }),
+        supabase.from('student_exam_prep').select('*, inner_enough(*)').eq('student_id', sid).order('exam_date', { ascending: true }),
       ])
       if (pcData) setProgressChecks(pcData)
       if (tbData) {
@@ -141,6 +149,9 @@ export default function TeacherReportsPage() {
         ])
       }
       setDailyTestSessions(dtData ?? [])
+      if (wsData) setWorksheets(wsData)
+      if (examData) setExams(examData)
+      if (epData) setExamPreps(epData)
     }
     fetchStudentProgress()
   }, [selectedStudent])
@@ -173,23 +184,19 @@ export default function TeacherReportsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: studentData }, worksheetData, { data: conceptData }, { data: tbData }, pcData, { data: examData }, { data: epData }] = await Promise.all([
+    // progress_checks(16,000행+)/exams/student_exam_prep/학습지 상세는 학생을 선택했을 때만 실제로 쓰이므로
+    // (아래 fetchStudentProgress 참고) 여기서는 전체를 매번 불러오지 않는다. 학습지는 "과제기록 있는 학생"
+    // 표시(진하게)에만 필요해서 학생 id만 가볍게 가져온다.
+    const [{ data: studentData }, wsIdRows, { data: conceptData }, { data: tbData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      // 1250행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 오래된 진행중 학습지가 빠지던 문제 - 전부 순회
-      fetchAllRows(() => supabase.from('student_worksheets').select('*')),
+      fetchAllRows<{ student_id: string }>(() => supabase.from('student_worksheets').select('student_id')),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').limit(5000),
-      fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
-      supabase.from('exams').select('*').order('exam_date', { ascending: true }).limit(5000),
-      supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
     ])
     if (studentData) setStudents(studentData)
-    if (worksheetData) setWorksheets(worksheetData)
+    setWorksheetHasRecordIds(new Set(wsIdRows.map((w) => w.student_id)))
     if (conceptData) setConcepts(conceptData)
     if (tbData) setStudentTextbooks(tbData)
-    setProgressChecks(pcData)
-    if (examData) setExams(examData)
-    if (epData) setExamPreps(epData)
     setLoading(false)
   }
 
@@ -1127,7 +1134,7 @@ export default function TeacherReportsPage() {
                 <p className="text-xs text-gray-400 py-2">해당하는 학생이 없어요</p>
               ) : (
                 filteredStudents.map((s) => {
-                  const hasRecord = worksheets.some((w) => w.student_id === s.id)
+                  const hasRecord = worksheetHasRecordIds.has(s.id)
                   return (
                     <button key={s.id} onClick={() => setSelectedStudent(s)}
                       className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',

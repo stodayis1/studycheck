@@ -64,11 +64,13 @@ export default function TeacherSubmissionsPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
-      const [{ data: sData }, wData, { data: tData }] = await Promise.all([
+      // 이 화면은 '진행중'인 것만 보여주는 화면이라(완료/채점완료는 화면에 아예 안 나옴) 애초에
+      // 그 상태만 서버에서 걸러서 가져온다 - 예전엔 완료된 것까지 전부(1250행+, 계속 증가) 매번 통째로
+      // 불러온 뒤 화면에서 걸러냈었음
+      const [{ data: sData }, wData, tData] = await Promise.all([
         supabase.from('students').select('*').eq('is_active', true).order('name'),
-        // 1250행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 오래된 채점대기 항목이 빠지던 문제 - 전부 순회
-        fetchAllRows(() => supabase.from('student_worksheets').select('*')),
-        supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
+        fetchAllRows(() => supabase.from('student_worksheets').select('*').neq('status', 'passed')),
+        fetchAllRows(() => supabase.from('student_textbooks').select('*').neq('status', 'checked').order('assigned_at', { ascending: false })),
       ])
       if (sData) setStudents(sData)
       if (wData) setWorksheets(wData)

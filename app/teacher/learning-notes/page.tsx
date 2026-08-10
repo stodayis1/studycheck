@@ -268,16 +268,19 @@ export default function TeacherLearningNotesPage() {
   }, [])
 
   const [refreshing, setRefreshing] = useState(false)
+  // 여러 선생님이 동시에 쓰다 보니 "오늘" 입력완료 여부를 30초마다 맞추는 용도인데, 예전엔 이걸 위해
+  // class_sessions/learning_notes 전체(1000행+, 계속 증가)를 30초마다 통째로 다시 불러왔다.
+  // 실제로 실시간으로 맞출 필요가 있는 건 "오늘" 것뿐이라 오늘 날짜분만 가져와서, 그 부분만 최신으로 교체한다
+  // (다른 날짜의 세션/기록은 처음 fetchData()에서 불러온 그대로 유지 - "지난 수업" 조회에 계속 쓰임).
   async function refreshTodayStatus() {
     setRefreshing(true)
-    // learning_notes/class_sessions는 이제 1000행이 훌쩍 넘어서 PostgREST 기본 상한(1000행)에
-    // 걸리면 정렬 기준과 무관하게 최근 저장분이 통째로 빠질 수 있다 - 끝까지 순회해서 전부 가져온다.
-    const [ssData, nData] = await Promise.all([
-      fetchAllRows(() => supabase.from('class_sessions').select('*')),
-      fetchAllRows(() => supabase.from('learning_notes').select('*')),
-    ])
-    if (ssData) setSessions(ssData)
-    if (nData) setNotes(nData)
+    const { data: ssToday } = await supabase.from('class_sessions').select('*').eq('session_date', todayStr)
+    const todayIds = (ssToday ?? []).map((s: any) => s.id)
+    const { data: nToday } = todayIds.length > 0
+      ? await supabase.from('learning_notes').select('*').in('session_id', todayIds)
+      : { data: [] as any[] }
+    setSessions((prev) => [...prev.filter((s) => s.session_date !== todayStr), ...(ssToday ?? [])])
+    setNotes((prev) => [...prev.filter((n) => !todayIds.includes(n.session_id)), ...(nToday ?? [])])
     setRefreshing(false)
   }
 

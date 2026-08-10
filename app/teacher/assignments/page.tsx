@@ -116,6 +116,10 @@ export default function TeacherAssignmentsPage() {
   const [subTab, setSubTab] = useState<'ws' | 'tb'>('ws')
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
+  // '단원 현황' 탭에서만 필요한 학습지 전체 이력(완료된 것 포함, 전체 학생) - 그 탭을 열 때만 불러온다
+  const [worksheetsFull, setWorksheetsFull] = useState<StudentWorksheet[]>([])
+  const [worksheetsFullLoaded, setWorksheetsFullLoaded] = useState(false)
+  const [worksheetsFullLoading, setWorksheetsFullLoading] = useState(false)
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
   const [loading, setLoading] = useState(true)
@@ -184,13 +188,24 @@ export default function TeacherAssignmentsPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  // 학습지관리 화면(학습지 배정/제출현황 탭)에는 '진행중인' 학습지만 필요한데, 예전엔 완료(passed)된
+  // 학습지까지(전체의 80% 이상, 계속 증가) 매번 통째로 불러왔다. 완료 처리 안 지 얼마 안 된 것만
+  // (되돌리기·최근완료 표시용) 같이 가져오고, 나머지 완료 이력은 '단원 현황' 탭을 열 때만 따로 불러온다.
+  async function fetchActiveWorksheets() {
+    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+    const [active, recentPassed] = await Promise.all([
+      fetchAllRows(() => supabase.from('student_worksheets').select('*').neq('status', 'passed')),
+      fetchAllRows(() => supabase.from('student_worksheets').select('*').eq('status', 'passed')
+        .or(`updated_at.gte.${cutoff},and(updated_at.is.null,assigned_at.gte.${cutoff})`)),
+    ])
+    return [...active, ...recentPassed]
+  }
+
   async function fetchData() {
     setLoading(true)
     const [{ data: sData }, wData, { data: tData }, { data: cData }, { data: mwData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      // 1250행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 오래된 진행중 학습지가
-      // 통째로 잘려나가 "학습지가 0건"처럼 보이던 근본 원인 - 끝까지 순회해서 전부 가져온다.
-      fetchAllRows(() => supabase.from('student_worksheets').select('*')),
+      fetchActiveWorksheets(),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order').limit(5000),
       supabase.from('middle_worksheets').select('*').order('grade').order('semester').order('lesson_no'),
@@ -200,8 +215,25 @@ export default function TeacherAssignmentsPage() {
     if (tData) setTextbooks(tData)
     if (cData) setConcepts(cData)
     if (mwData) setMiddleWorksheets(mwData)
+    // 학습지 기록이 바뀌었을 수 있으니 '단원 현황' 탭에서 캐시해둔 전체 이력은 무효화 -
+    // 그 탭을 다시 열 때 최신으로 다시 불러온다
+    setWorksheetsFullLoaded(false)
     setLoading(false)
   }
+
+  async function loadWorksheetsFull() {
+    setWorksheetsFullLoading(true)
+    const data = await fetchAllRows<StudentWorksheet>(() => supabase.from('student_worksheets').select('*'))
+    setWorksheetsFull(data)
+    setWorksheetsFullLoaded(true)
+    setWorksheetsFullLoading(false)
+  }
+
+  useEffect(() => {
+    if (tab === 'unit_status' && !worksheetsFullLoaded && !worksheetsFullLoading) {
+      loadWorksheetsFull()
+    }
+  }, [tab, worksheetsFullLoaded, worksheetsFullLoading])
 
   const myStudents = students.filter((s) => {
     if (canManageAllStudents()) return true
@@ -374,6 +406,8 @@ export default function TeacherAssignmentsPage() {
       return
     }
     setWorksheets(prev => prev.filter(w => w.id !== id))
+    // '단원 현황' 탭용으로 캐시해둔 전체 이력도 같이 지워서 삭제한 게 거기서 안 보이게 함
+    setWorksheetsFull(prev => prev.filter(w => w.id !== id))
   }
 
   async function handleBulkDelete() {
@@ -386,6 +420,7 @@ export default function TeacherAssignmentsPage() {
       return
     }
     setWorksheets(prev => prev.filter(w => !selectedWSIds.includes(w.id)))
+    setWorksheetsFull(prev => prev.filter(w => !selectedWSIds.includes(w.id)))
     setSelectedWSIds([])
     setDeleteMode(false)
   }
@@ -1118,7 +1153,7 @@ export default function TeacherAssignmentsPage() {
 
         {/* ── 단원 현황 탭 ── */}
         {tab === 'unit_status' && (
-          loading ? (
+          loading || worksheetsFullLoading || !worksheetsFullLoaded ? (
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin inline-block" />
             </div>
@@ -1126,8 +1161,8 @@ export default function TeacherAssignmentsPage() {
             <div className="space-y-2">
               <p className="text-xs text-gray-400 px-1">학습지 단원 현황을 볼 학생을 선택하세요</p>
               {filteredStudents.map((student) => {
-                const passedCount = worksheets.filter((w) => w.student_id === student.id && w.status === 'passed').length
-                const totalUnits = [...new Set(worksheets.filter((w) => w.student_id === student.id).map((w) => w.unit))].length
+                const passedCount = worksheetsFull.filter((w) => w.student_id === student.id && w.status === 'passed').length
+                const totalUnits = [...new Set(worksheetsFull.filter((w) => w.student_id === student.id).map((w) => w.unit))].length
                 return (
                   <button key={student.id} onClick={() => setUnitStatusStudent(student)}
                     className="w-full bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 transition-all text-left"
@@ -1152,7 +1187,7 @@ export default function TeacherAssignmentsPage() {
               })}
             </div>
           ) : (() => {
-            const studentWS = worksheets.filter((w) => w.student_id === unitStatusStudent.id)
+            const studentWS = worksheetsFull.filter((w) => w.student_id === unitStatusStudent.id)
             const gradeGroups2 = [...new Set(studentWS.map((w) => w.grade_level))].sort()
             const SUPERSCRIPT: Record<number, string> = { 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' }
 

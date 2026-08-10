@@ -150,7 +150,10 @@ export default function TeacherCurriculumPage() {
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
-      fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
+      // 16,000행+ - 학생 목록의 진도율/회독수 계산에 전체 학생의 진도체크가 다 필요해서(학생별 서버 집계는
+      // 별도 DB 함수가 있어야 해서 이번엔 손대지 않음) 행 자체는 그대로 다 가져오되, 실제 쓰이는 컬럼만
+      // 골라 가져와서 전송량을 줄인다 (updated_at, session_id는 이 화면에서 안 씀)
+      fetchAllRows(() => supabase.from('progress_checks').select('id,student_id,concept_id,check_count,student_textbook_id')),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: false }),
     ])
