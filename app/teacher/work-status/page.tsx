@@ -41,6 +41,7 @@ interface Worksheet {
 interface Schedule {
   student_id: string
   day_of_week: string
+  is_active: boolean
 }
 
 export default function TeacherWorkStatusPage() {
@@ -111,8 +112,10 @@ export default function TeacherWorkStatusPage() {
   )
 
   // 오늘 수업 있는 학생 (스케줄 기반)
+  // is_active를 안 걸러서, 시간표를 수정하며 남은 예전(비활성) 스케줄 행까지 오늘 수업으로 잘못 세던 문제
+  // (이규숙 선생님 - 김환희/시지우가 실제론 오늘 수업이 없는데 떴던 원인) - 활성 스케줄만 인정하도록 수정.
   const todayStudents = students.filter(s =>
-    schedules.some(sc => sc.student_id === s.id && sc.day_of_week === todayDay)
+    schedules.some(sc => sc.student_id === s.id && sc.day_of_week === todayDay && sc.is_active)
   )
 
   // 오늘 수업일지 작성된 학생
