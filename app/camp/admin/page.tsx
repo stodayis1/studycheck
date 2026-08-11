@@ -73,13 +73,16 @@ export default function CampAdminPage() {
       setNewName('')
       setNewSchool('')
       await fetchData()
+    } else {
+      alert('학생 추가 실패: ' + error.message)
     }
     setAdding(false)
   }
 
   async function removeStudent(id: string) {
     if (!confirm('이 학생을 명단에서 제외할까요? (기록은 남아있어요)')) return
-    await supabase.from('camp_students').update({ is_active: false }).eq('id', id)
+    const { error } = await supabase.from('camp_students').update({ is_active: false }).eq('id', id)
+    if (error) alert('제외 처리 실패: ' + error.message)
     await fetchData()
   }
 
@@ -96,7 +99,7 @@ export default function CampAdminPage() {
       copy[idx] = { ...copy[idx], [field]: nextVal }
       return copy
     })
-    await supabase.from('camp_progress').upsert(
+    const { error } = await supabase.from('camp_progress').upsert(
       {
         student_id: studentId,
         session_no: sessionNo,
@@ -105,6 +108,17 @@ export default function CampAdminPage() {
       },
       { onConflict: 'student_id,session_no' }
     )
+    // 저장이 실패했는데도 화면엔 체크된 것처럼 보이던 문제(RLS 등) - 실패 시 원래대로 되돌리고 알림
+    if (error) {
+      setProgress((prev) => {
+        const idx = prev.findIndex((p) => p.student_id === studentId && p.session_no === sessionNo)
+        if (idx === -1) return prev
+        const copy = [...prev]
+        copy[idx] = { ...copy[idx], [field]: existing ? existing[field] : false }
+        return copy
+      })
+      alert('저장에 실패했어요: ' + error.message)
+    }
   }
 
   if (!unlocked) {

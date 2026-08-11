@@ -148,6 +148,8 @@ export default function TeacherDashboardPage() {
     { href: '/teacher/students',        label: '학생관리',   desc: '학생 등록 · 시간표',   icon: 'ti-users',      color: '#27500A', bg: '#EAF3DE' },
     { href: '/teacher/assignments',     label: '학습지관리', desc: '학습지 배정 · 채점',   icon: 'ti-file-text',  color: '#633806', bg: '#FAEEDA' },
     { href: '/teacher/curriculum',      label: '과정관리',   desc: '교재 배정 · 진도표',   icon: 'ti-books',      color: '#712B13', bg: '#FFF0EE' },
+    // 방학특강 완주 챌린지 - 이번 방학특강 기간에만 쓰는 임시 메뉴 (일반 로그인 없이 PIN으로 들어가는 별도 화면)
+    { href: '/camp/admin',              label: '완주 챌린지', desc: '방학특강 진도 체크',   icon: 'ti-trophy',     color: '#9a3412', bg: '#FFF7ED' },
   ]
 
   return (
@@ -267,8 +269,8 @@ export default function TeacherDashboardPage() {
               <Link key={menu.href} href={menu.href}
                 className="flex items-center gap-3 px-4 py-4 transition-all hover:opacity-80 active:scale-95"
                 style={{
-                  borderRight: idx % 2 === 0 ? '1px solid #f9fafb' : 'none',
-                  borderBottom: idx < 2 ? '1px solid #f9fafb' : 'none',
+                  borderRight: idx % 2 === 0 && idx + 1 < QUICK_MENUS.length ? '1px solid #f9fafb' : 'none',
+                  borderBottom: idx < QUICK_MENUS.length - (QUICK_MENUS.length % 2 === 0 ? 2 : 1) ? '1px solid #f9fafb' : 'none',
                 }}>
                 <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
                   style={{ background: menu.bg }}>
