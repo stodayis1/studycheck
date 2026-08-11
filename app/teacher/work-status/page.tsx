@@ -83,13 +83,14 @@ export default function TeacherWorkStatusPage() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: tData }, { data: sData }, { data: ssData }, wData, scData] = await Promise.all([
+    const [{ data: tData }, { data: sData }, { data: ssData }, wData, { data: scData }] = await Promise.all([
       supabase.from('users').select('*').eq('role', 'teacher').order('name'),
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('class_sessions').select('*').gte('session_date', weekStart).order('session_date', { ascending: false }),
       fetchAllRows(() => supabase.from('student_worksheets').select('*').not('status', 'in', '("passed")')),
-      // schedules가 1246행이라 이미 PostgREST 상한(1000행)을 넘어서 활성/비활성 다 합치면 잘려나간다 - 전부 순회
-      fetchAllRows(() => supabase.from('schedules').select('*')),
+      // '오늘 수업' 판정엔 활성 스케줄만 필요함(비활성은 예전에 바뀐 시간표 이력) - 서버에서 걸러서
+      // 받으면 1000행 상한에도 안 걸려서 페이지 순회 없이 한 번에 가져올 수 있음.
+      supabase.from('schedules').select('*').eq('is_active', true),
     ])
     if (tData) setTeachers(tData)
     if (sData) setStudents(sData)
