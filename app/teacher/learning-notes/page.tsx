@@ -286,9 +286,13 @@ export default function TeacherLearningNotesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, wData, { data: catLNData }, pcData, { data: vwData }, { data: epData }] = await Promise.all([
+    // student_worksheets(1,878행)/progress_checks(17,200행+, 이 앱 전체에서 제일 큰 테이블)는
+    // 이 화면 어디에도 전체 목록으로 쓰이는 곳이 없다 - 전부 openNoteModal()에서 학생을 선택하는
+    // 순간 그 학생 것만 새로 불러오게 이미 되어 있어서(진도/과제배부 탭용), 페이지를 열 때마다
+    // 전체를 통째로 받아오는 건 그냥 낭비였다 - 초기 로딩에서 제거.
+    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, { data: epData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      // schedules/class_sessions/learning_notes/student_worksheets는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
+      // schedules/class_sessions/learning_notes는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
       // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
       fetchAllRows(() => supabase.from('schedules').select('*').eq('is_active', true)),
       fetchAllRows(() => supabase.from('class_sessions').select('*')),
@@ -296,9 +300,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
-      fetchAllRows(() => supabase.from('student_worksheets').select('*')),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
-      fetchAllRows(() => supabase.from('progress_checks').select('*')), // 8700+행이라 limit로는 언젠가 또 누락됨 - 끝까지 순회해서 전부 가져옴
       supabase.from('video_watch_logs').select('*'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
     ])
@@ -310,9 +312,7 @@ export default function TeacherLearningNotesPage() {
     if (fbData) setFeedbacks(fbData)
     if (cData) setConcepts(cData)
     if (stData) setStudentTextbooks(stData)
-    if (wData) setWorksheets(wData)
     if (catLNData) setLNCatalog(catLNData)
-    setProgressChecks(pcData)
     if (vwData) setVideoWatchLogs(vwData)
     if (epData) setExamPreps(epData)
     setLoading(false)
