@@ -105,7 +105,7 @@ export default function TeacherReportsPage() {
   const [dailyTestSessions, setDailyTestSessions] = useState<{ session_date: string; daily_test_unit: string | null; daily_test_score: number }[]>([])
 
   // 월간보고서 상태
-  const [activeTab, setActiveTab] = useState<'report' | 'monthly' | 'grade'>('report')
+  const [activeTab, setActiveTab] = useState<'report' | 'monthly' | 'grade' | 'ranking'>('report')
   const [mStudent, setMStudent] = useState<Student | null>(null)
   const [mSearchText, setMSearchText] = useState('')
   const [mYear, setMYear] = useState(new Date().getFullYear())
@@ -123,7 +123,84 @@ export default function TeacherReportsPage() {
   const [gLoading, setGLoading] = useState(false)
   const gradeRef = useRef<HTMLDivElement>(null)
 
+  // 코어테스트 학년별 등수 상태 (관리자 전용) - 매달 회차별로 같은 학년끼리 점수를 비교해 등수를 매긴다
+  const [rankGrade, setRankGrade] = useState<string | null>(null)
+  const [rankAllExams, setRankAllExams] = useState<Exam[]>([])
+  const [rankLoading, setRankLoading] = useState(false)
+  const [rankLoaded, setRankLoaded] = useState(false)
+  const [rankFocusStudentId, setRankFocusStudentId] = useState<string | null>(null)
+  const [rankSearchText, setRankSearchText] = useState('')
+
   useEffect(() => { fetchData() }, [])
+
+  // 등수 탭을 처음 열 때만 전체 코어테스트 점수를 한 번 불러온다 (학생별로 나눠 불러오던 다른 탭과 달리
+  // 등수는 학년 전체를 비교해야 해서 전체 조회가 불가피함 - 대신 탭을 열 때 딱 한 번만)
+  useEffect(() => {
+    if (activeTab === 'ranking' && isAdmin() && !rankLoaded && !rankLoading) {
+      (async () => {
+        setRankLoading(true)
+        const rows = await fetchAllRows<Exam>(() =>
+          supabase.from('exams').select('*').eq('exam_type', '코어테스트').not('score', 'is', null).order('exam_date', { ascending: true })
+        )
+        setRankAllExams(rows)
+        setRankLoaded(true)
+        setRankLoading(false)
+      })()
+    }
+  }, [activeTab])
+
+  const rankStudentMap = new Map(students.map((s) => [s.id, s]))
+  const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+  const rankGradesAvailable = Array.from(new Set(
+    rankAllExams.map((e) => rankStudentMap.get(e.student_id)?.grade).filter((g): g is string => !!g)
+  )).sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
+
+  // 선택한 학년의 코어테스트를 "연월 + 회차"별로 묶어 세션(=매달 한 번씩 보는 그 회차)마다 등수를 매긴다.
+  // 동점자는 공동 순위(1,1,3 식)로 처리
+  function buildRankSessions(grade: string) {
+    const rowsForGrade = rankAllExams.filter((e) => rankStudentMap.get(e.student_id)?.grade === grade)
+    const groups = new Map<string, { yearMonth: string; title: string; rows: Exam[] }>()
+    rowsForGrade.forEach((e) => {
+      const yearMonth = e.exam_date.slice(0, 7)
+      const title = e.title || '코어테스트'
+      const key = `${yearMonth}__${title}`
+      if (!groups.has(key)) groups.set(key, { yearMonth, title, rows: [] })
+      groups.get(key)!.rows.push(e)
+    })
+    return Array.from(groups.values()).map((g) => {
+      // 같은 세션에 학생당 여러 건이 잘못 들어간 경우 가장 최근 것만 사용
+      const byStudent = new Map<string, Exam>()
+      g.rows.forEach((e) => {
+        const existing = byStudent.get(e.student_id)
+        if (!existing || e.exam_date >= existing.exam_date) byStudent.set(e.student_id, e)
+      })
+      const entries = Array.from(byStudent.values())
+        .map((e) => ({
+          studentId: e.student_id,
+          name: rankStudentMap.get(e.student_id)?.name ?? '알수없음',
+          score: e.score as number, total: e.total_score,
+          pct: e.total_score > 0 ? Math.round(((e.score as number) / e.total_score) * 100) : 0,
+          examDate: e.exam_date,
+        }))
+        .sort((a, b) => b.pct - a.pct)
+      let rank = 0, prevPct: number | null = null
+      const rankedEntries = entries.map((en, i) => {
+        if (en.pct !== prevPct) rank = i + 1
+        prevPct = en.pct
+        return { ...en, rank }
+      })
+      return { key: `${g.yearMonth}__${g.title}`, yearMonth: g.yearMonth, title: g.title, entries: rankedEntries }
+    }).sort((a, b) => b.yearMonth.localeCompare(a.yearMonth) || b.title.localeCompare(a.title))
+  }
+
+  const rankSessions = rankGrade ? buildRankSessions(rankGrade) : []
+
+  function studentRankTrend(studentId: string) {
+    return rankSessions
+      .map((s) => ({ yearMonth: s.yearMonth, title: s.title, total: s.entries.length, entry: s.entries.find((e) => e.studentId === studentId) }))
+      .filter((x) => x.entry)
+      .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth) || a.title.localeCompare(b.title))
+  }
 
   useEffect(() => {
     if (!selectedStudent) return
@@ -595,8 +672,8 @@ export default function TeacherReportsPage() {
 
         {/* 탭 */}
         <div className="flex gap-2">
-          {([['report','학습 보고서'],['monthly','월간 보고서'],['grade','성적표']] as [string,string][]).map(([tab,label]) => (
-            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'grade')}
+          {([['report','학습 보고서'],['monthly','월간 보고서'],['grade','성적표'], ...(isAdmin() ? [['ranking','코어테스트 등수']] : [])] as [string,string][]).map(([tab,label]) => (
+            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'grade'|'ranking')}
               className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
               style={activeTab === tab ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#6b7280' }}>
               {label}
@@ -1053,6 +1130,113 @@ export default function TeacherReportsPage() {
                   </button>
                 </>
               )
+            )}
+          </div>
+        )}
+
+        {/* ══ 코어테스트 등수 탭 (관리자 전용) ══ */}
+        {activeTab === 'ranking' && isAdmin() && (
+          <div className="space-y-4">
+            <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">학년 선택</p>
+              {rankLoading && rankGradesAvailable.length === 0 ? (
+                <div className="text-center py-4 text-sm text-gray-400">코어테스트 점수 불러오는 중...</div>
+              ) : rankGradesAvailable.length === 0 ? (
+                <div className="text-center py-4 text-sm text-gray-400">등록된 코어테스트 점수가 없어요</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {rankGradesAvailable.map((g) => (
+                    <button key={g} onClick={() => { setRankGrade(g); setRankFocusStudentId(null); setRankSearchText('') }}
+                      className="text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all"
+                      style={rankGrade === g ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {rankGrade && (
+              <>
+                {/* 개인 등수 변화 조회 */}
+                <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
+                  <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">학생 개인 등수 변화</p>
+                  <input value={rankSearchText} onChange={(e) => setRankSearchText(e.target.value)} placeholder="이름 검색"
+                    className="w-full text-sm rounded-xl px-3 py-2 mb-3 outline-none"
+                    style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {students.filter((s) => s.grade === rankGrade && s.name.includes(rankSearchText)).map((s) => (
+                      <button key={s.id} onClick={() => setRankFocusStudentId(s.id === rankFocusStudentId ? null : s.id)}
+                        className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
+                        style={rankFocusStudentId === s.id ? { background: '#D85A30', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {rankFocusStudentId && (() => {
+                    const trend = studentRankTrend(rankFocusStudentId)
+                    if (trend.length === 0) {
+                      return <p className="text-sm text-gray-400 mt-4">이 학생의 코어테스트 기록이 없어요</p>
+                    }
+                    return (
+                      <div className="mt-4 pt-4 space-y-2" style={{ borderTop: '1px solid #f3f4f6' }}>
+                        {trend.map((t, i) => {
+                          const prev = i > 0 ? trend[i - 1] : null
+                          const rankDelta = prev && prev.entry ? prev.entry.rank - (t.entry?.rank ?? 0) : null
+                          return (
+                            <div key={t.yearMonth + t.title} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: '#f9fafb' }}>
+                              <div style={{ width: 62, flexShrink: 0 }}>
+                                <div className="text-xs font-bold text-gray-700">{t.yearMonth}</div>
+                                <div className="text-[10px] text-gray-400">{t.title}</div>
+                              </div>
+                              <div className="flex-1">
+                                <span className="text-lg font-bold" style={{ color: '#0f3460' }}>{t.entry!.rank}</span>
+                                <span className="text-xs text-gray-400"> / {t.total}명</span>
+                              </div>
+                              <div className="text-sm font-bold" style={{ color: t.entry!.pct >= 85 ? '#0f3460' : t.entry!.pct >= 70 ? '#D85A30' : '#dc2626' }}>{t.entry!.pct}%</div>
+                              {rankDelta != null && (
+                                <div className="text-xs font-bold" style={{ width: 44, textAlign: 'right', color: rankDelta > 0 ? '#0f3460' : rankDelta < 0 ? '#dc2626' : '#9ca3af' }}>
+                                  {rankDelta > 0 ? `▲${rankDelta}` : rankDelta < 0 ? `▼${Math.abs(rankDelta)}` : '－'}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* 회차별 등수표 */}
+                {rankSessions.length === 0 ? (
+                  <div className="rounded-2xl p-8 text-center" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
+                    <p className="text-sm text-gray-400">이 학년은 아직 코어테스트 기록이 없어요</p>
+                  </div>
+                ) : (
+                  rankSessions.map((session) => (
+                    <div key={session.key} className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
+                      <div className="flex items-baseline justify-between mb-3">
+                        <p className="text-sm font-bold" style={{ color: '#0f3460' }}>{session.yearMonth} · {session.title}</p>
+                        <p className="text-xs text-gray-400">{session.entries.length}명 응시</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        {session.entries.map((en) => (
+                          <div key={en.studentId} className="flex items-center gap-3 rounded-xl px-3 py-2"
+                            style={en.studentId === rankFocusStudentId ? { background: '#FAECE7' } : { background: en.rank <= 3 ? '#f7f8fa' : 'transparent' }}>
+                            <div className="text-sm font-bold" style={{ width: 28, flexShrink: 0, color: en.rank === 1 ? '#D85A30' : en.rank <= 3 ? '#0f3460' : '#9ca3af' }}>
+                              {en.rank === 1 ? '🥇' : en.rank === 2 ? '🥈' : en.rank === 3 ? '🥉' : en.rank}
+                            </div>
+                            <div className="text-sm font-medium flex-1" style={{ color: '#374151' }}>{en.name}</div>
+                            <div className="text-xs text-gray-400">{en.score}/{en.total}</div>
+                            <div className="text-sm font-bold" style={{ width: 44, textAlign: 'right', color: en.pct >= 85 ? '#0f3460' : en.pct >= 70 ? '#D85A30' : '#dc2626' }}>{en.pct}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </>
             )}
           </div>
         )}
