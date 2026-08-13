@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>스터디체크 로그인 활동 지도</title>
+<style>
+  :root{
+    --bg:#05060f;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;
+    background:var(--bg);
+    color:#eef1f8;
+    font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+    overflow:hidden;
+    width:100%;height:100%;
+  }
+  #stage{
+    position:relative;
+    width:100vw;height:100vh;
+    overflow:hidden;
+  }
+  /* soft aurora blobs */
+  .blob{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(70px);
+    opacity:0.38;
+    mix-blend-mode:screen;
+    pointer-events:none;
+    animation:drift 26s ease-in-out infinite;
+  }
+  @keyframes drift{
+    0%{transform:translate(0,0) scale(1);}
+    33%{transform:translate(3%,-4%) scale(1.08);}
+    66%{transform:translate(-3%,3%) scale(0.94);}
+    100%{transform:translate(0,0) scale(1);}
+  }
+  .star{
+    position:absolute;
+    width:2px;height:2px;
+    background:#ffffff;
+    border-radius:50%;
+    opacity:0.5;
+  }
+  .node{
+    position:absolute;
+    transform:translate(-50%,-50%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    pointer-events:none;
+    animation:bob 6s ease-in-out infinite;
+  }
+  @keyframes bob{
+    0%,100%{margin-top:0px;}
+    50%{margin-top:-6px;}
+  }
+  .dot{
+    border-radius:50%;
+    position:relative;
+  }
+  .dot.hot{
+    background:conic-gradient(from 0deg,
+      #ff3b3b,#ff9f1c,#ffe14d,#4dff88,#3ddcff,#5c6bff,#c04dff,#ff3b3b);
+    animation:spin 5s linear infinite;
+    box-shadow:0 0 18px 4px rgba(255,255,255,0.35),0 0 40px 12px currentColor;
+  }
+  @keyframes spin{
+    from{transform:rotate(0deg);}
+    to{transform:rotate(360deg);}
+  }
+  .dot.warm{
+    box-shadow:0 0 14px 3px currentColor;
+  }
+  .dot.cold{
+    opacity:0.85;
+    box-shadow:0 0 6px 1px currentColor;
+  }
+  .dot.none{
+    background:#3a3f52 !important;
+    opacity:0.55;
+    box-shadow:none;
+  }
+  .label{
+    margin-top:4px;
+    white-space:nowrap;
+    text-shadow:0 1px 4px rgba(0,0,0,0.9);
+    pointer-events:none;
+  }
+  #hud{
+    position:absolute;
+    top:18px;left:22px;
+    z-index:20;
+  }
+  #hud h1{
+    margin:0;
+    font-size:19px;
+    font-weight:800;
+    letter-spacing:-0.02em;
+  }
+  #hud p{
+    margin:4px 0 0;
+    font-size:12px;
+    color:#9aa3c0;
+  }
+  #legend{
+    position:absolute;
+    bottom:18px;left:22px;
+    z-index:20;
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+    max-width:70vw;
+  }
+  .legend-item{
+    display:flex;align-items:center;gap:6px;
+    font-size:11px;color:#c7cde3;
+    background:rgba(255,255,255,0.05);
+    padding:5px 10px;border-radius:999px;
+    backdrop-filter:blur(4px);
+  }
+  .legend-swatch{
+    width:10px;height:10px;border-radius:50%;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="hud">
+    <h1>🌈 스터디체크 로그인 활동 지도</h1>
+    <p id="subtitle">불러오는 중...</p>
+  </div>
+  <div id="legend"></div>
+</div>
+
+<script>
+const RAW = [{"name":"임채희","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-12 05:53:33.077512+00"},{"name":"차해인","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-12 05:26:21.024453+00"},{"name":"홍성준","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-12 03:17:33.265145+00"},{"name":"이소윤","teacher_name":"윤주희","student_last_login_at":"2026-08-12 02:03:00.769092+00","parent_last_login_at":"2026-08-04 11:34:45.19831+00"},{"name":"강동연","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-11 14:39:20.239457+00"},{"name":"박주하","teacher_name":"박경미","student_last_login_at":"2026-08-07 13:42:54.588879+00","parent_last_login_at":"2026-08-11 13:31:02.361176+00"},{"name":"안준혁","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":"2026-08-11 12:57:30.831243+00"},{"name":"정다솜","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-11 12:55:04.806346+00"},{"name":"신서린","teacher_name":"최윤정, 이규숙","student_last_login_at":"2026-08-11 12:19:54.251089+00","parent_last_login_at":null},{"name":"임유하","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-11 11:06:38.10776+00"},{"name":"이선호","teacher_name":"윤주희","student_last_login_at":"2026-08-04 12:07:14.5623+00","parent_last_login_at":"2026-08-11 09:31:55.640443+00"},{"name":"최온유","teacher_name":"윤주희","student_last_login_at":"2026-08-11 08:18:11.247712+00","parent_last_login_at":null},{"name":"유리예","teacher_name":"최윤정, 이규숙","student_last_login_at":null,"parent_last_login_at":"2026-08-11 05:23:33.103342+00"},{"name":"최건희","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-11 04:12:47.876142+00"},{"name":"강채경","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-11 03:42:29.736246+00"},{"name":"신연우","teacher_name":"최윤정, 이규숙","student_last_login_at":"2026-08-04 11:31:57.292421+00","parent_last_login_at":"2026-08-11 00:01:01.350383+00"},{"name":"강시온","teacher_name":"조윤희","student_last_login_at":"2026-08-04 11:31:13.193144+00","parent_last_login_at":"2026-08-10 22:44:38.433349+00"},{"name":"신민재","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-10 13:41:20.605787+00"},{"name":"최우진","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-10 13:15:44.929913+00"},{"name":"강다현","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":"2026-08-10 12:12:46.418889+00"},{"name":"강윤우","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-10 11:48:05.463478+00"},{"name":"최다윤","teacher_name":"윤지혜","student_last_login_at":"2026-08-05 08:49:41.867309+00","parent_last_login_at":"2026-08-10 11:35:23.932516+00"},{"name":"최다빈","teacher_name":"윤지혜","student_last_login_at":"2026-08-10 07:41:29.92597+00","parent_last_login_at":"2026-08-10 11:31:52.955771+00"},{"name":"배준한","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":"2026-08-10 11:28:56.845299+00"},{"name":"배준형","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":"2026-08-10 11:28:17.975602+00"},{"name":"안채영","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-10 10:12:58.803639+00"},{"name":"노하은","teacher_name":"조윤희","student_last_login_at":"2026-08-10 08:46:41.408439+00","parent_last_login_at":null},{"name":"홍채은","teacher_name":"윤지혜","student_last_login_at":"2026-08-10 07:37:05.061773+00","parent_last_login_at":null},{"name":"박소율","teacher_name":"신애진","student_last_login_at":"2026-08-10 06:35:09.712954+00","parent_last_login_at":"2026-08-10 06:33:47.882182+00"},{"name":"김규림","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":"2026-08-09 21:41:00.800757+00"},{"name":"박태하","teacher_name":"이규숙","student_last_login_at":null,"parent_last_login_at":"2026-08-09 09:25:53.564553+00"},{"name":"김규민","teacher_name":"김은수","student_last_login_at":"2026-08-04 11:28:00.131187+00","parent_last_login_at":"2026-08-09 08:12:00.186236+00"},{"name":"유정환","teacher_name":"윤지혜","student_last_login_at":"2026-08-04 11:28:44.432016+00","parent_last_login_at":"2026-08-08 13:16:47.195044+00"},{"name":"시지우","teacher_name":"이규숙","student_last_login_at":"2026-08-08 12:05:58.659599+00","parent_last_login_at":null},{"name":"정유나","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-08 07:20:56.753974+00"},{"name":"장율리","teacher_name":"최윤정, 이규숙","student_last_login_at":null,"parent_last_login_at":"2026-08-08 07:18:46.579967+00"},{"name":"박주원","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-08 04:28:48.636878+00"},{"name":"이수빈","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-08 04:13:44.392022+00"},{"name":"강하라","teacher_name":"신애진","student_last_login_at":"2026-08-04 11:29:56.599029+00","parent_last_login_at":"2026-08-08 03:50:15.98383+00"},{"name":"이수애","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":"2026-08-08 01:41:16.689984+00"},{"name":"이수아","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":"2026-08-08 01:39:18.039046+00"},{"name":"이수연","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-08 01:38:49.418415+00"},{"name":"권세연","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":"2026-08-07 18:12:22.784074+00"},{"name":"장태균","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-07 13:18:24.59118+00"},{"name":"정서윤","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-07 10:26:56.923783+00"},{"name":"이주현","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-07 09:38:07.11133+00"},{"name":"이서훈","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":"2026-08-07 09:37:33.529323+00"},{"name":"김태은","teacher_name":"최윤정, 이규숙","student_last_login_at":"2026-08-04 11:28:39.223262+00","parent_last_login_at":"2026-08-07 07:27:40.307981+00"},{"name":"윤수지","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":"2026-08-07 03:26:42.163685+00"},{"name":"박도현","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-07 02:05:11.92309+00"},{"name":"박지환","teacher_name":"최윤정, 이규숙","student_last_login_at":"2026-08-06 10:47:50.823726+00","parent_last_login_at":null},{"name":"방소율","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-06 10:19:06.535504+00"},{"name":"이재린","teacher_name":"윤주희","student_last_login_at":"2026-08-06 10:08:31.472931+00","parent_last_login_at":"2026-08-06 10:09:12.985295+00"},{"name":"권윤채","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-06 08:59:33.118619+00"},{"name":"최서현","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":"2026-08-06 05:59:47.260745+00"},{"name":"김서율j","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-06 05:28:44.525336+00"},{"name":"양하은","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-05 14:09:25.911921+00"},{"name":"김민희","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-05 13:39:32.817333+00"},{"name":"김민재","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-05 13:38:19.864102+00"},{"name":"하지원","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":"2026-08-05 13:37:28.571472+00"},{"name":"송시은","teacher_name":"신애진","student_last_login_at":"2026-08-05 06:20:24.839978+00","parent_last_login_at":null},{"name":"박세준","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":"2026-08-05 06:15:35.917529+00"},{"name":"박유준","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-05 01:48:46.512931+00"},{"name":"박서준","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-05 01:48:14.435212+00"},{"name":"김도윤","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-04 20:32:51.737533+00"},{"name":"최시호","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":"2026-08-04 14:00:23.838344+00"},{"name":"백동현","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":"2026-08-04 13:58:24.438679+00"},{"name":"신성우","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-04 13:06:13.890105+00"},{"name":"피가윤","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":"2026-08-04 12:31:44.064951+00"},{"name":"김윤아","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":"2026-08-04 12:23:14.649622+00"},{"name":"원서효","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":"2026-08-04 12:14:50.442944+00"},{"name":"김지호","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":"2026-08-04 12:05:06.140958+00"},{"name":"권대환","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-04 11:57:12.98426+00"},{"name":"이연서","teacher_name":"윤주희","student_last_login_at":"2026-08-04 11:48:26.969041+00","parent_last_login_at":"2026-08-04 11:40:46.9125+00"},{"name":"이하정","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":"2026-08-04 11:46:37.174939+00"},{"name":"백은빈","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-04 11:40:27.374154+00"},{"name":"신소민","teacher_name":"김은수","student_last_login_at":"2026-08-04 11:35:44.75964+00","parent_last_login_at":null},{"name":"허예은","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":"2026-08-04 11:35:37.969772+00"},{"name":"박소연","teacher_name":"최윤정, 이규숙","student_last_login_at":"2026-08-04 11:28:53.328179+00","parent_last_login_at":null},{"name":"박건우","teacher_name":"윤주희","student_last_login_at":"2026-08-04 11:28:52.383717+00","parent_last_login_at":null},{"name":"전다민","teacher_name":"조윤희","student_last_login_at":"2026-08-04 11:28:18.148831+00","parent_last_login_at":null},{"name":"이세아","teacher_name":"윤주희","student_last_login_at":"2026-08-04 11:27:56.712495+00","parent_last_login_at":null},{"name":"임지훈","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"장서윤","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"정건우","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"정은채","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"이송연","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"정지윤","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"정지후","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"조하윤","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"주혜진","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"최서연","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"최세린","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"최여준","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"최윤우","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"최이안","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"한기호","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"호킨슨루시리","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"호킨슨제레미","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"홍지윤","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"진서우","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"김준희","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"고예원","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"김하루","teacher_name":"최윤정, 이규숙","student_last_login_at":null,"parent_last_login_at":null},{"name":"김환희","teacher_name":"이규숙","student_last_login_at":null,"parent_last_login_at":null},{"name":"김지유","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"김하음","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"노우석","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"박영재","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"김재훈","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"곽에스더","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"곽정민","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"김규리","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"박승아","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"김서원","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"김은서","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"김정연","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"김지용","teacher_name":"최윤정, 이규숙","student_last_login_at":null,"parent_last_login_at":null},{"name":"박시연","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"박시준","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"박신영","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"노혁진","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"류연서","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"김봄","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"김지민","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"류휘석","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"김다윤","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"김서율","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"문지윤","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"강보민","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"박은채","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"박지호","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"정선영","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"박지은","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"박지후","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"박진건","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"배소율","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"이지훈","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":null},{"name":"손예원","teacher_name":"최윤정, 이규숙","student_last_login_at":null,"parent_last_login_at":null},{"name":"이수연","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"이지훈","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"김경은","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"백소은","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"백하연","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"서우현","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"서정우","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"서혜원","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"성채은","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"손성현","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"송현겸","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"양진혁","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"오예담","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"오예승","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"오지승","teacher_name":"최윤정, 이규숙","student_last_login_at":null,"parent_last_login_at":null},{"name":"오현승","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":null},{"name":"유서진","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"유솔민","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"유연우","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"유지호","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"윤도연","teacher_name":"이규숙","student_last_login_at":null,"parent_last_login_at":null},{"name":"윤서진","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"이도윤","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"이로운","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"이병목","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"이상준","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"이서우","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"이서현","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"이기범","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"이승기","teacher_name":"김은수","student_last_login_at":null,"parent_last_login_at":null},{"name":"이시후","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"이윤경","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"이은서","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"이주석","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"이주은","teacher_name":"윤주희","student_last_login_at":null,"parent_last_login_at":null},{"name":"이진우","teacher_name":"주한","student_last_login_at":null,"parent_last_login_at":null},{"name":"이하나","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"임동규","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"임서우","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"임찬우","teacher_name":"조윤희","student_last_login_at":null,"parent_last_login_at":null},{"name":"임재연","teacher_name":"신애진","student_last_login_at":null,"parent_last_login_at":null},{"name":"임재욱","teacher_name":"박경미","student_last_login_at":null,"parent_last_login_at":null},{"name":"임지원","teacher_name":"윤지혜","student_last_login_at":null,"parent_last_login_at":null}];
+
+const now = new Date('2026-08-13T00:00:00Z').getTime();
+
+function daysAgo(ts){
+  if(!ts) return Infinity;
+  let s = ts.replace(' ','T');
+  s = s.replace(/([+-]\d{2})$/, '$1:00');
+  const t = new Date(s).getTime();
+  if(isNaN(t)) return Infinity;
+  return (now - t) / 86400000;
+}
+
+const stage = document.getElementById('stage');
+const W = window.innerWidth, H = window.innerHeight;
+
+const students = RAW.map(r => {
+  const sD = daysAgo(r.student_last_login_at);
+  const pD = daysAgo(r.parent_last_login_at);
+  const best = Math.min(sD, pD);
+  let tier;
+  if(!isFinite(best)) tier = 'none';
+  else if(best <= 7) tier = 'hot';
+  else if(best <= 30) tier = 'warm';
+  else tier = 'cold';
+  return {...r, bestDays: best, tier};
+});
+
+// sort so hottest first (drawn last / on top visually not critical)
+students.sort((a,b)=>a.bestDays-b.bestDays);
+
+const counts = {hot:0,warm:0,cold:0,none:0};
+students.forEach(s=>counts[s.tier]++);
+document.getElementById('subtitle').textContent =
+  `총 ${students.length}명 · 최근 7일 ${counts.hot} · 이번달 ${counts.warm} · 오래전 ${counts.cold} · 한번도 안함 ${counts.none}`;
+
+// legend
+const legendDefs = [
+  {tier:'hot', color:'#ffd23f', label:'최근 7일 이내 로그인 (무지개 원)'},
+  {tier:'warm', color:'#3ddc84', label:'이번 달 로그인'},
+  {tier:'cold', color:'#3b82f6', label:'오래 전 로그인'},
+  {tier:'none', color:'#6b7280', label:'한 번도 로그인 안함'},
+];
+const legendEl = document.getElementById('legend');
+legendDefs.forEach(d=>{
+  const el = document.createElement('div');
+  el.className='legend-item';
+  el.innerHTML = `<span class="legend-swatch" style="background:${d.color}"></span>${d.label}`;
+  legendEl.appendChild(el);
+});
+
+// color per tier (for warm/cold glow color)
+function tierColor(tier, idx){
+  if(tier==='warm'){
+    const palette=['#3ddc84','#06d6a0','#2dd4bf','#4ade80'];
+    return palette[idx % palette.length];
+  }
+  if(tier==='cold'){
+    const palette=['#3b82f6','#60a5fa','#818cf8','#38bdf8'];
+    return palette[idx % palette.length];
+  }
+  return '#6b7280';
+}
+
+function sizeFor(tier){
+  if(tier==='hot') return 34 + Math.random()*14;
+  if(tier==='warm') return 26 + Math.random()*10;
+  if(tier==='cold') return 14 + Math.random()*6;
+  return 8 + Math.random()*4;
+}
+
+// initial placement: hot near center, others further out by tier, random angle
+const cx = W*0.5, cy = H*0.52;
+const ringRadius = {hot: () => 40 + Math.random()*140, warm: () => 170 + Math.random()*170, cold: () => 300 + Math.random()*(Math.min(W,H)*0.42), none: () => 340 + Math.random()*(Math.min(W,H)*0.46)};
+
+let warmI=0, coldI=0;
+const nodes = students.map(s=>{
+  const angle = Math.random()*Math.PI*2;
+  const r = ringRadius[s.tier]();
+  const size = sizeFor(s.tier);
+  let color;
+  if(s.tier==='warm'){ color = tierColor('warm', warmI++); }
+  else if(s.tier==='cold'){ color = tierColor('cold', coldI++); }
+  else if(s.tier==='none'){ color = tierColor('none',0); }
+  else { color = '#ffd23f'; }
+  return {
+    ...s,
+    x: cx + Math.cos(angle)*r,
+    y: cy + Math.sin(angle)*r,
+    size, color,
+  };
+});
+
+// simple repulsion pass to reduce overlap (few iterations, cheap for ~190 nodes)
+for(let iter=0; iter<120; iter++){
+  for(let i=0;i<nodes.length;i++){
+    for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i], b=nodes[j];
+      const dx=b.x-a.x, dy=b.y-a.y;
+      let dist=Math.sqrt(dx*dx+dy*dy)||0.001;
+      const minDist=(a.size+b.size)/2 + 10;
+      if(dist < minDist){
+        const push=(minDist-dist)/2;
+        const nx=dx/dist, ny=dy/dist;
+        a.x -= nx*push; a.y -= ny*push;
+        b.x += nx*push; b.y += ny*push;
+      }
+    }
+  }
+  // keep within bounds softly
+  nodes.forEach(n=>{
+    n.x = Math.max(n.size, Math.min(W-n.size, n.x));
+    n.y = Math.max(n.size+60, Math.min(H-n.size-40, n.y));
+  });
+}
+
+// render
+const frag = document.createDocumentFragment();
+nodes.forEach((n,idx)=>{
+  const wrap = document.createElement('div');
+  wrap.className='node';
+  wrap.style.left = n.x+'px';
+  wrap.style.top = n.y+'px';
+  wrap.style.animationDelay = (Math.random()*6).toFixed(2)+'s';
+  wrap.style.color = n.color;
+
+  const dot = document.createElement('div');
+  dot.className = 'dot ' + n.tier;
+  dot.style.width = n.size+'px';
+  dot.style.height = n.size+'px';
+  if(n.tier!=='hot' && n.tier!=='none'){
+    dot.style.background = n.color;
+  }
+  if(n.tier==='hot'){
+    dot.style.animationDuration = (4+Math.random()*3).toFixed(2)+'s';
+  }
+  wrap.appendChild(dot);
+
+  if(n.size >= 20 || n.tier==='hot'){
+    const label = document.createElement('div');
+    label.className='label';
+    label.style.fontSize = (n.tier==='hot' ? 13 : n.tier==='warm' ? 11 : 10)+'px';
+    label.style.fontWeight = n.tier==='hot' ? '800' : '500';
+    label.style.color = n.tier==='none' ? '#8a90a8' : '#e7eaf6';
+    label.textContent = n.name;
+    wrap.appendChild(label);
+  }
+
+  frag.appendChild(wrap);
+});
+stage.appendChild(frag);
+
+// background blobs
+const blobColors = ['#22c55e','#3b82f6','#a855f7','#06b6d4','#f59e0b'];
+for(let i=0;i<5;i++){
+  const b=document.createElement('div');
+  b.className='blob';
+  const size = 300+Math.random()*260;
+  b.style.width=size+'px';
+  b.style.height=size+'px';
+  b.style.left = (Math.random()*W*0.8)+'px';
+  b.style.top = (Math.random()*H*0.75)+'px';
+  b.style.background = `radial-gradient(circle, ${blobColors[i%blobColors.length]} 0%, transparent 70%)`;
+  b.style.animationDelay = (Math.random()*10).toFixed(2)+'s';
+  b.style.animationDuration = (20+Math.random()*14).toFixed(2)+'s';
+  stage.insertBefore(b, stage.firstChild.nextSibling);
+}
+
+// stars
+for(let i=0;i<80;i++){
+  const s=document.createElement('div');
+  s.className='star';
+  s.style.left=(Math.random()*W)+'px';
+  s.style.top=(Math.random()*H)+'px';
+  s.style.opacity = (0.15+Math.random()*0.5).toFixed(2);
+  stage.insertBefore(s, stage.firstChild.nextSibling);
+}
+</script>
+</body>
+</html>
