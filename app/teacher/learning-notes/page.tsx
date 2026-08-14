@@ -785,7 +785,7 @@ export default function TeacherLearningNotesPage() {
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
     // 화면이 그대로라 저장이 됐는지 안 됐는지 헷갈릴 수 있어 잠깐 확인 표시를 보여줌
     setJustSavedNote(true)
-    setTimeout(() => setJustSavedNote(false), 2500)
+    setTimeout(() => setJustSavedNote(false), 3500)
     } catch (err) {
       console.error('학습일지 저장 중 예상치 못한 오류:', err)
       alert('저장 중 오류가 발생했어요. 인터넷 연결을 확인하고 다시 시도해주세요.')
@@ -1487,6 +1487,15 @@ export default function TeacherLearningNotesPage() {
       </div>
 
       {/* ── 수업일지 입력 모달 ── */}
+      {/* 저장 성공 확인 표시 - 화면 맨 위에 고정으로 띄워서, 모달 안에서 스크롤이 어디에 있든
+          (또는 저장 직후 화면이 그대로라 "안 됐나?" 헷갈리는 것) 항상 눈에 띄게 함 */}
+      {justSavedNote && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-center text-sm font-bold flex items-center justify-center gap-2 shadow-lg"
+          style={{ background: '#166534', color: 'white' }}>
+          <i className="ti ti-circle-check" style={{ fontSize: 18 }} /> 저장됐어요!
+        </div>
+      )}
+
       {showNoteModal && noteStudent && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setShowNoteModal(false)}>
@@ -2455,14 +2464,6 @@ export default function TeacherLearningNotesPage() {
               </div>
             )}
 
-
-            {/* 저장 성공 확인 표시 - 저장해도 화면이 그대로라 "안 됐나?" 헷갈리는 것 방지 */}
-            {justSavedNote && (
-              <div className="mt-3 py-2.5 rounded-xl text-center text-sm font-bold flex items-center justify-center gap-1.5"
-                style={{ background: '#DCFCE7', color: '#166534' }}>
-                <i className="ti ti-circle-check" style={{ fontSize: 16 }} /> 저장됐어요!
-              </div>
-            )}
 
             {/* 저장 버튼 - 모든 탭에서 표시 */}
             <button onClick={handleSaveNote} disabled={savingNote}
