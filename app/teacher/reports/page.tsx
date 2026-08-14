@@ -130,6 +130,7 @@ export default function TeacherReportsPage() {
   const [rankLoaded, setRankLoaded] = useState(false)
   const [rankFocusStudentId, setRankFocusStudentId] = useState<string | null>(null)
   const [rankSearchText, setRankSearchText] = useState('')
+  const [rankMonth, setRankMonth] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -193,10 +194,15 @@ export default function TeacherReportsPage() {
     }).sort((a, b) => b.yearMonth.localeCompare(a.yearMonth) || b.title.localeCompare(a.title))
   }
 
-  const rankSessions = rankGrade ? buildRankSessions(rankGrade) : []
+  // 학생 개인 등수 변화(트렌드)는 항상 전체 월 기록을 봐야 하므로 월 필터와 별개로 전체를 계산해둔다
+  const rankAllSessionsForGrade = rankGrade ? buildRankSessions(rankGrade) : []
+  const rankMonthsAvailable = Array.from(new Set(rankAllSessionsForGrade.map((s) => s.yearMonth))).sort((a, b) => b.localeCompare(a))
+  const effectiveRankMonth = rankMonth ?? rankMonthsAvailable[0] ?? null
+  // 회차별 등수표는 선택된 월만 보여준다 (데이터가 쌓일수록 전체를 다 보여주면 헷갈리기 때문)
+  const rankSessions = effectiveRankMonth ? rankAllSessionsForGrade.filter((s) => s.yearMonth === effectiveRankMonth) : []
 
   function studentRankTrend(studentId: string) {
-    return rankSessions
+    return rankAllSessionsForGrade
       .map((s) => ({ yearMonth: s.yearMonth, title: s.title, total: s.entries.length, entry: s.entries.find((e) => e.studentId === studentId) }))
       .filter((x) => x.entry)
       .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth) || a.title.localeCompare(b.title))
@@ -1146,7 +1152,7 @@ export default function TeacherReportsPage() {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {rankGradesAvailable.map((g) => (
-                    <button key={g} onClick={() => { setRankGrade(g); setRankFocusStudentId(null); setRankSearchText('') }}
+                    <button key={g} onClick={() => { setRankGrade(g); setRankFocusStudentId(null); setRankSearchText(''); setRankMonth(null) }}
                       className="text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all"
                       style={rankGrade === g ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
                       {g}
@@ -1207,6 +1213,22 @@ export default function TeacherReportsPage() {
                     )
                   })()}
                 </div>
+
+                {/* 월 선택 */}
+                {rankMonthsAvailable.length > 0 && (
+                  <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
+                    <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">월 선택</p>
+                    <div className="flex flex-wrap gap-2">
+                      {rankMonthsAvailable.map((m) => (
+                        <button key={m} onClick={() => setRankMonth(m)}
+                          className="text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all"
+                          style={effectiveRankMonth === m ? { background: '#D85A30', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* 회차별 등수표 */}
                 {rankSessions.length === 0 ? (

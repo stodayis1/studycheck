@@ -6,6 +6,12 @@
 @tailwind utilities;
 
 @layer base {
+  /* 글씨가 작다는 민원 대응: 기본 글씨 크기를 16px→18px로 키운다.
+     tailwind의 text-xs/text-sm 등이 전부 rem 기준이라 여기 하나만 올려도
+     화면 전체(모바일+PC) 글씨가 비율 그대로 커진다. */
+  html {
+    font-size: 112.5%;
+  }
   * {
     -webkit-tap-highlight-color: transparent;
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
