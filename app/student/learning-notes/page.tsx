@@ -173,19 +173,28 @@ export default function StudentLearningNotePage() {
       student_edited: true,
     }
 
-    if (modalNote) {
-      await supabase.from('learning_notes').update(data).eq('id', modalNote.id)
-    } else {
-      await supabase.from('learning_notes').insert({
-        ...data,
-        attendance: '정시',
-        worksheet_submitted: false,
-        textbook_submitted: false,
-        workbook_done: false,
-      })
-    }
+    // 이전에는 저장 결과를 전혀 확인하지 않아서, 실패해도(네트워크 오류는 물론, 권한 문제로 조용히
+    // 0건 반영되는 경우까지) 모달이 그냥 닫혀버려 학생 입장에선 "저장이 안 된다"고 느껴도 원인을 알
+    // 수 없었음. update/insert 뒤에 .select()로 실제로 반영된 행을 받아와서, 없으면(=조용히 실패)
+    // 에러가 안 났어도 실패로 간주해 알려주고 모달을 닫지 않아 다시 시도할 수 있게 한다.
+    const { data: savedRows, error } = modalNote
+      ? await supabase.from('learning_notes').update(data).eq('id', modalNote.id).select()
+      : await supabase.from('learning_notes').insert({
+          ...data,
+          attendance: '정시',
+          worksheet_submitted: false,
+          textbook_submitted: false,
+          workbook_done: false,
+        }).select()
 
     setSaving(false)
+
+    if (error || !savedRows || savedRows.length === 0) {
+      console.error('배움노트 저장 오류:', error ?? '반영된 행 없음(권한 문제일 수 있음)')
+      alert('저장 중 오류가 발생했어요. 인터넷 연결을 확인하고 다시 시도해주세요.')
+      return
+    }
+
     setShowModal(false)
     if (studentId) await fetchData(studentId)
   }
