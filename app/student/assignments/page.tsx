@@ -25,6 +25,7 @@ interface LearningNote {
   worksheet_submitted: boolean
   workbook_done: boolean
   textbook_achievement: number | null
+  attendance?: string
 }
 
 interface StudentTextbook {
@@ -53,6 +54,7 @@ export default function StudentAssignmentsPage() {
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [loading, setLoading] = useState(true)
   const [monthOffset, setMonthOffset] = useState(0)
+  const [savingItem, setSavingItem] = useState<string | null>(null)
 
   const today = new Date()
   const baseDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1)
@@ -99,6 +101,54 @@ export default function StudentAssignmentsPage() {
   }
 
   const hasWorkbook = textbooks.some(t => t.textbook_type === '연산서')
+
+  // 오늘 할 일: 학생이 직접 체크할 수 있는 항목들 (자기주도학습 체크리스트)
+  const todaySession = sessions.find(s => s.session_date === todayStr) ?? null
+  const todayNote = todaySession ? (notes.find(n => n.session_id === todaySession.id) ?? null) : null
+  const todayAchievement = todayNote?.textbook_achievement ?? (todayNote?.workbook_done ? 100 : null)
+  const todayWorksheets = worksheets.filter(w => w.assigned_at?.startsWith(todayStr) && w.status === 'assigned')
+  const showTextbookTodo = !!(todaySession?.hw_textbook_name && (todayAchievement === null || todayAchievement < 100))
+  const showWorkbookTodo = hasWorkbook && !!todaySession && !(todayNote?.workbook_done)
+  const hasTodoItems = todayWorksheets.length > 0 || showTextbookTodo || showWorkbookTodo
+
+  // 학습지: 학생이 "제출했어요"로 직접 체크 (채점은 선생님/조교 몫이라 상태만 제출로 바꿈)
+  async function checkWorksheetDone(wsId: string) {
+    setSavingItem('ws-' + wsId)
+    const { error } = await supabase.from('student_worksheets').update({ status: 'submitted' }).eq('id', wsId).select()
+    setSavingItem(null)
+    if (error) { alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.'); return }
+    if (student) await fetchData(student.id)
+  }
+
+  // 교재 진도: 학생이 직접 "다 했어요" 체크 -> learning_notes에 반영
+  async function checkTextbookDone() {
+    if (!todaySession || !student) return
+    setSavingItem('textbook')
+    const result = todayNote
+      ? await supabase.from('learning_notes').update({ textbook_achievement: 100 }).eq('id', todayNote.id).select()
+      : await supabase.from('learning_notes').insert({
+          student_id: student.id, session_id: todaySession.id, attendance: '정시',
+          worksheet_submitted: false, workbook_done: false, textbook_achievement: 100,
+        }).select()
+    setSavingItem(null)
+    if (result.error || !result.data || result.data.length === 0) { alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.'); return }
+    if (student) await fetchData(student.id)
+  }
+
+  // 연산서: 학생이 직접 "다 했어요" 체크 -> learning_notes에 반영
+  async function checkWorkbookDone() {
+    if (!todaySession || !student) return
+    setSavingItem('workbook')
+    const result = todayNote
+      ? await supabase.from('learning_notes').update({ workbook_done: true }).eq('id', todayNote.id).select()
+      : await supabase.from('learning_notes').insert({
+          student_id: student.id, session_id: todaySession.id, attendance: '정시',
+          worksheet_submitted: false, workbook_done: true, textbook_achievement: null,
+        }).select()
+    setSavingItem(null)
+    if (result.error || !result.data || result.data.length === 0) { alert('저장 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.'); return }
+    if (student) await fetchData(student.id)
+  }
 
   // 달력 데이터 생성
   const firstDay = new Date(year, month, 1).getDay()
@@ -169,9 +219,62 @@ export default function StudentAssignmentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="전체 과제" subtitle="달력으로 확인해요" />
+      <Header title="할일목록" subtitle="오늘 할 일을 직접 체크해요" />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
+
+        {/* 오늘 할 일 체크리스트 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#FFF5F2', borderBottom: '1px solid #f0f0f0' }}>
+            <i className="ti ti-checklist" style={{ fontSize: 16, color: '#993C1D' }} />
+            <h3 className="text-sm font-bold" style={{ color: '#712B13' }}>오늘 할 일</h3>
+          </div>
+          <div className="px-4 py-3">
+            {!hasTodoItems ? (
+              <p className="text-xs text-gray-400 py-2 text-center">오늘 체크할 할 일이 없어요</p>
+            ) : (
+              <div className="space-y-2">
+                {todayWorksheets.map(ws => (
+                  <button key={ws.id} onClick={() => checkWorksheetDone(ws.id)} disabled={savingItem === 'ws-' + ws.id}
+                    className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-all disabled:opacity-50"
+                    style={{ background: '#f9fafb', border: '1px solid #f0f0f0' }}>
+                    <span className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0" style={{ borderColor: '#F5C4B3' }} />
+                    <span className="flex-1 text-sm font-semibold text-gray-700">
+                      학습지 · {ws.grade_level} {ws.unit}{ws.unit_name ? ` (${ws.unit_name})` : ''} · {ws.current_level}레벨
+                    </span>
+                    <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>
+                      {savingItem === 'ws-' + ws.id ? '저장 중' : '제출 체크'}
+                    </span>
+                  </button>
+                ))}
+                {showTextbookTodo && (
+                  <button onClick={checkTextbookDone} disabled={savingItem === 'textbook'}
+                    className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-all disabled:opacity-50"
+                    style={{ background: '#f9fafb', border: '1px solid #f0f0f0' }}>
+                    <span className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0" style={{ borderColor: '#F5C4B3' }} />
+                    <span className="flex-1 text-sm font-semibold text-gray-700">
+                      교재 · {todaySession?.hw_textbook_name}
+                    </span>
+                    <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>
+                      {savingItem === 'textbook' ? '저장 중' : '완료 체크'}
+                    </span>
+                  </button>
+                )}
+                {showWorkbookTodo && (
+                  <button onClick={checkWorkbookDone} disabled={savingItem === 'workbook'}
+                    className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-all disabled:opacity-50"
+                    style={{ background: '#f9fafb', border: '1px solid #f0f0f0' }}>
+                    <span className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0" style={{ borderColor: '#F5C4B3' }} />
+                    <span className="flex-1 text-sm font-semibold text-gray-700">연산서</span>
+                    <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>
+                      {savingItem === 'workbook' ? '저장 중' : '완료 체크'}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* 달력 카드 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

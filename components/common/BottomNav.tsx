@@ -33,7 +33,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
 export const STUDENT_NAV_ITEMS: NavItem[] = [
   { href:'/student/dashboard', label:'대시보드', icon:'☐', activeIcon:'☑' },
   { href:'/student/learning-notes', label:'배움노트', icon:'📓', activeIcon:'📓' },
-  { href:'/student/assignments', label:'과제달성현황', icon:'◎', activeIcon:'●' },
+  { href:'/student/assignments', label:'할일목록', icon:'◎', activeIcon:'●' },
   { href:'/student/feedback', label:'피드백', icon:'○', activeIcon:'●' },
 ]
 
