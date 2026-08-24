@@ -773,9 +773,12 @@ export default function TeacherCurriculumPage() {
                   <p className="text-[10px] text-gray-400 mt-2">회차는 스터디체크에 기록된 순서대로 매겨져요 (3회독이 끝이 아니에요 · 교재를 여러 권 배정했으면 배정한 순서대로 계속 올라가요)</p>
                 </div>
 
-                {/* 연산서 진도 (별도 % 5단계) */}
+                {/* 연산서 진도 (별도 % 5단계) - "지금 하고 있는" 것만 보여준다.
+                    예전엔 status='completed'(예: 이전 학기 다 끝낸 책)도 같이 나와서, 완료 표시가 따로 없다 보니
+                    "지금 하고 있는 연산서가 1학기로 나온다"처럼 다음 학기로 넘어간 뒤에도 지난 학기 책이 섞여 보이는
+                    문제가 있었다. 다른 화면(학부모/보고서)은 이미 진행중인 것만 보여주고 있어서 여기도 맞춘다. */}
                 {(() => {
-                  const calcBooks = textbooks.filter((t) => t.student_id === selectedProgressStudent.id && t.textbook_type === '연산서' && t.status !== 'checked')
+                  const calcBooks = textbooks.filter((t) => t.student_id === selectedProgressStudent.id && t.textbook_type === '연산서' && t.status === 'assigned')
                   if (calcBooks.length === 0) return null
                   return (
                     <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
