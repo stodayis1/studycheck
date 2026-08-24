@@ -27,6 +27,31 @@ interface WorksheetRecord {
   score: number | null
   assigned_at: string
   memo: string | null
+  semester?: number | null
+}
+
+// 학년 문자열("초5","중2","고1")을 정렬 가능한 숫자로 변환 - 초1~6 → 1~6, 중1~3 → 11~13, 고1~3 → 21~23
+function gradeSortKey(grade: string): number {
+  const num = parseInt(grade.replace(/[^0-9]/g, '')) || 0
+  if (grade.includes('초')) return num
+  if (grade.includes('중')) return 10 + num
+  if (grade.includes('고')) return 20 + num
+  return 99
+}
+
+// 초등 레벨학습지 "N단원"은 학기 구분 없이 숫자만 저장돼 있어서, semester가 있는 기록은
+// concepts(공식 교육과정 단원목록, concept_order 순)에서 N번째 대단원 이름을 찾아 정확한 단원명을 만든다.
+// semester가 없는(예전) 기록은 저장돼 있던 unit_name을 그대로 보여준다.
+function getChapterNameByOrder(concepts: Concept[], grade: string, semester: number, unitIndex: number): string | null {
+  const chapters = Array.from(new Set(
+    concepts
+      .filter((c) => c.grade === grade && c.semester === semester)
+      .sort((a, b) => a.concept_order - b.concept_order)
+      .map((c) => c.chapter)
+  ))
+  const raw = chapters[unitIndex - 1]
+  if (!raw) return null
+  return raw.replace(/^[Ⅰ-Ⅹ]+\s*/, '').trim() || null
 }
 
 const GRADE_GROUPS = [
@@ -316,17 +341,34 @@ export default function TeacherReportsPage() {
     const studentWS = worksheets
       .filter((w) => w.student_id === studentId)
       .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
-    const map = new Map<string, { grade_level: string; unit: string; unit_name: string }>()
+    const map = new Map<string, { grade_level: string; unit: string; unit_name: string; semester: number | null }>()
     studentWS.forEach((w) => {
       const key = `${w.grade_level}__${w.unit}`
       const existing = map.get(key)
       if (!existing) {
-        map.set(key, { grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name ?? '' })
-      } else if (w.unit_name && !existing.unit_name) {
-        map.set(key, { ...existing, unit_name: w.unit_name })
+        map.set(key, { grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name ?? '', semester: w.semester ?? null })
+      } else {
+        const merged = { ...existing }
+        if (w.unit_name && !existing.unit_name) merged.unit_name = w.unit_name
+        if (w.semester && !existing.semester) merged.semester = w.semester
+        map.set(key, merged)
       }
     })
-    return Array.from(map.values())
+    // 학기 정보가 있는 기록은 concepts(공식 교육과정)에서 정확한 단원명을 자동으로 가져와 표기가
+    // 들쭉날쭉하던 문제를 없앤다. 학기를 모르는 예전 기록은 저장돼 있던 이름을 그대로 쓴다.
+    const withNames = Array.from(map.values()).map((u) => {
+      const unitIndex = parseInt(u.unit)
+      const auto = u.semester && unitIndex ? getChapterNameByOrder(concepts, u.grade_level, u.semester, unitIndex) : null
+      return { ...u, unit_name: auto ?? u.unit_name }
+    })
+    // 학년 → 학기(모르면 맨 뒤) → 단원 번호 순으로 정렬해서 뒤죽박죽 보이던 문제를 해결
+    return withNames.sort((a, b) => {
+      const g = gradeSortKey(a.grade_level) - gradeSortKey(b.grade_level)
+      if (g !== 0) return g
+      const s = (a.semester ?? 99) - (b.semester ?? 99)
+      if (s !== 0) return s
+      return (parseInt(a.unit) || 0) - (parseInt(b.unit) || 0)
+    })
   }
 
   // 같은 단원 × 같은 레벨의 학습지를 여러 번 했다면 전부 반환 (2차/3차 표시용)
@@ -1813,11 +1855,11 @@ export default function TeacherReportsPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {studentUnits.map(({ grade_level, unit, unit_name }, idx) => (
+                            {studentUnits.map(({ grade_level, unit, unit_name, semester }, idx) => (
                               <tr key={idx} className="hover:bg-white/50">
                                 <td className="px-3 py-2.5 border-b border-r border-gray-100">
                                   <p className="font-bold text-gray-800">{unit}</p>
-                                  <p className="text-gray-400 text-[10px]">{grade_level}</p>
+                                  <p className="text-gray-400 text-[10px]">{grade_level}{semester ? `-${semester}` : ''}</p>
                                 </td>
                                 <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600">{unit_name || '-'}</td>
                                 {usedLevels.map((level) => {

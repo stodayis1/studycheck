@@ -28,6 +28,7 @@ interface StudentWorksheet {
   assigned_at: string
   submitted_at: string | null
   updated_at?: string | null
+  semester?: number | null
 }
 
 interface StudentTextbook {
@@ -109,6 +110,21 @@ function formatUnit(gradeLevel: string, unit: string, unitName: string) {
   return `${gradeLevel} ${unit}`
 }
 
+// 초등 레벨학습지는 "N단원"이라는 숫자만 고르고 학기 구분이 없어서, 같은 6단원이라도 5-1인지 5-2인지
+// 시스템이 몰라 단원명이 제각각으로 입력되던 문제가 있었다. 학기를 고르면 concepts 테이블(공식 교육과정
+// 단원 목록, concept_order 순)에서 N번째 대단원 이름을 찾아 자동으로 채워준다 - 로마숫자 접두어는 잘라낸다.
+function getChapterNameByOrder(concepts: Concept[], grade: string, semester: number, unitIndex: number): string | null {
+  const chapters = Array.from(new Set(
+    concepts
+      .filter((c) => c.grade === grade && c.semester === semester)
+      .sort((a, b) => a.concept_order - b.concept_order)
+      .map((c) => c.chapter)
+  ))
+  const raw = chapters[unitIndex - 1]
+  if (!raw) return null
+  return raw.replace(/^[Ⅰ-Ⅹ]+\s*/, '').trim() || null
+}
+
 export default function TeacherAssignmentsPage() {
   const { currentUser, isAdmin, canManageAllStudents } = useAuth()
   const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'textbook'>('worksheet')
@@ -129,8 +145,10 @@ export default function TeacherAssignmentsPage() {
   const [showWSModal, setShowWSModal] = useState(false)
   const [wsStudent, setWsStudent] = useState<Student | null>(null)
   const [wsGradeLevel, setWsGradeLevel] = useState('초4')
+  const [wsSemester, setWsSemester] = useState<1 | 2>(1)
   const [wsUnit, setWsUnit] = useState('1단원')
   const [wsUnitName, setWsUnitName] = useState('')
+  const [wsUnitNameTouched, setWsUnitNameTouched] = useState(false)
   const [wsLevel, setWsLevel] = useState(2.5)
   const [wsCourseGroup, setWsCourseGroup] = useState<'초등'|'중등'|'고등'>('초등')
   const [wsConceptGrade, setWsConceptGrade] = useState('')
@@ -235,6 +253,16 @@ export default function TeacherAssignmentsPage() {
     }
   }, [tab, worksheetsFullLoaded, worksheetsFullLoading])
 
+  // 초등 학습지: 학년/학기/단원을 고르면 concepts(공식 교육과정 단원목록)에서 이름을 찾아 자동으로 채워준다.
+  // 선생님이 직접 단원명을 고쳐 입력했다면(wsUnitNameTouched) 그 뒤로는 자동 채우기가 덮어쓰지 않는다.
+  useEffect(() => {
+    if (wsCourseGroup !== '초등' || wsUnitNameTouched) return
+    const unitIndex = parseInt(wsUnit)
+    if (!unitIndex) return
+    const auto = getChapterNameByOrder(concepts, wsGradeLevel, wsSemester, unitIndex)
+    setWsUnitName(auto ?? '')
+  }, [wsCourseGroup, wsGradeLevel, wsSemester, wsUnit, wsUnitNameTouched, concepts])
+
   const myStudents = students.filter((s) => {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
@@ -308,10 +336,11 @@ export default function TeacherAssignmentsPage() {
         grade_level: isMiddleHigh ? wsConceptGrade : wsGradeLevel,
         unit: isMiddleHigh ? wsChapters.join(' + ') : wsUnit,
         unit_name: isMiddleHigh ? wsConceptNames : wsUnitName,
+        semester: isMiddleHigh ? null : wsSemester,
         current_level: wsLevel, status: 'assigned', worksheet_type: 'main',
       })
     }
-    setShowWSModal(false); setWsStudent(null); setWsUnitName('')
+    setShowWSModal(false); setWsStudent(null); setWsUnitName(''); setWsUnitNameTouched(false)
     setWsConceptIds([])
     setBulkStudentIds([]); setBulkMode(false)
     setWsAssigning(false); fetchData()
@@ -376,7 +405,7 @@ export default function TeacherAssignmentsPage() {
     await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
-      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
       current_level: nextLevel, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
@@ -389,7 +418,7 @@ export default function TeacherAssignmentsPage() {
     await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
-      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
       current_level: w.current_level, status: 'similar_assigned', worksheet_type: 'similar', parent_worksheet_id: w.id,
     })
     fetchData()
@@ -436,11 +465,12 @@ export default function TeacherAssignmentsPage() {
         grade_level: isMiddleHigh ? wsConceptGrade : wsGradeLevel,
         unit: isMiddleHigh ? wsChapters.join(' + ') : wsUnit,
         unit_name: isMiddleHigh ? wsConceptNames : wsUnitName,
+        semester: isMiddleHigh ? null : wsSemester,
         current_level: wsLevel, status: 'assigned', worksheet_type: 'main',
       })
     }
     setWsConceptIds([])
-    setShowWSModal(false); setBulkStudentIds([]); setWsStudent(null); setWsUnitName('')
+    setShowWSModal(false); setBulkStudentIds([]); setWsStudent(null); setWsUnitName(''); setWsUnitNameTouched(false)
     setWsAssigning(false); fetchData()
   }
 
@@ -456,7 +486,7 @@ export default function TeacherAssignmentsPage() {
     await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
-      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name,
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
       current_level: w.current_level, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
@@ -516,7 +546,7 @@ export default function TeacherAssignmentsPage() {
         subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}
         action={
           tab === 'worksheet' ? (
-            <button onClick={() => setShowWSModal(true)}
+            <button onClick={() => { setWsUnitNameTouched(false); setWsSemester(1); setShowWSModal(true) }}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg"
               style={{ background: '#F5C4B3', color: '#712B13' }}>
               + 학습지 배정
@@ -1613,6 +1643,20 @@ export default function TeacherAssignmentsPage() {
                   </div>
                 </div>
                 <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    학기 <span className="text-gray-400 font-normal">(단원명 자동입력 및 보고서 정렬에 쓰여요)</span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    {([1, 2] as const).map((sem) => (
+                      <button key={sem} onClick={() => setWsSemester(sem)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                        style={wsSemester === sem
+                          ? { background: '#F5C4B3', color: '#712B13' }
+                          : { background: '#f3f4f6', color: '#6b7280' }}>{sem}학기</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">단원</label>
                   <div className="flex gap-1.5 flex-wrap">
                     {WORKSHEET_UNITS.map((u) => (
@@ -1625,8 +1669,11 @@ export default function TeacherAssignmentsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">단원명 <span className="text-gray-400 font-normal">(선택)</span></label>
-                  <input type="text" value={wsUnitName} onChange={(e) => setWsUnitName(e.target.value)}
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    단원명 <span className="text-gray-400 font-normal">({wsGradeLevel} {wsSemester}학기 기준 자동입력 · 필요하면 수정)</span>
+                  </label>
+                  <input type="text" value={wsUnitName}
+                    onChange={(e) => { setWsUnitName(e.target.value); setWsUnitNameTouched(true) }}
                     placeholder="예: 분수의 덧셈과 뺄셈"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
                 </div>
