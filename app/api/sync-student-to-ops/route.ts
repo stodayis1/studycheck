@@ -25,6 +25,10 @@ export async function POST(req: NextRequest) {
       if ('parent_phone' in fields) data.parent_phone = fields.parent_phone || null
       if ('class_time' in fields) data.class_time = fields.class_time || null
       if ('is_active' in fields) data.active = fields.is_active
+      // OPS 학생목록 카드는 class_time 텍스트가 아니라 schedule_days 배열로 요일을 표시하므로
+      // 이걸 빼먹으면 시간표를 바꿔도 OPS 화면엔 예전 요일이 그대로 남는 문제가 있었다.
+      if ('schedule_days' in fields) data.schedule_days = Array.isArray(fields.schedule_days) ? fields.schedule_days : null
+      if ('weekly_sessions' in fields) data.weekly_sessions = fields.weekly_sessions ?? null
     }
 
     // 담당강사 자유텍스트(콤마 구분 가능) -> OPS profiles.id 매핑. 첫 번째 이름만 사용.

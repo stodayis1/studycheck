@@ -211,10 +211,13 @@ export default function TeacherStudentsPage() {
     await supabase.from('students').update({ class_time: classTimeText }).eq('id', editStudent.id)
 
     // OPS 동기화 (연동된 학생만)
+    // schedule_days/weekly_sessions도 같이 보내야 한다 - OPS 학생목록 카드는 class_time 텍스트가 아니라
+    // schedule_days 배열로 요일을 표시해서, 이걸 빼먹으면 시간표 요일을 바꿔도 OPS 화면엔 예전 요일이 그대로 남는다.
+    const scheduleDays = [...new Set(sortedSchedules.map(sc => sc.day))]
     const syncResult = await syncStudentToOps(editStudent.ops_student_id, {
       name: editStudent.name, school: editStudent.school, grade: editStudent.grade,
       parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
-      class_time: classTimeText,
+      class_time: classTimeText, schedule_days: scheduleDays, weekly_sessions: sortedSchedules.length,
     }, editStudent.teacher_name)
 
     setShowEditModal(false)
