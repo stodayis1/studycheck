@@ -74,6 +74,7 @@ export default function TeacherStudentsPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
+  const [teacherFilter, setTeacherFilter] = useState('')
   const [importedStudents, setImportedStudents] = useState<Student[]>([])
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -112,9 +113,23 @@ export default function TeacherStudentsPage() {
     return teachers.includes(currentUser.name)
   })
 
-  const filtered = myStudents.filter((s) =>
-    s.name?.includes(searchText) || s.school?.includes(searchText)
-  )
+  // 담당쌤(관리자/직원용) 목록 - 학생 한 명당 여러 명(콤마 구분)일 수 있어서 전부 풀어서 이름별로 모으고,
+  // 몇 명씩 담당하는지도 같이 세어둔다 (원장님이 강사별로 담당학생을 훑어볼 수 있게)
+  const teacherCounts = (() => {
+    const map = new Map<string, number>()
+    myStudents.forEach((s) => {
+      const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+      teachers.forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
+    })
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'ko'))
+  })()
+
+  const filtered = myStudents.filter((s) => {
+    const searchMatch = s.name?.includes(searchText) || s.school?.includes(searchText)
+    if (!teacherFilter) return searchMatch
+    const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim())
+    return searchMatch && teachers.includes(teacherFilter)
+  })
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -396,13 +411,34 @@ export default function TeacherStudentsPage() {
           </div>
         )}
 
+        {/* 강사별 보기 (관리자/직원 전용 - 강사 계정은 어차피 본인 담당만 보여서 필요 없음) */}
+        {canManageAllStudents() && teacherCounts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-gray-500">강사별 보기</p>
+            <div className="flex gap-1.5 flex-wrap">
+              <button onClick={() => setTeacherFilter('')}
+                className={cx('px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                  teacherFilter === '' ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
+                전체 {myStudents.length}명
+              </button>
+              {teacherCounts.map(([name, count]) => (
+                <button key={name} onClick={() => setTeacherFilter(teacherFilter === name ? '' : name)}
+                  className={cx('px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                    teacherFilter === name ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
+                  {name} {count}명
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 검색 */}
         <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
           placeholder="학생 이름 또는 학교로 검색"
           className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
 
         {/* 학생 목록 */}
-        <SectionCard title="전체 학생" subtitle={loading ? '불러오는 중...' : `총 ${filtered.length}명`}>
+        <SectionCard title={teacherFilter ? `${teacherFilter} 선생님 담당` : '전체 학생'} subtitle={loading ? '불러오는 중...' : `총 ${filtered.length}명`}>
           {loading ? (
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
