@@ -443,8 +443,8 @@ export default function TeacherLearningNotesPage() {
     setJustSavedNote(false)
     // 기존 세션이 있고 편집 권한 체크
     const session = targetSession ?? getTodaySession(student.id)
-    if (session && !canEditNote(session.session_date)) {
-      alert('수업 당일과 다음날까지만 수정할 수 있어요. 그 이후 수정은 관리자에게 문의해주세요.')
+    if (session && !canEditNote(session.session_date, student.id)) {
+      alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 그 이후 수정은 관리자에게 문의해주세요.')
       return
     }
     const note = getTodayNote(student.id)
@@ -1032,12 +1032,12 @@ export default function TeacherLearningNotesPage() {
     fetchData()
   }
 
-  // 수업일지 삭제 (당일+다음날만 가능, 관리자 예외)
-  async function handleDeleteNote(sessionId: string, sessionDate: string) {
-    const canEdit = canEditNote(sessionDate)
+  // 수업일지 삭제 (당일+다음 수업일 오후 2시까지만 가능, 관리자 예외)
+  async function handleDeleteNote(sessionId: string, sessionDate: string, studentId: string) {
+    const canEdit = canEditNote(sessionDate, studentId)
 
     if (!canEdit) {
-      alert('수정/삭제는 수업 당일과 다음날까지만 가능해요. 그 이후에는 관리자에게 문의해주세요.')
+      alert('수정/삭제는 수업 당일과 다음 수업일 오후 2시까지만 가능해요. 그 이후에는 관리자에게 문의해주세요.')
       return
     }
     if (!confirm('수업일지를 삭제할까요?')) return
@@ -1049,15 +1049,33 @@ export default function TeacherLearningNotesPage() {
     fetchData()
   }
 
-  // 수업일지 수정 가능 여부 체크 (수업 당일 + 다음날까지)
-  function canEditNote(sessionDate: string) {
+  // 수업일지 수정 마감시각 - "당일 + 그 학생의 다음 수업일 오후 2시"까지 (2026-08 확정).
+  // 월수금 수업하는 학생이면 월요일 걸 못 썼을 때 수요일 오후 2시까지 넉넉하게 준다 - 화요일까지로
+  // 고정해두면 월수금반 강사는 항상 하루 모자란 채로 잠기는 문제가 있었음.
+  function getNextClassDeadline(sessionDate: string, studentId: string) {
+    const studentDays = new Set(schedules.filter((sc) => sc.student_id === studentId).map((sc) => sc.day_of_week))
+    const cursor = new Date(sessionDate)
+    cursor.setHours(0, 0, 0, 0)
+    cursor.setDate(cursor.getDate() + 1)
+    if (studentDays.size > 0) {
+      for (let i = 0; i < 14; i++) {
+        if (studentDays.has(dayMap[cursor.getDay()])) break
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
+    // 시간표를 못 찾으면(비활성/미등록) 위 루프가 14일을 다 돌아 다음날+14일이 되는데,
+    // 그런 경우는 기존 규칙(다음날 하루)으로 대체한다.
+    if (studentDays.size === 0) {
+      cursor.setTime(new Date(sessionDate).setHours(0, 0, 0, 0))
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    cursor.setHours(14, 0, 0, 0)
+    return cursor
+  }
+
+  function canEditNote(sessionDate: string, studentId: string) {
     if (isAdmin()) return true
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const sDate = new Date(sessionDate)
-    sDate.setHours(0, 0, 0, 0)
-    const diffDays = Math.round((today.getTime() - sDate.getTime()) / 86400000)
-    return diffDays >= 0 && diffDays <= 1
+    return new Date() <= getNextClassDeadline(sessionDate, studentId)
   }
 
   async function handleDeleteSchedule(id: string) {
@@ -1256,7 +1274,7 @@ export default function TeacherLearningNotesPage() {
                               💬 알림장
                             </button>
                             {note && session ? (() => {
-                              const editable = canEditNote(session.session_date)
+                              const editable = canEditNote(session.session_date, student.id)
                               return (
                                 <>
                                   {isComplete && isAdmin() && (
@@ -1267,12 +1285,12 @@ export default function TeacherLearningNotesPage() {
                                       {sendingKakao === session.id ? '보내는 중...' : '💬 카톡 발송'}
                                     </button>
                                   )}
-                                  <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음날까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
+                                  <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
                                     className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
                                       editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>
                                     {editable ? '수정' : '🔒 수정'}
                                   </button>
-                                  <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date) : alert('수업 당일과 다음날까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
+                                  <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date, student.id) : alert('수업 당일과 다음 수업일 오후 2시까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
                                     className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
                                       editable ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100 cursor-not-allowed')}>
                                     {editable ? '삭제' : '🔒 삭제'}
@@ -1365,7 +1383,7 @@ export default function TeacherLearningNotesPage() {
                               )
                             })()}
                             {note.memo && <span className="text-[10px] text-gray-400">📝 {note.memo}</span>}
-                            {!canEditNote(session.session_date) && (
+                            {!canEditNote(session.session_date, student.id) && (
                               <span className="text-[10px] text-gray-300 w-full mt-1">🔒 수정기간 종료 · 관리자 문의</span>
                             )}
                           </div>
