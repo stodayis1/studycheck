@@ -7,6 +7,24 @@ import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 
+// 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
+function laTierColor(v: number | null, good = 85, mid = 70) {
+  if (v == null) return '#9ca3af'
+  if (v >= good) return '#0f3460'
+  if (v >= mid) return '#D85A30'
+  return '#dc2626'
+}
+function laPolarPoint(cx: number, cy: number, angleDeg: number, r: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+}
+function laRingPoints(n: number, cx: number, cy: number, maxR: number, frac: number) {
+  return Array.from({ length: n })
+    .map((_, i) => laPolarPoint(cx, cy, i * (360 / n), maxR * frac))
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(' ')
+}
+
 interface Student {
   id: string
   name: string
@@ -554,7 +572,55 @@ export default function TeacherReportsPage() {
       .filter((t: any) => t.textbook_type === '연산서')
       .map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0, grade: tb.grade, semester: tb.semester }))
 
-    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, curriculumProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail, dailyTests, avgDailyTest })
+    // 학습분석리포트 - generate-report API와 완전히 동일한 로직 (미리보기와 실제 발송본이 어긋나면 안 됨)
+    const learningAnalysis = (() => {
+      if (scoredWS.length < 3) return null
+      const unitMap = new Map<string, { label: string; scores: number[]; lastAssignedAt: string }>()
+      scoredWS.forEach((w: any) => {
+        const key = w.unit ?? '기타'
+        const label = w.unit_name || w.unit || '기타'
+        const existing = unitMap.get(key)
+        if (existing) {
+          existing.scores.push(w.score)
+          if (w.assigned_at > existing.lastAssignedAt) existing.lastAssignedAt = w.assigned_at
+        } else {
+          unitMap.set(key, { label, scores: [w.score], lastAssignedAt: w.assigned_at })
+        }
+      })
+      const unitAverages = Array.from(unitMap.values())
+        .map((u) => ({ label: u.label, avg: Math.round(u.scores.reduce((s, v) => s + v, 0) / u.scores.length), count: u.scores.length }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'ko'))
+        .slice(0, 6)
+      const sortedByDate = [...scoredWS].sort((a: any, b: any) => a.assigned_at.localeCompare(b.assigned_at))
+      const recent5 = sortedByDate.slice(-5)
+      const recentAvg = Math.round(recent5.reduce((s: number, w: any) => s + w.score, 0) / recent5.length)
+      const overallScore = avgDailyTest != null && avgScore != null
+        ? Math.round((avgScore + avgDailyTest) / 2)
+        : (avgScore ?? avgDailyTest)
+      const weakest = [...unitAverages].sort((a, b) => a.avg - b.avg)[0] ?? null
+      const latest: any = sortedByDate[sortedByDate.length - 1]
+      const latestUnitAvg = unitMap.get(latest.unit ?? '기타')
+      const latestUnitAvgExcludingLast = latestUnitAvg && latestUnitAvg.scores.length > 1
+        ? Math.round((latestUnitAvg.scores.reduce((s, v) => s + v, 0) - latest.score) / (latestUnitAvg.scores.length - 1))
+        : null
+      const recentDrop = latestUnitAvgExcludingLast != null && latestUnitAvgExcludingLast - latest.score >= 15
+        ? { label: latest.unit_name || latest.unit || '기타', from: latestUnitAvgExcludingLast, to: latest.score }
+        : null
+      const solutions: string[] = []
+      if (recentDrop) {
+        solutions.push(`${recentDrop.label} 최근 정답률 급락(${recentDrop.from}→${recentDrop.to}점) — 재점검 필요`)
+      } else if (weakest && unitAverages.length >= 2) {
+        solutions.push(`${weakest.label} 평균이 상대적으로 낮음(${weakest.avg}점) — 보충 학습 권장`)
+      }
+      if (avgScore != null && recentAvg < avgScore - 5) {
+        solutions.push(`최근 5회 평균(${recentAvg}점)이 전체 평균(${avgScore}점)보다 낮음 — 난이도 조정 검토`)
+      } else if (solutions.length === 0) {
+        solutions.push('전반적으로 안정적인 흐름을 유지하고 있음')
+      }
+      return { overallScore, unitAverages, recentAvg, weakestLabel: weakest?.label ?? null, weakestAvg: weakest?.avg ?? null, recentDrop, solutions }
+    })()
+
+    setMData({ totalSessions, attendance, hwRate, avgScore, passRate, monthWS: monthWS.length, worksheetDetail, curriculumProgress, calcProgress, monthExams: examData ?? [], student, year, month, attendanceDetail, dailyTests, avgDailyTest, learningAnalysis })
     setMLoading(false)
   }
 
@@ -930,6 +996,76 @@ export default function TeacherReportsPage() {
                       )}
                     </div>
                   )}
+
+                  {/* 학습분석리포트 - 공개 리포트 페이지와 동일 디자인 (2026-08 확정) */}
+                  {mData.learningAnalysis && (() => {
+                    const la = mData.learningAnalysis
+                    const showRadar = la.unitAverages.length >= 3
+                    const n = la.unitAverages.length
+                    const cx = 80, cy = 80, maxR = 56
+                    const dataPts = la.unitAverages
+                      .map((u: any, i: number) => laPolarPoint(cx, cy, i * (360 / n), maxR * (u.avg / 100)))
+                      .map((p: any) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+                      .join(' ')
+                    return (
+                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>수학의지혜 학습분석리포트</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                          <div style={{ flexShrink: 0 }}>
+                            <div style={{ fontSize: 9, color: '#9ca3af', marginBottom: 2 }}>종합 점수</div>
+                            <div style={{ fontSize: 26, fontWeight: 500, color: laTierColor(la.overallScore) }}>
+                              {la.overallScore ?? '-'}<span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 2 }}>/100</span>
+                            </div>
+                          </div>
+                          {showRadar && (
+                            <svg viewBox="0 0 160 160" width={120} height={120} style={{ flexShrink: 0 }}>
+                              {[0.25, 0.5, 0.75, 1].map((frac) => (
+                                <polygon key={frac} points={laRingPoints(n, cx, cy, maxR, frac)} fill="none" stroke="#e5e7eb" strokeWidth={1} />
+                              ))}
+                              {la.unitAverages.map((_: any, i: number) => {
+                                const p = laPolarPoint(cx, cy, i * (360 / n), maxR)
+                                return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#e5e7eb" strokeWidth={1} />
+                              })}
+                              <polygon points={dataPts} fill="rgba(15,52,96,0.15)" stroke="#0f3460" strokeWidth={1.5} />
+                              {la.unitAverages.map((u: any, i: number) => {
+                                const label = laPolarPoint(cx, cy, i * (360 / n), maxR + 16)
+                                const anchor = label.x < cx - 5 ? 'end' : label.x > cx + 5 ? 'start' : 'middle'
+                                return (
+                                  <text key={i} x={label.x} y={label.y} textAnchor={anchor} dominantBaseline="middle" fontSize={9} fill="#374151">
+                                    {u.label.length > 6 ? u.label.slice(0, 6) : u.label}
+                                  </text>
+                                )
+                              })}
+                            </svg>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid #e9edf3', marginBottom: 10 }}>
+                          {la.unitAverages.map((u: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 10, color: '#374151', width: 64, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.label}</span>
+                              <div style={{ flex: 1, height: 6, background: '#e9edf3', borderRadius: 4 }}>
+                                <div style={{ height: 6, borderRadius: 4, width: `${u.avg}%`, background: laTierColor(u.avg) }} />
+                              </div>
+                              <span style={{ fontSize: 10, color: '#374151', width: 28, textAlign: 'right', flexShrink: 0 }}>{u.avg}점</span>
+                            </div>
+                          ))}
+                        </div>
+                        {la.weakestLabel && (
+                          <div style={{ marginBottom: 10 }}>
+                            <span style={{ fontSize: 10, fontWeight: 500, color: '#993C1D', background: '#FAECE7', borderRadius: 8, padding: '3px 9px' }}>
+                              취약 단원 · {la.weakestLabel} ({la.weakestAvg}점)
+                            </span>
+                          </div>
+                        )}
+                        <div style={{ paddingTop: 10, borderTop: '1px solid #e9edf3' }}>
+                          <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>솔루션</div>
+                          {la.solutions.map((s: string, i: number) => (
+                            <div key={i} style={{ fontSize: 11, color: '#374151', lineHeight: 1.7 }}>{i + 1}. {s}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* 교재 진도 - 기록이 있는 학년/학기만, 회차 + 진행률로 압축해서 보여줌 (실제 발송 보고서와 동일 로직) */}
                   {(mData.curriculumProgress.length > 0 || mData.calcProgress.length > 0) && (

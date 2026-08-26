@@ -36,6 +36,18 @@ function tierColor(pct: number | null, good = 85, mid = 70) {
   return RED
 }
 
+// 학습분석리포트용 레이더차트 - 클라이언트 JS 없이(카톡 인앱 브라우저 대응) 서버에서 SVG로 직접 그린다.
+function polarPoint(cx: number, cy: number, angleDeg: number, r: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+}
+function ringPoints(n: number, cx: number, cy: number, maxR: number, frac: number) {
+  return Array.from({ length: n })
+    .map((_, i) => polarPoint(cx, cy, i * (360 / n), maxR * frac))
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(' ')
+}
+
 interface DailyReportData {
   studentName: string
   studentGrade: string
@@ -78,6 +90,15 @@ interface ReportLink {
     attendanceDetail?: { date: string; dow: string; status: string }[]
     dailyTests?: { date: string; unit: string | null; score: number }[]
     avgDailyTest?: number | null
+    learningAnalysis?: {
+      overallScore: number | null
+      unitAverages: { label: string; avg: number; count: number }[]
+      recentAvg: number
+      weakestLabel: string | null
+      weakestAvg: number | null
+      recentDrop: { label: string; from: number; to: number } | null
+      solutions: string[]
+    } | null
   }
   ai_comment: string | null
   created_at: string
@@ -324,6 +345,80 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
               )}
             </div>
           )}
+
+          {/* 학습분석리포트 - 단원별 평균을 레이더로, 취약 단원과 솔루션을 함께 보여줌 (2026-08 확정 디자인) */}
+          {d.learningAnalysis && (() => {
+            const la = d.learningAnalysis!
+            const showRadar = la.unitAverages.length >= 3
+            const n = la.unitAverages.length
+            const cx = 80, cy = 80, maxR = 56
+            const dataPts = la.unitAverages
+              .map((u, i) => polarPoint(cx, cy, i * (360 / n), maxR * (u.avg / 100)))
+              .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+              .join(' ')
+            return (
+              <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>수학의지혜 학습분석리포트</div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                  <div style={{ flexShrink: 0 }}>
+                    <div style={{ fontSize: 9, color: TEXT_MUTED, marginBottom: 2 }}>종합 점수</div>
+                    <div style={{ fontSize: 26, fontWeight: 500, color: tierColor(la.overallScore) }}>
+                      {la.overallScore ?? '-'}<span style={{ fontSize: 12, color: TEXT_MUTED, marginLeft: 2 }}>/100</span>
+                    </div>
+                  </div>
+                  {showRadar && (
+                    <svg viewBox="0 0 160 160" width={120} height={120} style={{ flexShrink: 0 }}>
+                      {[0.25, 0.5, 0.75, 1].map((frac) => (
+                        <polygon key={frac} points={ringPoints(n, cx, cy, maxR, frac)} fill="none" stroke="#e5e7eb" strokeWidth={1} />
+                      ))}
+                      {la.unitAverages.map((_, i) => {
+                        const p = polarPoint(cx, cy, i * (360 / n), maxR)
+                        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#e5e7eb" strokeWidth={1} />
+                      })}
+                      <polygon points={dataPts} fill={NAVY_DIM} stroke={NAVY} strokeWidth={1.5} />
+                      {la.unitAverages.map((u, i) => {
+                        const label = polarPoint(cx, cy, i * (360 / n), maxR + 16)
+                        const anchor = label.x < cx - 5 ? 'end' : label.x > cx + 5 ? 'start' : 'middle'
+                        return (
+                          <text key={i} x={label.x} y={label.y} textAnchor={anchor} dominantBaseline="middle" fontSize={9} fill={TEXT_BODY}>
+                            {u.label.length > 6 ? u.label.slice(0, 6) : u.label}
+                          </text>
+                        )
+                      })}
+                    </svg>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: '1px solid #e9edf3', marginBottom: 10 }}>
+                  {la.unitAverages.map((u, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 10, color: TEXT_BODY, width: 64, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.label}</span>
+                      <div style={{ flex: 1, height: 6, background: '#e9edf3', borderRadius: 4 }}>
+                        <div style={{ height: 6, borderRadius: 4, width: `${u.avg}%`, background: tierColor(u.avg) }} />
+                      </div>
+                      <span style={{ fontSize: 10, color: TEXT_BODY, width: 28, textAlign: 'right', flexShrink: 0 }}>{u.avg}점</span>
+                    </div>
+                  ))}
+                </div>
+
+                {la.weakestLabel && (
+                  <div style={{ marginBottom: 10 }}>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: ORANGE_MID, background: ORANGE_BG, borderRadius: 8, padding: '3px 9px' }}>
+                      취약 단원 · {la.weakestLabel} ({la.weakestAvg}점)
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ paddingTop: 10, borderTop: '1px solid #e9edf3' }}>
+                  <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>솔루션</div>
+                  {la.solutions.map((s, i) => (
+                    <div key={i} style={{ fontSize: 11, color: TEXT_BODY, lineHeight: 1.7 }}>{i + 1}. {s}</div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* 교재 진도 - 기록이 있는 학년/학기만, 회차 + 진행률로 압축해서 보여줌 */}
           {((d.curriculumProgress?.length ?? 0) > 0 || d.calcProgress.length > 0) && (

@@ -140,11 +140,68 @@ export async function POST(req: NextRequest) {
       .filter((t: any) => t.textbook_type === '연산서')
       .map((tb: any) => ({ name: tb.textbook_name, percent: tb.progress_percent ?? 0, grade: tb.grade, semester: tb.semester }))
 
+    // 학습분석리포트 - 아직 문제은행(유형/난이도 태깅)이 없어서 개념/유형 단위가 아니라
+    // "단원" 단위로 점수를 묶어 레이더로 보여준다. 데이터가 너무 적으면(3건 미만) 억지로
+    // 만들지 않고 섹션 자체를 생략한다 - 표본이 적을 때 레이더가 왜곡돼 보이는 걸 막기 위함.
+    const learningAnalysis = (() => {
+      if (scoredWS.length < 3) return null
+
+      const unitMap = new Map<string, { label: string; scores: number[]; lastAssignedAt: string }>()
+      scoredWS.forEach((w: any) => {
+        const key = w.unit ?? '기타'
+        const label = w.unit_name || w.unit || '기타'
+        const existing = unitMap.get(key)
+        if (existing) {
+          existing.scores.push(w.score)
+          if (w.assigned_at > existing.lastAssignedAt) existing.lastAssignedAt = w.assigned_at
+        } else {
+          unitMap.set(key, { label, scores: [w.score], lastAssignedAt: w.assigned_at })
+        }
+      })
+      const unitAverages = Array.from(unitMap.values())
+        .map((u) => ({ label: u.label, avg: Math.round(u.scores.reduce((s, v) => s + v, 0) / u.scores.length), count: u.scores.length }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'ko'))
+        .slice(0, 6)
+
+      const sortedByDate = [...scoredWS].sort((a: any, b: any) => a.assigned_at.localeCompare(b.assigned_at))
+      const recent5 = sortedByDate.slice(-5)
+      const recentAvg = Math.round(recent5.reduce((s: number, w: any) => s + w.score, 0) / recent5.length)
+
+      const overallScore = avgDailyTest != null && avgScore != null
+        ? Math.round((avgScore + avgDailyTest) / 2)
+        : (avgScore ?? avgDailyTest)
+
+      const weakest = [...unitAverages].sort((a, b) => a.avg - b.avg)[0] ?? null
+
+      const latest = sortedByDate[sortedByDate.length - 1]
+      const latestUnitAvg = unitMap.get(latest.unit ?? '기타')
+      const latestUnitAvgExcludingLast = latestUnitAvg && latestUnitAvg.scores.length > 1
+        ? Math.round((latestUnitAvg.scores.reduce((s, v) => s + v, 0) - latest.score) / (latestUnitAvg.scores.length - 1))
+        : null
+      const recentDrop = latestUnitAvgExcludingLast != null && latestUnitAvgExcludingLast - latest.score >= 15
+        ? { label: latest.unit_name || latest.unit || '기타', from: latestUnitAvgExcludingLast, to: latest.score }
+        : null
+
+      const solutions: string[] = []
+      if (recentDrop) {
+        solutions.push(`${recentDrop.label} 최근 정답률 급락(${recentDrop.from}→${recentDrop.to}점) — 재점검 필요`)
+      } else if (weakest && unitAverages.length >= 2) {
+        solutions.push(`${weakest.label} 평균이 상대적으로 낮음(${weakest.avg}점) — 보충 학습 권장`)
+      }
+      if (avgScore != null && recentAvg < avgScore - 5) {
+        solutions.push(`최근 5회 평균(${recentAvg}점)이 전체 평균(${avgScore}점)보다 낮음 — 난이도 조정 검토`)
+      } else if (solutions.length === 0) {
+        solutions.push('전반적으로 안정적인 흐름을 유지하고 있음')
+      }
+
+      return { overallScore, unitAverages, recentAvg, weakestLabel: weakest?.label ?? null, weakestAvg: weakest?.avg ?? null, recentDrop, solutions }
+    })()
+
     const reportData = {
       totalSessions, attendance, hwRate, avgScore, passRate,
       periodCount: periodWS.length, curriculumProgress, calcProgress, worksheetDetail,
       exams: examData ?? [], studentName: student.name, studentGrade: student.grade,
-      attendanceDetail, dailyTests, avgDailyTest,
+      attendanceDetail, dailyTests, avgDailyTest, learningAnalysis,
     }
 
     // AI 한 줄평 생성
