@@ -575,10 +575,12 @@ export default function TeacherReportsPage() {
     // 학습분석리포트 - generate-report API와 완전히 동일한 로직 (미리보기와 실제 발송본이 어긋나면 안 됨)
     const learningAnalysis = (() => {
       if (scoredWS.length < 3) return null
+      // 단원 키에 학년을 같이 넣는다 - "1단원"이라는 이름은 초5든 초6이든 똑같이 쓰여서,
+      // 학년을 안 섞으면 서로 다른 내용인데 같은 축으로 합산돼버리는 문제가 있었다.
       const unitMap = new Map<string, { label: string; scores: number[]; lastAssignedAt: string }>()
       scoredWS.forEach((w: any) => {
-        const key = w.unit ?? '기타'
-        const label = w.unit_name || w.unit || '기타'
+        const key = `${w.grade_level ?? ''}__${w.unit ?? '기타'}`
+        const label = w.unit_name || `${w.grade_level ?? ''} ${w.unit ?? '기타'}`.trim()
         const existing = unitMap.get(key)
         if (existing) {
           existing.scores.push(w.score)
@@ -597,19 +599,20 @@ export default function TeacherReportsPage() {
       const overallScore = avgDailyTest != null && avgScore != null
         ? Math.round((avgScore + avgDailyTest) / 2)
         : (avgScore ?? avgDailyTest)
-      const weakest = [...unitAverages].sort((a, b) => a.avg - b.avg)[0] ?? null
+      // 단원이 하나뿐이면 "약한 단원"이라는 비교 자체가 성립하지 않으므로(비교 대상이 없음) null로 둔다.
+      const weakest = unitAverages.length >= 2 ? [...unitAverages].sort((a, b) => a.avg - b.avg)[0] : null
       const latest: any = sortedByDate[sortedByDate.length - 1]
-      const latestUnitAvg = unitMap.get(latest.unit ?? '기타')
+      const latestUnitAvg = unitMap.get(`${latest.grade_level ?? ''}__${latest.unit ?? '기타'}`)
       const latestUnitAvgExcludingLast = latestUnitAvg && latestUnitAvg.scores.length > 1
         ? Math.round((latestUnitAvg.scores.reduce((s, v) => s + v, 0) - latest.score) / (latestUnitAvg.scores.length - 1))
         : null
       const recentDrop = latestUnitAvgExcludingLast != null && latestUnitAvgExcludingLast - latest.score >= 15
-        ? { label: latest.unit_name || latest.unit || '기타', from: latestUnitAvgExcludingLast, to: latest.score }
+        ? { label: latest.unit_name || `${latest.grade_level ?? ''} ${latest.unit ?? '기타'}`.trim(), from: latestUnitAvgExcludingLast, to: latest.score }
         : null
       const solutions: string[] = []
       if (recentDrop) {
         solutions.push(`${recentDrop.label} 최근 정답률 급락(${recentDrop.from}→${recentDrop.to}점) — 재점검 필요`)
-      } else if (weakest && unitAverages.length >= 2) {
+      } else if (weakest) {
         solutions.push(`${weakest.label} 평균이 상대적으로 낮음(${weakest.avg}점) — 보충 학습 권장`)
       }
       if (avgScore != null && recentAvg < avgScore - 5) {
