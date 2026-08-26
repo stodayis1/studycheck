@@ -1907,18 +1907,18 @@ export default function TeacherLearningNotesPage() {
 
                 {/* 과제 달성률 - 결석이면 과제 자체가 없는 것이므로 비활성화 */}
                 <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📊 과제 달성률</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {ACHIEVEMENT_OPTIONS.map((opt) => (
-                      <button key={opt.value} onClick={() => setNoteAchievement(opt.value)}
-                        disabled={noteAttendance === '결석'}
-                        className="py-2.5 rounded-xl text-sm font-black transition-all"
-                        style={noteAttendance !== '결석' && noteAchievement === opt.value
-                          ? { background: '#F5C4B3', color: '#712B13' }
-                          : { background: '#f3f4f6', color: '#9ca3af' }}>
-                        {opt.label}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-gray-700">📊 과제 달성률</label>
+                    <span className="text-sm font-black" style={{ color: noteAchievement >= 85 ? '#16a34a' : noteAchievement >= 50 ? '#712B13' : '#dc2626' }}>
+                      {noteAchievement}%
+                    </span>
+                  </div>
+                  <input type="range" min={0} max={100} step={5} value={noteAchievement}
+                    disabled={noteAttendance === '결석'}
+                    onChange={(e) => setNoteAchievement(Number(e.target.value))}
+                    className="w-full accent-[#F5C4B3]" />
+                  <div className="flex justify-between text-[9px] text-gray-300 -mt-1">
+                    <span>0%</span><span>50%</span><span>100%</span>
                   </div>
                   {noteAttendance === '결석' && (
                     <p className="text-[11px] text-gray-400 mt-1.5">결석 처리 시 과제 항목은 기록되지 않아요.</p>
@@ -1927,18 +1927,18 @@ export default function TeacherLearningNotesPage() {
 
                 {/* 과제 성취도 % - 결석이면 비활성화 */}
                 <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">🎯 과제 성취도</label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[0, 30, 50, 70, 90, 100].map((pct) => (
-                      <button key={pct} onClick={() => setNoteScorePct(pct)}
-                        disabled={noteAttendance === '결석'}
-                        className="px-3 py-2 rounded-xl text-sm font-bold transition-all"
-                        style={noteAttendance !== '결석' && noteScorePct === pct
-                          ? { background: '#F5C4B3', color: '#712B13' }
-                          : { background: '#f3f4f6', color: '#9ca3af' }}>
-                        {pct}%
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-gray-700">🎯 과제 성취도</label>
+                    <span className="text-sm font-black" style={{ color: noteScorePct >= 85 ? '#16a34a' : noteScorePct >= 70 ? '#712B13' : '#dc2626' }}>
+                      {noteScorePct}%
+                    </span>
+                  </div>
+                  <input type="range" min={0} max={100} step={5} value={noteScorePct}
+                    disabled={noteAttendance === '결석'}
+                    onChange={(e) => setNoteScorePct(Number(e.target.value))}
+                    className="w-full accent-[#F5C4B3]" />
+                  <div className="flex justify-between text-[9px] text-gray-300 -mt-1">
+                    <span>0%</span><span>50%</span><span>100%</span>
                   </div>
                   {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
                   <div className="flex gap-2 mt-2">
