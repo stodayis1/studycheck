@@ -803,18 +803,17 @@ export default function TeacherCurriculumPage() {
                               <div className="h-2 rounded-full transition-all duration-500"
                                 style={{ width: `${pct}%`, background: pct >= 80 ? '#22c55e' : pct >= 40 ? '#3b82f6' : '#f59e0b' }} />
                             </div>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {[0, 20, 40, 60, 80, 100].map((v) => {
-                                const isActive = pct === v
-                                const isUpdating = updatingProgress === `calc_${tb.id}_${v}`
-                                return (
-                                  <button key={v} onClick={() => handleCalcProgress(tb.id, v)} disabled={isUpdating}
-                                    className={cx('flex-1 min-w-[44px] px-2 py-1.5 rounded-lg text-xs font-bold border transition-all disabled:opacity-50',
-                                      isActive ? 'bg-[#F5C4B3] text-white border-[#F5C4B3]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#F5C4B3]')}>
-                                    {v}%
-                                  </button>
-                                )
-                              })}
+                            <input type="range" min={0} max={100} step={5} value={pct}
+                              onChange={(e) => {
+                                const v = Number(e.target.value)
+                                setTextbooks((prev) => prev.map((t) => t.id === tb.id ? { ...t, progress_percent: v } : t))
+                              }}
+                              onMouseUp={(e) => handleCalcProgress(tb.id, Number((e.target as HTMLInputElement).value))}
+                              onTouchEnd={(e) => handleCalcProgress(tb.id, Number((e.target as HTMLInputElement).value))}
+                              onKeyUp={(e) => handleCalcProgress(tb.id, Number((e.target as HTMLInputElement).value))}
+                              className="w-full accent-[#F5C4B3]" />
+                            <div className="flex justify-between text-[9px] text-gray-300 -mt-1">
+                              <span>0%</span><span>50%</span><span>100%</span>
                             </div>
                           </div>
                         )
