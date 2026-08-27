@@ -24,7 +24,7 @@ export default function TeacherDashboardPage() {
   const { currentUser, isAdmin } = useAuth()
   const [stats, setStats] = useState({
     todayStudents: 0, unwrittenNotes: 0, pendingScore: 0, pendingShare: 0,
-    activeWorksheets: 0, activeTextbooks: 0,
+    activeWorksheets: 0, activeTextbooks: 0, needsAction: 0,
   })
   const [loading, setLoading] = useState(true)
   const [bulkProgressEnabled, setBulkProgressEnabled] = useState(false)
@@ -83,6 +83,9 @@ export default function TeacherDashboardPage() {
     }
     const { data: wsData } = await supabase.from('student_worksheets').select('student_id, status').in('status', ['submitted', 'similar_submitted'])
     const pendingScore = (wsData ?? []).filter((w: any) => myIds.has(w.student_id)).length
+    // 채점은 끝났지만 다음 액션(레벨업/재도전/오답유사/완료)을 아직 안 누른 것들 - 여기서 놓치기 쉬워서 별도로 알림
+    const { data: scoredData } = await supabase.from('student_worksheets').select('student_id, status').eq('status', 'scored')
+    const needsAction = (scoredData ?? []).filter((w: any) => myIds.has(w.student_id)).length
     // 결석 학생은 진도/과제처럼 학부모에게 공유할 내용 자체가 없어서 "학부모 공유 대기"에서 제외한다.
     // (예전엔 결석 처리 시 "OO 학생은 결석했습니다" 알림장을 자동으로 만들어서 대기에서 빠지게 했었는데,
     //  원장님이 결석한 학생에게 굳이 알림장을 남길 필요 없다고 하셔서 자동생성 대신 아예 대기 계산에서 빼는 방식으로 변경함)
@@ -106,7 +109,7 @@ export default function TeacherDashboardPage() {
     const { data: allTB } = await supabase.from('student_textbooks').select('student_id').eq('status', 'assigned')
     const activeWorksheets = (allWS ?? []).filter((w: any) => myIds.has(w.student_id)).length
     const activeTextbooks = (allTB ?? []).filter((t: any) => myIds.has(t.student_id)).length
-    setStats({ todayStudents, unwrittenNotes, pendingScore, pendingShare, activeWorksheets, activeTextbooks })
+    setStats({ todayStudents, unwrittenNotes, pendingScore, pendingShare, activeWorksheets, activeTextbooks, needsAction })
     setLoading(false)
   }
 
@@ -140,6 +143,15 @@ export default function TeacherDashboardPage() {
       color: stats.pendingShare > 0 ? '#712B13' : '#9ca3af',
       bg: stats.pendingShare > 0 ? '#FFF0F0' : '#f9fafb',
       border: stats.pendingShare > 0 ? '#F5C4B3' : '#f3f4f6',
+    },
+    {
+      // 채점은 됐는데 레벨업/재도전/오답유사/완료 중 아무것도 안 눌러서 그대로 남아있는 것들
+      label: '처리 필요', value: stats.needsAction, unit: '건',
+      href: '/teacher/assignments',
+      icon: 'ti-alert-triangle',
+      color: stats.needsAction > 0 ? '#991b1b' : '#9ca3af',
+      bg: stats.needsAction > 0 ? '#FFF5F5' : '#f9fafb',
+      border: stats.needsAction > 0 ? '#fca5a5' : '#f3f4f6',
     },
   ]
 
@@ -308,7 +320,13 @@ export default function TeacherDashboardPage() {
                 <p style={{ color: '#712B13' }}>학부모 공유 대기 {stats.pendingShare}건 · 알림장을 생성해주세요</p>
               </div>
             )}
-            {stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && (
+            {stats.needsAction > 0 && (
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF5F5' }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: 13, color: '#991b1b' }} />
+                <p style={{ color: '#991b1b' }}>채점 후 처리 필요 {stats.needsAction}건 · 학습지관리에서 레벨업/재도전/오답유사/완료를 선택해주세요</p>
+              </div>
+            )}
+            {stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#F0FBF7' }}>
                 <i className="ti ti-circle-check" style={{ fontSize: 13, color: '#085041' }} />
                 <p style={{ color: '#085041' }}>오늘 모든 업무 완료! 수고하셨습니다</p>

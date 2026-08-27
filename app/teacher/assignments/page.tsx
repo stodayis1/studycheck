@@ -693,7 +693,9 @@ export default function TeacherAssignmentsPage() {
                         const isExpanded = expandedStudents.has(studentId)
                         const pendingCount = sWS.filter(w => w.status === 'submitted' || w.status === 'similar_submitted').length
                         const activeCount = sWS.filter(w => w.status === 'assigned' || w.status === 'similar_assigned').length
-                        const scoredCount = sWS.filter(w => w.status === 'scored' || w.status === 'retry').length
+                        // retry는 예전 방식(현재는 안 쓰임)으로 남겨진 기록일 뿐 더 이상 누를 버튼이 없어서
+                        // "결과대기"에 넣으면 실제로 처리할 게 없는데도 대기 건수처럼 보여 혼란을 줌 -> scored만 집계
+                        const scoredCount = sWS.filter(w => w.status === 'scored').length
                         return (
                           <div key={studentId}>
                             {/* 학생 헤더 (클릭으로 펼치기) */}
