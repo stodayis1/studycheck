@@ -41,6 +41,9 @@ function viewerUrl(row: { signed_url: string | null; grade: string; semester: nu
   return `${origin}/teacher/quick-answers/viewer?u=${encodeURIComponent(row.signed_url)}&l=${encodeURIComponent(label)}`
 }
 
+// 마지막으로 본 학기를 기억해뒀다가, 다음에 들어왔을 때(또는 다른 학년탭으로 넘어갈 때) 그 학기를 먼저 보여줌
+const LAST_SEMESTER_KEY = 'quickAnswers_lastSemester'
+
 // Supabase Storage 객체 키는 한글/공백 등을 못 씀(Invalid key 에러) - 항목별로 고정된 영문 해시를 파일명으로 써서
 // 재업로드해도 항상 같은 경로를 덮어쓰게 한다 (안 그러면 QR에 찍힌 링크가 재업로드할 때마다 죽어버림)
 async function safeStorageKey(type: string, name: string, grade: string, semester: number) {
@@ -56,6 +59,7 @@ export default function QuickAnswersPage() {
   const [rows, setRows] = useState<QuickAnswerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [activeGrade, setActiveGrade] = useState('중1')
+  const [activeSemester, setActiveSemester] = useState<number | null>(null)
   const [uploadingKey, setUploadingKey] = useState<string | null>(null)
   const [qrModal, setQrModal] = useState<{ url: string; label: string; dataUrl: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -91,6 +95,30 @@ export default function QuickAnswersPage() {
         items: its.sort((a, b) => (b.usage - a.usage) || (TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type)) || a.name.localeCompare(b.name, 'ko')),
       }))
   }, [activeGrade])
+
+  // 학년(탭)이 바뀔 때마다 - 이 학년에 있는 학기 중, 마지막으로 봤던 학기를 우선 선택
+  // (없으면 2학기 우선, 그것도 없으면 첫 학기)
+  useEffect(() => {
+    if (gradeSemesters.length === 0) { setActiveSemester(null); return }
+    const available = gradeSemesters.map((s) => s.semester)
+    let stored: number | null = null
+    try {
+      const raw = localStorage.getItem(LAST_SEMESTER_KEY)
+      if (raw) stored = Number(raw)
+    } catch {}
+    const pick = (stored && available.includes(stored)) ? stored : (available.includes(2) ? 2 : available[0])
+    setActiveSemester(pick)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGrade, gradeSemesters])
+
+  function selectSemester(s: number) {
+    setActiveSemester(s)
+    try { localStorage.setItem(LAST_SEMESTER_KEY, String(s)) } catch {}
+  }
+
+  const currentSemesterItems = useMemo(() => {
+    return gradeSemesters.find((s) => s.semester === activeSemester)?.items ?? []
+  }, [gradeSemesters, activeSemester])
 
   const gradeCounts = useMemo(() => {
     const counts: Record<string, { total: number; done: number }> = {}
@@ -198,68 +226,82 @@ export default function QuickAnswersPage() {
           })}
         </div>
 
-        {/* 목록 - 학기별로 묶고, 학기 안에서는 자주 쓰는 교재부터 */}
-        {loading ? (
-          <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center text-xs text-gray-400">불러오는 중...</div>
-        ) : gradeSemesters.length === 0 ? (
-          <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center text-xs text-gray-400">이 학년에 등록된 교재가 없어요.</div>
-        ) : (
-          <div className="space-y-3">
-            {gradeSemesters.map(({ semester, items }) => (
-              <div key={semester} className="rounded-2xl overflow-hidden bg-white border border-gray-100">
-                <div className="px-4 py-2 flex items-center gap-2" style={{ background: '#FFF5F2', borderBottom: '1px solid #f3f4f6' }}>
-                  <span className="text-xs font-bold" style={{ color: '#712B13' }}>{semester}학기</span>
-                  <span className="text-[10px] text-gray-400">{items.length}권</span>
-                </div>
-                <div className="divide-y divide-gray-50">
-                  {items.map((item) => {
-                    const k = keyOf(item.type, item.name, item.grade, item.semester)
-                    const row = rowMap.get(k)
-                    const isUploading = uploadingKey === k
-                    return (
-                      <div key={k} className="px-4 py-3 flex items-center gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: TYPE_BG[item.type], color: TYPE_COLOR[item.type] }}>{item.type}</span>
-                            <span className="text-xs font-semibold text-gray-800">{item.name}</span>
-                            {item.usage > 0 && <span className="text-[9px] text-gray-400">{item.usage}명 사용중</span>}
-                          </div>
-                          {item.note && <p className="text-[10px] mt-0.5" style={{ color: '#9B1C1C' }}>{item.note}</p>}
-                          {row?.file_name && <p className="text-[10px] mt-0.5 text-gray-400 truncate">{row.file_name}</p>}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {row ? (
-                            <>
-                              {row.signed_url && (
-                                <a href={viewerUrl(row)} target="_blank" rel="noreferrer"
-                                  className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
-                                  style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기</a>
-                              )}
-                              <button onClick={() => openQr(row)}
-                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
-                                style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>QR 보기</button>
-                              <button onClick={() => triggerUpload(item)} disabled={isUploading}
-                                className="px-2.5 py-1.5 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
-                                {isUploading ? '업로드중...' : '재업로드'}
-                              </button>
-                            </>
-                          ) : (
-                            <button onClick={() => triggerUpload(item)} disabled={isUploading}
-                              className="px-3 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
-                              style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
-                              {isUploading ? '업로드중...' : 'PDF 업로드'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
+        {/* 학기 탭 - 마지막으로 본 학기가 기본으로 먼저 뜸 */}
+        {gradeSemesters.length > 1 && (
+          <div className="flex gap-1.5">
+            {gradeSemesters.map(({ semester, items }) => {
+              const active = semester === activeSemester
+              const doneCount = items.filter((it) => rowMap.has(keyOf(it.type, it.name, it.grade, it.semester))).length
+              return (
+                <button key={semester} onClick={() => selectSemester(semester)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                  style={{
+                    background: active ? '#1D4ED8' : '#fff',
+                    color: active ? '#fff' : '#374151',
+                    border: `1.5px solid ${active ? '#1D4ED8' : '#e5e7eb'}`,
+                  }}>
+                  {semester}학기
+                  <span className="ml-1 font-normal" style={{ opacity: 0.8 }}>{doneCount}/{items.length}</span>
+                </button>
+              )
+            })}
           </div>
         )}
+
+        {/* 목록 - 선택한 학기만, 자주 쓰는 교재부터 */}
+        <div className="rounded-2xl overflow-hidden bg-white border border-gray-100">
+          {loading ? (
+            <div className="p-8 text-center text-xs text-gray-400">불러오는 중...</div>
+          ) : currentSemesterItems.length === 0 ? (
+            <div className="p-8 text-center text-xs text-gray-400">이 학년에 등록된 교재가 없어요.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {currentSemesterItems.map((item) => {
+                const k = keyOf(item.type, item.name, item.grade, item.semester)
+                const row = rowMap.get(k)
+                const isUploading = uploadingKey === k
+                return (
+                  <div key={k} className="px-4 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: TYPE_BG[item.type], color: TYPE_COLOR[item.type] }}>{item.type}</span>
+                        <span className="text-xs font-semibold text-gray-800">{item.name}</span>
+                        {item.usage > 0 && <span className="text-[9px] text-gray-400">{item.usage}명 사용중</span>}
+                      </div>
+                      {item.note && <p className="text-[10px] mt-0.5" style={{ color: '#9B1C1C' }}>{item.note}</p>}
+                      {row?.file_name && <p className="text-[10px] mt-0.5 text-gray-400 truncate">{row.file_name}</p>}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {row ? (
+                        <>
+                          {row.signed_url && (
+                            <a href={viewerUrl(row)} target="_blank" rel="noreferrer"
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                              style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기</a>
+                          )}
+                          <button onClick={() => openQr(row)}
+                            className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                            style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>QR 보기</button>
+                          <button onClick={() => triggerUpload(item)} disabled={isUploading}
+                            className="px-2.5 py-1.5 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                            style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
+                            {isUploading ? '업로드중...' : '재업로드'}
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => triggerUpload(item)} disabled={isUploading}
+                          className="px-3 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                          style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
+                          {isUploading ? '업로드중...' : 'PDF 업로드'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* QR 모달 */}
