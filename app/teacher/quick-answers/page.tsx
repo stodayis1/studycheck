@@ -33,6 +33,14 @@ function keyOf(type: string, name: string, grade: string, semester: number) {
   return `${type}__${name}__${grade}__${semester}`
 }
 
+// 큰 글씨 뷰어 링크 - 브라우저 기본 PDF 뷰어(글씨 작게 보임) 대신 폭에 꽉 차게 보여주는 전용 화면으로 연결
+function viewerUrl(row: { signed_url: string | null; grade: string; semester: number; textbook_type: string; textbook_name: string }) {
+  if (!row.signed_url) return ''
+  const label = `${row.grade} ${row.semester}학기 · ${row.textbook_type} · ${row.textbook_name}`
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return `${origin}/teacher/quick-answers/viewer?u=${encodeURIComponent(row.signed_url)}&l=${encodeURIComponent(label)}`
+}
+
 // Supabase Storage 객체 키는 한글/공백 등을 못 씀(Invalid key 에러) - 항목별로 고정된 영문 해시를 파일명으로 써서
 // 재업로드해도 항상 같은 경로를 덮어쓰게 한다 (안 그러면 QR에 찍힌 링크가 재업로드할 때마다 죽어버림)
 async function safeStorageKey(type: string, name: string, grade: string, semester: number) {
@@ -133,8 +141,9 @@ export default function QuickAnswersPage() {
 
   async function openQr(row: QuickAnswerRow) {
     if (!row.signed_url) return
-    const dataUrl = await QRCode.toDataURL(row.signed_url, { width: 480, margin: 1, color: { dark: '#712B13', light: '#FFFFFF' } })
-    setQrModal({ url: row.signed_url, label: `${row.grade} ${row.semester}학기 · ${row.textbook_type} · ${row.textbook_name}`, dataUrl })
+    const target = viewerUrl(row)
+    const dataUrl = await QRCode.toDataURL(target, { width: 480, margin: 1, color: { dark: '#712B13', light: '#FFFFFF' } })
+    setQrModal({ url: target, label: `${row.grade} ${row.semester}학기 · ${row.textbook_type} · ${row.textbook_name}`, dataUrl })
   }
 
   const canAccess = isAdmin() || currentUser?.role === 'staff'
@@ -206,7 +215,7 @@ export default function QuickAnswersPage() {
                       {row ? (
                         <>
                           {row.signed_url && (
-                            <a href={row.signed_url} target="_blank" rel="noreferrer"
+                            <a href={viewerUrl(row)} target="_blank" rel="noreferrer"
                               className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
                               style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기</a>
                           )}
@@ -242,7 +251,7 @@ export default function QuickAnswersPage() {
             <p className="text-xs font-bold text-gray-700 mb-3">{qrModal.label}</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={qrModal.dataUrl} alt="QR 코드" className="w-full rounded-xl border border-gray-100" />
-            <p className="text-[10px] text-gray-400 mt-3">휴대폰 카메라로 스캔하면 빠른정답 PDF가 바로 열려요.</p>
+            <p className="text-[10px] text-gray-400 mt-3">휴대폰 카메라로 스캔하면 큰 글씨로 바로 볼 수 있어요.</p>
             <a href={qrModal.url} target="_blank" rel="noreferrer"
               className="block w-full py-2 text-xs font-bold rounded-xl mt-3"
               style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기 (PDF)</a>
