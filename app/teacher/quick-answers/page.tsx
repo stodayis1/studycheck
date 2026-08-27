@@ -76,10 +76,20 @@ export default function QuickAnswersPage() {
     return m
   }, [rows])
 
-  const gradeItems = useMemo(() => {
-    return QUICK_ANSWER_CATALOG
-      .filter((it) => it.grade === activeGrade)
-      .sort((a, b) => (a.semester - b.semester) || (TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type)) || a.name.localeCompare(b.name, 'ko'))
+  // 학년 탭 안에서 학기별로 묶고, 그 안에서는 실제 배정 이력이 많은(자주 쓰는) 교재부터 보여줌 - 찾기 쉽도록
+  const gradeSemesters = useMemo(() => {
+    const items = QUICK_ANSWER_CATALOG.filter((it) => it.grade === activeGrade)
+    const bySemester = new Map<number, QuickAnswerCatalogItem[]>()
+    items.forEach((it) => {
+      if (!bySemester.has(it.semester)) bySemester.set(it.semester, [])
+      bySemester.get(it.semester)!.push(it)
+    })
+    return Array.from(bySemester.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([semester, its]) => ({
+        semester,
+        items: its.sort((a, b) => (b.usage - a.usage) || (TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type)) || a.name.localeCompare(b.name, 'ko')),
+      }))
   }, [activeGrade])
 
   const gradeCounts = useMemo(() => {
@@ -188,60 +198,68 @@ export default function QuickAnswersPage() {
           })}
         </div>
 
-        {/* 목록 */}
-        <div className="rounded-2xl overflow-hidden bg-white border border-gray-100">
-          {loading ? (
-            <div className="p-8 text-center text-xs text-gray-400">불러오는 중...</div>
-          ) : gradeItems.length === 0 ? (
-            <div className="p-8 text-center text-xs text-gray-400">이 학년에 등록된 교재가 없어요.</div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {gradeItems.map((item) => {
-                const k = keyOf(item.type, item.name, item.grade, item.semester)
-                const row = rowMap.get(k)
-                const isUploading = uploadingKey === k
-                return (
-                  <div key={k} className="px-4 py-3 flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: TYPE_BG[item.type], color: TYPE_COLOR[item.type] }}>{item.type}</span>
-                        <span className="text-xs font-semibold text-gray-800">{item.name}</span>
-                        <span className="text-[10px] text-gray-400">{item.semester}학기</span>
-                      </div>
-                      {item.note && <p className="text-[10px] mt-0.5" style={{ color: '#9B1C1C' }}>{item.note}</p>}
-                      {row?.file_name && <p className="text-[10px] mt-0.5 text-gray-400 truncate">{row.file_name}</p>}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {row ? (
-                        <>
-                          {row.signed_url && (
-                            <a href={viewerUrl(row)} target="_blank" rel="noreferrer"
-                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
-                              style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기</a>
+        {/* 목록 - 학기별로 묶고, 학기 안에서는 자주 쓰는 교재부터 */}
+        {loading ? (
+          <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center text-xs text-gray-400">불러오는 중...</div>
+        ) : gradeSemesters.length === 0 ? (
+          <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center text-xs text-gray-400">이 학년에 등록된 교재가 없어요.</div>
+        ) : (
+          <div className="space-y-3">
+            {gradeSemesters.map(({ semester, items }) => (
+              <div key={semester} className="rounded-2xl overflow-hidden bg-white border border-gray-100">
+                <div className="px-4 py-2 flex items-center gap-2" style={{ background: '#FFF5F2', borderBottom: '1px solid #f3f4f6' }}>
+                  <span className="text-xs font-bold" style={{ color: '#712B13' }}>{semester}학기</span>
+                  <span className="text-[10px] text-gray-400">{items.length}권</span>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {items.map((item) => {
+                    const k = keyOf(item.type, item.name, item.grade, item.semester)
+                    const row = rowMap.get(k)
+                    const isUploading = uploadingKey === k
+                    return (
+                      <div key={k} className="px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: TYPE_BG[item.type], color: TYPE_COLOR[item.type] }}>{item.type}</span>
+                            <span className="text-xs font-semibold text-gray-800">{item.name}</span>
+                            {item.usage > 0 && <span className="text-[9px] text-gray-400">{item.usage}명 사용중</span>}
+                          </div>
+                          {item.note && <p className="text-[10px] mt-0.5" style={{ color: '#9B1C1C' }}>{item.note}</p>}
+                          {row?.file_name && <p className="text-[10px] mt-0.5 text-gray-400 truncate">{row.file_name}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {row ? (
+                            <>
+                              {row.signed_url && (
+                                <a href={viewerUrl(row)} target="_blank" rel="noreferrer"
+                                  className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                                  style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기</a>
+                              )}
+                              <button onClick={() => openQr(row)}
+                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                                style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>QR 보기</button>
+                              <button onClick={() => triggerUpload(item)} disabled={isUploading}
+                                className="px-2.5 py-1.5 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
+                                {isUploading ? '업로드중...' : '재업로드'}
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => triggerUpload(item)} disabled={isUploading}
+                              className="px-3 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                              style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
+                              {isUploading ? '업로드중...' : 'PDF 업로드'}
+                            </button>
                           )}
-                          <button onClick={() => openQr(row)}
-                            className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
-                            style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>QR 보기</button>
-                          <button onClick={() => triggerUpload(item)} disabled={isUploading}
-                            className="px-2.5 py-1.5 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                            style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
-                            {isUploading ? '업로드중...' : '재업로드'}
-                          </button>
-                        </>
-                      ) : (
-                        <button onClick={() => triggerUpload(item)} disabled={isUploading}
-                          className="px-3 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
-                          style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
-                          {isUploading ? '업로드중...' : 'PDF 업로드'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* QR 모달 */}
