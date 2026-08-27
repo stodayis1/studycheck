@@ -137,11 +137,12 @@ export default function QuickAnswersPage() {
     setQrModal({ url: row.signed_url, label: `${row.grade} ${row.semester}학기 · ${row.textbook_type} · ${row.textbook_name}`, dataUrl })
   }
 
-  if (!isAdmin()) {
+  const canAccess = isAdmin() || currentUser?.role === 'staff'
+  if (!canAccess) {
     return (
       <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
-        <Header title="빠른정답 QR 관리" subtitle="관리자 전용" />
-        <div className="px-4 py-10 text-center text-sm text-gray-400">원장님만 접근할 수 있는 화면이에요.</div>
+        <Header title="빠른정답 QR 관리" subtitle="관리자/직원 전용" />
+        <div className="px-4 py-10 text-center text-sm text-gray-400">원장님과 행정 직원만 접근할 수 있는 화면이에요.</div>
       </div>
     )
   }
@@ -149,6 +150,11 @@ export default function QuickAnswersPage() {
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
       <Header title="빠른정답 QR 관리" subtitle="교재별 빠른정답 PDF 업로드 · QR 생성" />
+      <div className="max-w-3xl mx-auto px-4 pt-3">
+        <div className="rounded-xl px-3 py-2 text-[11px] text-gray-500" style={{ background: '#F3F6FA', border: '1px solid #E4E9F0' }}>
+          담당 교재의 빠른정답 PDF를 스캔해서 올려주세요. 업로드하면 자동으로 QR 코드가 만들어져요.
+        </div>
+      </div>
       <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileSelected} />
 
       <div className="px-4 py-4 max-w-3xl mx-auto space-y-4">
@@ -199,6 +205,11 @@ export default function QuickAnswersPage() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       {row ? (
                         <>
+                          {row.signed_url && (
+                            <a href={row.signed_url} target="_blank" rel="noreferrer"
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                              style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기</a>
+                          )}
                           <button onClick={() => openQr(row)}
                             className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg whitespace-nowrap"
                             style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>QR 보기</button>
@@ -232,7 +243,10 @@ export default function QuickAnswersPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={qrModal.dataUrl} alt="QR 코드" className="w-full rounded-xl border border-gray-100" />
             <p className="text-[10px] text-gray-400 mt-3">휴대폰 카메라로 스캔하면 빠른정답 PDF가 바로 열려요.</p>
-            <div className="flex gap-2 mt-4">
+            <a href={qrModal.url} target="_blank" rel="noreferrer"
+              className="block w-full py-2 text-xs font-bold rounded-xl mt-3"
+              style={{ background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>정답 바로보기 (PDF)</a>
+            <div className="flex gap-2 mt-2">
               <a href={qrModal.dataUrl} download={`${qrModal.label}_QR.png`}
                 className="flex-1 py-2 text-xs font-bold rounded-xl"
                 style={{ background: '#712B13', color: '#fff' }}>QR 이미지 저장</a>

@@ -162,8 +162,8 @@ export default function TeacherDashboardPage() {
     { href: '/teacher/curriculum',      label: '과정관리',   desc: '교재 배정 · 진도표',   icon: 'ti-books',      color: '#712B13', bg: '#FFF0EE' },
     // 방학특강 완주 챌린지 - 이번 방학특강 기간에만 쓰는 임시 메뉴 (일반 로그인 없이 PIN으로 들어가는 별도 화면)
     { href: '/camp/admin',              label: '완주 챌린지', desc: '방학특강 진도 체크',   icon: 'ti-trophy',     color: '#9a3412', bg: '#FFF7ED' },
-    // 교재 빠른정답 QR 파이프라인 - 원장님만 관리 (문제은행 구축 전 임시 채점 보조 도구)
-    ...(isAdmin() ? [{ href: '/teacher/quick-answers', label: '빠른정답 QR', desc: '교재별 빠른정답 업로드', icon: 'ti-qrcode', color: '#1D4ED8', bg: '#EFF4FF' }] : []),
+    // 교재 빠른정답 QR 파이프라인 - 원장님/직원 관리 (문제은행 구축 전 임시 채점 보조 도구)
+    ...(isAdmin() || currentUser?.role === 'staff' ? [{ href: '/teacher/quick-answers', label: '빠른정답 QR', desc: '교재별 빠른정답 업로드', icon: 'ti-qrcode', color: '#1D4ED8', bg: '#EFF4FF' }] : []),
   ]
 
   return (
