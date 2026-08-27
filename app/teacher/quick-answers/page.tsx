@@ -33,6 +33,16 @@ function keyOf(type: string, name: string, grade: string, semester: number) {
   return `${type}__${name}__${grade}__${semester}`
 }
 
+// Supabase Storage 객체 키는 한글/공백 등을 못 씀(Invalid key 에러) - 항목별로 고정된 영문 해시를 파일명으로 써서
+// 재업로드해도 항상 같은 경로를 덮어쓰게 한다 (안 그러면 QR에 찍힌 링크가 재업로드할 때마다 죽어버림)
+async function safeStorageKey(type: string, name: string, grade: string, semester: number) {
+  const raw = keyOf(type, name, grade, semester)
+  const bytes = new TextEncoder().encode(raw)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex}.pdf`
+}
+
 export default function QuickAnswersPage() {
   const { currentUser, isAdmin } = useAuth()
   const [rows, setRows] = useState<QuickAnswerRow[]>([])
@@ -90,7 +100,7 @@ export default function QuickAnswersPage() {
     const k = keyOf(item.type, item.name, item.grade, item.semester)
     setUploadingKey(k)
     try {
-      const path = `${item.grade}/${item.semester}학기/${item.type}_${item.name}.pdf`
+      const path = await safeStorageKey(item.type, item.name, item.grade, item.semester)
       const { error: upErr } = await supabase.storage
         .from('quick-answers')
         .upload(path, file, { upsert: true, contentType: 'application/pdf' })
