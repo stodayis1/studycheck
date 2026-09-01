@@ -176,6 +176,10 @@ export default function TeacherLearningNotesPage() {
   const [hwTBChapters, setHwTBChapters] = useState<Record<string, string>>({})
   const [hwTBSubChapters, setHwTBSubChapters] = useState<Record<string, string>>({})
   const [hwTBPages, setHwTBPages] = useState<Record<string, string>>({})
+  // 오늘은 새로 배부할 과제가 없는 날(추가수업/오답풀이 위주 등) - 켜면 과제 선택 UI를 끄고
+  // hw_textbook_page에 안내 문구를 저장해서, "과제란이 비어서 미완료로 보이는" 문제를 막는다
+  const [noteNoHomework, setNoteNoHomework] = useState(false)
+  const NO_HOMEWORK_MARKER = '오늘은 새 과제 없음'
   // 학습지 - 진행중 목록
   const [worksheets, setWorksheets] = useState<any[]>([])
   const [lnCatalog, setLNCatalog] = useState<any[]>([])
@@ -532,18 +536,21 @@ export default function TeacherLearningNotesPage() {
     setDailySubChapters([])
     setDailyConceptIds([])
     setDailyLastIdx(-1)
-    setHwTextbookName(session?.hw_textbook_name ?? '')
+    // 지난번에 "오늘은 새 과제 없음"으로 저장해뒀으면 그 상태 그대로 다시 열어줌
+    const savedNoHomework = session?.hw_textbook_page === NO_HOMEWORK_MARKER
+    setNoteNoHomework(savedNoHomework)
+    setHwTextbookName(savedNoHomework ? '' : (session?.hw_textbook_name ?? ''))
     // hw_textbook_page는 "교재정보 / 📝 메모" 처럼 여러 조각이 합쳐진 값이라
     // 그 중 메모(📝 ...) 조각만 뽑아 메모칸에 다시 채워준다.
     // (안 그러면 다시 열었을 때 메모칸이 비어있어서 "저장한 게 지워졌다"고 보이게 됨)
-    const savedHwParts = (session?.hw_textbook_page ?? '').split(' / ').filter(Boolean)
+    const savedHwParts = savedNoHomework ? [] : (session?.hw_textbook_page ?? '').split(' / ').filter(Boolean)
     const savedHwMemoPart = savedHwParts.find((p) => p.startsWith('📝 '))
     const savedHwOtherParts = savedHwParts.filter((p) => !p.startsWith('📝 '))
     setHwMemo(savedHwMemoPart ? savedHwMemoPart.slice(2).trim() : '')
     setHwTextbookPage(savedHwOtherParts.join(' / '))
-    setHwWorksheetRange(session?.hw_worksheet_range ?? '')
+    setHwWorksheetRange(savedNoHomework ? '' : (session?.hw_worksheet_range ?? ''))
     setHwVideoUrls(
-      session?.video_url
+      !savedNoHomework && session?.video_url
         ? session.video_url.split('\n').filter(Boolean)
         : ['']
     )
@@ -642,7 +649,7 @@ export default function TeacherLearningNotesPage() {
         return dailyTestUnit || null
       })(),
       daily_test_score: dailyTestScore ? parseInt(dailyTestScore) : null,
-      hw_textbook_name: (() => {
+      hw_textbook_name: noteNoHomework ? null : (() => {
         const tbNames = hwSelectedTBIds.map((id) => {
           const tb = studentTextbooks.find((t) => t.id === id)
           return tb ? tb.textbook_name : ''
@@ -655,7 +662,9 @@ export default function TeacherLearningNotesPage() {
         if (all.length > 0) return all.join(', ')
         return hwTextbookName || null
       })(),
-      hw_textbook_page: (() => {
+      // 오늘 새 과제가 없는 날(추가수업/오답풀이 위주 등)은 이 칸에 안내 문구를 저장한다.
+      // hw_* 필드가 전부 비어있으면 "학습일지를 안 썼다"로 오인돼 완료 표시가 안 뜨던 문제를 막기 위함
+      hw_textbook_page: noteNoHomework ? NO_HOMEWORK_MARKER : (() => {
         const tbParts = hwSelectedTBIds.map((id) => {
           const tb = studentTextbooks.find((t) => t.id === id)
           const ch = hwTBChapters[id] || ''
@@ -677,14 +686,14 @@ export default function TeacherLearningNotesPage() {
         const allParts = [preservedOld, ...tbParts, ...epParts, memoPart].filter(Boolean)
         return allParts.length > 0 ? allParts.join(' / ') : null
       })(),
-      hw_worksheet_range: (() => {
+      hw_worksheet_range: noteNoHomework ? null : (() => {
         if (hwSelectedWSId) {
           const ws = worksheets.find((w) => w.id === hwSelectedWSId)
           return ws ? `${ws.grade_level} · ${ws.unit}${ws.unit_name ? ` (${ws.unit_name})` : ''} · ${ws.current_level}레벨` : null
         }
         return hwWorksheetRange || null
       })(),
-      video_url: hwVideoUrls.filter((u) => u.trim()).join('\n') || null,
+      video_url: noteNoHomework ? null : (hwVideoUrls.filter((u) => u.trim()).join('\n') || null),
       created_by: currentUser?.name,
     }
 
@@ -2253,6 +2262,17 @@ export default function TeacherLearningNotesPage() {
                 <div className="bg-green-50 rounded-xl p-3 text-xs text-green-700">
                   💡 과제 배부 시 학생 앱 "오늘 과제" 탭에 자동으로 표시됩니다
                 </div>
+
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={noteNoHomework}
+                    onChange={(e) => setNoteNoHomework(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-[#F5C4B3]" />
+                  <span className="text-[11px] font-semibold text-gray-500">오늘은 새로 배부할 과제가 없어요 (추가수업/오답풀이 위주 등)</span>
+                </label>
+
+                {noteNoHomework && (
+                  <p className="text-[10px] text-gray-400 px-1">이 상태로 저장하면 "과제 없음"으로 표시되고, 입력완료 처리는 정상적으로 돼요</p>
+                )}
 
                 {/* 교재 과제 - 배정된 교재 기반 (다중 선택) */}
                 {(() => {
