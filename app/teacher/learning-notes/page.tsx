@@ -102,7 +102,7 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; sub: string }> 
 }
 
 export default function TeacherLearningNotesPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades, supervisorLabel } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [sessions, setSessions] = useState<ClassSession[]>([])
@@ -380,7 +380,9 @@ export default function TeacherLearningNotesPage() {
     setSavingProgress(false)
   }
 
-  const myStudents = students.filter((s) => {
+  // 실제 학습일지 작성/수정 권한이 있는 학생 - 기존 로직(관리자/담당강사/같은 관 직원) 그대로.
+  // 주임모드로 넓게 "보이는" 것과는 별개로 실제 기록 작성/수정/삭제는 여기로만 한정한다 (주임은 보기 전용)
+  function isEditable(s: Student) {
     if (isAdmin()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     // 콤마/공백으로 구분된 여러 강사명에서 본인 이름 찾기
@@ -393,7 +395,14 @@ export default function TeacherLearningNotesPage() {
       return teachers.some((t) => TEACHER_CAMPUS[t] === myCampus)
     }
     return teachers.includes(currentUser.name)
-  })
+  }
+  const myEditableStudents = students.filter(isEditable)
+
+  // 화면에 "보이는" 학생 범위 - 기존 편집 가능 범위에 더해, 주임모드가 켜진 주임은 담당 학년 범위까지
+  // 넓게 볼 수 있다 (조회만 - 실제 작성/수정은 isEditable로 별도 제한)
+  const myStudents = students.filter((s) =>
+    isEditable(s) || (isSupervisorModeActive() && !!s.grade && supervisorGrades.includes(s.grade))
+  )
   const todayDayIndex = new Date().getDay()
   const dayMap: Record<number, string> = { 1:'월',2:'화',3:'수',4:'목',5:'금',6:'토',0:'일' }
   const todayDay = dayMap[todayDayIndex]
@@ -441,6 +450,11 @@ export default function TeacherLearningNotesPage() {
 
   function openNoteModal(student: Student, targetSession?: ClassSession) {
     setJustSavedNote(false)
+    // 주임모드로 넓게 보이는 것뿐인 학생(진짜 담당 아님)은 작성 불가 - 버튼 단에서 이미 막지만 안전장치로 한번 더 확인
+    if (!isEditable(student)) {
+      alert('보기 전용 학생이에요. 실제 담당 강사만 학습일지를 작성/수정할 수 있어요.')
+      return
+    }
     // 기존 세션이 있고 편집 권한 체크
     const session = targetSession ?? getTodaySession(student.id)
     if (session && !canEditNote(session.session_date, student.id)) {
@@ -796,6 +810,8 @@ export default function TeacherLearningNotesPage() {
 
   // 결석 한번에 처리 (전체 입력폼 없이 바로 기록) - 미입력과 결석을 구분하기 위함
   async function quickMarkAbsent(student: Student) {
+    // 주임모드로 넓게 보이는 것뿐인 학생(진짜 담당 아님)은 처리 불가 - 버튼 단에서 이미 막지만 안전장치
+    if (!isEditable(student)) { alert('보기 전용 학생이에요. 실제 담당 강사만 처리할 수 있어요.'); return }
     if (!confirm(`${student.name} 학생을 오늘(${todayStr}) 결석으로 처리할까요?\n나중에 '수정'으로 세부 내용을 보완할 수 있어요.`)) return
     const { data: savedSession, error: sessionError } = await supabase
       .from('class_sessions')
@@ -1074,6 +1090,9 @@ export default function TeacherLearningNotesPage() {
   }
 
   function canEditNote(sessionDate: string, studentId: string) {
+    // 주임모드로 넓게 보이는 것뿐인 학생(진짜 담당 아님)은 편집 불가 - 주임은 보기 전용
+    const student = students.find((s) => s.id === studentId)
+    if (!student || !isEditable(student)) return false
     if (isAdmin()) return true
     return new Date() <= getNextClassDeadline(sessionDate, studentId)
   }
@@ -1107,7 +1126,7 @@ export default function TeacherLearningNotesPage() {
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header
         title="학습관리"
-        subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}
+        subtitle={isAdmin() ? '전체 관리자' : isSupervisorModeActive() ? `${supervisorLabel()} (보기 전용)` : `${currentUser?.name} 선생님`}
         action={
           <button onClick={() => { setScheduleDays([]); setShowScheduleModal(true) }}
             className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
@@ -1174,10 +1193,12 @@ export default function TeacherLearningNotesPage() {
                           const top = timeToOffset(schedule!.start_time)
                           const blockH = HOUR_PX * periods - 6
                           const isComplete = isTodayComplete(student.id)
+                          const editable = isEditable(student)
                           return (
                             <div key={student.id} className="shrink-0 relative" style={{ width: 80, height: totalHeight }}>
                               <button
-                                onClick={() => openNoteModal(student)}
+                                onClick={() => editable && openNoteModal(student)}
+                                disabled={!editable}
                                 className="rounded-xl px-2 flex flex-col justify-center w-full transition-all hover:opacity-80 absolute"
                                 style={{
                                   backgroundColor: color.bg,
@@ -1269,45 +1290,51 @@ export default function TeacherLearningNotesPage() {
                             </div>
                           </div>
                           <div className="flex gap-1.5 flex-wrap justify-end">
-                            <button onClick={() => openFeedbackModal(student)}
-                              className="px-2.5 py-1 text-xs font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg">
-                              💬 알림장
-                            </button>
-                            {note && session ? (() => {
-                              const editable = canEditNote(session.session_date, student.id)
-                              return (
-                                <>
-                                  {isComplete && isAdmin() && (
-                                    <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id)}
-                                      disabled={sendingKakao === session.id}
-                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
-                                      style={{ background: '#FEE500' }}>
-                                      {sendingKakao === session.id ? '보내는 중...' : '💬 카톡 발송'}
-                                    </button>
-                                  )}
-                                  <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
-                                    className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
-                                      editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>
-                                    {editable ? '수정' : '🔒 수정'}
-                                  </button>
-                                  <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date, student.id) : alert('수업 당일과 다음 수업일 오후 2시까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
-                                    className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
-                                      editable ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100 cursor-not-allowed')}>
-                                    {editable ? '삭제' : '🔒 삭제'}
-                                  </button>
-                                </>
-                              )
-                            })() : (
+                            {isEditable(student) ? (
                               <>
-                                <button onClick={() => openNoteModal(student)}
-                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
-                                  ✏️ 입력
+                                <button onClick={() => openFeedbackModal(student)}
+                                  className="px-2.5 py-1 text-xs font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg">
+                                  💬 알림장
                                 </button>
-                                <button onClick={() => quickMarkAbsent(student)}
-                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg text-red-500 bg-red-50 border border-red-100">
-                                  🚫 결석
-                                </button>
+                                {note && session ? (() => {
+                                  const editable = canEditNote(session.session_date, student.id)
+                                  return (
+                                    <>
+                                      {isComplete && isAdmin() && (
+                                        <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id)}
+                                          disabled={sendingKakao === session.id}
+                                          className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
+                                          style={{ background: '#FEE500' }}>
+                                          {sendingKakao === session.id ? '보내는 중...' : '💬 카톡 발송'}
+                                        </button>
+                                      )}
+                                      <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
+                                        className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
+                                          editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>
+                                        {editable ? '수정' : '🔒 수정'}
+                                      </button>
+                                      <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date, student.id) : alert('수업 당일과 다음 수업일 오후 2시까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
+                                        className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
+                                          editable ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100 cursor-not-allowed')}>
+                                        {editable ? '삭제' : '🔒 삭제'}
+                                      </button>
+                                    </>
+                                  )
+                                })() : (
+                                  <>
+                                    <button onClick={() => openNoteModal(student)}
+                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
+                                      ✏️ 입력
+                                    </button>
+                                    <button onClick={() => quickMarkAbsent(student)}
+                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg text-red-500 bg-red-50 border border-red-100">
+                                      🚫 결석
+                                    </button>
+                                  </>
+                                )}
                               </>
+                            ) : (
+                              <span className="text-[10px] text-gray-300">보기 전용</span>
                             )}
                           </div>
                         </div>
@@ -1414,10 +1441,15 @@ export default function TeacherLearningNotesPage() {
                       const myTBs = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
                       const mainTB = myTBs.find((t) => t.textbook_type === '개념서') ?? myTBs[0]
 
+                      const editable = isEditable(student)
                       return (
                         <button key={student.id}
-                          onClick={() => openNoteModal(student)}
-                          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left hover:border-blue-200 hover:shadow-md transition-all w-full md:w-auto min-w-[140px]">
+                          onClick={() => editable && openNoteModal(student)}
+                          disabled={!editable}
+                          className={cx(
+                            'bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left transition-all w-full md:w-auto min-w-[140px]',
+                            editable ? 'hover:border-blue-200 hover:shadow-md' : 'opacity-60 cursor-default'
+                          )}>
                           <div className="flex items-center gap-2 mb-1.5">
                             <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
                               {student.name[0]}
@@ -1440,6 +1472,9 @@ export default function TeacherLearningNotesPage() {
                           )}
                           {!recentSession && (
                             <div className="text-[10px] text-gray-300 mt-0.5">수업 기록 없음</div>
+                          )}
+                          {!editable && (
+                            <div className="text-[10px] font-bold text-gray-300 mt-1">보기 전용</div>
                           )}
                         </button>
                       )
@@ -1464,7 +1499,7 @@ export default function TeacherLearningNotesPage() {
               className="w-full py-3 rounded-xl text-sm font-bold text-gray-800 bg-blue-50 border-2 border-dashed border-blue-200">
               + 시간표 추가
             </button>
-            {myStudents.map((student) => {
+            {myEditableStudents.map((student) => {
               const studentSchedules = getStudentSchedules(student.id)
               return (
                 <div key={student.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -2871,7 +2906,7 @@ export default function TeacherLearningNotesPage() {
                 </div>
               ) : (
                 <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-xl">
-                  {myStudents.map((s) => (
+                  {myEditableStudents.map((s) => (
                     <button key={s.id} onClick={() => setScheduleStudent(s)}
                       className="w-full text-left px-3 py-2.5 hover:bg-white border-b border-gray-50 last:border-0 text-sm font-semibold text-gray-800">
                       {s.name} <span className="text-xs text-gray-400 font-normal">{s.grade}</span>

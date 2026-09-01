@@ -126,7 +126,7 @@ function getChapterNameByOrder(concepts: Concept[], grade: string, semester: num
 }
 
 export default function TeacherAssignmentsPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
   const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'textbook'>('worksheet')
   const [unitStatusStudent, setUnitStatusStudent] = useState<Student | null>(null)
   const [subTab, setSubTab] = useState<'ws' | 'tb'>('ws')
@@ -263,21 +263,33 @@ export default function TeacherAssignmentsPage() {
     setWsUnitName(auto ?? '')
   }, [wsCourseGroup, wsGradeLevel, wsSemester, wsUnit, wsUnitNameTouched, concepts])
 
-  const myStudents = students.filter((s) => {
+  // 실제 배정/채점/삭제 권한이 있는 학생(관리자/직원 또는 진짜 담당 강사) - 주임모드로 넓게 "보이는" 것과는
+  // 별개로 실제 조작(배정 대상 선택, 채점, 삭제 등)은 여기로만 한정한다 (주임은 보기 전용)
+  function isEditable(s: Student) {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
-  })
+  }
+  const myEditableStudents = students.filter(isEditable)
+
+  // 화면에 "보이는" 학생 범위 - 관리자/직원은 전체, 주임모드가 켜진 주임은 담당 학년 범위까지 넓게,
+  // 강사는 본인 담당만 (canViewStudent가 우선순위를 반영함)
+  const myStudents = students.filter((s) => canViewStudent(s))
   const myStudentIds = new Set(myStudents.map((s) => s.id))
 
-  const filteredStudents = myStudents.filter((s) => {
-    const groupMatch = gradeGroup === '전체' ? true :
-      gradeGroup === '초등' ? s.grade.includes('초') :
-      gradeGroup === '중등' ? s.grade.includes('중') : s.grade.includes('고')
-    const searchMatch = searchText === '' || s.name.includes(searchText) || s.school?.includes(searchText)
-    return groupMatch && searchMatch
-  })
+  function filterByGroup(list: Student[]) {
+    return list.filter((s) => {
+      const groupMatch = gradeGroup === '전체' ? true :
+        gradeGroup === '초등' ? s.grade.includes('초') :
+        gradeGroup === '중등' ? s.grade.includes('중') : s.grade.includes('고')
+      const searchMatch = searchText === '' || s.name.includes(searchText) || s.school?.includes(searchText)
+      return groupMatch && searchMatch
+    })
+  }
+  const filteredStudents = filterByGroup(myStudents)
+  // 학습지/교재 배정 대상 선택 팝업(개별·일괄)에서는 실제 담당 학생만 골라야 하므로 별도로 좁혀서 사용
+  const filteredEditableStudents = filterByGroup(myEditableStudents)
 
   function getStudentName(id: string) {
     return students.find((s) => s.id === id)?.name ?? '알 수 없음'
@@ -543,7 +555,7 @@ export default function TeacherAssignmentsPage() {
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header
         title="학습지관리"
-        subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}
+        subtitle={isAdmin() ? '전체 관리자' : isSupervisorModeActive() ? `${supervisorLabel()} (보기 전용)` : `${currentUser?.name} 선생님`}
         action={
           tab === 'worksheet' ? (
             <button onClick={() => { setWsUnitNameTouched(false); setWsSemester(1); setShowWSModal(true) }}
@@ -754,7 +766,7 @@ export default function TeacherAssignmentsPage() {
                                         background: isSimilar ? '#FFF9F8' : isChecked ? '#FFF5F2' : wIdx % 2 === 0 ? '#fafafa' : 'white',
                                         borderLeft: isSimilar ? '3px solid #F5C4B3' : '3px solid transparent',
                                       }}>
-                                      {deleteMode && (
+                                      {deleteMode && student && isEditable(student) && (
                                         <button onClick={() => setSelectedWSIds(prev =>
                                           isChecked ? prev.filter(id => id !== w.id) : [...prev, w.id]
                                         )}
@@ -790,39 +802,43 @@ export default function TeacherAssignmentsPage() {
                                       </div>
                                       {/* 상태 */}
                                       <span className={cx('text-[10px] font-bold shrink-0 w-14 text-center', cfg.color)}>{cfg.label}</span>
-                                      {/* 액션 */}
-                                      <div className="flex gap-1 shrink-0">
-                                        {(w.status === 'assigned' || w.status === 'similar_assigned') && (
-                                          <button onClick={() => handleSubmitted(w.id, w.status)}
-                                            className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                            style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>제출확인</button>
-                                        )}
-                                        {(w.status === 'submitted' || w.status === 'similar_submitted') && (
-                                          <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
-                                            className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                            style={{ background: '#FAECE7', color: '#993C1D', border: '1px solid #F5C4B3' }}>점수입력</button>
-                                        )}
-                                        {w.status === 'scored' && (
-                                          <>
-                                            <button onClick={() => handleLevelUp(w)}
+                                      {/* 액션 - 주임모드로 넓게 보이는 학생(진짜 담당 아님)은 조회만 가능 */}
+                                      {student && isEditable(student) ? (
+                                        <div className="flex gap-1 shrink-0">
+                                          {(w.status === 'assigned' || w.status === 'similar_assigned') && (
+                                            <button onClick={() => handleSubmitted(w.id, w.status)}
                                               className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                              style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>레벨업↑</button>
-                                            <button onClick={() => handleRetry(w)}
+                                              style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>제출확인</button>
+                                          )}
+                                          {(w.status === 'submitted' || w.status === 'similar_submitted') && (
+                                            <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
                                               className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                              style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
-                                            <button onClick={() => handleSimilarAssign(w)}
-                                              className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                              style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>오답유사</button>
-                                            <button onClick={() => handleComplete(w)}
-                                              className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
-                                              style={{ background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>완료</button>
-                                          </>
-                                        )}
-                                        <button onClick={() => handleDelete(w.id)}
-                                          className="px-1.5 py-1 text-[10px] rounded-lg text-gray-300 hover:text-red-500 transition-colors">
-                                          <i className="ti ti-trash" style={{ fontSize: 12 }} />
-                                        </button>
-                                      </div>
+                                              style={{ background: '#FAECE7', color: '#993C1D', border: '1px solid #F5C4B3' }}>점수입력</button>
+                                          )}
+                                          {w.status === 'scored' && (
+                                            <>
+                                              <button onClick={() => handleLevelUp(w)}
+                                                className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>레벨업↑</button>
+                                              <button onClick={() => handleRetry(w)}
+                                                className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
+                                              <button onClick={() => handleSimilarAssign(w)}
+                                                className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>오답유사</button>
+                                              <button onClick={() => handleComplete(w)}
+                                                className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                style={{ background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>완료</button>
+                                            </>
+                                          )}
+                                          <button onClick={() => handleDelete(w.id)}
+                                            className="px-1.5 py-1 text-[10px] rounded-lg text-gray-300 hover:text-red-500 transition-colors">
+                                            <i className="ti ti-trash" style={{ fontSize: 12 }} />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[10px] text-gray-300 shrink-0">보기 전용</span>
+                                      )}
                                     </div>
                                   )
                                 })}
@@ -859,6 +875,7 @@ export default function TeacherAssignmentsPage() {
                       <tbody className="divide-y divide-gray-50">
                         {activeTwinWS.map((w) => {
                           const cfg = WS_STATUS[w.status] ?? WS_STATUS.assigned
+                          const twinRowStudent = students.find((s) => s.id === w.student_id)
                           // 단원명 요약: 첫개념~마지막개념
                           const conceptList = (w.unit_name ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
                           const first = conceptList[0] ?? ''
@@ -883,40 +900,44 @@ export default function TeacherAssignmentsPage() {
                                 <span className={cx('font-bold', cfg.color)}>{cfg.label}</span>
                               </td>
                               <td className="px-3 py-2.5 whitespace-nowrap">
-                                <div className="flex items-center gap-1">
-                                  {w.status === 'assigned' && (
-                                    <button onClick={() => handleSubmitted(w.id, w.status)}
-                                      className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                                      style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
-                                      제출확인
-                                    </button>
-                                  )}
-                                  {(w.status === 'submitted' || w.status === 'similar_submitted') && (
-                                    <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
-                                      className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                                      style={{ background: '#EFF6FF', color: '#1e3a5f', border: '1px solid #bfdbfe' }}>
-                                      점수입력
-                                    </button>
-                                  )}
-                                  {w.status === 'scored' && (
-                                    <div className="flex gap-1">
-                                      <button onClick={() => { supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id).then(() => fetchData()) }}
+                                {twinRowStudent && isEditable(twinRowStudent) ? (
+                                  <div className="flex items-center gap-1">
+                                    {w.status === 'assigned' && (
+                                      <button onClick={() => handleSubmitted(w.id, w.status)}
                                         className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                                        style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>
-                                        완료
+                                        style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
+                                        제출확인
                                       </button>
-                                      <button onClick={() => { supabase.from('student_worksheets').update({ status: 'assigned' }).eq('id', w.id).then(() => fetchData()) }}
+                                    )}
+                                    {(w.status === 'submitted' || w.status === 'similar_submitted') && (
+                                      <button onClick={() => { setScoreWS(w); setShowScoreModal(true) }}
                                         className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                                        style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
-                                        재도전
+                                        style={{ background: '#EFF6FF', color: '#1e3a5f', border: '1px solid #bfdbfe' }}>
+                                        점수입력
                                       </button>
-                                    </div>
-                                  )}
-                                  <button onClick={() => handleDelete(w.id)}
-                                    className="px-1.5 py-1 rounded-lg text-[10px] text-gray-300 hover:text-red-500 transition-colors">
-                                    <i className="ti ti-trash" style={{ fontSize: 12 }} />
-                                  </button>
-                                </div>
+                                    )}
+                                    {w.status === 'scored' && (
+                                      <div className="flex gap-1">
+                                        <button onClick={() => { supabase.from('student_worksheets').update({ status: 'passed' }).eq('id', w.id).then(() => fetchData()) }}
+                                          className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                          style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>
+                                          완료
+                                        </button>
+                                        <button onClick={() => { supabase.from('student_worksheets').update({ status: 'assigned' }).eq('id', w.id).then(() => fetchData()) }}
+                                          className="px-2 py-1 rounded-lg text-[10px] font-bold"
+                                          style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
+                                          재도전
+                                        </button>
+                                      </div>
+                                    )}
+                                    <button onClick={() => handleDelete(w.id)}
+                                      className="px-1.5 py-1 rounded-lg text-[10px] text-gray-300 hover:text-red-500 transition-colors">
+                                      <i className="ti ti-trash" style={{ fontSize: 12 }} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-gray-300">보기 전용</span>
+                                )}
                               </td>
                             </tr>
                           )
@@ -989,11 +1010,13 @@ export default function TeacherAssignmentsPage() {
                               )}
                             </div>
                           </div>
-                          <button onClick={() => { setTbStudent(student); setShowTBModal(true) }}
-                            className="px-2.5 py-1 text-xs font-semibold rounded-lg shrink-0"
-                            style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
-                            + 배정
-                          </button>
+                          {isEditable(student) && (
+                            <button onClick={() => { setTbStudent(student); setShowTBModal(true) }}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg shrink-0"
+                              style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
+                              + 배정
+                            </button>
+                          )}
                         </div>
 
                         {Object.keys(tbByType).length > 0 ? (
@@ -1035,12 +1058,12 @@ export default function TeacherAssignmentsPage() {
                               </span>
                               {/* 제출확인/채점완료는 연산서(제출형 워크북)에만 해당 - 개념서/유형서/심화서는 개념 체크로 진도를 관리하므로
                                   실수로 이 상태가 되면 "진행중 교재" 목록(status==='assigned' 기준)에서 사라져버린다 */}
-                              {t.textbook_type === '연산서' && t.status === 'assigned' && (
+                              {isEditable(student) && t.textbook_type === '연산서' && t.status === 'assigned' && (
                                 <button onClick={() => handleTBSubmitted(t.id)}
                                   className="px-2 py-1 text-[10px] font-semibold rounded-lg"
                                   style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>제출확인</button>
                               )}
-                              {t.textbook_type === '연산서' && t.status === 'submitted' && (
+                              {isEditable(student) && t.textbook_type === '연산서' && t.status === 'submitted' && (
                                 <button onClick={() => handleTBChecked(t.id)}
                                   className="px-2 py-1 text-[10px] font-semibold rounded-lg"
                                   style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>채점완료</button>
@@ -1414,7 +1437,7 @@ export default function TeacherAssignmentsPage() {
                       placeholder="이름 검색" className="w-full text-sm rounded-xl px-3 py-2 mb-2 outline-none"
                       style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
                     <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                      {myStudents.filter(s => {
+                      {myEditableStudents.filter(s => {
                         const middleOrHigh = s.grade.includes('중') || s.grade.includes('고')
                         // 초등학생이어도 실제 배정된 교재가 중등(또는 고등) 과정이면 쌍둥이학습지 대상에 포함
                         // (예: 초6인데 중1 과정 교재를 배정받은 학생)
@@ -1558,7 +1581,7 @@ export default function TeacherAssignmentsPage() {
                   </div>
                 ) : (
                   <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                    {filteredStudents.map((s) => (
+                    {filteredEditableStudents.map((s) => (
                       <button key={s.id} onClick={() => { setWsStudent(s); setMwSelectedLessons([]); setMwSemester(1) }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
@@ -1575,18 +1598,18 @@ export default function TeacherAssignmentsPage() {
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl">
                   {/* 전체 선택 */}
                   <button onClick={() => {
-                    if (bulkStudentIds.length === filteredStudents.length) setBulkStudentIds([])
-                    else setBulkStudentIds(filteredStudents.map(s => s.id))
+                    if (bulkStudentIds.length === filteredEditableStudents.length) setBulkStudentIds([])
+                    else setBulkStudentIds(filteredEditableStudents.map(s => s.id))
                   }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-gray-100"
                     style={{ background: '#fafafa' }}>
                     <div className="w-4 h-4 rounded flex items-center justify-center"
-                      style={{ background: bulkStudentIds.length === filteredStudents.length ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
-                      {bulkStudentIds.length === filteredStudents.length && <i className="ti ti-check" style={{ fontSize: 10, color: '#712B13' }} />}
+                      style={{ background: bulkStudentIds.length === filteredEditableStudents.length ? '#F5C4B3' : '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                      {bulkStudentIds.length === filteredEditableStudents.length && <i className="ti ti-check" style={{ fontSize: 10, color: '#712B13' }} />}
                     </div>
-                    <span className="text-xs font-bold text-gray-600">전체 선택 ({filteredStudents.length}명)</span>
+                    <span className="text-xs font-bold text-gray-600">전체 선택 ({filteredEditableStudents.length}명)</span>
                   </button>
-                  {filteredStudents.map((s) => {
+                  {filteredEditableStudents.map((s) => {
                     const isChecked = bulkStudentIds.includes(s.id)
                     return (
                       <button key={s.id} onClick={() => setBulkStudentIds(prev =>
@@ -1907,7 +1930,7 @@ export default function TeacherAssignmentsPage() {
                 </div>
               ) : (
                 <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                  {filteredStudents.map((s) => (
+                  {filteredEditableStudents.map((s) => (
                     <button key={s.id} onClick={() => {
                       setTbStudent(s)
                       if (s.grade.includes('초')) { setTbCourseGroup('초등'); setTbGrade(s.grade.replace('학년','').trim()) }
