@@ -70,7 +70,7 @@ function formatLastLogin(dateStr?: string | null): string | null {
 }
 
 export default function TeacherStudentsPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, isSupervisorModeActive } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
@@ -105,13 +105,18 @@ export default function TeacherStudentsPage() {
 
   useEffect(() => { fetchStudents() }, [])
 
-  // 담당 학생 필터 - 관리자와 직원(행정 업무상 전체 학생을 다뤄야 함)은 전체, 강사는 본인 담당만
-  const myStudents = students.filter((s) => {
+  // 담당 학생 필터 - 관리자와 직원(행정 업무상 전체 학생을 다뤄야 함)은 전체, 주임모드면 담당 학년 범위,
+  // 강사는 본인 담당만 (canViewStudent가 이 우선순위를 그대로 반영함)
+  const myStudents = students.filter((s) => canViewStudent(s))
+
+  // 수정/삭제 가능 여부 - 주임모드로 넓게 "보이는" 것과는 별개로, 실제 관리 권한은 기존과 동일하게
+  // 관리자/직원이거나 내가 진짜 담당(teacher_name)인 경우로 한정한다 (주임은 보기 전용)
+  function isEditable(s: Student) {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
-  })
+  }
 
   // 담당쌤(관리자/직원용) 목록 - 학생 한 명당 여러 명(콤마 구분)일 수 있어서 전부 풀어서 이름별로 모으고,
   // 몇 명씩 담당하는지도 같이 세어둔다 (원장님이 강사별로 담당학생을 훑어볼 수 있게)
@@ -412,7 +417,7 @@ export default function TeacherStudentsPage() {
         )}
 
         {/* 강사별 보기 (관리자/직원 전용 - 강사 계정은 어차피 본인 담당만 보여서 필요 없음) */}
-        {canManageAllStudents() && teacherCounts.length > 0 && (
+        {(canManageAllStudents() || isSupervisorModeActive()) && teacherCounts.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-bold text-gray-500">강사별 보기</p>
             <div className="flex gap-1.5 flex-wrap">
@@ -494,26 +499,32 @@ export default function TeacherStudentsPage() {
                     </p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button onClick={async () => {
-                      setEditStudent(student)
-                      // 기존 시간표 불러오기
-                      const { data: scData } = await supabase
-                        .from('schedules')
-                        .select('*')
-                        .eq('student_id', student.id)
-                        .eq('is_active', true)
-                        .order('day_of_week')
-                      setEditSchedules(scData ? scData.map((s: any) => ({
-                        day: s.day_of_week,
-                        time: s.start_time.slice(0, 5),
-                        periods: Number(s.periods) || 2,
-                      })) : [])
-                      setShowEditModal(true)
-                    }}
-                      className="px-2.5 py-1.5 text-xs font-semibold text-gray-800 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
-                    {isAdmin() && (
-                      <button onClick={() => handleDelete(student.id!, student.name)}
-                        className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
+                    {isEditable(student) ? (
+                      <>
+                        <button onClick={async () => {
+                          setEditStudent(student)
+                          // 기존 시간표 불러오기
+                          const { data: scData } = await supabase
+                            .from('schedules')
+                            .select('*')
+                            .eq('student_id', student.id)
+                            .eq('is_active', true)
+                            .order('day_of_week')
+                          setEditSchedules(scData ? scData.map((s: any) => ({
+                            day: s.day_of_week,
+                            time: s.start_time.slice(0, 5),
+                            periods: Number(s.periods) || 2,
+                          })) : [])
+                          setShowEditModal(true)
+                        }}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-gray-800 bg-blue-50 rounded-lg hover:bg-blue-100">수정</button>
+                        {isAdmin() && (
+                          <button onClick={() => handleDelete(student.id!, student.name)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 rounded-lg hover:bg-red-100">삭제</button>
+                        )}
+                      </>
+                    ) : (
+                      <span className="px-2.5 py-1.5 text-[11px] font-semibold text-gray-400 bg-gray-50 rounded-lg">보기 전용</span>
                     )}
                   </div>
                 </div>

@@ -34,7 +34,7 @@ const MOBILE_MORE = NAV_ITEMS.slice(4)
 
 export function TeacherSidebar() {
   const pathname = usePathname()
-  const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
+  const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode, isSupervisorAccount, supervisorMode, toggleSupervisorMode, supervisorLabel } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
   const [bulkEnabled, setBulkEnabled] = useState(false)
 
@@ -82,6 +82,20 @@ export function TeacherSidebar() {
                 : { background: '#F5C4B3', color: '#712B13' }}>
               <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 13 }} />
               {adminMode ? '관리자 모드' : '강사 모드'}
+            </button>
+          </div>
+        )}
+
+        {/* 주임/강사 모드 토글 - 주임으로 지정된 강사 계정에게만 보임 */}
+        {isSupervisorAccount() && (
+          <div className="px-3 pt-3 pb-1">
+            <button onClick={toggleSupervisorMode}
+              className="w-full text-xs py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-1.5"
+              style={supervisorMode
+                ? { background: '#1D4ED8', color: 'white' }
+                : { background: '#EFF4FF', color: '#1D4ED8' }}>
+              <i className={supervisorMode ? 'ti ti-eye' : 'ti ti-user'} style={{ fontSize: 13 }} />
+              {supervisorMode ? `${supervisorLabel()} 모드` : '강사 모드'}
             </button>
           </div>
         )}
@@ -159,6 +173,20 @@ export function TeacherSidebar() {
               : { background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>
             <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 11 }} />
             {adminMode ? '관리자' : '강사'}
+          </button>
+        </div>
+      )}
+
+      {/* 모바일 주임 토글 - 상단 고정 */}
+      {isSupervisorAccount() && (
+        <div className="md:hidden fixed top-3 right-3 z-50">
+          <button onClick={toggleSupervisorMode}
+            className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
+            style={supervisorMode
+              ? { background: '#1D4ED8', color: 'white', border: '1px solid #1D4ED8' }
+              : { background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>
+            <i className={supervisorMode ? 'ti ti-eye' : 'ti ti-user'} style={{ fontSize: 11 }} />
+            {supervisorMode ? supervisorLabel() : '강사'}
           </button>
         </div>
       )}

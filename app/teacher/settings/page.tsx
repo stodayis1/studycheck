@@ -11,6 +11,17 @@ interface Profile {
   name: string
   email: string | null
   role: 'admin' | 'teacher' | 'staff'
+  supervisor_grades: string[] | null
+}
+
+// 주임 지정용 학년 선택지 (curriculum/quick-answers 등에서 쓰는 것과 같은 순서)
+const SUPERVISOR_GRADE_OPTIONS = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3']
+const MIDDLE_GRADES = ['중1', '중2', '중3']
+
+function supervisorLabelOf(grades: string[]) {
+  if (grades.length === MIDDLE_GRADES.length && MIDDLE_GRADES.every((m) => grades.includes(m))) return '중등주임'
+  if (grades.length === 1) return `${grades[0]} 학년주임`
+  return `${grades.join('·')} 주임`
 }
 
 export default function SettingsPage() {
@@ -33,6 +44,7 @@ export default function SettingsPage() {
   const [editProfile, setEditProfile] = useState<Profile | null>(null)
   const [editName, setEditName] = useState('')
   const [editPassword, setEditPassword] = useState('')
+  const [editSupervisorGrades, setEditSupervisorGrades] = useState<string[]>([])
   const [editSaving, setEditSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -47,7 +59,7 @@ export default function SettingsPage() {
 
   async function fetchProfiles() {
     setLoadingProfiles(true)
-    const { data } = await supabase.from('users').select('id, name, email, role').order('name')
+    const { data } = await supabase.from('users').select('id, name, email, role, supervisor_grades').order('name')
     setProfiles(data ?? [])
     setLoadingProfiles(false)
   }
@@ -123,7 +135,11 @@ export default function SettingsPage() {
   async function handleEditSave() {
     if (!editProfile) return
     setEditSaving(true)
-    const updates: any = { name: editName, email: editProfile.email }
+    const updates: any = {
+      name: editName,
+      email: editProfile.email,
+      supervisor_grades: editSupervisorGrades.length > 0 ? editSupervisorGrades : null,
+    }
     await supabase.from('users').update(updates).eq('id', editProfile.id)
     if (editPassword) {
       // 비밀번호 변경은 admin API 필요 - 여기서는 안내만
@@ -216,12 +232,16 @@ export default function SettingsPage() {
                           <p className="text-sm font-bold text-gray-800">{p.name}</p>
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                             style={rc}>{ROLE_LABEL[p.role]}</span>
-                
+                          {p.supervisor_grades && p.supervisor_grades.length > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#EFF4FF', color: '#1D4ED8' }}>
+                              {supervisorLabelOf(p.supervisor_grades)}
+                            </span>
+                          )}
                         </div>
                         <p className="text-[10px] text-gray-400 mt-0.5">{p.email}</p>
                       </div>
                       <div className="flex gap-1.5">
-                        <button onClick={() => { setEditProfile(p); setEditName(p.name); setEditPassword('') }}
+                        <button onClick={() => { setEditProfile(p); setEditName(p.name); setEditPassword(''); setEditSupervisorGrades(p.supervisor_grades ?? []) }}
                           className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all"
                           style={{ background: '#f3f4f6', color: '#374151' }}>
                           수정
@@ -367,7 +387,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">이메일 (로그인 ID)</label>
-                <input value={editProfile.login_id} disabled
+                <input value={editProfile.email ?? ''} disabled
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-100 text-sm bg-gray-50 text-gray-400" />
               </div>
               <div>
@@ -379,6 +399,47 @@ export default function SettingsPage() {
                   <p className="text-[10px] text-orange-500 mt-1">⚠ 비밀번호 변경은 Supabase 대시보드에서 직접 해주세요.</p>
                 )}
               </div>
+
+              {/* 주임 지정 - 강사 계정만. 지정하면 그 강사 화면에 '강사모드/주임모드' 전환 버튼이 생기고,
+                  주임모드일 때는 담당 학생이 아니어도 여기서 고른 학년 범위는 보기 전용으로 조회 가능해짐. */}
+              {editProfile.role === 'teacher' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">주임 지정 <span className="font-normal text-gray-400">(보기 전용 · 안 고르면 일반 강사)</span></label>
+                  <div className="flex gap-1.5 mb-2">
+                    <button onClick={() => setEditSupervisorGrades([])}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all"
+                      style={editSupervisorGrades.length === 0
+                        ? { background: '#1a1a2e', color: 'white', borderColor: '#1a1a2e' }
+                        : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                      주임 아님
+                    </button>
+                    <button onClick={() => setEditSupervisorGrades(MIDDLE_GRADES)}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all"
+                      style={editSupervisorGrades.length === MIDDLE_GRADES.length && MIDDLE_GRADES.every((m) => editSupervisorGrades.includes(m))
+                        ? { background: '#1D4ED8', color: 'white', borderColor: '#1D4ED8' }
+                        : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                      중등주임 (중1~중3)
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mb-1">또는 특정 학년만 (여러 개 선택 가능)</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SUPERVISOR_GRADE_OPTIONS.map((g) => {
+                      const active = editSupervisorGrades.includes(g)
+                      return (
+                        <button key={g}
+                          onClick={() => setEditSupervisorGrades((prev) => active ? prev.filter((x) => x !== g) : [...prev, g])}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all"
+                          style={active
+                            ? { background: '#EFF4FF', color: '#1D4ED8', borderColor: '#1D4ED8' }
+                            : { background: 'white', color: '#9ca3af', borderColor: '#e5e7eb' }}>
+                          {g}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               <button onClick={handleEditSave} disabled={editSaving}
                 className="w-full py-3 rounded-2xl text-sm font-bold transition-all"
                 style={{ background: editSaving ? '#e5e7eb' : '#085041', color: editSaving ? '#9ca3af' : 'white' }}>

@@ -21,7 +21,7 @@ interface Announcement {
 }
 
 export default function TeacherDashboardPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
   const [stats, setStats] = useState({
     todayStudents: 0, unwrittenNotes: 0, pendingScore: 0, pendingShare: 0,
     activeWorksheets: 0, activeTextbooks: 0, needsAction: 0,
@@ -64,10 +64,11 @@ export default function TeacherDashboardPage() {
     setLoading(true)
     const todayDay = DAYS[new Date().getDay()]
     const todayStr = new Date().toISOString().split('T')[0]
-    let q = supabase.from('students').select('id').eq('is_active', true)
-    if (!isAdmin() && currentUser?.name) q = q.ilike('teacher_name', `%${currentUser.name}%`)
-    const { data: myStudents } = await q
-    const myIds = new Set(myStudents?.map((s: any) => s.id) ?? [])
+    // 주임모드일 때는 담당 학년 범위 학생도 다 봐야 해서, 조건절로 좁혀서 쿼리하는 대신
+    // 전체를 가져와 canViewStudent()로 한 번에 걸러낸다 (관리자/직원/주임모드/일반 강사 전부 이 한 함수로 통일)
+    const { data: allStudents } = await supabase.from('students').select('id, grade, teacher_name').eq('is_active', true)
+    const myStudents = (allStudents ?? []).filter((s: any) => canViewStudent(s))
+    const myIds = new Set(myStudents.map((s: any) => s.id))
     const { data: todaySch } = await supabase.from('schedules').select('student_id').eq('day_of_week', todayDay).eq('is_active', true)
     const todayStudents = (todaySch ?? []).filter((s: any) => myIds.has(s.student_id)).length
     const { data: sessions } = await supabase.from('class_sessions').select('id, student_id').eq('session_date', todayStr)
@@ -169,7 +170,7 @@ export default function TeacherDashboardPage() {
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
       <Header title={`${currentUser?.name ?? ''} 선생님`}
-        subtitle={isAdmin() ? '관리자 대시보드' : '수업일지 · 진도관리'}
+        subtitle={isAdmin() ? '관리자 대시보드' : isSupervisorModeActive() ? `${supervisorLabel()} · 보기 전용` : '수업일지 · 진도관리'}
         action={currentUser?.id ? (
           <PushSubscribeButton role={(currentUser.role as any) || 'teacher'} userId={currentUser.id} />
         ) : undefined} />
