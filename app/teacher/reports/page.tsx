@@ -128,7 +128,7 @@ const EXAM_CONFIG: Record<string, { color: string; bg: string; dot: string }> = 
 }
 
 export default function TeacherReportsPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, isSupervisorModeActive, supervisorGrades } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<WorksheetRecord[]>([])
   const [exams, setExams] = useState<Exam[]>([])
@@ -180,7 +180,7 @@ export default function TeacherReportsPage() {
   // 등수 탭을 처음 열 때만 전체 코어테스트 점수를 한 번 불러온다 (학생별로 나눠 불러오던 다른 탭과 달리
   // 등수는 학년 전체를 비교해야 해서 전체 조회가 불가피함 - 대신 탭을 열 때 딱 한 번만)
   useEffect(() => {
-    if (activeTab === 'ranking' && isAdmin() && !rankLoaded && !rankLoading) {
+    if (activeTab === 'ranking' && (isAdmin() || isSupervisorModeActive()) && !rankLoaded && !rankLoading) {
       (async () => {
         setRankLoading(true)
         const rows = await fetchAllRows<Exam>(() =>
@@ -197,7 +197,10 @@ export default function TeacherReportsPage() {
   const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
   const rankGradesAvailable = Array.from(new Set(
     rankAllExams.map((e) => rankStudentMap.get(e.student_id)?.grade).filter((g): g is string => !!g)
-  )).sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
+  ))
+    // 관리자는 전체 학년, 주임모드는 담당 학년 범위로만 제한 (중등주임이면 중1~중3, 학년주임이면 그 학년만)
+    .filter((g) => isAdmin() || !isSupervisorModeActive() || supervisorGrades.includes(g))
+    .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
 
   // 선택한 학년의 코어테스트를 "연월 + 회차"별로 묶어 세션(=매달 한 번씩 보는 그 회차)마다 등수를 매긴다.
   // 동점자는 공동 순위(1,1,3 식)로 처리
@@ -789,7 +792,7 @@ export default function TeacherReportsPage() {
 
         {/* 탭 */}
         <div className="flex gap-2">
-          {([['report','학습 보고서'],['monthly','월간 보고서'],['grade','성적표'], ...(isAdmin() ? [['ranking','코어테스트 등수']] : [])] as [string,string][]).map(([tab,label]) => (
+          {([['report','학습 보고서'],['monthly','월간 보고서'],['grade','성적표'], ...((isAdmin() || isSupervisorModeActive()) ? [['ranking','코어테스트 등수']] : [])] as [string,string][]).map(([tab,label]) => (
             <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'grade'|'ranking')}
               className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
               style={activeTab === tab ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#6b7280' }}>
@@ -1321,8 +1324,8 @@ export default function TeacherReportsPage() {
           </div>
         )}
 
-        {/* ══ 코어테스트 등수 탭 (관리자 전용) ══ */}
-        {activeTab === 'ranking' && isAdmin() && (
+        {/* ══ 코어테스트 등수 탭 (관리자·주임모드) ══ */}
+        {activeTab === 'ranking' && (isAdmin() || isSupervisorModeActive()) && (
           <div className="space-y-4">
             <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
               <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">학년 선택</p>
