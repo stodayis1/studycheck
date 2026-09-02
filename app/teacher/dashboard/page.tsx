@@ -161,8 +161,8 @@ export default function TeacherDashboardPage() {
     { href: '/teacher/students',        label: '학생관리',   desc: '학생 등록 · 시간표',   icon: 'ti-users',      color: '#27500A', bg: '#EAF3DE' },
     { href: '/teacher/assignments',     label: '학습지관리', desc: '학습지 배정 · 채점',   icon: 'ti-file-text',  color: '#633806', bg: '#FAEEDA' },
     { href: '/teacher/curriculum',      label: '과정관리',   desc: '교재 배정 · 진도표',   icon: 'ti-books',      color: '#712B13', bg: '#FFF0EE' },
-    // 방학특강 완주 챌린지 - 이번 방학특강 기간에만 쓰는 임시 메뉴 (일반 로그인 없이 PIN으로 들어가는 별도 화면)
-    { href: '/camp/admin',              label: '완주 챌린지', desc: '방학특강 진도 체크',   icon: 'ti-trophy',     color: '#9a3412', bg: '#FFF7ED' },
+    // 중등 개념강의 촬영 스케줄러 - 관리자/직원 전용 (일반 강사는 페이지 진입 시 자동 리다이렉트됨)
+    { href: '/teacher/video-schedule',  label: '촬영 스케줄러', desc: '개념강의 촬영 진행 체크', icon: 'ti-video',     color: '#9a3412', bg: '#FFF7ED' },
     // 교재 빠른정답 QR 파이프라인 - 원장님/직원 관리 (문제은행 구축 전 임시 채점 보조 도구)
     ...(isAdmin() || currentUser?.role === 'staff' ? [{ href: '/teacher/quick-answers', label: '빠른정답 QR', desc: '교재별 빠른정답 업로드', icon: 'ti-qrcode', color: '#1D4ED8', bg: '#EFF4FF' }] : []),
   ]
