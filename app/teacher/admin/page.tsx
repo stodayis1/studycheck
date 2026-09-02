@@ -131,8 +131,14 @@ export default function AdminPage() {
       const cur = firstDateByStudent.get(s.student_id)
       if (!cur || s.session_date < cur) firstDateByStudent.set(s.student_id, s.session_date)
     }
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 14)
+    // 이번주 월요일 기준으로 지난주 월요일까지 - "지난주 + 이번주" 첫수업만 대상으로
+    const today = new Date()
+    const dow = today.getDay() // 0=일 ... 6=토
+    const diffToMonday = dow === 0 ? -6 : 1 - dow
+    const thisMonday = new Date(today)
+    thisMonday.setDate(today.getDate() + diffToMonday)
+    const cutoff = new Date(thisMonday)
+    cutoff.setDate(thisMonday.getDate() - 7)
     const cutoffStr = cutoff.toISOString().slice(0, 10)
 
     return students
@@ -257,7 +263,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[#9a3412] text-lg shrink-0">📋</span>
                 <p className="text-sm font-bold text-[#9a3412]">
-                  최근 첫수업 알림장 현황 (최근 14일, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
+                  첫수업 알림장 현황 (지난주~이번주, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
                 </p>
               </div>
               <div className="space-y-1.5">

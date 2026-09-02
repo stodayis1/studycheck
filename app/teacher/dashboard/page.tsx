@@ -49,7 +49,7 @@ export default function TeacherDashboardPage() {
     }
   }, [currentUser])
 
-  // 관리자 전용: 최근 14일 내 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인
+  // 관리자 전용: 지난주~이번주 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인
   async function fetchFirstClassChecks() {
     const { data: activeStudents } = await supabase.from('students')
       .select('id, name, school, teacher_name').eq('is_active', true)
@@ -64,8 +64,14 @@ export default function TeacherDashboardPage() {
       const cur = firstDateMap.get(s.student_id)
       if (!cur || s.session_date < cur) firstDateMap.set(s.student_id, s.session_date)
     }
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 14)
+    // 이번주 월요일 기준으로 지난주 월요일까지 - "지난주 + 이번주" 첫수업만 대상으로
+    const today = new Date()
+    const dow = today.getDay() // 0=일 ... 6=토
+    const diffToMonday = dow === 0 ? -6 : 1 - dow
+    const thisMonday = new Date(today)
+    thisMonday.setDate(today.getDate() + diffToMonday)
+    const cutoff = new Date(thisMonday)
+    cutoff.setDate(thisMonday.getDate() - 7)
     const cutoffStr = cutoff.toISOString().split('T')[0]
     const results: FirstClassCheck[] = []
     for (const st of activeStudents ?? []) {
@@ -292,7 +298,7 @@ export default function TeacherDashboardPage() {
               <div className="flex items-center gap-2 mb-2">
                 <span style={{ fontSize: 16 }}>📋</span>
                 <p className="text-sm font-bold" style={{ color: '#9a3412' }}>
-                  최근 첫수업 알림장 현황 (14일 내, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
+                  첫수업 알림장 현황 (지난주~이번주, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
                 </p>
               </div>
               <div className="space-y-1.5">
