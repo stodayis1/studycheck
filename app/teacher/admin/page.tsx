@@ -55,6 +55,18 @@ interface ElementaryTextbook {
   lesson_type: string
 }
 
+interface Feedback {
+  id: string
+  student_id: string
+  created_at: string
+}
+
+interface SessionDate {
+  id: string
+  student_id: string
+  session_date: string
+}
+
 const TEACHERS = ['전체', '조윤희', '윤주희', '김은수', '신애진', '박경미', '최윤정', '주한']
 const GRADE_GROUPS = ['전체', '초등', '중등', '고등']
 
@@ -67,6 +79,8 @@ export default function AdminPage() {
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [progress, setProgress] = useState<StudentProgress[]>([])
   const [elementaryTBs, setElementaryTBs] = useState<ElementaryTextbook[]>([])
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  const [allSessionDates, setAllSessionDates] = useState<SessionDate[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTeacher, setSelectedTeacher] = useState('전체')
   const [selectedGroup, setSelectedGroup] = useState('전체')
@@ -84,7 +98,7 @@ export default function AdminPage() {
     const now = new Date()
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-    const [{ data: sData }, nData, { data: ssData }, wsData, { data: pgData }, { data: etData }] = await Promise.all([
+    const [{ data: sData }, nData, { data: ssData }, wsData, { data: pgData }, { data: etData }, { data: fbData }, allSsData] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('teacher_name').order('grade').order('name'),
       // 1957행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 최근 기록이 빠질 수 있어 전부 순회
       fetchAllRows(() => supabase.from('learning_notes').select('*')),
@@ -93,6 +107,10 @@ export default function AdminPage() {
       fetchAllRows(() => supabase.from('student_worksheets').select('id, student_id, status, score')),
       supabase.from('student_progress').select('*'),
       supabase.from('elementary_textbooks').select('id, grade, semester, chapter_no, lesson_type'),
+      // 신입생 첫 수업 알림장 누락 체크용 - 알림장(feedbacks)은 기간 제한 없이 전부
+      supabase.from('feedbacks').select('id, student_id, created_at'),
+      // 학생별 "첫 수업" 판단에는 이번달 세션만으론 부족해서(입학이 지난달일 수도) 전체 기간 세션을 따로 전부 순회해서 받아온다
+      fetchAllRows(() => supabase.from('class_sessions').select('id, student_id, session_date')),
     ])
     if (sData) setStudents(sData)
     if (nData) setNotes(nData)
@@ -100,8 +118,38 @@ export default function AdminPage() {
     if (wsData) setWorksheets(wsData)
     if (pgData) setProgress(pgData)
     if (etData) setElementaryTBs(etData)
+    if (fbData) setFeedbacks(fbData)
+    if (allSsData) setAllSessionDates(allSsData as SessionDate[])
     setLoading(false)
   }
+
+  // 신입생 첫 수업 알림장 체크 - 최근 14일 내 "첫 수업"을 한 재원생 중, 그 수업일 기준 며칠 안에
+  // 알림장(feedbacks)을 작성했는지 확인. 관리자가 매주 확인하는 리스트라 날짜를 고정하지 않고 굴러가게 둔다.
+  const firstClassChecks = (() => {
+    const firstDateByStudent = new Map<string, string>()
+    for (const s of allSessionDates) {
+      const cur = firstDateByStudent.get(s.student_id)
+      if (!cur || s.session_date < cur) firstDateByStudent.set(s.student_id, s.session_date)
+    }
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 14)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+    return students
+      .map((s) => {
+        const firstDate = firstDateByStudent.get(s.id)
+        if (!firstDate || firstDate < cutoffStr) return null
+        const hasFeedback = feedbacks.some((f) => {
+          if (f.student_id !== s.id) return false
+          const fbDate = f.created_at.slice(0, 10)
+          const diffDays = (new Date(fbDate).getTime() - new Date(firstDate).getTime()) / 86400000
+          return diffDays >= 0 && diffDays <= 2
+        })
+        return { student: s, firstDate, hasFeedback }
+      })
+      .filter((x): x is { student: Student; firstDate: string; hasFeedback: boolean } => x !== null)
+      .sort((a, b) => a.firstDate.localeCompare(b.firstDate))
+  })()
 
   const filteredStudents = students.filter(s => {
     const teacherMatch = selectedTeacher === '전체' || s.teacher_name === selectedTeacher
@@ -195,6 +243,36 @@ export default function AdminPage() {
                 <p className="text-xs text-red-400 mt-0.5">
                   {unassigned.map(s => s.name).join(', ')}
                 </p>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* 첫수업 알림장 작성 현황 */}
+        {firstClassChecks.length > 0 && (() => {
+          const missing = firstClassChecks.filter(c => !c.hasFeedback)
+          const written = firstClassChecks.filter(c => c.hasFeedback)
+          return (
+            <div className="bg-[#FFF7ED] border border-[#FDBA74] rounded-2xl px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[#9a3412] text-lg shrink-0">📋</span>
+                <p className="text-sm font-bold text-[#9a3412]">
+                  최근 첫수업 알림장 현황 (최근 14일, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                {firstClassChecks.map(c => (
+                  <div key={c.student.id}
+                    className={cx('flex items-center justify-between rounded-xl px-3 py-2 text-xs',
+                      c.hasFeedback ? 'bg-white/60 text-gray-500' : 'bg-white text-[#9a3412] font-bold')}>
+                    <span className="flex items-center gap-2">
+                      <span>{c.hasFeedback ? '✅' : '⚠️'}</span>
+                      <span>{c.student.name}</span>
+                      <span className="font-normal text-gray-400">{c.student.school ?? ''} · {c.student.teacher_name ?? '미배정'}</span>
+                    </span>
+                    <span className="font-normal text-gray-400">첫수업 {c.firstDate}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )
