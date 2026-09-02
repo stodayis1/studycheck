@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
+import { fetchAllRows } from '@/lib/utils'
 
 const DAYS = ['일','월','화','수','목','금','토']
 
@@ -20,6 +21,15 @@ interface Announcement {
   is_important?: boolean
 }
 
+interface FirstClassCheck {
+  id: string
+  name: string
+  school: string
+  teacher_name: string
+  firstDate: string
+  hasFeedback: boolean
+}
+
 export default function TeacherDashboardPage() {
   const { currentUser, isAdmin, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
   const [stats, setStats] = useState({
@@ -30,8 +40,47 @@ export default function TeacherDashboardPage() {
   const [bulkProgressEnabled, setBulkProgressEnabled] = useState(false)
   const [togglingBulk, setTogglingBulk] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
 
-  useEffect(() => { if (currentUser) { fetchStats(); fetchBulkSetting(); fetchAnnouncements() } }, [currentUser])
+  useEffect(() => {
+    if (currentUser) {
+      fetchStats(); fetchBulkSetting(); fetchAnnouncements()
+      if (isAdmin()) fetchFirstClassChecks()
+    }
+  }, [currentUser])
+
+  // 관리자 전용: 최근 14일 내 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인
+  async function fetchFirstClassChecks() {
+    const { data: activeStudents } = await supabase.from('students')
+      .select('id, name, school, teacher_name').eq('is_active', true)
+    const allSessions = await fetchAllRows<{ id: string; student_id: string; session_date: string }>(
+      () => supabase.from('class_sessions').select('id, student_id, session_date')
+    )
+    const allFeedbacks = await fetchAllRows<{ student_id: string; created_at: string }>(
+      () => supabase.from('feedbacks').select('student_id, created_at')
+    )
+    const firstDateMap = new Map<string, string>()
+    for (const s of allSessions) {
+      const cur = firstDateMap.get(s.student_id)
+      if (!cur || s.session_date < cur) firstDateMap.set(s.student_id, s.session_date)
+    }
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 14)
+    const cutoffStr = cutoff.toISOString().split('T')[0]
+    const results: FirstClassCheck[] = []
+    for (const st of activeStudents ?? []) {
+      const firstDate = firstDateMap.get(st.id)
+      if (!firstDate || firstDate < cutoffStr) continue
+      const windowEnd = new Date(firstDate)
+      windowEnd.setDate(windowEnd.getDate() + 2)
+      const windowEndStr = windowEnd.toISOString().split('T')[0]
+      const hasFeedback = allFeedbacks.some((f) =>
+        f.student_id === st.id && f.created_at.slice(0, 10) >= firstDate && f.created_at.slice(0, 10) <= windowEndStr)
+      results.push({ id: st.id, name: st.name, school: st.school, teacher_name: st.teacher_name, firstDate, hasFeedback })
+    }
+    results.sort((a, b) => a.firstDate.localeCompare(b.firstDate))
+    setFirstClassChecks(results)
+  }
 
   // 원장님이 올린 공지 중 지금 표시 대상인 것만 (종료일 지난 건 자동으로 제외)
   async function fetchAnnouncements() {
@@ -234,6 +283,39 @@ export default function TeacherDashboardPage() {
             </button>
           </div>
         )}
+
+        {/* 관리자 전용: 첫수업 알림장 작성 현황 */}
+        {isAdmin() && firstClassChecks.length > 0 && (() => {
+          const missing = firstClassChecks.filter(c => !c.hasFeedback)
+          return (
+            <div className="rounded-2xl px-4 py-3" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span style={{ fontSize: 16 }}>📋</span>
+                <p className="text-sm font-bold" style={{ color: '#9a3412' }}>
+                  최근 첫수업 알림장 현황 (14일 내, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                {firstClassChecks.map((c) => (
+                  <div key={c.id}
+                    className="flex items-center justify-between rounded-xl px-3 py-2 text-xs"
+                    style={{
+                      background: c.hasFeedback ? 'rgba(255,255,255,0.6)' : 'white',
+                      color: c.hasFeedback ? '#9ca3af' : '#9a3412',
+                      fontWeight: c.hasFeedback ? 400 : 700,
+                    }}>
+                    <span className="flex items-center gap-2">
+                      <span>{c.hasFeedback ? '✅' : '⚠️'}</span>
+                      <span>{c.name}</span>
+                      <span className="font-normal text-gray-400">{c.school} · {c.teacher_name || '미배정'}</span>
+                    </span>
+                    <span className="font-normal text-gray-400">첫수업 {c.firstDate}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 핵심 지표 카드 */}
         <div className="grid grid-cols-2 gap-3">
