@@ -94,16 +94,16 @@ export default function TeacherMyRecordsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [studentsRes, feedbacksRes, sessionsRes, notesData] = await Promise.all([
+    const [studentsRes, feedbacksRes, sessionsData, notesData] = await Promise.all([
       supabase.from('students').select('id, name, school, grade, teacher_name').eq('is_active', true).order('name'),
       supabase.from('feedbacks').select('*').order('created_at', { ascending: false }),
-      supabase.from('class_sessions').select('*').order('session_date', { ascending: false }).limit(5000),
-      // 1957행+ - limit()만으론 PostgREST 기본 상한(1000행)에 걸려 최근 기록이 빠질 수 있어 전부 순회
+      // limit()만으론 PostgREST 기본 상한(1000행)에 걸려 최근 기록이 빠질 수 있어 전부 순회
+      fetchAllRows<ClassSession>(() => supabase.from('class_sessions').select('*').order('session_date', { ascending: false })),
       fetchAllRows(() => supabase.from('learning_notes').select('*')),
     ])
     if (studentsRes.data) setStudents(studentsRes.data)
     if (feedbacksRes.data) setFeedbacks(feedbacksRes.data)
-    if (sessionsRes.data) setSessions(sessionsRes.data)
+    if (sessionsData) setSessions(sessionsData)
     if (notesData) setNotes(notesData)
     setLoading(false)
   }

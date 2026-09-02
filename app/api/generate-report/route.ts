@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes } from 'crypto'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
+import { fetchAllRows } from '@/lib/utils'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -55,9 +56,9 @@ export async function POST(req: NextRequest) {
     const { data: student } = await supabase.from('students').select('*').eq('id', studentId).single()
     if (!student) return NextResponse.json({ error: '학생을 찾을 수 없습니다.' }, { status: 404 })
 
-    const [{ data: sessionsData }, { data: notesData }, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: conceptsData }, { data: schedulesData }] = await Promise.all([
+    const [{ data: sessionsData }, notesData, { data: wsData }, { data: examData }, { data: tbData }, { data: pcData }, { data: conceptsData }, { data: schedulesData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', studentId).gte('session_date', range.start).lte('session_date', range.end),
-      supabase.from('learning_notes').select('*').limit(5000),
+      fetchAllRows(() => supabase.from('learning_notes').select('*')),
       supabase.from('student_worksheets').select('*').eq('student_id', studentId),
       supabase.from('exams').select('*').eq('student_id', studentId).gte('exam_date', range.start).lte('exam_date', range.end),
       supabase.from('student_textbooks').select('*').eq('student_id', studentId),

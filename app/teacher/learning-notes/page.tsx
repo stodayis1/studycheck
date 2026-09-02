@@ -858,6 +858,16 @@ export default function TeacherLearningNotesPage() {
     fetchData()
   }
 
+  // 신입생 첫 수업 알림장 양식 - 너무 세세하게 강제하지 않고, 뭘 적어야 할지 잊지 않도록
+  // 빈칸만 채우면 되게 가벼운 틀만 미리 채워준다 (원장님 공지 기준, 2026-09 도입)
+  const FIRST_CLASS_TEMPLATE = `[신입생 첫 수업]
+- 적응/수업 태도:
+- 확인한 개념·유형:
+- 이해도·성취도:
+- 강점/보완점:
+- 첫 과제: (무엇을, 어떤 목적으로 배부했는지)
+- 앞으로 진도·교재 진행 방향: `
+
   async function openFeedbackModal(student: Student) {
     setFeedbackStudent(student)
     setFeedbackContent('')
@@ -897,6 +907,11 @@ export default function TeacherLearningNotesPage() {
       setFeedbackReplies(replies || [])
     } else {
       setFeedbackReplies([])
+      // 오늘 작성된 알림장이 없는 경우에만: 이 학생의 첫 수업이면(과거 세션이 오늘 것 포함 1개 이하) 양식 미리 채우기
+      const studentSessionCount = sessions.filter((s) => s.student_id === student.id).length
+      if (studentSessionCount <= 1) {
+        setFeedbackContent(FIRST_CLASS_TEMPLATE)
+      }
     }
     setReplyContent('')
     setReplyImages([])
