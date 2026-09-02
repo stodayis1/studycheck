@@ -272,6 +272,7 @@ export default function TeacherLearningNotesPage() {
   }, [])
 
   const [refreshing, setRefreshing] = useState(false)
+  const [studentSearch, setStudentSearch] = useState('')
   // 여러 선생님이 동시에 쓰다 보니 "오늘" 입력완료 여부를 30초마다 맞추는 용도인데, 예전엔 이걸 위해
   // class_sessions/learning_notes 전체(1000행+, 계속 증가)를 30초마다 통째로 다시 불러왔다.
   // 실제로 실시간으로 맞출 필요가 있는 건 "오늘" 것뿐이라 오늘 날짜분만 가져와서, 그 부분만 최신으로 교체한다
@@ -423,6 +424,11 @@ export default function TeacherLearningNotesPage() {
 
   const otherStudents = myStudents
     .filter((s) => !schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay))
+
+  // 이름으로 학생 바로 찾기 - 오늘 시간표를 안 내려도 특정 학생의 학습일지/알림장 화면으로 바로 진입할 수 있게
+  const searchedStudents = studentSearch.trim()
+    ? myStudents.filter((s) => s.name.includes(studentSearch.trim())).slice(0, 20)
+    : []
 
   function getStudentSchedules(studentId: string) {
     return schedules.filter((s) => s.student_id === studentId)
@@ -1246,6 +1252,54 @@ export default function TeacherLearningNotesPage() {
                   </div>
                 </div>
               )}
+
+              {/* 학생 이름으로 바로 찾기 - 화면을 내려서 찾지 않아도 특정 학생 학습일지/알림장으로 바로 진입 */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50">
+                  <i className="ti ti-search" style={{ fontSize: 16, color: '#9ca3af' }} />
+                  <input
+                    type="text"
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    placeholder="학생 이름으로 검색"
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-300"
+                  />
+                  {studentSearch && (
+                    <button onClick={() => setStudentSearch('')} className="shrink-0" style={{ color: '#d1d5db' }}>
+                      <i className="ti ti-x" style={{ fontSize: 14 }} />
+                    </button>
+                  )}
+                </div>
+                {studentSearch.trim() && (
+                  <div className="mt-2 max-h-72 overflow-y-auto divide-y divide-gray-50 border-t border-gray-50">
+                    {searchedStudents.length === 0 ? (
+                      <p className="text-xs text-gray-300 text-center py-4">검색 결과가 없어요</p>
+                    ) : searchedStudents.map((student) => {
+                      const editable = isEditable(student)
+                      return (
+                        <button key={student.id}
+                          onClick={() => { if (editable) { openNoteModal(student); setStudentSearch('') } }}
+                          disabled={!editable}
+                          className={cx(
+                            'w-full flex items-center gap-2.5 px-2 py-2.5 text-left transition-all',
+                            editable ? 'hover:bg-gray-50' : 'opacity-50 cursor-default'
+                          )}>
+                          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
+                            {student.name[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-gray-800 truncate">{student.name}</p>
+                            <p className="text-[11px] text-gray-400 truncate">
+                              {student.grade}{student.teacher_name ? ` · ${student.teacher_name} 선생님` : ''}
+                            </p>
+                          </div>
+                          {!editable && <span className="text-[10px] font-bold text-gray-300 shrink-0">보기 전용</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* 오늘 수업 학생 목록 */}
               {todayStudents.length > 0 && (() => {
