@@ -45,14 +45,16 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
-      if (isAdmin()) fetchFirstClassChecks()
+      fetchFirstClassChecks()
     }
   }, [currentUser])
 
-  // 관리자 전용: 지난주~이번주 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인
+  // 지난주~이번주 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인.
+  // 관리자/직원은 전체, 주임모드는 담당 학년, 일반 강사는 본인 담당 학생만 - canViewStudent()로 통일해서 필터링.
   async function fetchFirstClassChecks() {
-    const { data: activeStudents } = await supabase.from('students')
-      .select('id, name, school, teacher_name').eq('is_active', true)
+    const { data: allStudents } = await supabase.from('students')
+      .select('id, name, school, grade, teacher_name').eq('is_active', true)
+    const activeStudents = (allStudents ?? []).filter((s: any) => canViewStudent(s))
     const allSessions = await fetchAllRows<{ id: string; student_id: string; session_date: string }>(
       () => supabase.from('class_sessions').select('id, student_id, session_date')
     )
@@ -290,8 +292,8 @@ export default function TeacherDashboardPage() {
           </div>
         )}
 
-        {/* 관리자 전용: 첫수업 알림장 작성 현황 */}
-        {isAdmin() && firstClassChecks.length > 0 && (() => {
+        {/* 첫수업 알림장 작성 현황 - 관리자/직원은 전체, 주임모드는 담당 학년, 일반 강사는 본인 담당 학생만 */}
+        {firstClassChecks.length > 0 && (() => {
           const missing = firstClassChecks.filter(c => !c.hasFeedback)
           return (
             <div className="rounded-2xl px-4 py-3" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
