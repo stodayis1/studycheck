@@ -452,6 +452,10 @@ export default function TeacherExamPrepPage() {
                                     {ie?.unit_name}
                                   </span>
                                   <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-black shrink-0"
+                                      style={{ color: pct >= 100 ? '#27500A' : pct > 0 ? '#993C1D' : '#9ca3af' }}>
+                                      {pct}%
+                                    </span>
                                     {a.score != null ? (
                                       <button onClick={() => { setScorePrep(a); setInputScore(a.score?.toString() ?? ''); setShowScoreModal(true) }}
                                         className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
@@ -474,6 +478,11 @@ export default function TeacherExamPrepPage() {
                                   </div>
                                 </div>
                                 <p className="text-[10px] text-gray-400 mb-1.5">{ie?.sub_unit_name} · {ie?.problem_count}문항</p>
+                                {/* 진도율 바 */}
+                                <div className="h-1.5 rounded-full mb-1.5" style={{ background: '#f3f4f6' }}>
+                                  <div className="h-1.5 rounded-full transition-all"
+                                    style={{ width: `${pct}%`, background: pct >= 100 ? '#639922' : '#EF9F27' }} />
+                                </div>
                                 {/* 진도 단계 버튼 (줄바꿈) */}
                                 <div className="flex flex-wrap gap-1">
                                   {Array.from({ length: totalSteps + 1 }).map((_, step) => {
