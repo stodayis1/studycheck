@@ -99,6 +99,8 @@ export default function TeacherExamPrepPage() {
   // 시험일정 모달
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [expandedStudents, setExpandedStudents] = useState<string[]>([])
+  // 배정 현황 탭 - 학년별로 나눠서 볼 수 있는 필터 ('전체' 또는 특정 학년, 예: '중1')
+  const [assignGradeGroup, setAssignGradeGroup] = useState('전체')
   const [schSchool, setSchSchool] = useState('')
   const [schGrade, setSchGrade] = useState('')
   const [schName, setSchName] = useState('1학기 중간고사')
@@ -138,6 +140,8 @@ export default function TeacherExamPrepPage() {
   const filteredStudents = myStudents.filter(s =>
     searchText === '' || s.name.includes(searchText) || s.school?.includes(searchText)
   )
+  // 시험대비(내신)는 중고등 전용 기능이라 '학생별 진도' 탭에는 초등 학생을 보이지 않게 함
+  const filteredStudentsForStatus = filteredStudents.filter(s => !s.grade.includes('초'))
 
   // inner_enough 학교 목록에서 매칭 (innerEnough state 직접 참조)
   function getSchoolName(student: Student) {
@@ -368,15 +372,46 @@ export default function TeacherExamPrepPage() {
             </div>
           )
 
+          // 학년별 탭 - 실제로 배정이 있는 학년만 뽑아서 교육과정 순서(초1~초6, 중1~3, 고1~3)로 정렬
+          const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+          const availableGrades = [...new Set(grouped.map(g => g.student.grade))]
+            .sort((a, b) => {
+              const ia = GRADE_ORDER.indexOf(a), ib = GRADE_ORDER.indexOf(b)
+              if (ia === -1 && ib === -1) return a.localeCompare(b, 'ko')
+              if (ia === -1) return 1
+              if (ib === -1) return -1
+              return ia - ib
+            })
+          const visibleGrouped = assignGradeGroup === '전체'
+            ? grouped
+            : grouped.filter(g => g.student.grade === assignGradeGroup)
+
           return (
             <div>
+              {/* 학년별 탭 */}
+              <div className="flex gap-1.5 flex-wrap mb-3">
+                {['전체', ...availableGrades].map(g => (
+                  <button key={g} onClick={() => setAssignGradeGroup(g)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+                    style={assignGradeGroup === g
+                      ? { background: '#F5C4B3', color: '#712B13', borderColor: '#F5C4B3' }
+                      : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                    {g}
+                  </button>
+                ))}
+              </div>
               {/* 범례 */}
               <p className="text-[11px] text-gray-400 mb-2 px-1">
                 <i className="ti ti-info-circle" style={{ fontSize: 11 }} /> 백분율(%)은 완성률 · 점수는 성취도를 나타냅니다
               </p>
+              {visibleGrouped.length === 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                  <p className="text-sm text-gray-500">{assignGradeGroup} 학생 중 배정된 시험대비 교재가 없어요</p>
+                </div>
+              )}
               {/* 3열 그리드 */}
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
-                {grouped.map(({ student, preps }) => {
+                {visibleGrouped.map(({ student, preps }) => {
                   const totalPct = Math.round(preps.reduce((sum, a) => sum + Math.round((a.progress_step||0)/(a.total_steps||1)*100), 0) / preps.length)
                   const doneCount = preps.filter(a => a.status === 'done').length
                   const overallStatus = doneCount === preps.length ? 'done' : preps.some(a => a.status === 'in_progress' || (a.progress_step||0) > 0) ? 'in_progress' : 'assigned'
@@ -526,7 +561,7 @@ export default function TeacherExamPrepPage() {
         {viewTab === 'status' && (
           !statusStudent ? (
             <div className="space-y-2">
-              {filteredStudents.map(s => {
+              {filteredStudentsForStatus.map(s => {
                 const myA = assignments.filter(a => a.student_id === s.id)
                 const done = myA.filter(a => a.status === 'done').length
                 const totalPct = myA.length > 0
