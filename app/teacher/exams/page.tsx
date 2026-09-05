@@ -17,8 +17,22 @@ interface Exam {
   id: string; student_id: string; exam_type: string; exam_date: string
   title: string | null; unit: string | null; unit_name: string | null
   level: number | null; score: number | null; total_score: number
-  memo: string | null; teacher_name: string | null
+  memo: string | null; teacher_name: string | null; semester?: number | null
 }
+
+// 초등 학교시험(단원평가)은 학기가 지날 때마다 "1단원"이 다른 내용을 가리키므로, 학기를 고르면
+// concepts(공식 교육과정 단원목록)에서 그 학년+학기의 N번째 대단원 이름을 찾아 자동으로 채워준다.
+function getChapterNameByOrder(list: any[], grade: string, semester: number, unitIndex: number): string | null {
+  const chapters = Array.from(new Set(
+    list.filter((c) => c.grade === grade && c.semester === semester)
+      .sort((a, b) => a.concept_order - b.concept_order)
+      .map((c) => c.chapter)
+  ))
+  const raw = chapters[unitIndex - 1]
+  if (!raw) return null
+  return raw.replace(/^[Ⅰ-Ⅹ]+\s*/, '').trim() || null
+}
+const SCHOOL_UNIT_INDEXES = [1, 2, 3, 4, 5, 6, 7, 8]
 
 const EXAM_TYPES = ['입학테스트', '진단평가', '코어테스트', '학교시험'] as const
 const GRADE_OPTIONS = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','공통수학1','공통수학2','대수','미적분1','확률과통계','기하']
@@ -106,6 +120,12 @@ export default function TeacherExamsPage() {
   const [examTotalScore, setExamTotalScore] = useState('100')
   const [examMemo, setExamMemo] = useState('')
   const [saving, setSaving] = useState(false)
+  // 초등 학교시험(단원평가) 구조화 입력용
+  const defaultSemester: 1 | 2 = (() => { const m = new Date().getMonth(); return m >= 2 && m <= 7 ? 1 : 2 })()
+  const [examSemester, setExamSemester] = useState<1 | 2>(defaultSemester)
+  const [examUnitIndex, setExamUnitIndex] = useState(1)
+  // 학교시험 탭 - 학생 카드에서 "단원별 점수 한눈에" 그리드에 쓸 학기
+  const [gridSemester, setGridSemester] = useState<1 | 2>(defaultSemester)
 
   // 개별 평가 수정/삭제 (등록된 값 실수로 잘못 올렸을 때 고치는 용도)
   const [editingExam, setEditingExam] = useState<Exam | null>(null)
@@ -247,6 +267,8 @@ export default function TeacherExamsPage() {
     setUnitEntries({})
     setActiveSubTabs([])
     setRangeGradeOverride('')
+    setExamSemester(defaultSemester)
+    setExamUnitIndex(1)
     // 초기 탭: 오버라이드 없이 기본 학년 기준으로 계산
     const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
     const tbGrade = myTBs[0]?.grade ?? ''
@@ -356,8 +378,14 @@ export default function TeacherExamsPage() {
     // (대단원·중단원 선택 UI는 입학테스트/진단평가/코어테스트에서만 쓰이는데,
     //  activeUnitTabs가 모달을 열 때 학생의 첫 대단원으로 미리 채워져 있어서
     //  학교시험에서도 그 값이 그대로 저장되며 직접 입력한 단원명을 덮어쓰던 버그였음)
+    const isElemUnitExam = tab === '학교시험' && examTitle === '단원평가' && (modalStudent.grade ?? '').includes('초')
+
     let rangeUnits: string | null
-    if (tab === '학교시험') {
+    let rangeUnit: string | null = examUnit || null
+    if (isElemUnitExam) {
+      rangeUnit = `${examUnitIndex}단원`
+      rangeUnits = getChapterNameByOrder(concepts, modalStudent.grade, examSemester, examUnitIndex)
+    } else if (tab === '학교시험') {
       rangeUnits = examUnitName || null
     } else {
       // 선택한 범위 키 계산 (초등=대단원 / 중고등=중단원, 없으면 대단원)
@@ -390,13 +418,14 @@ export default function TeacherExamsPage() {
         exam_type: tab,
         exam_date: examDate,
         title: examTitle || null,
-        unit: examUnit || null,
+        unit: rangeUnit,
         unit_name: rangeUnits,
         level: examLevel,
         score: parseFloat(examScore),
         total_score: parseFloat(examTotalScore) || 100,
         memo: examMemo || null,
         teacher_name: currentUser?.name ?? null,
+        semester: isElemUnitExam ? examSemester : null,
       })
     }
     setSaving(false)
@@ -575,6 +604,52 @@ export default function TeacherExamsPage() {
                   {/* 펼쳐진 평가 상세 */}
                   {isExpanded && (
                     <div className="px-4 pb-4" style={{ borderTop: '1px solid #f3f4f6' }}>
+                      {/* 초등 학교시험: 단원평가 점수를 단원별로 한눈에 보기 */}
+                      {tab === '학교시험' && student.grade.includes('초') && (() => {
+                        const unitRecords = exams.filter((e) =>
+                          e.student_id === student.id && e.exam_type === '학교시험' &&
+                          e.title === '단원평가' && e.semester === gridSemester)
+                        const byUnit: Record<number, Exam> = {}
+                        unitRecords.forEach((r) => {
+                          const idx = parseInt((r.unit ?? '').replace('단원', ''))
+                          if (!idx) return
+                          if (!byUnit[idx] || r.exam_date >= byUnit[idx].exam_date) byUnit[idx] = r
+                        })
+                        return (
+                          <div className="mt-3 mb-4 rounded-xl p-3" style={{ background: '#f9fafb', border: '1px solid #f3f4f6' }}>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-[10px] font-semibold text-gray-400">단원평가 단원별 점수</p>
+                              <div className="flex gap-1">
+                                {[1, 2].map((s) => (
+                                  <button key={s} onClick={() => setGridSemester(s as 1 | 2)}
+                                    className="px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-all"
+                                    style={gridSemester === s
+                                      ? { background: '#3b82f6', color: 'white', borderColor: '#3b82f6' }
+                                      : { background: 'white', color: '#9ca3af', borderColor: '#e5e7eb' }}>
+                                    {s}학기
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {SCHOOL_UNIT_INDEXES.map((idx) => {
+                                const rec = byUnit[idx]
+                                return (
+                                  <div key={idx} className="rounded-lg py-2 text-center"
+                                    style={{ background: rec?.score != null ? scoreBg(rec.score, rec.total_score) : 'white', border: '1px solid #f0f0f0' }}
+                                    title={rec?.unit_name ?? ''}>
+                                    <p className="text-[9px] text-gray-400">{idx}단원</p>
+                                    <p className="text-xs font-bold"
+                                      style={{ color: rec?.score != null ? scoreColor(rec.score, rec.total_score) : '#d1d5db' }}>
+                                      {rec?.score != null ? rec.score : '-'}
+                                    </p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
                       {sExams.length === 0 ? (
                         <p className="text-xs text-gray-400 py-4 text-center">아직 등록된 {tab}가 없어요</p>
                       ) : (
@@ -988,9 +1063,44 @@ export default function TeacherExamsPage() {
               )
             })()}
 
-            {/* 학교시험: 단원명 직접 입력 + 전체 점수 */}
-            {tab === '학교시험' && (
+            {/* 학교시험: 초등 단원평가는 학기+단원을 골라 concepts에서 단원명을 자동으로 채움,
+                그 외(중간/기말고사, 중고등)는 단원명 직접 입력 */}
+            {tab === '학교시험' && (() => {
+              const isElemUnitExamModal = examTitle === '단원평가' && (modalStudent?.grade ?? '').includes('초')
+              return (
               <>
+                {isElemUnitExamModal ? (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2">학기 · 단원</label>
+                    <div className="flex gap-2 mb-2">
+                      {[1, 2].map((s) => (
+                        <button key={s} type="button" onClick={() => setExamSemester(s as 1 | 2)}
+                          className="flex-1 py-2 rounded-xl text-xs font-semibold border transition-all"
+                          style={examSemester === s
+                            ? { background: '#3b82f6', color: 'white', borderColor: '#3b82f6' }
+                            : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                          {s}학기
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1 flex-wrap">
+                      {SCHOOL_UNIT_INDEXES.map((idx) => (
+                        <button key={idx} type="button" onClick={() => setExamUnitIndex(idx)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+                          style={examUnitIndex === idx
+                            ? { background: '#3b82f6', color: 'white', borderColor: '#3b82f6' }
+                            : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                          {idx}단원
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 rounded-xl px-3 py-2" style={{ background: cfg.bg }}>
+                      <p className="text-xs font-semibold" style={{ color: cfg.color }}>
+                        {getChapterNameByOrder(concepts, modalStudent?.grade ?? '', examSemester, examUnitIndex) || '단원명을 찾을 수 없어요 (교육과정 데이터 확인 필요)'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">단원 / 범위 <span className="text-gray-400 font-normal">(선택)</span></label>
                   <div className="flex gap-2">
@@ -1000,6 +1110,7 @@ export default function TeacherExamsPage() {
                       placeholder="단원명" className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
                   </div>
                 </div>
+                )}
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">점수 <span className="text-red-400">*</span></label>
                   <div className="flex gap-2 items-center">
@@ -1018,7 +1129,8 @@ export default function TeacherExamsPage() {
                   )}
                 </div>
               </>
-            )}
+              )
+            })()}
 
             {/* 메모 */}
             <div>

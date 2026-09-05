@@ -88,6 +88,9 @@ const TEXTBOOK_LIST: Record<string, string[]> = {
   '연산서': ['빅데이터 연산', '최상위 연산', '원리셈', '기탄수학', '쎈개념연산'],
 }
 
+// 레벨학습지가 며칠째 배정/기록이 없으면 '정체'로 볼지 - 담당 강사가 자율적으로 기록하는 구조라
+// 관리자/강사가 한눈에 놓친 학생을 찾을 수 있도록 '단원 현황' 목록에서 이 기준으로 정렬·경고 표시한다.
+const WORKSHEET_STALE_DAYS = 7
 const WORKSHEET_LEVELS = [1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0,5.5,6.0]
 const WORKSHEET_GRADE_LEVELS = ['초1','초2','초3','초4','초5','초6']
 const WORKSHEET_UNITS = ['1단원','2단원','3단원','4단원','5단원','6단원','7단원','8단원']
@@ -1212,18 +1215,44 @@ export default function TeacherAssignmentsPage() {
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin inline-block" />
             </div>
-          ) : !unitStatusStudent ? (
-            <div className="space-y-2">
-              <p className="text-xs text-gray-400 px-1">학습지 단원 현황을 볼 학생을 선택하세요</p>
-              {filteredStudents.map((student) => {
-                const passedCount = worksheetsFull.filter((w) => w.student_id === student.id && w.status === 'passed').length
-                const totalUnits = [...new Set(worksheetsFull.filter((w) => w.student_id === student.id).map((w) => w.unit))].length
-                return (
+          ) : !unitStatusStudent ? (() => {
+            const now = Date.now()
+            const rows = filteredStudents.map((student) => {
+              const sWs = worksheetsFull.filter((w) => w.student_id === student.id)
+              const passedCount = sWs.filter((w) => w.status === 'passed').length
+              const totalUnits = [...new Set(sWs.map((w) => w.unit))].length
+              const lastAt = sWs.reduce((max, w) => {
+                const t = new Date(w.updated_at || w.assigned_at).getTime()
+                return Number.isFinite(t) && t > max ? t : max
+              }, 0)
+              const daysSince = lastAt ? Math.floor((now - lastAt) / (1000 * 60 * 60 * 24)) : null
+              const isStale = daysSince === null || daysSince >= WORKSHEET_STALE_DAYS
+              return { student, passedCount, totalUnits, daysSince, isStale }
+            }).sort((a, b) => {
+              if (a.isStale !== b.isStale) return a.isStale ? -1 : 1
+              if (a.daysSince === null && b.daysSince === null) return a.student.name.localeCompare(b.student.name)
+              if (a.daysSince === null) return -1
+              if (b.daysSince === null) return 1
+              return b.daysSince - a.daysSince
+            })
+            const staleCount = rows.filter((r) => r.isStale).length
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-xs text-gray-400">학습지 단원 현황을 볼 학생을 선택하세요</p>
+                  {staleCount > 0 && (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: '#fee2e2', color: '#991b1b' }}>
+                      {staleCount}명 {WORKSHEET_STALE_DAYS}일 이상 미배정
+                    </span>
+                  )}
+                </div>
+                {rows.map(({ student, passedCount, totalUnits, daysSince, isStale }) => (
                   <button key={student.id} onClick={() => setUnitStatusStudent(student)}
-                    className="w-full bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 transition-all text-left"
-                    style={{ borderColor: '#f0f0f0' }}
+                    className="w-full bg-white rounded-2xl border p-4 flex items-center gap-3 transition-all text-left"
+                    style={{ borderColor: isStale ? '#F0997B' : '#f0f0f0' }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = '#F5C4B3')}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = '#f0f0f0')}>
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = isStale ? '#F0997B' : '#f0f0f0')}>
                     <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                       style={{ background: '#FAECE7', color: '#993C1D' }}>
                       {student.name[0]}
@@ -1233,15 +1262,21 @@ export default function TeacherAssignmentsPage() {
                       <p className="text-xs text-gray-400">{student.grade} · {student.teacher_name}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xs font-bold text-gray-800">{totalUnits}단원 진행</p>
-                      <p className="text-[10px] text-gray-400">{passedCount}개 완료</p>
+                      <p className="text-xs font-bold text-gray-800">{totalUnits}단원 진행 · {passedCount}개 완료</p>
+                      {daysSince === null ? (
+                        <p className="text-[10px] font-bold" style={{ color: '#991b1b' }}>기록 없음</p>
+                      ) : isStale ? (
+                        <p className="text-[10px] font-bold" style={{ color: '#991b1b' }}>{daysSince}일째 미배정</p>
+                      ) : (
+                        <p className="text-[10px] text-gray-400">{daysSince === 0 ? '오늘 배정' : `${daysSince}일 전 배정`}</p>
+                      )}
                     </div>
                     <i className="ti ti-chevron-right" style={{ fontSize: 16, color: '#d1d5db' }} />
                   </button>
-                )
-              })}
-            </div>
-          ) : (() => {
+                ))}
+              </div>
+            )
+          })() : (() => {
             const studentWS = worksheetsFull.filter((w) => w.student_id === unitStatusStudent.id)
             const gradeGroups2 = [...new Set(studentWS.map((w) => w.grade_level))].sort()
             const SUPERSCRIPT: Record<number, string> = { 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' }
