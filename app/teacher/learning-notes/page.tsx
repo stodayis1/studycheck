@@ -185,7 +185,10 @@ export default function TeacherLearningNotesPage() {
   const [hwTBSubChapters, setHwTBSubChapters] = useState<Record<string, string>>({})
   const [hwTBPages, setHwTBPages] = useState<Record<string, string>>({})
   // 오토스텝: 개념 → 유형편 페이지 매핑 (concept_id 기준)
-  const [autostepPageMap, setAutostepPageMap] = useState<Record<string, { page_start: number; page_end: number; workbook_name: string }>>({})
+  const [autostepPageMap, setAutostepPageMap] = useState<Record<string, {
+    page_start: number; page_end: number; workbook_name: string
+    concept_book_page_start: number | null; concept_book_page_end: number | null; concept_book_workbook_name: string | null
+  }>>({})
   // 오토스텝: 유형서를 별도 배정 안 해도 뜨는 "가상 카드" 선택 상태 (workbook_name 기준)
   const [hwAutostepVirtual, setHwAutostepVirtual] = useState<Record<string, { included: boolean; chapter: string; sub_chapter: string; page: string }>>({})
   // 오늘은 새로 배부할 과제가 없는 날(추가수업/오답풀이 위주 등) - 켜면 과제 선택 UI를 끄고
@@ -333,7 +336,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('video_watch_logs').select('*'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
-      supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name'),
+      supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name, concept_book_page_start, concept_book_page_end, concept_book_workbook_name'),
     ])
     if (sData) setStudents(sData)
     // periods는 DB에서 numeric 타입이라 문자열("2.5")로 내려올 수 있어 숫자로 변환 (연산 시 문자열 이어붙기 방지)
@@ -347,8 +350,15 @@ export default function TeacherLearningNotesPage() {
     if (vwData) setVideoWatchLogs(vwData)
     if (epData) setExamPreps(epData)
     if (apmData) {
-      const m: Record<string, { page_start: number; page_end: number; workbook_name: string }> = {}
-      for (const r of apmData) m[r.concept_id] = { page_start: r.page_start, page_end: r.page_end, workbook_name: r.workbook_name }
+      const m: Record<string, {
+        page_start: number; page_end: number; workbook_name: string
+        concept_book_page_start: number | null; concept_book_page_end: number | null; concept_book_workbook_name: string | null
+      }> = {}
+      for (const r of apmData) m[r.concept_id] = {
+        page_start: r.page_start, page_end: r.page_end, workbook_name: r.workbook_name,
+        concept_book_page_start: r.concept_book_page_start, concept_book_page_end: r.concept_book_page_end,
+        concept_book_workbook_name: r.concept_book_workbook_name,
+      }
       setAutostepPageMap(m)
     }
     setLoading(false)
@@ -727,6 +737,8 @@ export default function TeacherLearningNotesPage() {
     const touchedConceptIds = getTouchedConceptIdsFor(conceptTBs.map((t) => t.id))
     if (touchedConceptIds.size === 0) return []
 
+    // 개념서는 진도를 체크한 그 교재가 곧 배정된 교재라 "미배정" 가상 카드가 필요 없다.
+    // (유형서처럼 별도 책을 안 배정한 경우를 위한 카드이므로, 여기선 유형서 매핑만 다룬다.)
     const byWorkbook: Record<string, { concept_name: string; chapter: string; sub_chapter: string; page_start: number; page_end: number }[]> = {}
     for (const cid of touchedConceptIds) {
       const m = autostepPageMap[cid]
@@ -748,15 +760,21 @@ export default function TeacherLearningNotesPage() {
     })
   }
 
-  // 오토스텝: 지금 "과제배부" 탭에 보이는 이 유형서 교재(tb)에 대해,
-  // 같은 학생의 개념서에서 오늘(수업내용 탭에서) 체크한 개념 중 이 유형서로 매핑된 게 있으면
-  // "P.21~24, P.32" 식으로 제안 텍스트를 만들어 돌려준다. 없으면 null.
-  function getAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string }) {
+  // 오토스텝: 지금 "과제배부" 탭에 보이는 이 교재(tb)에 대해,
+  // 같은 학생이 오늘(수업내용 탭에서, 또는 이미 저장된 progress_checks에서) 체크한 개념 중
+  // 이 교재로 매핑된 게 있으면 "P.21~24, P.32" 식으로 제안 텍스트를 만들어 돌려준다. 없으면 null.
+  // - tb가 유형서면: 그 유형서에 매핑된 유형편 페이지
+  // - tb가 개념서면: 그 개념서 자신에서 오늘 체크한 부분의 페이지(=진도 나간 부분 그대로)
+  function getAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; textbook_type: string }) {
     if (!noteStudent || tb.grade == null || tb.semester == null) return null
-    const conceptTBIds = studentTextbooks
-      .filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && t.grade === tb.grade && t.semester === tb.semester)
-      .map((t) => t.id)
-    const touchedConceptIds = getTouchedConceptIdsFor(conceptTBIds)
+    const isConceptBook = tb.textbook_type === '개념서'
+    // 개념서 카드는 그 교재 자신이 체크 대상이고, 유형서 카드는 같은 학년/학기 개념서에서 체크한 걸 본다
+    const sourceTBIds = isConceptBook
+      ? [tb.id]
+      : studentTextbooks
+          .filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && t.grade === tb.grade && t.semester === tb.semester)
+          .map((t) => t.id)
+    const touchedConceptIds = getTouchedConceptIdsFor(sourceTBIds)
     if (touchedConceptIds.size === 0) return null
 
     const items: { concept_name: string; chapter: string; sub_chapter: string; page_start: number; page_end: number }[] = []
@@ -764,8 +782,13 @@ export default function TeacherLearningNotesPage() {
       const m = autostepPageMap[cid]
       const c = concepts.find((cc) => cc.id === cid)
       if (!m || !c) continue
-      if (m.workbook_name !== tb.textbook_name) continue
-      items.push({ concept_name: c.concept_name, chapter: c.chapter, sub_chapter: c.sub_chapter, page_start: m.page_start, page_end: m.page_end })
+      if (isConceptBook) {
+        if (m.concept_book_page_start == null || m.concept_book_page_end == null) continue
+        items.push({ concept_name: c.concept_name, chapter: c.chapter, sub_chapter: c.sub_chapter, page_start: m.concept_book_page_start, page_end: m.concept_book_page_end })
+      } else {
+        if (m.workbook_name !== tb.textbook_name) continue
+        items.push({ concept_name: c.concept_name, chapter: c.chapter, sub_chapter: c.sub_chapter, page_start: m.page_start, page_end: m.page_end })
+      }
     }
     if (items.length === 0) return null
 
