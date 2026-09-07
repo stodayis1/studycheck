@@ -704,16 +704,27 @@ export default function TeacherLearningNotesPage() {
     }
   }
 
+  // 오토스텝: "체크한 개념"을 모을 때 noteProgressByTB(이번 화면 세션에서 방금 누른 것)만 보면,
+  // 저장 후 모달을 닫았다 열거나 새로고침하면 이 값이 비어서 제안이 사라져버린다.
+  // 그래서 이미 저장돼 DB에 있는 progress_checks(check_count>=1)도 항상 같이 합쳐서 본다.
+  function getTouchedConceptIdsFor(tbIds: string[]) {
+    const ids = new Set<string>()
+    for (const tbId of tbIds) {
+      const sel = noteProgressByTB[tbId]
+      if (sel) sel.conceptIds.forEach((cid) => ids.add(cid))
+    }
+    for (const pc of progressChecks) {
+      if (tbIds.includes(pc.student_textbook_id) && (pc.check_count ?? 0) >= 1) ids.add(pc.concept_id)
+    }
+    return ids
+  }
+
   // 오토스텝: 유형서를 별도로 배정하지 않은 학생도 쓸 수 있도록, 오늘 체크한 개념들을
   // (교재 배정 여부와 상관없이) workbook_name별로 묶어서 제안 목록을 만든다.
   function getAllAutostepSuggestions() {
     if (!noteStudent) return []
     const conceptTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서')
-    const touchedConceptIds = new Set<string>()
-    for (const tb of conceptTBs) {
-      const sel = noteProgressByTB[tb.id]
-      if (sel) sel.conceptIds.forEach((cid) => touchedConceptIds.add(cid))
-    }
+    const touchedConceptIds = getTouchedConceptIdsFor(conceptTBs.map((t) => t.id))
     if (touchedConceptIds.size === 0) return []
 
     const byWorkbook: Record<string, { concept_name: string; chapter: string; sub_chapter: string; page_start: number; page_end: number }[]> = {}
@@ -745,10 +756,7 @@ export default function TeacherLearningNotesPage() {
     const conceptTBIds = studentTextbooks
       .filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && t.grade === tb.grade && t.semester === tb.semester)
       .map((t) => t.id)
-    const touchedConceptIds = new Set<string>()
-    for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
-      if (conceptTBIds.includes(tbId)) sel.conceptIds.forEach((cid) => touchedConceptIds.add(cid))
-    }
+    const touchedConceptIds = getTouchedConceptIdsFor(conceptTBIds)
     if (touchedConceptIds.size === 0) return null
 
     const items: { concept_name: string; chapter: string; sub_chapter: string; page_start: number; page_end: number }[] = []
