@@ -83,8 +83,8 @@ const AUTOSTEP_TARGET_STUDENT_ID = '3e50baff-4003-49be-b915-98e297bda726' // 윤
 const AUTOSTEP_TEXTBOOK_NAMES = ['개념유형 라이트', '개념+유형라이트']
 const AUTOSTEP_TOTAL_ITEMS: Record<string, Record<number, number>> = {
   '중1': { 1: 90, 2: 110 },
-  '중2': { 1: 98 }, // 2학기는 아직 분석 전
-  '중3': { 1: 106 },
+  '중2': { 1: 98, 2: 111 },
+  '중3': { 1: 106 }, // 2학기는 아직 분석 전
 }
 // 1스텝=하루2개, 2스텝=하루3개, 3스텝=하루3개(+단원마무리 포함되는 경우 있음, 완료일 계산은 근사치)
 const AUTOSTEP_PACE: Record<number, number> = { 1: 2, 2: 3, 3: 3 }
