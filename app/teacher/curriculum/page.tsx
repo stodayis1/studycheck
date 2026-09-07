@@ -183,6 +183,21 @@ export default function TeacherCurriculumPage() {
     setLoading(false)
   }
 
+  // 교재 배정/완료/중단/삭제 등 student_textbooks만 바뀌는 동작 뒤에 쓰는 가벼운 새로고침.
+  // 예전엔 이런 동작마다 fetchData()를 통째로 다시 불러서, 2만 행 넘는 progress_checks까지 매번 다시
+  // 받아오느라 "교재배정 하나 하는데도 로딩이 오래 걸린다"는 체감 지연이 있었음.
+  // student_textbooks는 700여 행이라 훨씬 가볍다 - 이걸로 필요한 곳만 갈아 끼운다.
+  async function refetchTextbooks() {
+    const { data } = await supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000)
+    if (data) setTextbooks(data)
+  }
+
+  // 교재 카탈로그(교재 목록) 추가/수정/삭제 뒤에 쓰는 가벼운 새로고침
+  async function refetchCatalog() {
+    const { data } = await supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order')
+    if (data) setCatalog(data)
+  }
+
   // 진도 체크를 누르면 회차가 +1씩 계속 올라감 (회독수는 상한이 없음 - 3회독이 끝이 아니라
   // 4회독, 5회독도 나올 수 있어서 예전처럼 3에서 0으로 강제로 되돌리지 않음)
   // 같은 개념에 교재별로 나뉜 기록이 여러 개 있을 수 있어서(과정관리 완료처리/진도일괄입력에서 생긴 것 포함),
@@ -343,8 +358,8 @@ export default function TeacherCurriculumPage() {
     }
     setShowTBModal(false)
     setTbStudent(null); setTbStudentIds([]); setTbMultiMode(false); setTbName(''); setTbMemo(''); setTbAutostepLevel(null)
+    await refetchTextbooks()
     setTbAssigning(false)
-    fetchData()
   }
 
   // 교재를 완료 처리하면 그 학기 전체 개념을 해당 교재의 회차(순번 기반, lib/progressLevel 참고)로 일괄 반영
@@ -367,10 +382,16 @@ export default function TeacherCurriculumPage() {
         .update({ check_count: targetLevel, updated_at: new Date().toISOString() })
         .eq('id', existingByConcept.get(c.id)!.id)
     ))
+    // 로컬 상태도 서버와 같은 내용으로 즉시 반영 (이후 progress_checks 전체를 다시 안 불러와도 되게)
+    if (toUpdate.length > 0) {
+      const updatedIds = new Set(toUpdate.map((c) => existingByConcept.get(c.id)!.id))
+      setProgressChecks((prev) => prev.map((p) => updatedIds.has(p.id) ? { ...p, check_count: targetLevel } : p))
+    }
     if (toInsert.length > 0) {
-      await supabase.from('progress_checks').insert(
+      const { data: insertedRows } = await supabase.from('progress_checks').insert(
         toInsert.map((c) => ({ student_id: studentId, concept_id: c.id, check_count: targetLevel }))
-      )
+      ).select('id,student_id,concept_id,check_count,student_textbook_id')
+      if (insertedRows) setProgressChecks((prev) => [...prev, ...insertedRows])
     }
   }
 
@@ -378,6 +399,7 @@ export default function TeacherCurriculumPage() {
   async function handleCompleteTB(id: string) {
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'completed' } : t))
     const tb = textbooks.find((t) => t.id === id)
     if (tb && tb.grade && tb.semester && tb.textbook_type !== '연산서') {
       // 같은 학생의 같은 학년+학기 안에 있는 교재들(연산서 제외)을 배정 순서로 늘어놓고,
@@ -388,20 +410,19 @@ export default function TeacherCurriculumPage() {
       const targetLevel = computeTextbookLevels(siblings).get(tb.id)
       if (targetLevel) await markSemesterMastered(tb.student_id, tb.grade, tb.semester, targetLevel)
     }
-    fetchData()
   }
 
   // 교재 중단
   async function handlePauseTB(id: string) {
     if (!confirm('이 교재를 중단 처리할까요? 나중에 다시 진행중으로 되돌릴 수 있어요.')) return
     await supabase.from('student_textbooks').update({ status: 'paused' }).eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'paused' } : t))
   }
 
   // 교재 재개 (중단 → 진행중)
   async function handleResumeTB(id: string) {
     await supabase.from('student_textbooks').update({ status: 'assigned' }).eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'assigned' } : t))
   }
 
   // 교재 완전 삭제 - 원장님(관리자)만 가능. 강사는 삭제 자체가 안 되고 삭제요청만 할 수 있음
@@ -409,23 +430,25 @@ export default function TeacherCurriculumPage() {
     if (!isAdmin()) { alert('교재 삭제는 원장님만 하실 수 있어요. 잘못 입력했다면 "삭제요청"을 눌러주세요.'); return }
     if (!confirm('이 교재 기록을 완전히 삭제할까요? 되돌릴 수 없어요.')) return
     await supabase.from('student_textbooks').delete().eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.filter((t) => t.id !== id))
   }
 
   // 강사가 잘못 입력한 교재를 발견했을 때 - 직접 지우지 못하고 원장님께 삭제요청만 남김
   async function handleRequestDeleteTB(id: string) {
     if (!confirm('이 교재 삭제를 원장님께 요청할까요?')) return
+    const requestedBy = currentUser?.name ?? '강사'
+    const requestedAt = new Date().toISOString()
     await supabase.from('student_textbooks')
-      .update({ delete_requested_by: currentUser?.name ?? '강사', delete_requested_at: new Date().toISOString() })
+      .update({ delete_requested_by: requestedBy, delete_requested_at: requestedAt })
       .eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: requestedBy, delete_requested_at: requestedAt } : t))
   }
 
   // 삭제요청 취소 (원장님이 확인해보니 삭제할 필요는 없었던 경우)
   async function handleCancelDeleteRequest(id: string) {
     if (!isAdmin()) return
     await supabase.from('student_textbooks').update({ delete_requested_by: null, delete_requested_at: null }).eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
   }
 
   // 교재 카탈로그 추가 (관리자)
@@ -440,14 +463,14 @@ export default function TeacherCurriculumPage() {
     })
     setNewTBName('')
     setAddingTB(false)
-    fetchData()
+    await refetchCatalog()
   }
 
   // 교재 카탈로그 삭제
   async function handleDeleteCatalog(id: string, name: string) {
     if (!confirm(`"${name}" 교재를 목록에서 삭제할까요?`)) return
     await supabase.from('textbook_catalog').update({ is_active: false }).eq('id', id)
-    fetchData()
+    setCatalog((prev) => prev.filter((c) => c.id !== id))
   }
 
   // 교재 카탈로그 이름 수정 - 이미 배정된 학생들의 기록(student_textbooks.textbook_name)은 과거 스냅샷이라
@@ -459,19 +482,19 @@ export default function TeacherCurriculumPage() {
   async function handleUpdateCatalog() {
     if (!editingCatalogId || !editingCatalogName.trim()) return
     await supabase.from('textbook_catalog').update({ textbook_name: editingCatalogName.trim() }).eq('id', editingCatalogId)
+    setCatalog((prev) => prev.map((c) => c.id === editingCatalogId ? { ...c, textbook_name: editingCatalogName.trim() } : c))
     setEditingCatalogId(null)
     setEditingCatalogName('')
-    fetchData()
   }
 
   async function handleTBChecked(id: string) {
     await supabase.from('student_textbooks').update({ status: 'checked' }).eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'checked' } : t))
   }
 
   async function handleTBSubmitted(id: string) {
     await supabase.from('student_textbooks').update({ status: 'submitted' }).eq('id', id)
-    fetchData()
+    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'submitted' } : t))
   }
 
   // 삭제 버튼 자리 - 원장님(관리자)에겐 실제 삭제 버튼을, 강사에겐 삭제요청 버튼을 보여준다.
