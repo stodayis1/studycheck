@@ -186,6 +186,8 @@ export default function TeacherLearningNotesPage() {
   const [hwTBPages, setHwTBPages] = useState<Record<string, string>>({})
   // 오토스텝: 개념 → 유형편 페이지 매핑 (concept_id 기준)
   const [autostepPageMap, setAutostepPageMap] = useState<Record<string, { page_start: number; page_end: number; workbook_name: string }>>({})
+  // 오토스텝: 유형서를 별도 배정 안 해도 뜨는 "가상 카드" 선택 상태 (workbook_name 기준)
+  const [hwAutostepVirtual, setHwAutostepVirtual] = useState<Record<string, { included: boolean; chapter: string; sub_chapter: string; page: string }>>({})
   // 오늘은 새로 배부할 과제가 없는 날(추가수업/오답풀이 위주 등) - 켜면 과제 선택 UI를 끄고
   // hw_textbook_page에 안내 문구를 저장해서, "과제란이 비어서 미완료로 보이는" 문제를 막는다
   const [noteNoHomework, setNoteNoHomework] = useState(false)
@@ -553,6 +555,7 @@ export default function TeacherLearningNotesPage() {
     setHwTBChapters({})
     setHwTBSubChapters({})
     setHwTBPages({})
+    setHwAutostepVirtual({})
     setHwSelectedWSId('')
     setHwSelectedEPIds([])
     setHwEPPages({})
@@ -701,6 +704,39 @@ export default function TeacherLearningNotesPage() {
     }
   }
 
+  // 오토스텝: 유형서를 별도로 배정하지 않은 학생도 쓸 수 있도록, 오늘 체크한 개념들을
+  // (교재 배정 여부와 상관없이) workbook_name별로 묶어서 제안 목록을 만든다.
+  function getAllAutostepSuggestions() {
+    if (!noteStudent) return []
+    const conceptTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서')
+    const touchedConceptIds = new Set<string>()
+    for (const tb of conceptTBs) {
+      const sel = noteProgressByTB[tb.id]
+      if (sel) sel.conceptIds.forEach((cid) => touchedConceptIds.add(cid))
+    }
+    if (touchedConceptIds.size === 0) return []
+
+    const byWorkbook: Record<string, { concept_name: string; chapter: string; sub_chapter: string; page_start: number; page_end: number }[]> = {}
+    for (const cid of touchedConceptIds) {
+      const m = autostepPageMap[cid]
+      const c = concepts.find((cc) => cc.id === cid)
+      if (!m || !c) continue
+      if (!byWorkbook[m.workbook_name]) byWorkbook[m.workbook_name] = []
+      byWorkbook[m.workbook_name].push({ concept_name: c.concept_name, chapter: c.chapter, sub_chapter: c.sub_chapter, page_start: m.page_start, page_end: m.page_end })
+    }
+
+    return Object.entries(byWorkbook).map(([workbook_name, items]) => {
+      items.sort((a, b) => a.page_start - b.page_start)
+      const seen = new Set<string>()
+      const ranges: string[] = []
+      for (const it of items) {
+        const label = it.page_start === it.page_end ? `P.${it.page_start}` : `P.${it.page_start}~${it.page_end}`
+        if (!seen.has(label)) { seen.add(label); ranges.push(label) }
+      }
+      return { workbook_name, pageText: ranges.join(', '), items }
+    })
+  }
+
   // 오토스텝: 지금 "과제배부" 탭에 보이는 이 유형서 교재(tb)에 대해,
   // 같은 학생의 개념서에서 오늘(수업내용 탭에서) 체크한 개념 중 이 유형서로 매핑된 게 있으면
   // "P.21~24, P.32" 식으로 제안 텍스트를 만들어 돌려준다. 없으면 null.
@@ -822,7 +858,8 @@ export default function TeacherLearningNotesPage() {
           const ep = examPreps.find((e) => e.id === id)
           return ep ? `시험대비(${ep.inner_enough?.unit_name ?? ''})` : ''
         }).filter(Boolean)
-        const all = [...tbNames, ...epNames]
+        const virtualNames = Object.entries(hwAutostepVirtual).filter(([, v]) => v.included).map(([name]) => name)
+        const all = [...tbNames, ...epNames, ...virtualNames]
         if (all.length > 0) return all.join(', ')
         return hwTextbookName || null
       })(),
@@ -842,12 +879,16 @@ export default function TeacherLearningNotesPage() {
           const page = hwEPPages[id] || ''
           return [`시험대비: ${ep.inner_enough?.unit_name ?? ''}`, page].filter(Boolean).join(' · ')
         }).filter(Boolean)
+        const virtualParts = Object.entries(hwAutostepVirtual)
+          .filter(([, v]) => v.included)
+          .map(([workbook_name, v]) => [workbook_name, v.chapter, v.sub_chapter, v.page].filter(Boolean).join(' · '))
+          .filter(Boolean)
         const memoPart = hwMemo ? `📝 ${hwMemo}` : ''
         // 이번에 교재/시험대비를 새로 고르지 않았다면(=picker를 안 건드렸다면),
         // 예전에 저장돼 있던 교재 관련 텍스트(hwTextbookPage, 메모 제외)는 지우지 않고 그대로 유지한다.
         // (안 그러면 메모만 살짝 고쳐 저장해도 예전 교재 정보가 통째로 사라짐)
-        const preservedOld = (tbParts.length === 0 && epParts.length === 0) ? hwTextbookPage : ''
-        const allParts = [preservedOld, ...tbParts, ...epParts, memoPart].filter(Boolean)
+        const preservedOld = (tbParts.length === 0 && epParts.length === 0 && virtualParts.length === 0) ? hwTextbookPage : ''
+        const allParts = [preservedOld, ...tbParts, ...epParts, ...virtualParts, memoPart].filter(Boolean)
         return allParts.length > 0 ? allParts.join(' / ') : null
       })(),
       hw_worksheet_range: noteNoHomework ? null : (() => {
@@ -2643,6 +2684,58 @@ export default function TeacherLearningNotesPage() {
                           })}
                         </div>
                       )}
+                    </div>
+                  )
+                })()}
+
+                {/* 오토스텝: 유형서를 따로 배정 안 했어도, 오늘 체크한 개념에 매핑된 유형편이 있으면
+                    독립적인 "가상 카드"로 뜬다. 이미 그 교재가 배정돼 있어서 위 목록에 카드가 있다면
+                    거긴 인라인 제안 박스가 이미 있으니 중복해서 안 띄운다. */}
+                {(() => {
+                  if (!noteStudent) return null
+                  const assignedNames = new Set(
+                    studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned').map((t) => t.textbook_name)
+                  )
+                  const suggestions = getAllAutostepSuggestions().filter((s) => !assignedNames.has(s.workbook_name))
+                  if (suggestions.length === 0) return null
+
+                  return (
+                    <div className="space-y-2">
+                      {suggestions.map((s) => {
+                        const v = hwAutostepVirtual[s.workbook_name] || { included: false, chapter: s.items[0].chapter, sub_chapter: s.items[0].sub_chapter, page: s.pageText }
+                        return (
+                          <div key={s.workbook_name} className="rounded-xl border-2 overflow-hidden transition-all"
+                            style={{ borderColor: v.included ? '#C7D2FE' : '#F3F4F6' }}>
+                            <button onClick={() => {
+                              const nowIncluded = !v.included
+                              setHwAutostepVirtual((p) => ({
+                                ...p,
+                                [s.workbook_name]: { included: nowIncluded, chapter: v.chapter, sub_chapter: v.sub_chapter, page: v.page || s.pageText },
+                              }))
+                            }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
+                              <span className={cx('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                                v.included ? 'bg-[#9FE1CB] border-[#9FE1CB]' : 'border-gray-300')}>
+                                {v.included && <span className="w-2 h-2 bg-white rounded-full" />}
+                              </span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">유형서(미배정)</span>
+                              <span className="text-xs font-semibold text-gray-700">{s.workbook_name}</span>
+                              <span className="text-[10px] ml-auto" style={{ color: '#4338CA' }}>⚡ {s.pageText}</span>
+                            </button>
+                            {v.included && (
+                              <div className="px-3 pb-3 space-y-2 bg-indigo-50/30">
+                                <p className="text-[10px] text-gray-500">
+                                  이 교재는 학생에게 별도 배정되어 있지 않아요. 오늘 체크한 개념 기준으로만 제안돼요.
+                                </p>
+                                <input type="text" value={v.page}
+                                  onChange={(e) => setHwAutostepVirtual((p) => ({ ...p, [s.workbook_name]: { ...v, page: e.target.value } }))}
+                                  placeholder="페이지/범위 (예: p.45~52)"
+                                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   )
                 })()}
