@@ -202,12 +202,26 @@ export default function TeacherAssignmentsPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [showRecentPassed, setShowRecentPassed] = useState(false)
 
+  // 오토스텝 파일럿: 소단원 완료 시 학습일지에서 자동 생성되는 유형편 숙제 알림 (지금은 윤수지 전용)
+  const [autostepAlerts, setAutostepAlerts] = useState<any[]>([])
+  async function fetchAutostepAlerts() {
+    const { data } = await supabase.from('autostep_homework_alerts').select('*')
+      .is('acknowledged_at', null).order('created_at', { ascending: false })
+    if (data) setAutostepAlerts(data)
+  }
+  async function handleAckAutostepAlert(id: string) {
+    await supabase.from('autostep_homework_alerts')
+      .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: currentUser?.name ?? null })
+      .eq('id', id)
+    setAutostepAlerts((prev) => prev.filter((a) => a.id !== id))
+  }
+
   function flashToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 4000)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData(); fetchAutostepAlerts() }, [])
 
   // 학습지관리 화면(학습지 배정/제출현황 탭)에는 '진행중인' 학습지만 필요한데, 예전엔 완료(passed)된
   // 학습지까지(전체의 80% 이상, 계속 증가) 매번 통째로 불러왔다. 완료 처리 안 지 얼마 안 된 것만
@@ -957,6 +971,29 @@ export default function TeacherAssignmentsPage() {
         {/* ── 병행교재 관리 탭 ── */}
         {tab === 'textbook' && (
           <div className="space-y-3">
+            {autostepAlerts.map((a) => {
+              const student = students.find((s) => s.id === a.student_id)
+              return (
+                <div key={a.id} className="rounded-2xl px-4 py-3 flex items-center gap-3"
+                  style={{ background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                  <span style={{ fontSize: 18 }}>⚡</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold" style={{ color: '#3730A3' }}>
+                      {student?.name ?? '학생'} · 오토스텝 자동 숙제 알림
+                    </p>
+                    <p className="text-xs" style={{ color: '#4338CA' }}>
+                      "{a.chapter} {a.sub_chapter}" 소단원 완료 → {a.workbook_name} {a.page_range}
+                      {a.includes_danwon_marumi ? ' (단원마무리 포함)' : ''} 숙제로 내주세요
+                    </p>
+                  </div>
+                  <button onClick={() => handleAckAutostepAlert(a.id)}
+                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    style={{ background: '#4338CA', color: 'white' }}>
+                    확인
+                  </button>
+                </div>
+              )
+            })}
             {pendingTB.length > 0 && (
               <div className="rounded-2xl px-4 py-3 flex items-center gap-3"
                 style={{ background: '#FFF5F2', border: '1px solid #F5C4B3' }}>
