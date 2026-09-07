@@ -14,6 +14,9 @@ interface Student {
   teacher_name: string
   wise_step: string
   parent_phone?: string | null
+  on_leave?: boolean
+  leave_start_date?: string | null
+  leave_end_date?: string | null
 }
 
 // 강사/직원 이름 → 관(코어관/프라임관) 매핑. 학생별로 관을 따로 입력하지 않고,
@@ -181,6 +184,8 @@ export default function TeacherLearningNotesPage() {
   const [hwTBChapters, setHwTBChapters] = useState<Record<string, string>>({})
   const [hwTBSubChapters, setHwTBSubChapters] = useState<Record<string, string>>({})
   const [hwTBPages, setHwTBPages] = useState<Record<string, string>>({})
+  // 오토스텝: 개념 → 유형편 페이지 매핑 (concept_id 기준)
+  const [autostepPageMap, setAutostepPageMap] = useState<Record<string, { page_start: number; page_end: number; workbook_name: string }>>({})
   // 오늘은 새로 배부할 과제가 없는 날(추가수업/오답풀이 위주 등) - 켜면 과제 선택 UI를 끄고
   // hw_textbook_page에 안내 문구를 저장해서, "과제란이 비어서 미완료로 보이는" 문제를 막는다
   const [noteNoHomework, setNoteNoHomework] = useState(false)
@@ -291,6 +296,19 @@ export default function TeacherLearningNotesPage() {
       : { data: [] as any[] }
     setSessions((prev) => [...prev.filter((s) => s.session_date !== todayStr), ...(ssToday ?? [])])
     setNotes((prev) => [...prev.filter((n) => !todayIds.includes(n.session_id)), ...(nToday ?? [])])
+    // 페이지를 켜놓은 채로 하루를 보내는 경우가 많아서, 그 사이 OPS에서 휴원 처리된 학생이
+    // 화면엔 계속 남아있다가 실수로 결석 체크되는 사고가 있었다 (2026-09-07, 김서율 학생).
+    // is_active/on_leave만 가볍게 다시 불러와서 30초 안에 로스터에 반영되게 한다.
+    const { data: statusData } = await supabase.from('students').select('id, is_active, on_leave, leave_start_date, leave_end_date')
+    if (statusData) {
+      const statusMap = new Map(statusData.map((s: any) => [s.id, s]))
+      setStudents((prev) => prev
+        .filter((s) => statusMap.get(s.id)?.is_active !== false)
+        .map((s) => {
+          const st = statusMap.get(s.id)
+          return st ? { ...s, on_leave: st.on_leave, leave_start_date: st.leave_start_date, leave_end_date: st.leave_end_date } : s
+        }))
+    }
     setRefreshing(false)
   }
 
@@ -300,7 +318,7 @@ export default function TeacherLearningNotesPage() {
     // 이 화면 어디에도 전체 목록으로 쓰이는 곳이 없다 - 전부 openNoteModal()에서 학생을 선택하는
     // 순간 그 학생 것만 새로 불러오게 이미 되어 있어서(진도/과제배부 탭용), 페이지를 열 때마다
     // 전체를 통째로 받아오는 건 그냥 낭비였다 - 초기 로딩에서 제거.
-    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, { data: epData }, { data: apmData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       // schedules/class_sessions/learning_notes는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
       // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
@@ -313,6 +331,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('video_watch_logs').select('*'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
+      supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name'),
     ])
     if (sData) setStudents(sData)
     // periods는 DB에서 numeric 타입이라 문자열("2.5")로 내려올 수 있어 숫자로 변환 (연산 시 문자열 이어붙기 방지)
@@ -325,6 +344,11 @@ export default function TeacherLearningNotesPage() {
     if (catLNData) setLNCatalog(catLNData)
     if (vwData) setVideoWatchLogs(vwData)
     if (epData) setExamPreps(epData)
+    if (apmData) {
+      const m: Record<string, { page_start: number; page_end: number; workbook_name: string }> = {}
+      for (const r of apmData) m[r.concept_id] = { page_start: r.page_start, page_end: r.page_end, workbook_name: r.workbook_name }
+      setAutostepPageMap(m)
+    }
     setLoading(false)
   }
 
@@ -677,8 +701,46 @@ export default function TeacherLearningNotesPage() {
     }
   }
 
+  // 오토스텝: 지금 "과제배부" 탭에 보이는 이 유형서 교재(tb)에 대해,
+  // 같은 학생의 개념서에서 오늘(수업내용 탭에서) 체크한 개념 중 이 유형서로 매핑된 게 있으면
+  // "P.21~24, P.32" 식으로 제안 텍스트를 만들어 돌려준다. 없으면 null.
+  function getAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string }) {
+    if (!noteStudent || tb.grade == null || tb.semester == null) return null
+    const conceptTBIds = studentTextbooks
+      .filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && t.grade === tb.grade && t.semester === tb.semester)
+      .map((t) => t.id)
+    const touchedConceptIds = new Set<string>()
+    for (const [tbId, sel] of Object.entries(noteProgressByTB)) {
+      if (conceptTBIds.includes(tbId)) sel.conceptIds.forEach((cid) => touchedConceptIds.add(cid))
+    }
+    if (touchedConceptIds.size === 0) return null
+
+    const items: { concept_name: string; chapter: string; sub_chapter: string; page_start: number; page_end: number }[] = []
+    for (const cid of touchedConceptIds) {
+      const m = autostepPageMap[cid]
+      const c = concepts.find((cc) => cc.id === cid)
+      if (!m || !c) continue
+      if (m.workbook_name !== tb.textbook_name) continue
+      items.push({ concept_name: c.concept_name, chapter: c.chapter, sub_chapter: c.sub_chapter, page_start: m.page_start, page_end: m.page_end })
+    }
+    if (items.length === 0) return null
+
+    items.sort((a, b) => a.page_start - b.page_start)
+    const seen = new Set<string>()
+    const ranges: string[] = []
+    for (const it of items) {
+      const label = it.page_start === it.page_end ? `P.${it.page_start}` : `P.${it.page_start}~${it.page_end}`
+      if (!seen.has(label)) { seen.add(label); ranges.push(label) }
+    }
+    return { pageText: ranges.join(', '), items }
+  }
+
   async function handleSaveNote() {
     if (!noteStudent) return
+    if (noteStudent.on_leave) {
+      alert(`${noteStudent.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 학습일지를 작성할 수 없어요 (복귀 후 다시 확인해주세요).`)
+      return
+    }
     setSavingNote(true)
     try {
     // 진도 텍스트 - "대단원번호-중단원번호 첫개념~마지막개념" 형식
@@ -925,6 +987,13 @@ export default function TeacherLearningNotesPage() {
   async function quickMarkAbsent(student: Student) {
     // 주임모드로 넓게 보이는 것뿐인 학생(진짜 담당 아님)은 처리 불가 - 버튼 단에서 이미 막지만 안전장치
     if (!isEditable(student)) { alert('보기 전용 학생이에요. 실제 담당 강사만 처리할 수 있어요.'); return }
+    // 휴원중인 학생은 결석이 아니라 "원래 안 오는 게 맞는" 상태라, 결석/보강 처리 대상이 아니다.
+    // (2026-09-07 김서율 학생 건 - 휴원 처리됐는데 화면이 오래 켜져있어서 실수로 결석 체크되고
+    //  OPS로 잘못된 결석/보강 요청이 넘어간 사고가 있었음. 재발 방지용 안전장치)
+    if (student.on_leave) {
+      alert(`${student.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 결석 처리 대상이 아니에요 (복귀 후 다시 확인해주세요).`)
+      return
+    }
     if (!confirm(`${student.name} 학생을 오늘(${todayStr}) 결석으로 처리할까요?\n나중에 '수정'으로 세부 내용을 보완할 수 있어요.`)) return
     const { data: savedSession, error: sessionError } = await supabase
       .from('class_sessions')
