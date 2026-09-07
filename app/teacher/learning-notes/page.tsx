@@ -586,10 +586,11 @@ export default function TeacherLearningNotesPage() {
     }).catch((e) => console.error('OPS 결석 동기화 요청 실패:', e))
   }
 
-  // 오토스텝 파일럿 2단계: 방금 체크한 개념들이 속한 소단원(들)이 이제 전부 체크됐는지 확인하고,
-  // 다 됐으면 유형편 숙제 알림(autostep_homework_alerts)을 자동으로 만든다.
-  // - autostep_workbook_map에 그 소단원의 실제 쪽수 매핑이 없으면 조용히 넘어간다(아직 입력 안 된 학년/학기).
-  // - 같은 학생+소단원 조합은 DB 유니크 제약으로 한 번만 알림이 생긴다(중복 저장 시도해도 무시됨).
+  // 오토스텝: 개념을 체크하는 즉시(소단원 완료를 기다리지 않고) 그 개념에 매핑된 유형편 쪽수로 숙제 알림을 만든다.
+  // - autostep_concept_page_map에 그 개념의 쪽수 매핑이 없으면 조용히 넘어간다(아직 입력 안 된 개념).
+  // - 같은 학생+개념 조합은 DB 유니크 제약으로 한 번만 알림이 생긴다(중복 저장 시도해도 무시됨).
+  // - 추가로, 체크한 개념이 속한 소단원이 이번에 전부 끝났고 그 소단원이 대단원의 마지막 소단원이면
+  //   '단원마무리' 알림을 별도로 하나 더 만든다.
   async function runAutostepHomeworkCheck(
     studentId: string,
     tb: { id: string; grade: string | null; semester: number | null; textbook_type: string },
@@ -598,14 +599,43 @@ export default function TeacherLearningNotesPage() {
     if (studentId !== AUTOSTEP_TARGET_STUDENT_ID) return
     if (tb.textbook_type !== '개념서' || !tb.grade || !tb.semester) return
 
-    // 방금 체크한 개념들이 어느 (chapter, sub_chapter)에 속하는지 모아서, 그 소단원들만 완료 여부를 확인
-    const touchedSubChapters = new Set<string>()
-    for (const cid of touchedConceptIds) {
-      const c = concepts.find((cc) => cc.id === cid)
-      if (c && c.grade === tb.grade && c.semester === tb.semester) touchedSubChapters.add(`${c.chapter}__${c.sub_chapter}`)
-    }
-    if (touchedSubChapters.size === 0) return
+    const touchedConcepts = touchedConceptIds
+      .map((cid) => concepts.find((cc) => cc.id === cid))
+      .filter((c): c is NonNullable<typeof c> => !!c && c.grade === tb.grade && c.semester === tb.semester)
+    if (touchedConcepts.length === 0) return
 
+    // 1) 개념 단위 즉시 알림
+    const { data: pageMapRows } = await supabase
+      .from('autostep_concept_page_map')
+      .select('concept_id, workbook_name, page_start, page_end')
+      .in('concept_id', touchedConcepts.map((c) => c.id))
+
+    for (const c of touchedConcepts) {
+      const m = (pageMapRows ?? []).find((r) => r.concept_id === c.id)
+      if (!m) continue // 이 개념은 아직 쪽수 매핑이 안 되어 있음
+
+      const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
+        student_id: studentId,
+        grade: tb.grade,
+        semester: tb.semester,
+        chapter: c.chapter,
+        sub_chapter: c.sub_chapter,
+        concept_id: c.id,
+        concept_name: c.concept_name,
+        workbook_name: m.workbook_name,
+        page_range: `P.${m.page_start}~${m.page_end}`,
+        alert_kind: 'concept',
+        includes_danwon_marumi: false,
+        student_textbook_id: tb.id,
+      })
+      // 23505 = 이미 이 개념 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
+      if (alertError && alertError.code !== '23505') {
+        console.error('오토스텝 숙제 알림(개념) 생성 오류:', alertError)
+      }
+    }
+
+    // 2) 소단원 완료 + 대단원 마지막 소단원이면 단원마무리 알림 추가
+    const touchedSubChapters = new Set(touchedConcepts.map((c) => `${c.chapter}__${c.sub_chapter}`))
     for (const key of touchedSubChapters) {
       const [chapter, sub_chapter] = key.split('__')
       const subConceptIds = concepts
@@ -613,7 +643,6 @@ export default function TeacherLearningNotesPage() {
         .map((c) => c.id)
       if (subConceptIds.length === 0) continue
 
-      // 이 소단원의 모든 개념이 이 교재(student_textbook_id) 기준으로 다 체크됐는지 DB에서 다시 확인
       const { data: checkedRows } = await supabase
         .from('progress_checks')
         .select('concept_id, check_count')
@@ -621,17 +650,12 @@ export default function TeacherLearningNotesPage() {
       const doneCount = (checkedRows ?? []).filter((r) => r.check_count >= 1).length
       if (doneCount < subConceptIds.length) continue // 아직 이 소단원 안에 안 끝난 개념이 있음
 
-      // 유형편 쪽수 매핑 확인 - 없으면 조용히 스킵 (아직 이 학년/학기 데이터를 안 넣어둔 경우)
       const { data: mapRow } = await supabase
         .from('autostep_workbook_map')
         .select('*')
         .eq('grade', tb.grade).eq('semester', tb.semester).eq('chapter', chapter).eq('sub_chapter', sub_chapter)
         .maybeSingle()
-      if (!mapRow) continue
-
-      const includesDanwon = !!mapRow.is_last_sub_chapter && !!mapRow.page_danwon_marumi
-      const endPage = includesDanwon ? mapRow.page_danwon_marumi : mapRow.page_twins_end
-      const pageRange = `P.${mapRow.page_start}~${endPage}`
+      if (!mapRow || !mapRow.is_last_sub_chapter || !mapRow.page_danwon_marumi) continue
 
       const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
         student_id: studentId,
@@ -639,14 +663,16 @@ export default function TeacherLearningNotesPage() {
         semester: tb.semester,
         chapter,
         sub_chapter,
+        concept_id: null,
+        concept_name: null,
         workbook_name: mapRow.workbook_name,
-        page_range: pageRange,
-        includes_danwon_marumi: includesDanwon,
+        page_range: `P.${mapRow.page_danwon_marumi}`,
+        alert_kind: 'danwon_marumi',
+        includes_danwon_marumi: true,
         student_textbook_id: tb.id,
       })
-      // 23505 = 이미 이 소단원 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
       if (alertError && alertError.code !== '23505') {
-        console.error('오토스텝 숙제 알림 생성 오류:', alertError)
+        console.error('오토스텝 숙제 알림(단원마무리) 생성 오류:', alertError)
       }
     }
   }

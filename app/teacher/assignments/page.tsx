@@ -982,8 +982,9 @@ export default function TeacherAssignmentsPage() {
                       {student?.name ?? '학생'} · 오토스텝 자동 숙제 알림
                     </p>
                     <p className="text-xs" style={{ color: '#4338CA' }}>
-                      "{a.chapter} {a.sub_chapter}" 소단원 완료 → {a.workbook_name} {a.page_range}
-                      {a.includes_danwon_marumi ? ' (단원마무리 포함)' : ''} 숙제로 내주세요
+                      {a.alert_kind === 'danwon_marumi'
+                        ? <>"{a.chapter}" 대단원 완료 → {a.workbook_name} 단원마무리 {a.page_range} 숙제로 내주세요</>
+                        : <>"{a.concept_name ?? `${a.chapter} ${a.sub_chapter}`}" 개념 체크 → {a.workbook_name} {a.page_range} 숙제로 내주세요</>}
                     </p>
                   </div>
                   <button onClick={() => handleAckAutostepAlert(a.id)}
