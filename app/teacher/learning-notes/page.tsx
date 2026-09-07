@@ -2545,6 +2545,16 @@ export default function TeacherLearningNotesPage() {
                               : []
                             const selectedSub = hwTBSubChapters[tb.id] || ''
                             const selectedPage = hwTBPages[tb.id] || ''
+                            const autostepSuggestion = getAutostepSuggestion(tb)
+
+                            const applySuggestion = () => {
+                              if (!autostepSuggestion) return
+                              const first = autostepSuggestion.items[0]
+                              setHwSelectedTBIds((prev) => (prev.includes(tb.id) ? prev : [...prev, tb.id]))
+                              setHwTBChapters((p) => ({ ...p, [tb.id]: p[tb.id] || first.chapter }))
+                              setHwTBSubChapters((p) => ({ ...p, [tb.id]: p[tb.id] || first.sub_chapter }))
+                              setHwTBPages((p) => ({ ...p, [tb.id]: autostepSuggestion.pageText }))
+                            }
 
                             return (
                               <div key={tb.id} className={cx('rounded-xl border-2 overflow-hidden transition-all',
@@ -2572,6 +2582,21 @@ export default function TeacherLearningNotesPage() {
                                   <span className="text-xs font-semibold text-gray-700">{tb.textbook_name}</span>
                                   {tb.grade && <span className="text-[10px] text-gray-400 ml-auto">{tb.grade} {tb.semester}학기</span>}
                                 </button>
+
+                                {/* 오토스텝 자동 제안 */}
+                                {autostepSuggestion && (
+                                  <div className="mx-3 mb-2 px-2.5 py-2 rounded-lg flex items-center gap-2 flex-wrap"
+                                    style={{ background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                    <span className="text-[10px]" style={{ color: '#4338CA' }}>
+                                      ⚡ 오늘 체크한 개념 매핑: {autostepSuggestion.pageText}
+                                    </span>
+                                    <button onClick={applySuggestion}
+                                      className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md"
+                                      style={{ background: '#4338CA', color: 'white' }}>
+                                      적용
+                                    </button>
+                                  </div>
+                                )}
 
                                 {/* 선택된 경우 세부 입력 */}
                                 {isSelected && (
