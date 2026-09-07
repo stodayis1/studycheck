@@ -34,6 +34,9 @@ interface StudentTextbook {
   assigned_at: string
   delete_requested_by?: string | null
   delete_requested_at?: string | null
+  autostep_enabled?: boolean
+  autostep_level?: number | null
+  autostep_start_date?: string | null
 }
 
 interface Concept {
@@ -72,6 +75,19 @@ interface TextbookCatalog {
 const GRADE_GROUPS = ['전체', '초등', '중등', '고등']
 const HIGH_SUBJECTS = ['공통수학1', '공통수학2', '미적분1', '확률과통계', '대수', '기하']
 const TB_TYPES = ['개념서', '유형서', '심화서', '연산서']
+
+// 오토스텝 파일럿: 윤수지(중2, 윤지혜 담당) 학생 한 명에게만 우선 적용해보는 기능.
+// "개념유형 라이트" PDF 구조 분석(개념박스+STEP1+STEP2+STEP3)으로 구한 학년/학기별 총 항목수.
+// 아직 다 분석 못한 학기는 표에서 빼뒀고, 그런 학기를 고르면 오토스텝 UI 자체가 안 뜬다.
+const AUTOSTEP_TARGET_STUDENT_ID = '3e50baff-4003-49be-b915-98e297bda726' // 윤수지(중2)
+const AUTOSTEP_TEXTBOOK_NAMES = ['개념유형 라이트', '개념+유형라이트']
+const AUTOSTEP_TOTAL_ITEMS: Record<string, Record<number, number>> = {
+  '중1': { 1: 90, 2: 110 },
+  '중2': { 1: 98 }, // 2학기는 아직 분석 전
+  '중3': { 1: 106 },
+}
+// 1스텝=하루2개, 2스텝=하루3개, 3스텝=하루3개(+단원마무리 포함되는 경우 있음, 완료일 계산은 근사치)
+const AUTOSTEP_PACE: Record<number, number> = { 1: 2, 2: 3, 3: 3 }
 // 초등/중등/고등 대분류 안에서 학년별로 나눠 볼 수 있게 하는 학년 목록 (진도표 학년별 탭용)
 const SUB_GRADE_OPTIONS: Record<string, string[]> = {
   '초등': ['초1', '초2', '초3', '초4', '초5', '초6'],
@@ -141,6 +157,7 @@ export default function TeacherCurriculumPage() {
   const [tbName, setTbName] = useState('')
   const [tbMemo, setTbMemo] = useState('')
   const [tbAssigning, setTbAssigning] = useState(false)
+  const [tbAutostepLevel, setTbAutostepLevel] = useState<number | null>(null) // 오토스텝 파일럿: 1/2/3스텝
 
   useEffect(() => { fetchData() }, [])
 
@@ -307,6 +324,9 @@ export default function TeacherCurriculumPage() {
       const savedGrade = (isMockExam1 || isMockExam2) ? '중2모의고사' : tbGrade
       const savedSemester = isMockExam1 ? 1 : isMockExam2 ? 2 : tbSemester
 
+      // 오토스텝 파일럿: 지금은 윤수지 학생 + 개념유형 라이트 교재일 때만 저장 (다른 학생/교재는 항상 비활성)
+      const autostepOn = sid === AUTOSTEP_TARGET_STUDENT_ID && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
+
       await supabase.from('student_textbooks').insert({
         student_id: sid,
         concept_id: null,
@@ -316,10 +336,13 @@ export default function TeacherCurriculumPage() {
         semester: savedSemester,
         status: 'assigned',
         memo: tbMemo || null,
+        autostep_enabled: autostepOn,
+        autostep_level: autostepOn ? tbAutostepLevel : null,
+        autostep_start_date: autostepOn ? new Date().toISOString().slice(0, 10) : null,
       })
     }
     setShowTBModal(false)
-    setTbStudent(null); setTbStudentIds([]); setTbMultiMode(false); setTbName(''); setTbMemo('')
+    setTbStudent(null); setTbStudentIds([]); setTbMultiMode(false); setTbName(''); setTbMemo(''); setTbAutostepLevel(null)
     setTbAssigning(false)
     fetchData()
   }
@@ -1140,12 +1163,12 @@ export default function TeacherCurriculumPage() {
       {/* 병행교재 배정 모달 */}
       {showTBModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
-          onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]) }}>
+          onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]); setTbAutostepLevel(null) }}>
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900">📚 과정 및 교재 배정</h3>
-              <button onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]) }} className="text-gray-400">✕</button>
+              <button onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]); setTbAutostepLevel(null) }} className="text-gray-400">✕</button>
             </div>
 
             {/* 학생 선택 */}
@@ -1307,6 +1330,42 @@ export default function TeacherCurriculumPage() {
               </div>
             </div>
 
+            {/* 오토스텝 파일럿 - 지금은 윤수지 학생 + 개념유형 라이트 교재 배정 시에만 노출 */}
+            {tbStudent?.id === AUTOSTEP_TARGET_STUDENT_ID && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && (
+              AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] ? (
+                <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
+                  <p className="text-xs font-bold text-indigo-800">⚡ 오토스텝 · 하루 진도량(스텝)을 선택하세요</p>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map((lvl) => (
+                      <button key={lvl} type="button" onClick={() => setTbAutostepLevel(lvl)}
+                        className={cx('flex-1 py-2 rounded-lg text-xs font-bold border transition-all',
+                          tbAutostepLevel === lvl ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200')}>
+                        {lvl}스텝 · 하루 {AUTOSTEP_PACE[lvl]}개
+                      </button>
+                    ))}
+                  </div>
+                  {tbAutostepLevel != null && (() => {
+                    const total = AUTOSTEP_TOTAL_ITEMS[tbGrade][tbSemester]
+                    const perDay = AUTOSTEP_PACE[tbAutostepLevel]
+                    const days = Math.ceil(total / perDay)
+                    const completeDate = new Date()
+                    completeDate.setDate(completeDate.getDate() + days - 1)
+                    const completeStr = completeDate.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+                    return (
+                      <p className="text-[11px] text-indigo-700 leading-relaxed">
+                        총 {total}개 항목(개념박스+STEP1~3) · 오늘부터 시작 시 약 <b>{days}일</b> 소요 · 완료 예상일 <b>{completeStr}</b> 무렵
+                        <br /><span className="text-indigo-400">※ 수업/결석일 반영 전 단순 계산이에요. 소단원 끝날 때마다 유형편 숙제가 자동 매칭될 예정이에요(개발 중).</span>
+                      </p>
+                    )
+                  })()}
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                  <p className="text-[11px] text-gray-500">이 학년/학기는 아직 오토스텝 교재 구조 분석 전이라 스텝 계산을 지원하지 않아요.</p>
+                </div>
+              )
+            )}
+
             {/* 선택 요약 */}
             {tbStudent && tbName && (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
@@ -1317,7 +1376,9 @@ export default function TeacherCurriculumPage() {
             )}
 
             <button onClick={handleTBAssign}
-              disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || !tbName || tbAssigning}
+              disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || !tbName || tbAssigning ||
+                (tbStudent?.id === AUTOSTEP_TARGET_STUDENT_ID && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) &&
+                  !!AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] && tbAutostepLevel == null)}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
               {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : (tbMultiMode ? `📚 ${tbStudentIds.length}명에게 교재 배정하기` : '📚 교재 배정하기')}
             </button>
