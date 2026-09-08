@@ -716,15 +716,19 @@ export default function TeacherLearningNotesPage() {
 
   // 오토스텝: "체크한 개념"을 모을 때 noteProgressByTB(이번 화면 세션에서 방금 누른 것)만 보면,
   // 저장 후 모달을 닫았다 열거나 새로고침하면 이 값이 비어서 제안이 사라져버린다.
-  // 그래서 이미 저장돼 DB에 있는 progress_checks(check_count>=1)도 항상 같이 합쳐서 본다.
+  // 그래서 이미 저장된 세션을 다시 열었을 때는 progress_checks 중 "이 세션(session_id)"에서
+  // 체크된 것만 같이 합쳐서 본다. (check_count는 평생 1회성 플래그라 그걸로 필터링하면
+  // 이 교재에서 과거에 한 번이라도 체크됐던 개념이 전부 딸려 나오는 버그가 있었음)
   function getTouchedConceptIdsFor(tbIds: string[]) {
     const ids = new Set<string>()
     for (const tbId of tbIds) {
       const sel = noteProgressByTB[tbId]
       if (sel) sel.conceptIds.forEach((cid) => ids.add(cid))
     }
-    for (const pc of progressChecks) {
-      if (tbIds.includes(pc.student_textbook_id) && (pc.check_count ?? 0) >= 1) ids.add(pc.concept_id)
+    if (noteSession?.id) {
+      for (const pc of progressChecks) {
+        if (tbIds.includes(pc.student_textbook_id) && pc.session_id === noteSession.id) ids.add(pc.concept_id)
+      }
     }
     return ids
   }
