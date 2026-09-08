@@ -9,6 +9,7 @@ import { cx } from '@/lib/utils'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
+import { getSsenbSubChapterForConceptOrder, type SsenbProblem } from '@/lib/ssenbSteps'
 
 interface StudentInfo {
   id: string
@@ -89,6 +90,7 @@ interface ProgressCheck {
   concept_id: string
   check_count: number
   student_textbook_id?: string | null
+  session_id?: string | null
 }
 
 const WS_STATUS: Record<string, { label: string; color: string; bg: string }> = {
@@ -116,6 +118,12 @@ export default function StudentDashboardPage() {
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  // 오토스텝: 개념 → 유형편/개념편 페이지 매핑 (concept_id 기준) - 학습 내용에 페이지 표시할 때 씀
+  const [autostepPageMap, setAutostepPageMap] = useState<Record<string, {
+    page_start: number; page_end: number; workbook_name: string
+    concept_book_page_start: number | null; concept_book_page_end: number | null
+  }>>({})
+  const [ssenbProblemMap, setSsenbProblemMap] = useState<SsenbProblem[]>([])
 
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -143,7 +151,7 @@ export default function StudentDashboardPage() {
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
     const fromStr = fourteenDaysAgo.toISOString().split('T')[0]
 
-    const [{ data: ssData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }] = await Promise.all([
+    const [{ data: ssData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }, { data: apmData }, { data: ssenbData }] = await Promise.all([
       supabase.from('class_sessions').select('*').eq('student_id', sid)
         .gte('session_date', fromStr).order('session_date', { ascending: false }),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).order('assigned_at', { ascending: false }),
@@ -151,6 +159,8 @@ export default function StudentDashboardPage() {
       supabase.from('concepts').select('*').order('concept_order'),
       supabase.from('progress_checks').select('*').eq('student_id', sid),
       supabase.from('feedbacks').select('*').eq('student_id', sid).order('created_at', { ascending: false }).limit(20),
+      supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name, concept_book_page_start, concept_book_page_end'),
+      supabase.from('ssenb_problem_map').select('*'),
     ])
     if (ssData && ssData.length > 0) {
       setSessions(ssData)
@@ -165,6 +175,12 @@ export default function StudentDashboardPage() {
     if (cData) setConcepts(cData)
     if (pcData) setProgressChecks(pcData)
     if (fbData) setFeedbacks(fbData)
+    if (apmData) {
+      const map: typeof autostepPageMap = {}
+      for (const r of apmData) map[r.concept_id] = r
+      setAutostepPageMap(map)
+    }
+    if (ssenbData) setSsenbProblemMap(ssenbData)
 
     // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
     const nowIso = new Date().toISOString()
@@ -191,15 +207,50 @@ export default function StudentDashboardPage() {
     if (epData) setExamPreps(epData)
   }
 
-  // 오늘 진도 텍스트 생성 (교재별)
-  function buildProgressText(tb: StudentTextbook): string | null {
+  // 체크된 개념들의 페이지 범위를 "P.6~13" 식으로 압축. 매핑이 없으면 null(페이지 표시 생략).
+  function pageRangeForConcepts(cs: Concept[], isConceptBook: boolean, workbookName?: string): string | null {
+    const pages: number[] = []
+    for (const c of cs) {
+      const m = autostepPageMap[c.id]
+      if (!m) continue
+      if (isConceptBook) {
+        if (m.concept_book_page_start != null) pages.push(m.concept_book_page_start)
+        if (m.concept_book_page_end != null) pages.push(m.concept_book_page_end)
+      } else {
+        if (workbookName && m.workbook_name !== workbookName) continue
+        pages.push(m.page_start, m.page_end)
+      }
+    }
+    if (pages.length === 0) return null
+    const min = Math.min(...pages), max = Math.max(...pages)
+    return min === max ? `P.${min}` : `P.${min}~${max}`
+  }
+
+  // 쎈B는 페이지 매핑이 autostep_concept_page_map이 아니라 ssenb_problem_map(소단원 기준)에 있어서
+  // 별도로 계산한다. concept_order → 쎈B 소단원 매핑(lib/ssenbSteps.ts)을 거쳐 그 소단원의 페이지 범위를 구함.
+  function ssenbPageRangeForConcepts(cs: Concept[], grade: string, semester: number): string | null {
+    const subNos = Array.from(new Set(
+      cs.map(c => getSsenbSubChapterForConceptOrder(grade, semester, c.concept_order)).filter((n): n is number => n != null)
+    ))
+    if (subNos.length === 0) return null
+    const probs = ssenbProblemMap.filter(p => subNos.includes(p.sub_chapter_no))
+    if (probs.length === 0) return null
+    const pages = probs.map(p => p.page)
+    const min = Math.min(...pages), max = Math.max(...pages)
+    return min === max ? `P.${min}` : `P.${min}~${max}`
+  }
+
+  // 진도 텍스트 생성 (교재별) - sessionId로 넘겨받은 그날 실제로 체크된 개념만 본다.
+  // (예전엔 "평생 한 번이라도 체크된 개념" 기준이라, 며칠 전에 나간 심화서까지 매일 계속
+  // 학습 내용에 떠 있는 버그가 있었음 - 오늘 진도를 안 나갔으면 안 떠야 정상)
+  function buildProgressText(tb: StudentTextbook, sessionId: string): string | null {
     if (!tb.grade) return null
     const tbConcepts = concepts.filter(c =>
       c.grade === tb.grade && (tb.semester ? c.semester === tb.semester : true)
     )
-    // 오늘 수업에서 진도 나간 개념 (이 교재에서 직접 체크한 것 + 개념서에 한해 예전 기록도 포함)
     const todayChecked = progressChecks.filter(p =>
       p.check_count >= 1 &&
+      p.session_id === sessionId &&
       (p.student_textbook_id === tb.id || (!p.student_textbook_id && tb.textbook_type === '개념서')) &&
       tbConcepts.some(c => c.id === p.concept_id)
     )
@@ -210,7 +261,7 @@ export default function StudentDashboardPage() {
       .sort((a, b) => a.concept_order - b.concept_order)
 
     if (tb.textbook_type === '개념서') {
-      // 개념서: 교재명 · 대단원-중단원-첫개념~마지막개념
+      // 개념서: 교재명 · 대단원-중단원-첫개념~마지막개념 (P.페이지)
       const first = checkedConcepts[0]
       const last = checkedConcepts[checkedConcepts.length - 1]
       // 대단원 앞자리가 유니코드 로마숫자(Ⅰ,Ⅱ...)인 교과서도 있고, 그냥 영문 알파벳으로 적힌
@@ -229,11 +280,15 @@ export default function StudentDashboardPage() {
       const range = first.concept_name === last.concept_name
         ? first.concept_name
         : `${first.concept_name}~${last.concept_name}`
-      return `${chNum}-${subNum} ${range}`
+      const pageText = pageRangeForConcepts(checkedConcepts, true)
+      return pageText ? `${chNum}-${subNum} ${range} (${pageText})` : `${chNum}-${subNum} ${range}`
     } else {
-      // 유형서/심화서: 대단원명
+      // 유형서/심화서: 대단원명 (P.페이지) - 쎈B는 별도 소단원 매핑을 통해 페이지를 구함
       const chapters = [...new Set(checkedConcepts.map(c => c.chapter))]
-      return chapters.join(', ')
+      const pageText = tb.textbook_name === '쎈B'
+        ? ssenbPageRangeForConcepts(checkedConcepts, tb.grade, tb.semester ?? 0)
+        : pageRangeForConcepts(checkedConcepts, false, tb.textbook_name)
+      return pageText ? `${chapters.join(', ')} (${pageText})` : chapters.join(', ')
     }
   }
 
@@ -404,7 +459,7 @@ export default function StudentDashboardPage() {
         {selectedSession ? (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {/* 학습 내용 서브헤더 */}
-            {(selectedSession.progress_content || buildProgressText(textbooks.filter(t => t.grade)[0])) && (
+            {(selectedSession.progress_content || buildProgressText(textbooks.filter(t => t.grade)[0], selectedSession.id)) && (
               <div>
                 <div className="px-4 py-2 flex items-center gap-1.5" style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
                   <i className="ti ti-books" style={{ fontSize: 13, color: '#F5C4B3' }} />
@@ -413,7 +468,7 @@ export default function StudentDashboardPage() {
                 <div className="px-4 py-3">
                   {(() => {
                     const myTBs = textbooks.filter(t => t.grade)
-                    const progressLines = myTBs.map(tb => ({ tb, text: buildProgressText(tb) })).filter(x => x.text)
+                    const progressLines = myTBs.map(tb => ({ tb, text: buildProgressText(tb, selectedSession.id) })).filter(x => x.text)
                     if (progressLines.length > 0) {
                       return (
                         <div className="space-y-2">
