@@ -69,7 +69,7 @@ function getDefaultExamSeason(): string {
 }
 
 export default function TeacherExamPrepPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, isSupervisorModeActive } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [innerEnough, setInnerEnough] = useState<InnerEnough[]>([])
   const [assignments, setAssignments] = useState<StudentExamPrep[]>([])
@@ -252,6 +252,7 @@ export default function TeacherExamPrepPage() {
   }
 
   async function handleSaveSchedule() {
+    if (!canManageAllStudents() && !isSupervisorModeActive()) return
     if (!schSchool || !schGrade || !schDate) return
     setSavingSchedule(true)
     await supabase.from('exam_schedule').insert({
@@ -668,12 +669,17 @@ export default function TeacherExamPrepPage() {
         {/* ── 시험 일정 ── */}
         {viewTab === 'schedule' && (
           <div className="space-y-3">
-            <button onClick={() => { setSchName(scheduleTab); setShowScheduleModal(true) }}
-              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-              style={{ background: '#F5C4B3', color: '#712B13' }}>
-              <i className="ti ti-plus" style={{ fontSize: 16 }} />
-              시험 일정 추가
-            </button>
+            {/* 시험일정 추가는 학교 전체에 공유되는 일정이라, 아무 강사나 등록하게 두면 중복/오류 일정이
+                쌓이기 쉽다. 관리자/직원이거나 해당 범위를 담당하는 주임(주임모드 켜짐)만 등록 가능 -
+                일반 강사에게는 조회만 가능하도록 버튼 자체를 숨긴다. */}
+            {(canManageAllStudents() || isSupervisorModeActive()) && (
+              <button onClick={() => { setSchName(scheduleTab); setShowScheduleModal(true) }}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                style={{ background: '#F5C4B3', color: '#712B13' }}>
+                <i className="ti ti-plus" style={{ fontSize: 16 }} />
+                시험 일정 추가
+              </button>
+            )}
 
             {/* 학기/중간·기말 탭 - 지난 시즌 일정이 계속 섞여 보이지 않게 나눠서 표시 */}
             <div className="flex gap-1.5 overflow-x-auto pb-1">
