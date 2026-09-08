@@ -133,6 +133,12 @@ export default function TeacherAssignmentsPage() {
   const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'level_report' | 'textbook'>('worksheet')
   const [unitStatusStudent, setUnitStatusStudent] = useState<Student | null>(null)
   const [levelReportGrade, setLevelReportGrade] = useState<string>('초1')
+  // 3~7월은 1학기, 8~2월은 2학기로 기본값을 잡는다 (레벨학습지에 학기 컬럼을 최근에 추가해서,
+  // 그 전 기록은 학기가 비어있는 경우가 많다 - 비어있는 건 학기 필터에서 안 보이는 게 맞음)
+  const [levelReportSemester, setLevelReportSemester] = useState<1 | 2>(() => {
+    const m = new Date().getMonth() + 1
+    return m >= 3 && m <= 7 ? 1 : 2
+  })
   const [subTab, setSubTab] = useState<'ws' | 'tb'>('ws')
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
@@ -1491,8 +1497,11 @@ export default function TeacherAssignmentsPage() {
 
             // 학생이 특정 레벨에서 1~8단원 중 어디까지 왔는지 - 단원별로 가장 최근/진행중인 상태를 하나씩 뽑는다.
             // (grade_level은 학생마다 실제 배정된 학기가 제각각이라, 레벨 자체를 기준으로만 묶는다)
+            // 반드시 선택된 학기(semester)로 걸러야 한다 - 안 그러면 레벨은 그대로 이어지는 값이라
+            // 지난 학기에 끝낸 단원이 이번 학기 칸에도 그대로 남아 보이는(뒤죽박죽) 문제가 생긴다.
             function getLevelUnitStatuses(studentId: string, level: number) {
-              const rows = worksheetsFull.filter((w) => w.student_id === studentId && w.current_level === level)
+              const rows = worksheetsFull.filter((w) =>
+                w.student_id === studentId && w.current_level === level && w.semester === levelReportSemester)
               if (rows.length === 0) return null
               return WORKSHEET_UNITS.map((u) => {
                 const unitRows = rows.filter((w) => w.unit === u)
@@ -1504,19 +1513,22 @@ export default function TeacherAssignmentsPage() {
 
             return (
               <div className="space-y-3">
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  {WORKSHEET_GRADE_LEVELS.map((g) => {
-                    const count = filteredStudents.filter((s) => s.grade === g).length
-                    return (
-                      <button key={g} onClick={() => setLevelReportGrade(g)}
-                        className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
-                        style={activeGrade === g
-                          ? { background: '#F5C4B3', color: '#712B13' }
-                          : { background: '#f3f4f6', color: '#9ca3af' }}>
-                        {g} {count > 0 ? `(${count})` : ''}
-                      </button>
-                    )
-                  })}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {WORKSHEET_GRADE_LEVELS.map((g) => {
+                      const count = filteredStudents.filter((s) => s.grade === g).length
+                      return (
+                        <button key={g} onClick={() => setLevelReportGrade(g)}
+                          className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                          style={activeGrade === g
+                            ? { background: '#F5C4B3', color: '#712B13' }
+                            : { background: '#f3f4f6', color: '#9ca3af' }}>
+                          {g} {count > 0 ? `(${count})` : ''}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="text-[11px] font-bold text-gray-400 shrink-0">{levelReportSemester}학기 기준</span>
                 </div>
 
                 <div className="flex gap-3 flex-wrap px-1">
