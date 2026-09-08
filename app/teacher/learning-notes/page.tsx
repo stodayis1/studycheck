@@ -846,6 +846,43 @@ export default function TeacherLearningNotesPage() {
     })
   }
 
+  // 쎈B 오토스텝: 지금 "과제배부" 탭에 보이는 쎈B 카드에 대해, 오늘(또는 저장된 progress_checks에서)
+  // 체크한 개념들이 속한 쎈B 소단원별로 배정된 스텝(1~4)대로 문제를 골라 제안 텍스트를 만든다.
+  // 소단원이 아직 다 안 끝났어도 지금까지 체크한 개념만큼 바로 보여준다(개념서 오토스텝의
+  // "소단원 통째로 완료돼야 알림" 방식과 달리, 여기는 교사가 지금 이 화면에서 바로 확인하는
+  // 자리라 매번 완료를 기다리게 하면 너무 늦게 뜬다).
+  function getSsenbAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; ssenb_step?: number | null }) {
+    if (!noteStudent || tb.textbook_name !== '쎈B' || !tb.ssenb_step || tb.grade == null || tb.semester == null) return null
+    const touchedConceptIds = getTouchedConceptIdsFor([tb.id])
+    if (touchedConceptIds.size === 0) return null
+
+    const touchedConcepts = Array.from(touchedConceptIds)
+      .map((cid) => concepts.find((cc) => cc.id === cid))
+      .filter((c): c is NonNullable<typeof c> => !!c && c.grade === tb.grade && c.semester === tb.semester)
+    if (touchedConcepts.length === 0) return null
+
+    const subNos = Array.from(new Set(
+      touchedConcepts
+        .map((c) => getSsenbSubChapterForConceptOrder(tb.grade!, tb.semester!, c.concept_order))
+        .filter((n): n is number => n != null)
+    ))
+    if (subNos.length === 0) return null
+
+    const step = tb.ssenb_step as 1 | 2 | 3 | 4
+    const parts: { subNo: number; title: string; problems: SsenbProblem[] }[] = []
+    for (const subNo of subNos) {
+      const subProblems = ssenbProblemMap.filter((p) => p.sub_chapter_no === subNo)
+      if (subProblems.length === 0) continue
+      const stepProblems = getSsenbStepProblems(subProblems, step)
+      if (stepProblems.length === 0) continue
+      parts.push({ subNo, title: subProblems[0].sub_chapter_title, problems: stepProblems })
+    }
+    if (parts.length === 0) return null
+
+    const pageText = parts.map((p) => `${p.title} ${formatSsenbStepSummary(step, p.problems)}`).join(' / ')
+    return { pageText, parts, chapter: touchedConcepts[0].chapter, sub_chapter: touchedConcepts[0].sub_chapter }
+  }
+
   // 오토스텝: 지금 "과제배부" 탭에 보이는 이 교재(tb)에 대해,
   // 같은 학생이 오늘(수업내용 탭에서, 또는 이미 저장된 progress_checks에서) 체크한 개념 중
   // 이 교재로 매핑된 게 있으면 "P.21~24, P.32" 식으로 제안 텍스트를 만들어 돌려준다. 없으면 null.
@@ -2731,6 +2768,7 @@ export default function TeacherLearningNotesPage() {
                             const selectedSub = hwTBSubChapters[tb.id] || ''
                             const selectedPage = hwTBPages[tb.id] || ''
                             const autostepSuggestion = getAutostepSuggestion(tb)
+                            const ssenbSuggestion = getSsenbAutostepSuggestion(tb)
 
                             const applySuggestion = () => {
                               if (!autostepSuggestion) return
@@ -2739,6 +2777,14 @@ export default function TeacherLearningNotesPage() {
                               setHwTBChapters((p) => ({ ...p, [tb.id]: p[tb.id] || first.chapter }))
                               setHwTBSubChapters((p) => ({ ...p, [tb.id]: p[tb.id] || first.sub_chapter }))
                               setHwTBPages((p) => ({ ...p, [tb.id]: autostepSuggestion.pageText }))
+                            }
+
+                            const applySsenbSuggestion = () => {
+                              if (!ssenbSuggestion) return
+                              setHwSelectedTBIds((prev) => (prev.includes(tb.id) ? prev : [...prev, tb.id]))
+                              setHwTBChapters((p) => ({ ...p, [tb.id]: p[tb.id] || ssenbSuggestion.chapter }))
+                              setHwTBSubChapters((p) => ({ ...p, [tb.id]: p[tb.id] || ssenbSuggestion.sub_chapter }))
+                              setHwTBPages((p) => ({ ...p, [tb.id]: ssenbSuggestion.pageText }))
                             }
 
                             return (
@@ -2777,6 +2823,21 @@ export default function TeacherLearningNotesPage() {
                                     </span>
                                     <button onClick={applySuggestion}
                                       className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md"
+                                      style={{ background: '#4338CA', color: 'white' }}>
+                                      적용
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* 쎈B 오토스텝 자동 제안 */}
+                                {ssenbSuggestion && (
+                                  <div className="mx-3 mb-2 px-2.5 py-2 rounded-lg flex items-start gap-2 flex-wrap"
+                                    style={{ background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                    <span className="text-[10px] leading-relaxed" style={{ color: '#4338CA' }}>
+                                      ⚡ 오늘 체크한 개념 → 쎈B {tb.ssenb_step}스텝: {ssenbSuggestion.pageText}
+                                    </span>
+                                    <button onClick={applySsenbSuggestion}
+                                      className="ml-auto shrink-0 text-[10px] font-semibold px-2 py-1 rounded-md"
                                       style={{ background: '#4338CA', color: 'white' }}>
                                       적용
                                     </button>
