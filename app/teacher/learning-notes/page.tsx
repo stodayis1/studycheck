@@ -504,7 +504,10 @@ export default function TeacherLearningNotesPage() {
     // 교재/학습지를 고르지 않고 메모("📝 ...")로만 과제를 적는 경우 hw_textbook_page에만 값이 들어가는데
     // 여기 빠져있어서 분명히 과제를 입력했는데도 "미완료"로 잘못 표시되던 문제 (고등부 메모 위주 입력에서 특히 발생)
     const hasHomework = !!(session.hw_textbook_name || session.hw_worksheet_range || session.video_url || session.hw_textbook_page)
-    return hasContent && hasHomework
+    // 시험기간에 정규 진도 없이 시험대비(내신)만 배정한 날은 애초에 남길 "진도"가 없는 게 정상인데,
+    // hasContent가 항상 false가 돼서 과제를 분명히 입력했는데도 "미완료"로 잘못 표시되는 문제 (정지후, 이준민 사례)
+    const isExamPrepOnly = !!(session.hw_textbook_name?.includes('시험대비') || session.hw_textbook_page?.includes('시험대비'))
+    return (hasContent || isExamPrepOnly) && hasHomework
   }
 
   function openNoteModal(student: Student, targetSession?: ClassSession) {
