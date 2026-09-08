@@ -63,11 +63,23 @@ export function formatSsenbPageRange(problems: SsenbProblem[]): string {
   return min === max ? `P.${min}` : `P.${min}~${max}`
 }
 
-// 스텝 선택 문제들을 "N스텝 · N문항 (1~5, 8) · P.61~70" 형식의 알림 텍스트로 요약
+// 각 스텝이 실제로 어떤 문제를 고르는지 말로 풀어 쓴 것 - 학생/학부모도 바로 이해할 수 있게
+// "1~7, 9~12번 문제" 식으로 흩어진 문제번호를 나열하는 대신 이 규칙 문구 + 유형 번호로 대신한다.
+export const SSENB_STEP_RULE_LABEL: Record<1 | 2 | 3 | 4, string> = {
+  1: '유형별 대표문제만',
+  2: '유형별 대표문제+다음문제',
+  3: "'상' 난이도 제외 전체",
+  4: '전체',
+}
+
+// 스텝 선택 문제들을 학생/학부모가 봐도 바로 알아볼 수 있게 요약한다.
+// 문제 번호를 낱개로 나열하면(예: "1~20, 22~26, 28~34...") 무슨 뜻인지 알 수 없어서,
+// 대신 "몇 번 유형까지" + 스텝 규칙 설명 + 페이지로 표현한다 - 쎈B 책 안에서 유형 번호는
+// 문제들을 묶어서 보여주는 소제목이라 "유형 1~13"이라고 하면 책만 펴도 바로 찾을 수 있다.
 export function formatSsenbStepSummary(step: 1 | 2 | 3 | 4, problems: SsenbProblem[]): string {
-  const noText = formatSsenbNoRanges(problems.map((p) => p.local_no))
+  const typeText = formatSsenbNoRanges(Array.from(new Set(problems.map((p) => p.type_no))))
   const pageText = formatSsenbPageRange(problems)
-  return `${step}스텝 · ${problems.length}문항 (${noText}) · ${pageText}`
+  return `${step}스텝(${SSENB_STEP_RULE_LABEL[step]}) · 유형 ${typeText} · ${problems.length}문항 · ${pageText}`
 }
 
 // 교과과정 개념(concepts 테이블)과 쎈B 소단원(ssenb_problem_map.sub_chapter_no) 사이의 매핑.
