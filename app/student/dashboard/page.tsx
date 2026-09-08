@@ -213,8 +213,18 @@ export default function StudentDashboardPage() {
       // 개념서: 교재명 · 대단원-중단원-첫개념~마지막개념
       const first = checkedConcepts[0]
       const last = checkedConcepts[checkedConcepts.length - 1]
-      const chNum = first.chapter?.match(/^(\d+)/)?.[1] ??
-        (first.chapter ? ({ 'Ⅰ':'1','Ⅱ':'2','Ⅲ':'3','Ⅳ':'4','Ⅴ':'5','Ⅵ':'6' } as Record<string,string>)[first.chapter[0]] : null) ?? '?'
+      // 대단원 앞자리가 유니코드 로마숫자(Ⅰ,Ⅱ...)인 교과서도 있고, 그냥 영문 알파벳으로 적힌
+      // 로마숫자("V. 도형의 성질"처럼 V, VI, VII...)인 교과서도 있어서 둘 다 처리한다.
+      // (중2-2 concepts가 후자라서 기존엔 매칭이 안 돼 '?'로만 표시되던 버그가 있었음)
+      const ROMAN_TO_NUM: Record<string, string> = {
+        'Ⅰ': '1', 'Ⅱ': '2', 'Ⅲ': '3', 'Ⅳ': '4', 'Ⅴ': '5', 'Ⅵ': '6', 'Ⅶ': '7', 'Ⅷ': '8', 'Ⅸ': '9',
+        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9',
+      }
+      const asciiRoman = first.chapter?.match(/^([IVX]+)\b/)?.[1]
+      const chNum = first.chapter?.match(/^(\d+)/)?.[1]
+        ?? (asciiRoman ? ROMAN_TO_NUM[asciiRoman] : undefined)
+        ?? (first.chapter ? ROMAN_TO_NUM[first.chapter[0]] : undefined)
+        ?? '?'
       const subNum = first.sub_chapter?.match(/^(\d+)/)?.[1] ?? '?'
       const range = first.concept_name === last.concept_name
         ? first.concept_name

@@ -565,10 +565,32 @@ export default function TeacherLearningNotesPage() {
     setNoteProgressSubChapter('')
     setNoteProgressConcepts([])
     setNoteAttendance(note?.attendance ?? '정시')
-    setHwSelectedTBIds([])
-    setHwTBChapters({})
-    setHwTBSubChapters({})
-    setHwTBPages({})
+    // hw_textbook_page는 "교재명 · 단원 · 소단원 · 페이지" 조각들을 ' / '로 이어붙인 문자열로 저장돼 있다.
+    // 저장 시 hwSelectedTBIds에 있는 교재만 다시 조립해서 통째로 덮어쓰는 구조라서, 모달을 다시 열 때
+    // 이 값들을 비워두면(예전엔 그랬음) "이번엔 교재 하나만 살짝 고쳐서 저장" 같은 경우에 그때 손 안 댄
+    // 다른 교재들의 과제가 저장 과정에서 통째로 사라지는 버그가 있었다 - 그래서 열 때 기존 값을
+    // 교재별로 되살려서 채워준다 (이후 적용/선택은 이 위에 얹혀서 추가/수정되는 방식).
+    const savedHwNoHomework = session?.hw_textbook_page === NO_HOMEWORK_MARKER
+    const savedHwRawParts = savedHwNoHomework ? [] : (session?.hw_textbook_page ?? '').split(' / ').filter(Boolean)
+    const myAssignedTBsForHw = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
+    const restoredTBIds: string[] = []
+    const restoredChapters: Record<string, string> = {}
+    const restoredSubChapters: Record<string, string> = {}
+    const restoredPages: Record<string, string> = {}
+    for (const part of savedHwRawParts) {
+      if (part.startsWith('📝 ')) continue
+      const segs = part.split(' · ')
+      const tbForPart = myAssignedTBsForHw.find((t) => t.textbook_name === segs[0])
+      if (!tbForPart) continue
+      restoredTBIds.push(tbForPart.id)
+      if (segs[1]) restoredChapters[tbForPart.id] = segs[1]
+      if (segs[2]) restoredSubChapters[tbForPart.id] = segs[2]
+      if (segs[3]) restoredPages[tbForPart.id] = segs[3]
+    }
+    setHwSelectedTBIds(restoredTBIds)
+    setHwTBChapters(restoredChapters)
+    setHwTBSubChapters(restoredSubChapters)
+    setHwTBPages(restoredPages)
     setHwAutostepVirtual({})
     setHwSelectedWSId('')
     setHwSelectedEPIds([])
