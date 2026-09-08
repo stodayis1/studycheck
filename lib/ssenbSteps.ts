@@ -70,34 +70,78 @@ export function formatSsenbStepSummary(step: 1 | 2 | 3 | 4, problems: SsenbProbl
   return `${step}스텝 · ${problems.length}문항 (${noText}) · ${pageText}`
 }
 
-// 교과과정 개념(concepts 테이블의 chapter/sub_chapter, 표준 교과서 단원 기준)과
-// 쎈B 소단원(ssenb_problem_map.sub_chapter_no, 상업용 문제집 자체 단원 구성) 사이의 매핑.
-// 두 체계의 단원 쪼개는 방식이 서로 달라서(예: 교과서는 "도형의 닮음"을 2개 중단원으로,
-// 쎈B는 4개 소단원으로 쪼갬) 텍스트 단순 일치로는 매칭이 안 되어 직접 대조해서 만들었다.
-// 지금은 중2-2(쎈B 중등 수학 2-2)만 추출되어 있어 이 학년/학기만 채워둠 - 다른 학년/학기는 매핑이 없으면
-// 빈 배열을 돌려줘서 조용히 아무 표시도 안 하도록(=아직 지원 안 함) 처리한다.
-const SSENB_SUBCHAPTER_MAP: Record<string, Record<string, number[]>> = {
+// 교과과정 개념(concepts 테이블)과 쎈B 소단원(ssenb_problem_map.sub_chapter_no) 사이의 매핑.
+// 두 체계가 단원을 쪼개는 방식과 순서가 서로 달라서(예: 교과서 중단원 "닮음의 활용" 8개 개념이
+// 쎈B에서는 소단원 6·7·8 세 곳에 흩어져 들어가고, 반대로 "도형의 닮음" 중단원 안의 넓이/부피비
+// 개념 하나(24번)는 쎈B 소단원8(닮음의 활용)로 감) 중단원 단위 매칭으로는 부정확해서, 개념
+// 하나하나(concept_order)를 쎈B 유형 제목과 대조해서 소단원 단위로 만든 매핑이다.
+// 지금은 중2-2(쎈B 중등 수학 2-2)만 추출되어 있어 이 학년/학기만 채워둠 - 다른 학년/학기는 매핑이
+// 없으면 빈 결과를 돌려줘서 조용히 아무 표시도 안 하도록(=아직 지원 안 함) 처리한다.
+const SSENB_SUBCHAPTER_CONCEPT_ORDERS: Record<string, Record<number, number[]>> = {
   '중2__2': {
-    'V. 도형의 성질__1. 삼각형의 성질': [1, 2],
-    'V. 도형의 성질__2. 사각형의 성질': [3, 4],
-    'VI. 도형의 닮음__1. 도형의 닮음': [5],
-    'VI. 도형의 닮음__2. 닮음의 활용': [6, 7, 8],
-    'VII. 피타고라스 정리__1. 피타고라스 정리와 활용': [9],
-    'VIII. 확률__1. 경우의 수': [10],
-    'VIII. 확률__2. 확률과 그 계산': [11],
+    1: [1, 2, 3, 4, 5],           // 삼각형의 성질(1) - 이등변삼각형 성질/조건, 직각삼각형 합동조건
+    2: [6, 7, 8, 9, 10, 11],      // 삼각형의 성질(2) - 외심/내심
+    3: [12, 13, 14],              // 평행사변형
+    4: [15, 16, 17, 18, 19, 20],  // 여러 가지 사각형
+    5: [21, 22, 23, 25, 26, 27],  // 도형의 닮음 - 닮은도형, 닮음의 성질, 삼각형 닮음조건
+    6: [28, 29, 32],              // 평행선 사이의 선분의 길이의 비
+    7: [30, 31, 33, 34, 35],      // 삼각형의 무게중심
+    8: [24],                      // 닮음의 활용 - 닮은 도형의 넓이의 비와 부피의 비
+    9: [36, 37, 38, 39, 40, 41],  // 피타고라스 정리
+    10: [42, 43, 44, 45, 46, 47], // 경우의 수
+    11: [48, 49, 50, 51, 52],     // 확률과 그 계산
   },
 }
 
-// 교과과정 개념의 (학년, 학기, 대단원, 중단원)을 받아 해당하는 쎈B sub_chapter_no 목록을 돌려준다.
-// 매핑이 없으면(아직 지원 안 하는 학년/학기, 또는 매칭 안 되는 단원) 빈 배열.
-export function getSsenbSubChaptersForConceptGroup(
+function gradeKeyOf(grade: string, semester: number) {
+  return `${grade}__${semester}`
+}
+
+// 이 학년/학기에 쎈B 매핑이 있는지 여부
+export function hasSsenbConceptMap(grade: string, semester: number): boolean {
+  return !!SSENB_SUBCHAPTER_CONCEPT_ORDERS[gradeKeyOf(grade, semester)]
+}
+
+// 특정 개념(concept_order 하나)이 속하는 쎈B 소단원 번호. 매핑 없으면 null.
+export function getSsenbSubChapterForConceptOrder(
   grade: string,
   semester: number,
-  chapter: string,
-  subChapter: string
+  conceptOrder: number
+): number | null {
+  const map = SSENB_SUBCHAPTER_CONCEPT_ORDERS[gradeKeyOf(grade, semester)]
+  if (!map) return null
+  for (const [subNo, orders] of Object.entries(map)) {
+    if (orders.includes(conceptOrder)) return Number(subNo)
+  }
+  return null
+}
+
+// 쎈B 소단원 번호 하나에 해당하는 이 학년/학기의 전체 concept_order 목록. 매핑 없으면 빈 배열.
+export function getConceptOrdersForSsenbSubChapter(
+  grade: string,
+  semester: number,
+  ssenbSubNo: number
 ): number[] {
-  const gradeKey = `${grade}__${semester}`
-  const map = SSENB_SUBCHAPTER_MAP[gradeKey]
-  if (!map) return []
-  return map[`${chapter}__${subChapter}`] ?? []
+  const map = SSENB_SUBCHAPTER_CONCEPT_ORDERS[gradeKeyOf(grade, semester)]
+  return map?.[ssenbSubNo] ?? []
+}
+
+// 개념 목록(concept_order를 가진 것들)을 쎈B 소단원별로 묶어서, 각 소단원에 해당하는
+// concept_order를 "1~5, 8" 식으로 압축한 결과를 돌려준다. 진도탭 미리보기에서 사용.
+export function groupConceptOrdersBySsenbSubChapter(
+  grade: string,
+  semester: number,
+  conceptOrders: number[]
+): { ssenbSubNo: number; orderRangeText: string }[] {
+  const bySub = new Map<number, number[]>()
+  for (const co of conceptOrders) {
+    const subNo = getSsenbSubChapterForConceptOrder(grade, semester, co)
+    if (subNo == null) continue
+    const arr = bySub.get(subNo) ?? []
+    arr.push(co)
+    bySub.set(subNo, arr)
+  }
+  return Array.from(bySub.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([ssenbSubNo, orders]) => ({ ssenbSubNo, orderRangeText: formatSsenbNoRanges(orders) }))
 }

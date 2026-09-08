@@ -5,7 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
-import { getSsenbStepProblems, formatSsenbStepSummary, getSsenbSubChaptersForConceptGroup, type SsenbProblem } from '@/lib/ssenbSteps'
+import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 
 interface Student {
   id: string
@@ -719,10 +719,12 @@ export default function TeacherLearningNotesPage() {
   }
 
   // 쎈B 오토스텝 파일럿: 쎈B는 학습지가 아니라 교재(유형서)로 배정한다. 학습일지 진도탭에서
-  // 쎈B에 매핑된 개념(=교과과정 소단원)을 체크했을 때, 그 소단원이 이번에 전부 끝났으면
-  // 교재배정 시 정해둔 스텝(student_textbooks.ssenb_step, 1~4)대로 문제를 골라 숙제 알림을 만든다.
-  // - ssenb_problem_map.chapter_title/sub_chapter_title이 concepts.chapter/sub_chapter 텍스트와
-  //   그대로 일치한다고 보고 매칭한다(둘 다 표준 중2-2 교과과정 단원명을 그대로 씀). 매칭 안 되면 조용히 무시.
+  // 쎈B에 매핑된 개념(concept_order)을 체크했을 때, 그 개념이 속한 쎈B 소단원(sub_chapter_no)에
+  // 매핑된 개념이 이번에 전부 끝났으면 교재배정 시 정해둔 스텝(student_textbooks.ssenb_step,
+  // 1~4)대로 문제를 골라 숙제 알림을 만든다.
+  // - 교과서 중단원과 쎈B 소단원이 쪼개는 방식이 달라서(예: 교과서 "닮음의 활용" 한 중단원이
+  //   쎈B 소단원 3개에 걸쳐 있음) concept_order 단위로 만든 lib/ssenbSteps.ts의 매핑을 쓴다.
+  //   매핑이 없는 개념/학년·학기는 조용히 무시(=아직 지원 안 함).
   // - 개념서 오토스텝과 같은 큐(autostep_homework_alerts)에 alert_kind='ssenb_step'으로 쌓이고,
   //   과제배부 화면에서 교사가 확인 후 적용한다(진도 체크만으로 바로 student_worksheets에 배정하지 않음).
   async function runSsenbAutostepCheck(
@@ -738,57 +740,58 @@ export default function TeacherLearningNotesPage() {
       .filter((c): c is NonNullable<typeof c> => !!c && c.grade === tb.grade && c.semester === tb.semester)
     if (touchedConcepts.length === 0) return
 
-    const touchedSubChapters = new Set(touchedConcepts.map((c) => `${c.chapter}__${c.sub_chapter}`))
-    for (const key of touchedSubChapters) {
-      const [chapter, sub_chapter] = key.split('__')
-      const subConceptIds = concepts
-        .filter((c) => c.grade === tb.grade && c.semester === tb.semester && c.chapter === chapter && c.sub_chapter === sub_chapter)
+    // 방금 체크한 개념들이 속한 쎈B 소단원 번호들을 모은다 (매핑 없는 개념은 제외)
+    const touchedSsenbSubNos = new Set(
+      touchedConcepts
+        .map((c) => getSsenbSubChapterForConceptOrder(tb.grade!, tb.semester!, c.concept_order))
+        .filter((n): n is number => n != null)
+    )
+    if (touchedSsenbSubNos.size === 0) return
+
+    const step = tb.ssenb_step as 1 | 2 | 3 | 4
+    for (const ssenbSubNo of touchedSsenbSubNos) {
+      // 이 쎈B 소단원에 매핑된 전체 개념이 이번에 다 끝났는지 확인
+      const mappedOrders = getConceptOrdersForSsenbSubChapter(tb.grade, tb.semester, ssenbSubNo)
+      const mappedConceptIds = concepts
+        .filter((c) => c.grade === tb.grade && c.semester === tb.semester && mappedOrders.includes(c.concept_order))
         .map((c) => c.id)
-      if (subConceptIds.length === 0) continue
+      if (mappedConceptIds.length === 0) continue
 
       const { data: checkedRows } = await supabase
         .from('progress_checks')
         .select('concept_id, check_count')
-        .eq('student_id', studentId).eq('student_textbook_id', tb.id).in('concept_id', subConceptIds)
+        .eq('student_id', studentId).eq('student_textbook_id', tb.id).in('concept_id', mappedConceptIds)
       const doneCount = (checkedRows ?? []).filter((r) => r.check_count >= 1).length
-      if (doneCount < subConceptIds.length) continue // 아직 이 소단원 안에 안 끝난 개념이 있음
+      if (doneCount < mappedConceptIds.length) continue // 아직 이 쎈B 소단원에 매핑된 개념 중 안 끝난 게 있음
 
-      // 교과과정 중단원(chapter/sub_chapter) 하나가 쎈B 소단원 여러 개에 걸쳐 있을 수 있어서
-      // (예: 교과서 "닮음의 활용" 한 중단원 = 쎈B "평행선 사이의 선분의 길이의 비"+"삼각형의 무게중심"+"닮음의 활용" 3개 소단원)
-      // 매핑된 쎈B 소단원마다 각각 알림을 만든다.
-      const ssenbSubNos = getSsenbSubChaptersForConceptGroup(tb.grade, tb.semester, chapter, sub_chapter)
-      if (ssenbSubNos.length === 0) continue // 아직 쎈B 매핑이 없는 단원(다른 학년/학기 등)은 조용히 무시
+      const { data: subProblems } = await supabase
+        .from('ssenb_problem_map')
+        .select('*')
+        .eq('sub_chapter_no', ssenbSubNo)
+      if (!subProblems || subProblems.length === 0) continue
+      const ssenbSubTitle = (subProblems[0] as SsenbProblem).sub_chapter_title
+      const ssenbChapterTitle = (subProblems[0] as SsenbProblem).chapter_title
 
-      const step = tb.ssenb_step as 1 | 2 | 3 | 4
-      for (const ssenbSubNo of ssenbSubNos) {
-        const { data: subProblems } = await supabase
-          .from('ssenb_problem_map')
-          .select('*')
-          .eq('sub_chapter_no', ssenbSubNo)
-        if (!subProblems || subProblems.length === 0) continue
-        const ssenbSubTitle = (subProblems[0] as SsenbProblem).sub_chapter_title
+      const stepProblems = getSsenbStepProblems(subProblems as SsenbProblem[], step)
+      if (stepProblems.length === 0) continue
 
-        const stepProblems = getSsenbStepProblems(subProblems as SsenbProblem[], step)
-        if (stepProblems.length === 0) continue
-
-        const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
-          student_id: studentId,
-          grade: tb.grade,
-          semester: tb.semester,
-          chapter,
-          sub_chapter: ssenbSubTitle,
-          concept_id: null,
-          concept_name: null,
-          workbook_name: '쎈B',
-          page_range: formatSsenbStepSummary(step, stepProblems),
-          alert_kind: 'ssenb_step',
-          includes_danwon_marumi: false,
-          student_textbook_id: tb.id,
-        })
-        // 23505 = 이미 이 소단원 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
-        if (alertError && alertError.code !== '23505') {
-          console.error('쎈B 오토스텝 숙제 알림 생성 오류:', alertError)
-        }
+      const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
+        student_id: studentId,
+        grade: tb.grade,
+        semester: tb.semester,
+        chapter: ssenbChapterTitle,
+        sub_chapter: ssenbSubTitle,
+        concept_id: null,
+        concept_name: null,
+        workbook_name: '쎈B',
+        page_range: formatSsenbStepSummary(step, stepProblems),
+        alert_kind: 'ssenb_step',
+        includes_danwon_marumi: false,
+        student_textbook_id: tb.id,
+      })
+      // 23505 = 이미 이 소단원 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
+      if (alertError && alertError.code !== '23505') {
+        console.error('쎈B 오토스텝 숙제 알림 생성 오류:', alertError)
       }
     }
   }
@@ -2238,22 +2241,26 @@ export default function TeacherLearningNotesPage() {
                                           </div>
                                         )}
 
-                                        {/* 쎈B 단원 구성 미리보기 - 책을 직접 펼쳐보지 않아도 이 중단원이 쎈B에서 어떻게 쪼개지는지 알 수 있게 */}
+                                        {/* 쎈B 단원 구성 미리보기 - 진도 개념 번호가 쎈B 소단원별로 어떻게 나뉘는지,
+                                            책을 직접 펼쳐보지 않아도 강사가 바로 알 수 있게 보여준다. */}
                                         {tb.textbook_name === '쎈B' && sel.chapter && sel.subChapters.length > 0 && (() => {
-                                          const subNos = Array.from(new Set(
-                                            sel.subChapters.flatMap((sub) =>
-                                              getSsenbSubChaptersForConceptGroup(tb.grade ?? '', tb.semester ?? 0, sel.chapter, sub))
-                                          ))
-                                          if (subNos.length === 0) return null
+                                          const groups = groupConceptOrdersBySsenbSubChapter(
+                                            tb.grade ?? '', tb.semester ?? 0, tbConceptList.map((c) => c.concept_order)
+                                          )
+                                          if (groups.length === 0) return null
                                           return (
                                             <div className="px-3 py-2.5 rounded-xl text-[11px] space-y-1" style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#3730a3' }}>
-                                              <p className="font-bold">📘 쎈B에서는 이렇게 나뉘어요</p>
-                                              {subNos.map((no) => {
-                                                const probs = ssenbProblemMap.filter((p) => p.sub_chapter_no === no)
+                                              <p className="font-bold">📘 쎈B에서는 이렇게 나뉘어요 (진도 개념번호 기준)</p>
+                                              {groups.map(({ ssenbSubNo, orderRangeText }) => {
+                                                const probs = ssenbProblemMap.filter((p) => p.sub_chapter_no === ssenbSubNo)
                                                 if (probs.length === 0) return null
                                                 const title = probs[0].sub_chapter_title
                                                 const typeCount = new Set(probs.map((p) => p.type_no)).size
-                                                return <p key={no}>· {title} — {typeCount}유형 {probs.length}문항</p>
+                                                return (
+                                                  <p key={ssenbSubNo}>
+                                                    · 개념 {orderRangeText} → <b>{title}</b> ({typeCount}유형 {probs.length}문항)
+                                                  </p>
+                                                )
                                               })}
                                             </div>
                                           )
