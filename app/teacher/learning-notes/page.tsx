@@ -835,14 +835,14 @@ export default function TeacherLearningNotesPage() {
     }
 
     return Object.entries(byWorkbook).map(([workbook_name, items]) => {
-      items.sort((a, b) => a.page_start - b.page_start)
-      const seen = new Set<string>()
-      const ranges: string[] = []
-      for (const it of items) {
-        const label = it.page_start === it.page_end ? `P.${it.page_start}` : `P.${it.page_start}~${it.page_end}`
-        if (!seen.has(label)) { seen.add(label); ranges.push(label) }
-      }
-      return { workbook_name, pageText: ranges.join(', '), items }
+      // 낱개로 쪼개서 "P.36~37, P.39~40, P.41..." 나열하면 알아보기 어려워서,
+      // 오늘 체크한 범위 전체를 시작~끝 페이지 하나로 압축해서 보여준다.
+      const starts = items.map((it) => it.page_start)
+      const ends = items.map((it) => it.page_end)
+      const min = Math.min(...starts)
+      const max = Math.max(...ends)
+      const pageText = min === max ? `P.${min}` : `P.${min}~${max}`
+      return { workbook_name, pageText, items }
     })
   }
 
@@ -915,14 +915,13 @@ export default function TeacherLearningNotesPage() {
     }
     if (items.length === 0) return null
 
+    // 낱개로 쪼개서 "P.36~37, P.39~40, P.41..." 나열하면 알아보기 어려워서,
+    // 오늘 체크한 범위 전체를 시작~끝 페이지 하나로 압축해서 보여준다.
     items.sort((a, b) => a.page_start - b.page_start)
-    const seen = new Set<string>()
-    const ranges: string[] = []
-    for (const it of items) {
-      const label = it.page_start === it.page_end ? `P.${it.page_start}` : `P.${it.page_start}~${it.page_end}`
-      if (!seen.has(label)) { seen.add(label); ranges.push(label) }
-    }
-    return { pageText: ranges.join(', '), items }
+    const min = Math.min(...items.map((it) => it.page_start))
+    const max = Math.max(...items.map((it) => it.page_end))
+    const pageText = min === max ? `P.${min}` : `P.${min}~${max}`
+    return { pageText, items }
   }
 
   async function handleSaveNote() {
