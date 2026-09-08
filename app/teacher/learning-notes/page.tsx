@@ -5,7 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
-import { getSsenbStepProblems, formatSsenbStepSummary, type SsenbProblem } from '@/lib/ssenbSteps'
+import { getSsenbStepProblems, formatSsenbStepSummary, getSsenbSubChaptersForConceptGroup, type SsenbProblem } from '@/lib/ssenbSteps'
 
 interface Student {
   id: string
@@ -142,6 +142,7 @@ export default function TeacherLearningNotesPage() {
   // 개념DB 기반 진도 선택
   const [concepts, setConcepts] = useState<any[]>([])
   const [studentTextbooks, setStudentTextbooks] = useState<any[]>([])
+  const [ssenbProblemMap, setSsenbProblemMap] = useState<SsenbProblem[]>([])
   const [examPreps, setExamPreps] = useState<any[]>([])
   // 교재별 독립 진도 선택 (tbId → { chapter, subChapters, conceptIds, lastIdx })
   const [noteProgressByTB, setNoteProgressByTB] = useState<Record<string, {
@@ -324,7 +325,7 @@ export default function TeacherLearningNotesPage() {
     // 이 화면 어디에도 전체 목록으로 쓰이는 곳이 없다 - 전부 openNoteModal()에서 학생을 선택하는
     // 순간 그 학생 것만 새로 불러오게 이미 되어 있어서(진도/과제배부 탭용), 페이지를 열 때마다
     // 전체를 통째로 받아오는 건 그냥 낭비였다 - 초기 로딩에서 제거.
-    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, { data: epData }, { data: apmData }] = await Promise.all([
+    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, { data: epData }, { data: apmData }, { data: ssenbData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       // schedules/class_sessions/learning_notes는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
       // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
@@ -338,6 +339,7 @@ export default function TeacherLearningNotesPage() {
       supabase.from('video_watch_logs').select('*'),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
       supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name, concept_book_page_start, concept_book_page_end, concept_book_workbook_name'),
+      supabase.from('ssenb_problem_map').select('*'),
     ])
     if (sData) setStudents(sData)
     // periods는 DB에서 numeric 타입이라 문자열("2.5")로 내려올 수 있어 숫자로 변환 (연산 시 문자열 이어붙기 방지)
@@ -347,6 +349,7 @@ export default function TeacherLearningNotesPage() {
     if (fbData) setFeedbacks(fbData)
     if (cData) setConcepts(cData)
     if (stData) setStudentTextbooks(stData)
+    if (ssenbData) setSsenbProblemMap(ssenbData)
     if (catLNData) setLNCatalog(catLNData)
     if (vwData) setVideoWatchLogs(vwData)
     if (epData) setExamPreps(epData)
@@ -750,33 +753,42 @@ export default function TeacherLearningNotesPage() {
       const doneCount = (checkedRows ?? []).filter((r) => r.check_count >= 1).length
       if (doneCount < subConceptIds.length) continue // 아직 이 소단원 안에 안 끝난 개념이 있음
 
-      const { data: subProblems } = await supabase
-        .from('ssenb_problem_map')
-        .select('*')
-        .eq('chapter_title', chapter).eq('sub_chapter_title', sub_chapter)
-      if (!subProblems || subProblems.length === 0) continue // 이 소단원은 아직 쎈B 매핑이 안 되어 있음
+      // 교과과정 중단원(chapter/sub_chapter) 하나가 쎈B 소단원 여러 개에 걸쳐 있을 수 있어서
+      // (예: 교과서 "닮음의 활용" 한 중단원 = 쎈B "평행선 사이의 선분의 길이의 비"+"삼각형의 무게중심"+"닮음의 활용" 3개 소단원)
+      // 매핑된 쎈B 소단원마다 각각 알림을 만든다.
+      const ssenbSubNos = getSsenbSubChaptersForConceptGroup(tb.grade, tb.semester, chapter, sub_chapter)
+      if (ssenbSubNos.length === 0) continue // 아직 쎈B 매핑이 없는 단원(다른 학년/학기 등)은 조용히 무시
 
       const step = tb.ssenb_step as 1 | 2 | 3 | 4
-      const stepProblems = getSsenbStepProblems(subProblems as SsenbProblem[], step)
-      if (stepProblems.length === 0) continue
+      for (const ssenbSubNo of ssenbSubNos) {
+        const { data: subProblems } = await supabase
+          .from('ssenb_problem_map')
+          .select('*')
+          .eq('sub_chapter_no', ssenbSubNo)
+        if (!subProblems || subProblems.length === 0) continue
+        const ssenbSubTitle = (subProblems[0] as SsenbProblem).sub_chapter_title
 
-      const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
-        student_id: studentId,
-        grade: tb.grade,
-        semester: tb.semester,
-        chapter,
-        sub_chapter,
-        concept_id: null,
-        concept_name: null,
-        workbook_name: '쎈B',
-        page_range: formatSsenbStepSummary(step, stepProblems),
-        alert_kind: 'ssenb_step',
-        includes_danwon_marumi: false,
-        student_textbook_id: tb.id,
-      })
-      // 23505 = 이미 이 소단원 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
-      if (alertError && alertError.code !== '23505') {
-        console.error('쎈B 오토스텝 숙제 알림 생성 오류:', alertError)
+        const stepProblems = getSsenbStepProblems(subProblems as SsenbProblem[], step)
+        if (stepProblems.length === 0) continue
+
+        const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
+          student_id: studentId,
+          grade: tb.grade,
+          semester: tb.semester,
+          chapter,
+          sub_chapter: ssenbSubTitle,
+          concept_id: null,
+          concept_name: null,
+          workbook_name: '쎈B',
+          page_range: formatSsenbStepSummary(step, stepProblems),
+          alert_kind: 'ssenb_step',
+          includes_danwon_marumi: false,
+          student_textbook_id: tb.id,
+        })
+        // 23505 = 이미 이 소단원 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
+        if (alertError && alertError.code !== '23505') {
+          console.error('쎈B 오토스텝 숙제 알림 생성 오류:', alertError)
+        }
       }
     }
   }
@@ -2225,6 +2237,27 @@ export default function TeacherLearningNotesPage() {
                                             })}
                                           </div>
                                         )}
+
+                                        {/* 쎈B 단원 구성 미리보기 - 책을 직접 펼쳐보지 않아도 이 중단원이 쎈B에서 어떻게 쪼개지는지 알 수 있게 */}
+                                        {tb.textbook_name === '쎈B' && sel.chapter && sel.subChapters.length > 0 && (() => {
+                                          const subNos = Array.from(new Set(
+                                            sel.subChapters.flatMap((sub) =>
+                                              getSsenbSubChaptersForConceptGroup(tb.grade ?? '', tb.semester ?? 0, sel.chapter, sub))
+                                          ))
+                                          if (subNos.length === 0) return null
+                                          return (
+                                            <div className="px-3 py-2.5 rounded-xl text-[11px] space-y-1" style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#3730a3' }}>
+                                              <p className="font-bold">📘 쎈B에서는 이렇게 나뉘어요</p>
+                                              {subNos.map((no) => {
+                                                const probs = ssenbProblemMap.filter((p) => p.sub_chapter_no === no)
+                                                if (probs.length === 0) return null
+                                                const title = probs[0].sub_chapter_title
+                                                const typeCount = new Set(probs.map((p) => p.type_no)).size
+                                                return <p key={no}>· {title} — {typeCount}유형 {probs.length}문항</p>
+                                              })}
+                                            </div>
+                                          )
+                                        })()}
 
                                         {/* 개념 목록 */}
                                         {tbConceptList.length > 0 && (

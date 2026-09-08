@@ -69,3 +69,35 @@ export function formatSsenbStepSummary(step: 1 | 2 | 3 | 4, problems: SsenbProbl
   const pageText = formatSsenbPageRange(problems)
   return `${step}스텝 · ${problems.length}문항 (${noText}) · ${pageText}`
 }
+
+// 교과과정 개념(concepts 테이블의 chapter/sub_chapter, 표준 교과서 단원 기준)과
+// 쎈B 소단원(ssenb_problem_map.sub_chapter_no, 상업용 문제집 자체 단원 구성) 사이의 매핑.
+// 두 체계의 단원 쪼개는 방식이 서로 달라서(예: 교과서는 "도형의 닮음"을 2개 중단원으로,
+// 쎈B는 4개 소단원으로 쪼갬) 텍스트 단순 일치로는 매칭이 안 되어 직접 대조해서 만들었다.
+// 지금은 중2-2(쎈B 중등 수학 2-2)만 추출되어 있어 이 학년/학기만 채워둠 - 다른 학년/학기는 매핑이 없으면
+// 빈 배열을 돌려줘서 조용히 아무 표시도 안 하도록(=아직 지원 안 함) 처리한다.
+const SSENB_SUBCHAPTER_MAP: Record<string, Record<string, number[]>> = {
+  '중2__2': {
+    'V. 도형의 성질__1. 삼각형의 성질': [1, 2],
+    'V. 도형의 성질__2. 사각형의 성질': [3, 4],
+    'VI. 도형의 닮음__1. 도형의 닮음': [5],
+    'VI. 도형의 닮음__2. 닮음의 활용': [6, 7, 8],
+    'VII. 피타고라스 정리__1. 피타고라스 정리와 활용': [9],
+    'VIII. 확률__1. 경우의 수': [10],
+    'VIII. 확률__2. 확률과 그 계산': [11],
+  },
+}
+
+// 교과과정 개념의 (학년, 학기, 대단원, 중단원)을 받아 해당하는 쎈B sub_chapter_no 목록을 돌려준다.
+// 매핑이 없으면(아직 지원 안 하는 학년/학기, 또는 매칭 안 되는 단원) 빈 배열.
+export function getSsenbSubChaptersForConceptGroup(
+  grade: string,
+  semester: number,
+  chapter: string,
+  subChapter: string
+): number[] {
+  const gradeKey = `${grade}__${semester}`
+  const map = SSENB_SUBCHAPTER_MAP[gradeKey]
+  if (!map) return []
+  return map[`${chapter}__${subChapter}`] ?? []
+}
