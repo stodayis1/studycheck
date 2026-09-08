@@ -32,6 +32,10 @@ const TEACHER_CAMPUS: Record<string, '코어관' | '프라임관'> = {
 // 그 소단원에 해당하는 유형편 숙제를 자동으로 과제 화면에 알림으로 띄운다. 지금은 윤수지 학생 한 명 +
 // autostep_workbook_map에 실제로 페이지 매핑을 입력해둔 소단원에 대해서만 동작한다 (없으면 조용히 무시).
 const AUTOSTEP_TARGET_STUDENT_ID = '3e50baff-4003-49be-b915-98e297bda726' // 윤수지(중2)
+// 오토스텝 제안 박스는 파일럿 학생(윤수지)이라도 실제로 매핑을 만들어둔 교재에서만 떠야 한다.
+// 개념리피트처럼 같은 개념을 다루지만 페이지 매핑이 없는 다른 개념서에는 뜨면 안 된다.
+const AUTOSTEP_TEXTBOOK_NAMES = ['개념유형 라이트', '개념+유형라이트']
+const SSENB_TEXTBOOK_NAME = '쎈B'
 
 interface Schedule {
   id: string
@@ -841,7 +845,8 @@ export default function TeacherLearningNotesPage() {
   // (교재 배정 여부와 상관없이) workbook_name별로 묶어서 제안 목록을 만든다.
   function getAllAutostepSuggestions() {
     if (!noteStudent || noteStudent.id !== AUTOSTEP_TARGET_STUDENT_ID) return []
-    const conceptTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서')
+    // 개념리피트처럼 매핑이 없는 다른 개념서는 제외하고, 실제로 매핑을 만들어둔 개념서(개념유형 라이트류)만 본다
+    const conceptTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && AUTOSTEP_TEXTBOOK_NAMES.includes(t.textbook_name))
     const touchedConceptIds = getTouchedConceptIdsFor(conceptTBs.map((t) => t.id))
     if (touchedConceptIds.size === 0) return []
 
@@ -913,11 +918,14 @@ export default function TeacherLearningNotesPage() {
   function getAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; textbook_type: string }) {
     if (!noteStudent || noteStudent.id !== AUTOSTEP_TARGET_STUDENT_ID || tb.grade == null || tb.semester == null) return null
     const isConceptBook = tb.textbook_type === '개념서'
-    // 개념서 카드는 그 교재 자신이 체크 대상이고, 유형서 카드는 같은 학년/학기 개념서에서 체크한 걸 본다
+    // 실제로 페이지 매핑을 만들어둔 개념서(개념유형 라이트류)에서만 떠야 한다 - 개념리피트처럼
+    // 같은 개념을 다루지만 매핑이 없는 다른 개념서에는 뜨면 안 된다.
+    if (isConceptBook && !AUTOSTEP_TEXTBOOK_NAMES.includes(tb.textbook_name)) return null
+    // 개념서 카드는 그 교재 자신이 체크 대상이고, 유형서 카드는 같은 학년/학기의 "매핑된" 개념서에서 체크한 걸 본다
     const sourceTBIds = isConceptBook
       ? [tb.id]
       : studentTextbooks
-          .filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && t.grade === tb.grade && t.semester === tb.semester)
+          .filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && AUTOSTEP_TEXTBOOK_NAMES.includes(t.textbook_name) && t.grade === tb.grade && t.semester === tb.semester)
           .map((t) => t.id)
     const touchedConceptIds = getTouchedConceptIdsFor(sourceTBIds)
     if (touchedConceptIds.size === 0) return null
