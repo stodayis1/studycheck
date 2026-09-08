@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
+import { getSsenbStepProblems, formatSsenbStepSummary, type SsenbProblem } from '@/lib/ssenbSteps'
 
 interface Student {
   id: string
@@ -714,6 +715,72 @@ export default function TeacherLearningNotesPage() {
     }
   }
 
+  // 쎈B 오토스텝 파일럿: 쎈B는 학습지가 아니라 교재(유형서)로 배정한다. 학습일지 진도탭에서
+  // 쎈B에 매핑된 개념(=교과과정 소단원)을 체크했을 때, 그 소단원이 이번에 전부 끝났으면
+  // 교재배정 시 정해둔 스텝(student_textbooks.ssenb_step, 1~4)대로 문제를 골라 숙제 알림을 만든다.
+  // - ssenb_problem_map.chapter_title/sub_chapter_title이 concepts.chapter/sub_chapter 텍스트와
+  //   그대로 일치한다고 보고 매칭한다(둘 다 표준 중2-2 교과과정 단원명을 그대로 씀). 매칭 안 되면 조용히 무시.
+  // - 개념서 오토스텝과 같은 큐(autostep_homework_alerts)에 alert_kind='ssenb_step'으로 쌓이고,
+  //   과제배부 화면에서 교사가 확인 후 적용한다(진도 체크만으로 바로 student_worksheets에 배정하지 않음).
+  async function runSsenbAutostepCheck(
+    studentId: string,
+    tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; ssenb_step?: number | null },
+    touchedConceptIds: string[]
+  ) {
+    if (studentId !== AUTOSTEP_TARGET_STUDENT_ID) return
+    if (tb.textbook_name !== '쎈B' || !tb.ssenb_step || !tb.grade || !tb.semester) return
+
+    const touchedConcepts = touchedConceptIds
+      .map((cid) => concepts.find((cc) => cc.id === cid))
+      .filter((c): c is NonNullable<typeof c> => !!c && c.grade === tb.grade && c.semester === tb.semester)
+    if (touchedConcepts.length === 0) return
+
+    const touchedSubChapters = new Set(touchedConcepts.map((c) => `${c.chapter}__${c.sub_chapter}`))
+    for (const key of touchedSubChapters) {
+      const [chapter, sub_chapter] = key.split('__')
+      const subConceptIds = concepts
+        .filter((c) => c.grade === tb.grade && c.semester === tb.semester && c.chapter === chapter && c.sub_chapter === sub_chapter)
+        .map((c) => c.id)
+      if (subConceptIds.length === 0) continue
+
+      const { data: checkedRows } = await supabase
+        .from('progress_checks')
+        .select('concept_id, check_count')
+        .eq('student_id', studentId).eq('student_textbook_id', tb.id).in('concept_id', subConceptIds)
+      const doneCount = (checkedRows ?? []).filter((r) => r.check_count >= 1).length
+      if (doneCount < subConceptIds.length) continue // 아직 이 소단원 안에 안 끝난 개념이 있음
+
+      const { data: subProblems } = await supabase
+        .from('ssenb_problem_map')
+        .select('*')
+        .eq('chapter_title', chapter).eq('sub_chapter_title', sub_chapter)
+      if (!subProblems || subProblems.length === 0) continue // 이 소단원은 아직 쎈B 매핑이 안 되어 있음
+
+      const step = tb.ssenb_step as 1 | 2 | 3 | 4
+      const stepProblems = getSsenbStepProblems(subProblems as SsenbProblem[], step)
+      if (stepProblems.length === 0) continue
+
+      const { error: alertError } = await supabase.from('autostep_homework_alerts').insert({
+        student_id: studentId,
+        grade: tb.grade,
+        semester: tb.semester,
+        chapter,
+        sub_chapter,
+        concept_id: null,
+        concept_name: null,
+        workbook_name: '쎈B',
+        page_range: formatSsenbStepSummary(step, stepProblems),
+        alert_kind: 'ssenb_step',
+        includes_danwon_marumi: false,
+        student_textbook_id: tb.id,
+      })
+      // 23505 = 이미 이 소단원 알림이 있음(유니크 제약) - 정상적인 중복 방지이므로 조용히 무시
+      if (alertError && alertError.code !== '23505') {
+        console.error('쎈B 오토스텝 숙제 알림 생성 오류:', alertError)
+      }
+    }
+  }
+
   // 오토스텝: "체크한 개념"을 모을 때 noteProgressByTB(이번 화면 세션에서 방금 누른 것)만 보면,
   // 저장 후 모달을 닫았다 열거나 새로고침하면 이 값이 비어서 제안이 사라져버린다.
   // 그래서 이미 저장된 세션을 다시 열었을 때는 progress_checks 중 "이 세션(session_id)"에서
@@ -991,6 +1058,8 @@ export default function TeacherLearningNotesPage() {
           }))
           // 오토스텝 파일럿: 이 교재에서 방금 체크한 개념들의 소단원이 완료됐는지 확인해서 숙제 알림 생성
           await runAutostepHomeworkCheck(noteStudent.id, tb, sel.conceptIds)
+          // 쎈B 오토스텝 파일럿: 쎈B 교재로 체크한 경우 배정된 스텝대로 별도 숙제 알림 생성
+          await runSsenbAutostepCheck(noteStudent.id, tb, sel.conceptIds)
         }
         // 로컬 즉시 반영
         const myTBs2 = myTBs

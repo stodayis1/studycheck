@@ -65,22 +65,6 @@ interface MiddleWorksheet {
   lesson_name: string
 }
 
-interface SsenbProblem {
-  id: string
-  book_name: string
-  chapter_no: number
-  chapter_title: string
-  sub_chapter_no: number
-  sub_chapter_title: string
-  type_no: number
-  type_title: string
-  local_no: number
-  global_code: string
-  difficulty: '대표' | '하' | '중' | '상'
-  is_essay: boolean
-  page: number
-}
-
 const WS_STATUS: Record<string, { label: string; color: string; bg: string }> = {
   assigned:          { label: '과제중',       color: 'text-gray-500',   bg: 'bg-gray-100' },
   submitted:         { label: '채점대기',     color: 'text-[#712B13]',  bg: 'bg-[#FFF5F2]' },
@@ -196,7 +180,7 @@ export default function TeacherAssignmentsPage() {
   const [mwLevel, setMwLevel] = useState(2.5)
 
   // 쌍둥이 학습지 상태
-  const [wsType, setWsType] = useState<'level' | 'twin' | 'ssenb'>('level')
+  const [wsType, setWsType] = useState<'level' | 'twin'>('level')
   const [twinStudent, setTwinStudent] = useState<Student | null>(null)
   const [twinTextbookId, setTwinTextbookId] = useState('')
   const [twinConcepts, setTwinConcepts] = useState<Concept[]>([])
@@ -204,84 +188,6 @@ export default function TeacherAssignmentsPage() {
   const [twinRound, setTwinRound] = useState<'1차' | '2차' | '오답' | '오답유사'>('1차')
   const [twinAssigning, setTwinAssigning] = useState(false)
   const [twinSearch, setTwinSearch] = useState('')
-
-  // 쎈B 스텝 배정 상태 (파일럿: 쎈B 중등 수학 2-2)
-  const [ssenbMap, setSsenbMap] = useState<SsenbProblem[]>([])
-  const [ssenbStudent, setSsenbStudent] = useState<Student | null>(null)
-  const [ssenbSearch, setSsenbSearch] = useState('')
-  const [ssenbSubChapter, setSsenbSubChapter] = useState<number | null>(null)
-  const [ssenbStep, setSsenbStep] = useState<1 | 2 | 3 | 4 | null>(null)
-  const [ssenbAssigning, setSsenbAssigning] = useState(false)
-
-  async function loadSsenbMap() {
-    if (ssenbMap.length > 0) return
-    const { data } = await supabase.from('ssenb_problem_map').select('*').order('sub_chapter_no').order('local_no')
-    if (data) setSsenbMap(data)
-  }
-
-  const ssenbSubChapters = [...new Set(ssenbMap.map(p => p.sub_chapter_no))].sort((a, b) => a - b)
-  function ssenbSubChapterTitle(no: number) {
-    return ssenbMap.find(p => p.sub_chapter_no === no)?.sub_chapter_title ?? `소단원${no}`
-  }
-
-  // 스텝별 문제 필터링: 1스텝=대표문제만, 2스텝=유형별 처음 두 문제, 3스텝=상 제외 전체, 4스텝=전체
-  function getSsenbStepProblems(subChapterNo: number, step: 1 | 2 | 3 | 4): SsenbProblem[] {
-    const all = ssenbMap.filter(p => p.sub_chapter_no === subChapterNo).sort((a, b) => a.local_no - b.local_no)
-    if (step === 4) return all
-    if (step === 3) return all.filter(p => p.difficulty !== '상')
-    if (step === 1) return all.filter(p => p.difficulty === '대표')
-    // 2스텝: 유형별 처음 두 문제 (대표문제 + 바로 다음 문제)
-    const byType = new Map<number, SsenbProblem[]>()
-    for (const p of all) {
-      const arr = byType.get(p.type_no) ?? []
-      arr.push(p)
-      byType.set(p.type_no, arr)
-    }
-    const result: SsenbProblem[] = []
-    for (const arr of byType.values()) result.push(...arr.slice(0, 2))
-    return result.sort((a, b) => a.local_no - b.local_no)
-  }
-
-  function formatSsenbNoRanges(nums: number[]): string {
-    if (nums.length === 0) return ''
-    const sorted = [...nums].sort((a, b) => a - b)
-    const ranges: string[] = []
-    let start = sorted[0], prev = sorted[0]
-    for (let i = 1; i <= sorted.length; i++) {
-      const n = sorted[i]
-      if (n === prev + 1) { prev = n; continue }
-      ranges.push(start === prev ? `${start}` : `${start}~${prev}`)
-      if (i < sorted.length) { start = n; prev = n }
-    }
-    return ranges.join(', ')
-  }
-
-  async function handleSsenbAssign() {
-    if (!ssenbStudent || !ssenbSubChapter || !ssenbStep) return
-    setSsenbAssigning(true)
-    const problems = getSsenbStepProblems(ssenbSubChapter, ssenbStep)
-    const pages = problems.map(p => p.page)
-    const pageText = pages.length ? (Math.min(...pages) === Math.max(...pages) ? `p.${Math.min(...pages)}` : `p.${Math.min(...pages)}~${Math.max(...pages)}`) : ''
-    const noText = formatSsenbNoRanges(problems.map(p => p.local_no))
-    const subTitle = ssenbSubChapterTitle(ssenbSubChapter)
-    await supabase.from('student_worksheets').insert({
-      student_id: ssenbStudent.id,
-      subject: '수학',
-      grade_level: ssenbStudent.grade,
-      unit: `쎈B ${subTitle}`,
-      unit_name: `${ssenbStep}스텝 · ${problems.length}문항 (${noText}) · ${pageText}`,
-      current_level: 1,
-      status: 'assigned',
-      worksheet_type: 'main',
-    })
-    setSsenbStudent(null)
-    setSsenbSubChapter(null)
-    setSsenbStep(null)
-    setSsenbAssigning(false)
-    setShowWSModal(false)
-    flashToast('쎈B 학습지를 배정했어요')
-    fetchData()
-  }
 
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [scoreWS, setScoreWS] = useState<StudentWorksheet | null>(null)
@@ -1086,6 +992,8 @@ export default function TeacherAssignmentsPage() {
                     <p className="text-xs" style={{ color: '#4338CA' }}>
                       {a.alert_kind === 'danwon_marumi'
                         ? <>"{a.chapter}" 대단원 완료 → {a.workbook_name} 단원마무리 {a.page_range} 숙제로 내주세요</>
+                        : a.alert_kind === 'ssenb_step'
+                        ? <>"{a.sub_chapter}" 소단원 완료 → {a.workbook_name} {a.page_range} 숙제로 내주세요</>
                         : <>"{a.concept_name ?? `${a.chapter} ${a.sub_chapter}`}" 개념 체크 → {a.workbook_name} {a.page_range} 숙제로 내주세요</>}
                     </p>
                   </div>
@@ -1721,11 +1629,9 @@ export default function TeacherAssignmentsPage() {
 
             {/* 학습지 종류 탭 */}
             <div className="flex gap-2">
-              {([['level','레벨학습지'],['twin','쌍둥이학습지'],['ssenb','쎈B']] as const).map(([type, label]) => (
+              {([['level','레벨학습지'],['twin','쌍둥이학습지']] as const).map(([type, label]) => (
                 <button key={type} onClick={() => {
                   setWsType(type); setTwinStudent(null); setTwinSelectedConcepts([])
-                  setSsenbStudent(null); setSsenbSubChapter(null); setSsenbStep(null)
-                  if (type === 'ssenb') loadSsenbMap()
                 }}
                   className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
                   style={wsType === type ? { background: '#F5C4B3', color: '#712B13' } : { background: '#f3f4f6', color: '#9ca3af' }}>
@@ -1734,91 +1640,7 @@ export default function TeacherAssignmentsPage() {
               ))}
             </div>
 
-            {wsType === 'ssenb' ? (
-              <>
-                {/* 쎈B 스텝 배정 UI (파일럿: 쎈B 중등 수학 2-2) */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">학생 <span className="text-red-400">*</span></label>
-                  {ssenbStudent ? (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: '#FAECE7', border: '2px solid #F5C4B3' }}>
-                      <p className="text-sm font-bold flex-1" style={{ color: '#712B13' }}>{ssenbStudent.name} · {ssenbStudent.grade}</p>
-                      <button onClick={() => setSsenbStudent(null)} className="text-gray-400"><i className="ti ti-x" /></button>
-                    </div>
-                  ) : (
-                    <>
-                    <input value={ssenbSearch} onChange={e => setSsenbSearch(e.target.value)}
-                      placeholder="이름 검색" className="w-full text-sm rounded-xl px-3 py-2 mb-2 outline-none"
-                      style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
-                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                      {myEditableStudents.filter(s =>
-                        s.grade.includes('중') && (ssenbSearch === '' || s.name.includes(ssenbSearch))
-                      ).map(s => (
-                        <button key={s.id} onClick={() => setSsenbStudent(s)}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#FAECE7', color: '#993C1D' }}>{s.name[0]}</div>
-                          <div className="flex-1 text-left">
-                            <p className="text-sm font-semibold text-gray-800">{s.name}</p>
-                            <p className="text-xs text-gray-400">{s.grade} · {s.teacher_name}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                    </>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">단원 <span className="text-gray-400 font-normal">쎈B 중등 수학 2-2</span></label>
-                  <div className="flex flex-wrap gap-2">
-                    {ssenbSubChapters.map(no => (
-                      <button key={no} onClick={() => setSsenbSubChapter(no)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
-                        style={ssenbSubChapter === no ? { background: '#712B13', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
-                        {ssenbSubChapterTitle(no)}
-                      </button>
-                    ))}
-                    {ssenbSubChapters.length === 0 && <p className="text-xs text-gray-400">불러오는 중...</p>}
-                  </div>
-                </div>
-
-                {ssenbSubChapter && (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-2">스텝</label>
-                    <div className="flex gap-2 flex-wrap">
-                      {([1,2,3,4] as const).map(step => (
-                        <button key={step} onClick={() => setSsenbStep(step)}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                          style={ssenbStep === step ? { background: '#F5C4B3', color: '#712B13' } : { background: '#f3f4f6', color: '#6b7280' }}>
-                          {step}스텝
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      1스텝 대표문제만 · 2스텝 대표+다음문제 · 3스텝 &apos;상&apos; 제외 전체 · 4스텝 전체
-                    </p>
-                  </div>
-                )}
-
-                {ssenbSubChapter && ssenbStep && (() => {
-                  const problems = getSsenbStepProblems(ssenbSubChapter, ssenbStep)
-                  const pages = problems.map(p => p.page)
-                  const pageText = pages.length ? (Math.min(...pages) === Math.max(...pages) ? `p.${Math.min(...pages)}` : `p.${Math.min(...pages)}~${Math.max(...pages)}`) : ''
-                  const noText = formatSsenbNoRanges(problems.map(p => p.local_no))
-                  return (
-                    <div className="px-3 py-2.5 rounded-xl text-xs" style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#3730a3' }}>
-                      ⚡ {problems.length}문항 ({noText}) · {pageText}
-                    </div>
-                  )
-                })()}
-
-                <button onClick={handleSsenbAssign}
-                  disabled={!ssenbStudent || !ssenbSubChapter || !ssenbStep || ssenbAssigning}
-                  className="w-full py-3 rounded-2xl text-sm font-bold transition-all"
-                  style={!ssenbStudent || !ssenbSubChapter || !ssenbStep ? { background: '#f3f4f6', color: '#9ca3af' } : { background: '#712B13', color: 'white' }}>
-                  {ssenbAssigning ? '배정 중...' : '쎈B 학습지 배정'}
-                </button>
-              </>
-            ) : wsType === 'twin' ? (
+            {wsType === 'twin' ? (
               <>
                 {/* 쌍둥이 학습지 UI */}
                 <div>
