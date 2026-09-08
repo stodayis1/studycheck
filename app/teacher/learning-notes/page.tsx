@@ -840,7 +840,7 @@ export default function TeacherLearningNotesPage() {
   // 오토스텝: 유형서를 별도로 배정하지 않은 학생도 쓸 수 있도록, 오늘 체크한 개념들을
   // (교재 배정 여부와 상관없이) workbook_name별로 묶어서 제안 목록을 만든다.
   function getAllAutostepSuggestions() {
-    if (!noteStudent) return []
+    if (!noteStudent || noteStudent.id !== AUTOSTEP_TARGET_STUDENT_ID) return []
     const conceptTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서')
     const touchedConceptIds = getTouchedConceptIdsFor(conceptTBs.map((t) => t.id))
     if (touchedConceptIds.size === 0) return []
@@ -911,7 +911,7 @@ export default function TeacherLearningNotesPage() {
   // - tb가 유형서면: 그 유형서에 매핑된 유형편 페이지
   // - tb가 개념서면: 그 개념서 자신에서 오늘 체크한 부분의 페이지(=진도 나간 부분 그대로)
   function getAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; textbook_type: string }) {
-    if (!noteStudent || tb.grade == null || tb.semester == null) return null
+    if (!noteStudent || noteStudent.id !== AUTOSTEP_TARGET_STUDENT_ID || tb.grade == null || tb.semester == null) return null
     const isConceptBook = tb.textbook_type === '개념서'
     // 개념서 카드는 그 교재 자신이 체크 대상이고, 유형서 카드는 같은 학년/학기 개념서에서 체크한 걸 본다
     const sourceTBIds = isConceptBook
