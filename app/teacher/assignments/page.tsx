@@ -130,8 +130,9 @@ function getChapterNameByOrder(concepts: Concept[], grade: string, semester: num
 
 export default function TeacherAssignmentsPage() {
   const { currentUser, isAdmin, canManageAllStudents, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
-  const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'textbook'>('worksheet')
+  const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'level_report' | 'textbook'>('worksheet')
   const [unitStatusStudent, setUnitStatusStudent] = useState<Student | null>(null)
+  const [levelReportGrade, setLevelReportGrade] = useState<string>('초1')
   const [subTab, setSubTab] = useState<'ws' | 'tb'>('ws')
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
@@ -265,7 +266,7 @@ export default function TeacherAssignmentsPage() {
   }
 
   useEffect(() => {
-    if (tab === 'unit_status' && !worksheetsFullLoaded && !worksheetsFullLoading) {
+    if ((tab === 'unit_status' || tab === 'level_report') && !worksheetsFullLoaded && !worksheetsFullLoading) {
       loadWorksheetsFull()
     }
   }, [tab, worksheetsFullLoaded, worksheetsFullLoading])
@@ -592,6 +593,7 @@ export default function TeacherAssignmentsPage() {
             { key: 'worksheet',   label: '학습지 배정', icon: 'ti-file-text' },
             { key: 'submissions', label: '제출현황',     icon: 'ti-clock' },
             { key: 'unit_status', label: '단원 현황',    icon: 'ti-chart-bar' },
+            { key: 'level_report', label: '레벨 현황판', icon: 'ti-table' },
             { key: 'textbook',    label: '병행교재',     icon: 'ti-book' },
           ].map((t) => (
             <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
@@ -1459,6 +1461,129 @@ export default function TeacherAssignmentsPage() {
                   <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
                     <i className="ti ti-file-text" style={{ fontSize: 32, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
                     <p className="text-sm text-gray-500">아직 배정된 학습지가 없어요</p>
+                  </div>
+                )}
+              </div>
+            )
+          })()
+        )}
+
+        {tab === 'level_report' && (
+          loading || worksheetsFullLoading || !worksheetsFullLoaded ? (
+            <div className="text-center py-8">
+              <span className="w-6 h-6 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin inline-block" />
+            </div>
+          ) : (() => {
+            const gradesAvailable = WORKSHEET_GRADE_LEVELS.filter((g) => filteredStudents.some((s) => s.grade === g))
+            const activeGrade = gradesAvailable.includes(levelReportGrade) ? levelReportGrade : (gradesAvailable[0] ?? '초1')
+            const gradeStudents = filteredStudents
+              .filter((s) => s.grade === activeGrade)
+              .sort((a, b) => a.name.localeCompare(b.name))
+
+            const STATUS_COLOR: Record<string, string> = {
+              assigned: '#3b82f6', submitted: '#f59e0b', scored: '#8b5cf6',
+              retry: '#ef4444', passed: '#22c55e', similar_assigned: '#f97316', similar_submitted: '#f59e0b',
+            }
+            const STATUS_LABEL: Record<string, string> = {
+              assigned: '과제중', submitted: '채점대기', scored: '결과대기',
+              retry: '재도전', passed: '완료', similar_assigned: '오답유사', similar_submitted: '오답제출',
+            }
+
+            // 학생이 특정 레벨에서 1~8단원 중 어디까지 왔는지 - 단원별로 가장 최근/진행중인 상태를 하나씩 뽑는다.
+            // (grade_level은 학생마다 실제 배정된 학기가 제각각이라, 레벨 자체를 기준으로만 묶는다)
+            function getLevelUnitStatuses(studentId: string, level: number) {
+              const rows = worksheetsFull.filter((w) => w.student_id === studentId && w.current_level === level)
+              if (rows.length === 0) return null
+              return WORKSHEET_UNITS.map((u) => {
+                const unitRows = rows.filter((w) => w.unit === u)
+                if (unitRows.length === 0) return null
+                const active = unitRows.find((w) => w.status !== 'passed')
+                return active ? active.status : 'passed'
+              })
+            }
+
+            return (
+              <div className="space-y-3">
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {WORKSHEET_GRADE_LEVELS.map((g) => {
+                    const count = filteredStudents.filter((s) => s.grade === g).length
+                    return (
+                      <button key={g} onClick={() => setLevelReportGrade(g)}
+                        className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                        style={activeGrade === g
+                          ? { background: '#F5C4B3', color: '#712B13' }
+                          : { background: '#f3f4f6', color: '#9ca3af' }}>
+                        {g} {count > 0 ? `(${count})` : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="flex gap-3 flex-wrap px-1">
+                  {[
+                    { color: '#22c55e', label: '완료' },
+                    { color: '#8b5cf6', label: '결과대기' },
+                    { color: '#3b82f6', label: '과제중' },
+                    { color: '#ef4444', label: '재도전' },
+                    { color: '#f59e0b', label: '채점대기' },
+                    { color: '#f3f4f6', label: '미배정' },
+                  ].map((s) => (
+                    <div key={s.label} className="flex items-center gap-1">
+                      <div style={{ width: 9, height: 9, borderRadius: 2, background: s.color, border: s.label === '미배정' ? '1px solid #e5e7eb' : 'none' }} />
+                      <span className="text-[10px] text-gray-500">{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {gradeStudents.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                    <p className="text-sm text-gray-500">{activeGrade} 학생이 없어요</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-gray-100 overflow-auto">
+                    <table className="text-xs border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left border-b border-r border-gray-100 whitespace-nowrap">레벨</th>
+                          {gradeStudents.map((s) => (
+                            <th key={s.id} className="px-2 py-2 border-b border-gray-100 whitespace-nowrap font-semibold text-gray-700">
+                              {s.name}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {WORKSHEET_LEVELS.map((level) => (
+                          <tr key={level}>
+                            <td className="sticky left-0 z-10 bg-white px-3 py-2 border-r border-b border-gray-50 font-bold text-gray-700 whitespace-nowrap">
+                              {level}레벨
+                            </td>
+                            {gradeStudents.map((s) => {
+                              const statuses = getLevelUnitStatuses(s.id, level)
+                              return (
+                                <td key={s.id} className="px-2 py-2 border-b border-gray-50 text-center">
+                                  {!statuses ? (
+                                    <span className="text-gray-200">–</span>
+                                  ) : (
+                                    <div className="flex gap-0.5 justify-center">
+                                      {statuses.map((st, i) => (
+                                        <div key={i}
+                                          title={`${WORKSHEET_UNITS[i]}${st ? ` · ${STATUS_LABEL[st] ?? st}` : ' · 미배정'}`}
+                                          style={{
+                                            width: 9, height: 9, borderRadius: 2,
+                                            background: st ? (STATUS_COLOR[st] ?? '#e5e7eb') : '#f3f4f6',
+                                            border: st ? 'none' : '1px solid #e5e7eb',
+                                          }} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
