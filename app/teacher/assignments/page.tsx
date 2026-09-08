@@ -979,7 +979,7 @@ export default function TeacherAssignmentsPage() {
         {/* ── 병행교재 관리 탭 ── */}
         {tab === 'textbook' && (
           <div className="space-y-3">
-            {autostepAlerts.map((a) => {
+            {autostepAlerts.filter((a) => myStudentIds.has(a.student_id)).map((a) => {
               const student = students.find((s) => s.id === a.student_id)
               return (
                 <div key={a.id} className="rounded-2xl px-4 py-3 flex items-center gap-3"
