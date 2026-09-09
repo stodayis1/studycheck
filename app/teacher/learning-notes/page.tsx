@@ -31,7 +31,15 @@ const TEACHER_CAMPUS: Record<string, '코어관' | '프라임관'> = {
 // 오토스텝 파일럿 2단계: 소단원(=concepts의 chapter+sub_chapter) 안의 모든 개념을 다 체크하면
 // 그 소단원에 해당하는 유형편 숙제를 자동으로 과제 화면에 알림으로 띄운다. 지금은 윤수지 학생 한 명 +
 // autostep_workbook_map에 실제로 페이지 매핑을 입력해둔 소단원에 대해서만 동작한다 (없으면 조용히 무시).
-const AUTOSTEP_TARGET_STUDENT_ID = '3e50baff-4003-49be-b915-98e297bda726' // 윤수지(중2)
+// 오토스텝 파일럿 학생 목록 - 한 명씩 늘려가며 검증 중. 새 학생을 추가할 땐 여기 한 줄만 더하면 됨.
+// (app/teacher/curriculum/page.tsx에도 같은 목록이 있음 - 파일럿 학생을 추가/제외할 땐 두 파일 다 맞춰줘야 함)
+const AUTOSTEP_PILOT_STUDENT_IDS = new Set([
+  '3e50baff-4003-49be-b915-98e297bda726', // 윤수지(중2)
+  '4fec8d11-ccb5-4300-9e2e-7ca5dedc0ff7', // 유정환(초6, 개념유형 선행)
+])
+function isAutostepPilot(studentId: string | null | undefined) {
+  return !!studentId && AUTOSTEP_PILOT_STUDENT_IDS.has(studentId)
+}
 // 오토스텝 제안 박스는 파일럿 학생(윤수지)이라도 실제로 매핑을 만들어둔 교재에서만 떠야 한다.
 // 개념리피트처럼 같은 개념을 다루지만 페이지 매핑이 없는 다른 개념서에는 뜨면 안 된다.
 const AUTOSTEP_TEXTBOOK_NAMES = ['개념유형 라이트', '개념+유형라이트']
@@ -666,7 +674,7 @@ export default function TeacherLearningNotesPage() {
     tb: { id: string; grade: string | null; semester: number | null; textbook_type: string },
     touchedConceptIds: string[]
   ) {
-    if (studentId !== AUTOSTEP_TARGET_STUDENT_ID) return
+    if (!isAutostepPilot(studentId)) return
     if (tb.textbook_type !== '개념서' || !tb.grade || !tb.semester) return
 
     const touchedConcepts = touchedConceptIds
@@ -761,7 +769,7 @@ export default function TeacherLearningNotesPage() {
     tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; ssenb_step?: number | null },
     touchedConceptIds: string[]
   ) {
-    if (studentId !== AUTOSTEP_TARGET_STUDENT_ID) return
+    if (!isAutostepPilot(studentId)) return
     if (tb.textbook_name !== '쎈B' || !tb.ssenb_step || !tb.grade || !tb.semester) return
 
     const touchedConcepts = touchedConceptIds
@@ -847,7 +855,7 @@ export default function TeacherLearningNotesPage() {
   // 오토스텝: 유형서를 별도로 배정하지 않은 학생도 쓸 수 있도록, 오늘 체크한 개념들을
   // (교재 배정 여부와 상관없이) workbook_name별로 묶어서 제안 목록을 만든다.
   function getAllAutostepSuggestions() {
-    if (!noteStudent || noteStudent.id !== AUTOSTEP_TARGET_STUDENT_ID) return []
+    if (!noteStudent || !isAutostepPilot(noteStudent.id)) return []
     // 개념리피트처럼 매핑이 없는 다른 개념서는 제외하고, 실제로 매핑을 만들어둔 개념서(개념유형 라이트류)만 본다
     const conceptTBs = studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.textbook_type === '개념서' && AUTOSTEP_TEXTBOOK_NAMES.includes(t.textbook_name))
     const touchedConceptIds = getTouchedConceptIdsFor(conceptTBs.map((t) => t.id))
@@ -919,7 +927,7 @@ export default function TeacherLearningNotesPage() {
   // - tb가 유형서면: 그 유형서에 매핑된 유형편 페이지
   // - tb가 개념서면: 그 개념서 자신에서 오늘 체크한 부분의 페이지(=진도 나간 부분 그대로)
   function getAutostepSuggestion(tb: { id: string; grade: string | null; semester: number | null; textbook_name: string; textbook_type: string }) {
-    if (!noteStudent || noteStudent.id !== AUTOSTEP_TARGET_STUDENT_ID || tb.grade == null || tb.semester == null) return null
+    if (!noteStudent || !isAutostepPilot(noteStudent.id) || tb.grade == null || tb.semester == null) return null
     const isConceptBook = tb.textbook_type === '개념서'
     // 실제로 페이지 매핑을 만들어둔 개념서(개념유형 라이트류)에서만 떠야 한다 - 개념리피트처럼
     // 같은 개념을 다루지만 매핑이 없는 다른 개념서에는 뜨면 안 된다.

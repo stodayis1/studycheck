@@ -80,7 +80,14 @@ const TB_TYPES = ['개념서', '유형서', '심화서', '연산서']
 // 오토스텝 파일럿: 윤수지(중2, 윤지혜 담당) 학생 한 명에게만 우선 적용해보는 기능.
 // "개념유형 라이트" PDF 구조 분석(개념박스+STEP1+STEP2+STEP3)으로 구한 학년/학기별 총 항목수.
 // 아직 다 분석 못한 학기는 표에서 빼뒀고, 그런 학기를 고르면 오토스텝 UI 자체가 안 뜬다.
-const AUTOSTEP_TARGET_STUDENT_ID = '3e50baff-4003-49be-b915-98e297bda726' // 윤수지(중2)
+// 오토스텝 파일럿 학생 목록 - 한 명씩 늘려가며 검증 중. 새 학생을 추가할 땐 여기 한 줄만 더하면 됨.
+const AUTOSTEP_PILOT_STUDENT_IDS = new Set([
+  '3e50baff-4003-49be-b915-98e297bda726', // 윤수지(중2)
+  '4fec8d11-ccb5-4300-9e2e-7ca5dedc0ff7', // 유정환(초6, 개념유형 선행)
+])
+function isAutostepPilot(studentId: string | null | undefined) {
+  return !!studentId && AUTOSTEP_PILOT_STUDENT_IDS.has(studentId)
+}
 const AUTOSTEP_TEXTBOOK_NAMES = ['개념유형 라이트', '개념+유형라이트']
 const SSENB_TEXTBOOK_NAME = '쎈B' // 쎈B 오토스텝 파일럿 대상 교재명
 const AUTOSTEP_TOTAL_ITEMS: Record<string, Record<number, number>> = {
@@ -343,9 +350,9 @@ export default function TeacherCurriculumPage() {
       const savedSemester = isMockExam1 ? 1 : isMockExam2 ? 2 : tbSemester
 
       // 오토스텝 파일럿: 지금은 윤수지 학생 + 개념유형 라이트 교재일 때만 저장 (다른 학생/교재는 항상 비활성)
-      const autostepOn = sid === AUTOSTEP_TARGET_STUDENT_ID && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
+      const autostepOn = isAutostepPilot(sid) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
       // 쎈B 오토스텝 파일럿: 윤수지 학생 + 쎈B 교재 + 스텝(1~4) 선택 시에만 저장
-      const ssenbOn = sid === AUTOSTEP_TARGET_STUDENT_ID && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep != null
+      const ssenbOn = isAutostepPilot(sid) && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep != null
 
       await supabase.from('student_textbooks').insert({
         student_id: sid,
@@ -1360,7 +1367,7 @@ export default function TeacherCurriculumPage() {
             </div>
 
             {/* 오토스텝 파일럿 - 지금은 윤수지 학생 + 개념유형 라이트 교재 배정 시에만 노출 */}
-            {tbStudent?.id === AUTOSTEP_TARGET_STUDENT_ID && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && (
+            {isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && (
               AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] ? (
                 <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
                   <p className="text-xs font-bold text-indigo-800">⚡ 오토스텝 · 하루 진도량(스텝)을 선택하세요</p>
@@ -1396,7 +1403,7 @@ export default function TeacherCurriculumPage() {
             )}
 
             {/* 쎈B 오토스텝 파일럿 - 지금은 윤수지 학생 + 쎈B 교재 배정 시에만 노출 */}
-            {tbStudent?.id === AUTOSTEP_TARGET_STUDENT_ID && tbName === SSENB_TEXTBOOK_NAME && (
+            {isAutostepPilot(tbStudent?.id) && tbName === SSENB_TEXTBOOK_NAME && (
               <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
                 <p className="text-xs font-bold text-indigo-800">⚡ 쎈B 오토스텝 · 소단원 완료 시 자동 배부할 스텝을 선택하세요</p>
                 <div className="flex gap-2 flex-wrap">
@@ -1426,9 +1433,9 @@ export default function TeacherCurriculumPage() {
 
             <button onClick={handleTBAssign}
               disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || !tbName || tbAssigning ||
-                (tbStudent?.id === AUTOSTEP_TARGET_STUDENT_ID && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) &&
+                (isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) &&
                   !!AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] && tbAutostepLevel == null) ||
-                (tbStudent?.id === AUTOSTEP_TARGET_STUDENT_ID && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep == null)}
+                (isAutostepPilot(tbStudent?.id) && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep == null)}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
               {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : (tbMultiMode ? `📚 ${tbStudentIds.length}명에게 교재 배정하기` : '📚 교재 배정하기')}
             </button>
