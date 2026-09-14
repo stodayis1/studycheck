@@ -84,6 +84,9 @@ const TB_TYPES = ['개념서', '유형서', '심화서', '연산서']
 const AUTOSTEP_PILOT_STUDENT_IDS = new Set([
   '3e50baff-4003-49be-b915-98e297bda726', // 윤수지(중2)
   '4fec8d11-ccb5-4300-9e2e-7ca5dedc0ff7', // 유정환(초6, 개념유형 선행)
+  '07a66269-59ee-4675-96f9-fc79c8f2dfbc', // 안준혁(초6)
+  'fe87f1a6-9142-4e64-8cfa-2a9273e516cc', // 오현승(초6)
+  '06b4178f-0f71-48e6-bbfe-07f911acdf72', // 임지원(초6)
 ])
 function isAutostepPilot(studentId: string | null | undefined) {
   return !!studentId && AUTOSTEP_PILOT_STUDENT_IDS.has(studentId)
