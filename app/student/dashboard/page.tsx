@@ -759,9 +759,14 @@ export default function StudentDashboardPage() {
                   낮은 순으로 점수 칩을 모아두면 한 단원 안에서 어디까지 왔는지 한눈에 보인다. */}
               <div className="px-2 pb-3 pt-1 space-y-2.5">
                 {(() => {
+                  // unit_name에는 그 학습지가 다루는 개념을 전부 "+"로 이어붙인 긴 텍스트가 들어있어서
+                  // (예: "소수와 합성수 + 거듭제곱 + ... 혼합 계산") 화면에 그대로 쓰면 안 됨. 게다가
+                  // 같은 대단원(unit)이라도 학습지마다 다루는 범위가 달라 unit_name이 조금씩 달라지므로,
+                  // 그걸 그룹 키에 넣으면 같은 대단원이 여러 카드로 쪼개지는 문제도 있었음. 대단원(unit)
+                  // 하나로만 묶고, 제목도 대단원명만 짧게 보여준다.
                   const groups = new Map<string, StudentWorksheet[]>()
                   for (const w of worksheets) {
-                    const key = `${w.grade_level}__${w.unit}__${w.unit_name}`
+                    const key = `${w.grade_level}__${w.unit}`
                     if (!groups.has(key)) groups.set(key, [])
                     groups.get(key)!.push(w)
                   }
@@ -771,14 +776,14 @@ export default function StudentDashboardPage() {
                     return latestB - latestA
                   })
                   return sortedGroups.map(([key, items]) => {
-                    const [gradeLevel, unit, unitName] = key.split('__')
+                    const [gradeLevel, unit] = key.split('__')
                     const sorted = [...items].sort((a, b) =>
                       a.current_level - b.current_level || a.assigned_at.localeCompare(b.assigned_at)
                     )
                     return (
                       <div key={key} className="rounded-xl border border-gray-100 px-3 py-2.5">
                         <p className="text-xs font-bold text-gray-700 mb-2">
-                          {gradeLevel} {unit}{unitName ? ` ${unitName}` : ''}
+                          {gradeLevel} {unit}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {sorted.map((w) => {
