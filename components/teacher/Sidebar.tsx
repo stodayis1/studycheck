@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: '/teacher/my-records',     label: '내 기록',     icon: 'ti-history' },
   { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
   { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
+  { href: '/teacher/gradings',       label: '채점결과',   icon: 'ti-checkbox' },
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
   { href: '/teacher/work-status',    label: '업무현황',   icon: 'ti-briefcase' },
   { href: '/teacher/exam-prep',      label: '시험배정',   icon: 'ti-clipboard-list' },

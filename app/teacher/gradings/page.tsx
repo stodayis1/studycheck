@@ -1,0 +1,435 @@
+// 채점결과 — QR로 학생이 스스로 채점한 결과를 모아 보는 화면.
+// 시험지별 응시 현황 → 학생별 점수 → 문항별 정답률 → 유형별 오답 집계.
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { Header } from '@/components/common/Header'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
+
+type Sheet = {
+  id: string
+  code: string
+  title: string
+  grade: string | null
+  semester: number | null
+  created_at: string
+}
+
+type Grading = {
+  id: string
+  student_id: string | null
+  student_name: string | null
+  score: number | null
+  total: number | null
+  submitted_at: string | null
+}
+
+type Answer = {
+  grading_id: string
+  no: number
+  type_code: string | null
+  student_answer: string | null
+  is_correct: boolean | null
+}
+
+type SheetProblem = {
+  no: number
+  problem_id: number
+  problems: {
+    difficulty: string | null
+    type_code: string | null
+    answer_kind: string | null
+    answer_text: string | null
+    book: string | null
+    local_no: string | null
+  } | null
+}
+
+const NAVY = '#0f3460'
+const ORANGE = '#D85A30'
+const RED = '#dc2626'
+
+function rateColor(r: number) {
+  if (r >= 0.8) return NAVY
+  if (r >= 0.5) return ORANGE
+  return RED
+}
+
+export default function TeacherGradingsPage() {
+  const { role, loading: authLoading } = useAuth()
+
+  const [sheets, setSheets] = useState<Sheet[]>([])
+  const [counts, setCounts] = useState<Record<string, { n: number; avg: number }>>({})
+  const [sel, setSel] = useState<Sheet | null>(null)
+
+  const [gradings, setGradings] = useState<Grading[]>([])
+  const [answers, setAnswers] = useState<Answer[]>([])
+  const [problems, setProblems] = useState<SheetProblem[]>([])
+  const [typeTitles, setTypeTitles] = useState<Record<string, string>>({})
+  const [openStudent, setOpenStudent] = useState<string | null>(null)
+
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'students' | 'problems' | 'types'>('students')
+
+  // 시험지 목록
+  useEffect(() => {
+    ;(async () => {
+      const { data: sh } = await supabase
+        .from('exam_sheets')
+        .select('id, code, title, grade, semester, created_at')
+        .order('created_at', { ascending: false })
+        .limit(200)
+      const list = sh ?? []
+      setSheets(list)
+
+      if (list.length) {
+        const { data: gs } = await supabase
+          .from('gradings')
+          .select('sheet_id, score, total')
+          .in('sheet_id', list.map((s) => s.id))
+          .limit(5000)
+        const agg: Record<string, { n: number; sum: number }> = {}
+        ;(gs ?? []).forEach((g: any) => {
+          const a = (agg[g.sheet_id] ??= { n: 0, sum: 0 })
+          a.n += 1
+          a.sum += g.total ? (g.score ?? 0) / g.total : 0
+        })
+        setCounts(
+          Object.fromEntries(
+            Object.entries(agg).map(([k, v]) => [k, { n: v.n, avg: v.n ? v.sum / v.n : 0 }])
+          )
+        )
+      }
+      setLoading(false)
+    })()
+  }, [])
+
+  // 선택한 시험지 상세
+  useEffect(() => {
+    if (!sel) return
+    setOpenStudent(null)
+    ;(async () => {
+      setLoading(true)
+      const [{ data: gs }, { data: ps }] = await Promise.all([
+        supabase
+          .from('gradings')
+          .select('id, student_id, student_name, score, total, submitted_at')
+          .eq('sheet_id', sel.id)
+          .order('submitted_at', { ascending: false })
+          .limit(2000),
+        supabase
+          .from('exam_sheet_problems')
+          .select(
+            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, book, local_no)'
+          )
+          .eq('sheet_id', sel.id)
+          .order('no'),
+      ])
+
+      const glist = (gs ?? []) as Grading[]
+      setGradings(glist)
+      setProblems((ps ?? []) as any)
+
+      if (glist.length) {
+        const { data: as } = await supabase
+          .from('grading_answers')
+          .select('grading_id, no, type_code, student_answer, is_correct')
+          .in('grading_id', glist.map((g) => g.id))
+          .limit(20000)
+        setAnswers((as ?? []) as Answer[])
+      } else {
+        setAnswers([])
+      }
+
+      const codes = Array.from(
+        new Set(((ps ?? []) as any[]).map((p) => p.problems?.type_code).filter(Boolean))
+      )
+      if (codes.length) {
+        const { data: ts } = await supabase
+          .from('standard_types')
+          .select('code, type_title')
+          .in('code', codes)
+        setTypeTitles(Object.fromEntries((ts ?? []).map((t: any) => [t.code, t.type_title])))
+      }
+      setLoading(false)
+    })()
+  }, [sel])
+
+  // 문항별 정답률
+  const byProblem = useMemo(() => {
+    const m = new Map<number, { ok: number; n: number }>()
+    answers.forEach((a) => {
+      const e = m.get(a.no) ?? { ok: 0, n: 0 }
+      e.n += 1
+      if (a.is_correct) e.ok += 1
+      m.set(a.no, e)
+    })
+    return problems.map((p) => {
+      const e = m.get(p.no) ?? { ok: 0, n: 0 }
+      return {
+        no: p.no,
+        difficulty: p.problems?.difficulty ?? null,
+        answerText: p.problems?.answer_text ?? null,
+        typeTitle: p.problems?.type_code ? typeTitles[p.problems.type_code] ?? null : null,
+        source: p.problems?.book ? `${p.problems.book} ${p.problems.local_no}번` : null,
+        ok: e.ok,
+        n: e.n,
+        rate: e.n ? e.ok / e.n : 0,
+      }
+    })
+  }, [problems, answers, typeTitles])
+
+  // 유형별 오답
+  const byType = useMemo(() => {
+    const m = new Map<string, { ok: number; n: number; nos: Set<number> }>()
+    answers.forEach((a) => {
+      const key = a.type_code ?? '미분류'
+      const e = m.get(key) ?? { ok: 0, n: 0, nos: new Set<number>() }
+      e.n += 1
+      if (a.is_correct) e.ok += 1
+      e.nos.add(a.no)
+      m.set(key, e)
+    })
+    return [...m.entries()]
+      .map(([code, e]) => ({
+        code,
+        title: typeTitles[code] ?? (code === '미분류' ? '유형 미지정' : code),
+        ok: e.ok,
+        n: e.n,
+        rate: e.n ? e.ok / e.n : 0,
+        nos: [...e.nos].sort((a, b) => a - b),
+      }))
+      .sort((a, b) => a.rate - b.rate)
+  }, [answers, typeTitles])
+
+  const answersOf = (gid: string) =>
+    answers.filter((a) => a.grading_id === gid).sort((a, b) => a.no - b.no)
+
+  if (authLoading) return <Center>불러오는 중…</Center>
+  if (role !== 'teacher' && role !== 'admin')
+    return <Center>선생님만 접근할 수 있습니다</Center>
+
+  // ── 시험지 목록 ──
+  if (!sel)
+    return (
+      <>
+        <Header title="채점결과" subtitle="QR 채점으로 들어온 결과" />
+        <div className="p-4">
+          {loading ? (
+            <Center>불러오는 중…</Center>
+          ) : sheets.length === 0 ? (
+            <Center>아직 발행한 시험지가 없습니다</Center>
+          ) : (
+            <div className="space-y-2">
+              {sheets.map((s) => {
+                const c = counts[s.id]
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSel(s)}
+                    className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-gray-300"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold" style={{ color: NAVY }}>
+                          {s.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-400">
+                          {s.code} · {new Date(s.created_at).toLocaleDateString('ko-KR')}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-bold" style={{ color: NAVY }}>
+                          {c?.n ?? 0}명
+                        </p>
+                        {c?.n ? (
+                          <p className="text-xs" style={{ color: rateColor(c.avg) }}>
+                            평균 {Math.round(c.avg * 100)}점
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-300">미응시</p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </>
+    )
+
+  // ── 시험지 상세 ──
+  const avg =
+    gradings.length > 0
+      ? gradings.reduce((s, g) => s + (g.total ? (g.score ?? 0) / g.total : 0), 0) / gradings.length
+      : 0
+
+  return (
+    <>
+      <Header
+        title={sel.title}
+        subtitle={`${sel.code} · ${gradings.length}명 응시`}
+        showBack
+        action={
+          <button onClick={() => setSel(null)} className="text-xs text-gray-400 underline">
+            목록
+          </button>
+        }
+      />
+
+      <div className="p-4">
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          <Stat label="응시" value={`${gradings.length}명`} />
+          <Stat label="평균" value={`${Math.round(avg * 100)}점`} color={rateColor(avg)} />
+          <Stat label="문항" value={`${problems.length}개`} />
+        </div>
+
+        <div className="mb-4 flex gap-1 rounded-xl bg-gray-100 p-1">
+          {([
+            ['students', '학생별'],
+            ['problems', '문항별'],
+            ['types', '유형별'],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className="flex-1 rounded-lg py-2 text-sm font-medium transition"
+              style={tab === k ? { background: '#fff', color: NAVY } : { color: '#9ca3af' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {loading && <Center>불러오는 중…</Center>}
+
+        {!loading && tab === 'students' && (
+          <div className="space-y-2">
+            {gradings.length === 0 && <Center>아직 아무도 채점하지 않았습니다</Center>}
+            {gradings.map((g) => {
+              const r = g.total ? (g.score ?? 0) / g.total : 0
+              const open = openStudent === g.id
+              return (
+                <div key={g.id} className="rounded-xl border border-gray-200 bg-white">
+                  <button
+                    onClick={() => setOpenStudent(open ? null : g.id)}
+                    className="flex w-full items-center gap-3 p-4 text-left"
+                  >
+                    <span className="flex-1 font-medium">{g.student_name ?? '이름 없음'}</span>
+                    <span className="text-xs text-gray-400">
+                      {g.submitted_at
+                        ? new Date(g.submitted_at).toLocaleString('ko-KR', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                    </span>
+                    <span className="font-bold" style={{ color: rateColor(r) }}>
+                      {g.score}/{g.total}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="border-t border-gray-100 px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {answersOf(g.id).map((a) => (
+                          <span
+                            key={a.no}
+                            className="rounded-md px-2 py-1 text-xs"
+                            style={
+                              a.is_correct
+                                ? { background: '#eef2f8', color: NAVY }
+                                : { background: '#fdeceb', color: RED }
+                            }
+                            title={a.student_answer ?? ''}
+                          >
+                            {a.no} {a.is_correct ? '○' : `✗ ${a.student_answer ?? ''}`}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {!loading && tab === 'problems' && (
+          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white">
+            {byProblem.map((p) => (
+              <div key={p.no} className="flex items-center gap-3 px-4 py-3">
+                <span className="w-8 shrink-0 font-bold" style={{ color: NAVY }}>
+                  {p.no}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{p.typeTitle ?? '유형 미지정'}</p>
+                  <p className="text-xs text-gray-400">
+                    {[p.difficulty, p.answerText ? `정답 ${p.answerText}` : null, p.source]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+                <div className="w-24 shrink-0">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${p.rate * 100}%`, background: rateColor(p.rate) }}
+                    />
+                  </div>
+                  <p className="mt-1 text-right text-xs" style={{ color: rateColor(p.rate) }}>
+                    {p.n ? `${Math.round(p.rate * 100)}% (${p.ok}/${p.n})` : '—'}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loading && tab === 'types' && (
+          <div className="space-y-2">
+            {byType.length === 0 && <Center>아직 데이터가 없습니다</Center>}
+            {byType.map((t) => (
+              <div key={t.code} className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{t.title}</p>
+                    <p className="text-xs text-gray-400">{t.nos.join(', ')}번</p>
+                  </div>
+                  <span className="shrink-0 font-bold" style={{ color: rateColor(t.rate) }}>
+                    {Math.round(t.rate * 100)}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${t.rate * 100}%`, background: rateColor(t.rate) }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className="mt-0.5 text-lg font-bold" style={{ color: color ?? NAVY }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function Center({ children }: { children: React.ReactNode }) {
+  return <p className="py-16 text-center text-sm text-gray-400">{children}</p>
+}
