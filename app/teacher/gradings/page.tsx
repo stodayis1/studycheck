@@ -57,7 +57,7 @@ function rateColor(r: number) {
 }
 
 export default function TeacherGradingsPage() {
-  const { role, loading: authLoading } = useAuth()
+  const { isAdmin, loading: authLoading } = useAuth()
 
   const [sheets, setSheets] = useState<Sheet[]>([])
   const [counts, setCounts] = useState<Record<string, { n: number; avg: number }>>({})
@@ -71,6 +71,27 @@ export default function TeacherGradingsPage() {
 
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'students' | 'problems' | 'types'>('students')
+  const [busy, setBusy] = useState<string | null>(null)
+
+  // 틀린 문제를 다시 뽑아 새 시험지를 만들고 인쇄 화면을 새 탭으로 연다
+  async function reprint(gradingId: string, mode: 'wrong' | 'similar') {
+    setBusy(`${gradingId}:${mode}`)
+    try {
+      const res = await fetch('/api/reprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gradingId, mode }),
+      })
+      const j = await res.json()
+      if (!res.ok) {
+        alert(j.error ?? '만들지 못했습니다.')
+        return
+      }
+      window.open(`/teacher/gradings/print?code=${j.code}`, '_blank')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   // 시험지 목록
   useEffect(() => {
@@ -207,8 +228,7 @@ export default function TeacherGradingsPage() {
     answers.filter((a) => a.grading_id === gid).sort((a, b) => a.no - b.no)
 
   if (authLoading) return <Center>불러오는 중…</Center>
-  if (role !== 'teacher' && role !== 'admin')
-    return <Center>선생님만 접근할 수 있습니다</Center>
+  if (!isAdmin()) return <Center>관리자만 접근할 수 있습니다</Center>
 
   // ── 시험지 목록 ──
   if (!sel)
@@ -335,6 +355,24 @@ export default function TeacherGradingsPage() {
                   </button>
                   {open && (
                     <div className="border-t border-gray-100 px-4 py-3">
+                      <div className="mb-3 flex gap-2">
+                        <button
+                          onClick={() => reprint(g.id, 'wrong')}
+                          disabled={busy !== null}
+                          className="flex-1 rounded-lg border py-2 text-xs font-medium disabled:opacity-40"
+                          style={{ borderColor: NAVY, color: NAVY }}
+                        >
+                          {busy === `${g.id}:wrong` ? '만드는 중…' : '틀린 문제 다시 출력'}
+                        </button>
+                        <button
+                          onClick={() => reprint(g.id, 'similar')}
+                          disabled={busy !== null}
+                          className="flex-1 rounded-lg py-2 text-xs font-medium text-white disabled:opacity-40"
+                          style={{ background: NAVY }}
+                        >
+                          {busy === `${g.id}:similar` ? '만드는 중…' : '같은 유형 유사문제 출력'}
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
                         {answersOf(g.id).map((a) => (
                           <span

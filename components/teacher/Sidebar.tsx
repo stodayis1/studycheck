@@ -17,7 +17,6 @@ const NAV_ITEMS = [
   { href: '/teacher/my-records',     label: '내 기록',     icon: 'ti-history' },
   { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
   { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
-  { href: '/teacher/gradings',       label: '채점결과',   icon: 'ti-checkbox' },
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
   { href: '/teacher/work-status',    label: '업무현황',   icon: 'ti-briefcase' },
   { href: '/teacher/exam-prep',      label: '시험배정',   icon: 'ti-clipboard-list' },
@@ -28,6 +27,7 @@ const NAV_ITEMS = [
 const BULK_ITEM = { href: '/teacher/bulk-progress', label: '진도일괄입력', icon: 'ti-list-check' }
 const SETTINGS_ITEM = { href: '/teacher/settings', label: '설정', icon: 'ti-settings' }
 const IMPORT_ITEM = { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' }
+const GRADINGS_ITEM = { href: '/teacher/gradings', label: '채점결과', icon: 'ti-checkbox' }  // 관리자 전용
 
 // 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
 const MOBILE_MAIN = NAV_ITEMS.slice(0, 4)
@@ -50,12 +50,18 @@ export function TeacherSidebar() {
   const showBulk = isAdmin() || bulkEnabled
 
   const adminItems = isAdmin() ? [SETTINGS_ITEM] : []
+  // 채점결과는 원장님(관리자)만 - '평가관리' 바로 뒤에 붙인다
+  const EXAMS_AT = NAV_ITEMS.findIndex(i => i.href === '/teacher/exams')
+  const navItems = isAdmin()
+    ? [...NAV_ITEMS.slice(0, EXAMS_AT + 1), GRADINGS_ITEM, ...NAV_ITEMS.slice(EXAMS_AT + 1)]
+    : NAV_ITEMS
+  const mobileMore = navItems.slice(4)
   const desktopNavItems = showBulk
-    ? [...NAV_ITEMS, BULK_ITEM, IMPORT_ITEM, ...adminItems]
-    : [...NAV_ITEMS, IMPORT_ITEM, ...adminItems]
+    ? [...navItems, BULK_ITEM, IMPORT_ITEM, ...adminItems]
+    : [...navItems, IMPORT_ITEM, ...adminItems]
   const mobileMoreItems = showBulk
-    ? [...MOBILE_MORE, BULK_ITEM, IMPORT_ITEM, ...adminItems]
-    : [...MOBILE_MORE, IMPORT_ITEM, ...adminItems]
+    ? [...mobileMore, BULK_ITEM, IMPORT_ITEM, ...adminItems]
+    : [...mobileMore, IMPORT_ITEM, ...adminItems]
 
   return (
     <>
