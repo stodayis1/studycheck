@@ -50,8 +50,43 @@ const DATA_FILE = path.join(HERE, 'problems_data.json');
 if (!fs.existsSync(DATA_FILE)) { console.error(`✗ ${DATA_FILE} 이 없습니다. 스크립트와 같은 폴더에 problems_data.json 을 두세요.`); process.exit(1); }
 const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
-const key = (r, kind) => `${r.g}-${r.s}/${r.b}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
-const srcPath = (r, kind) => path.join(ROOT, r.dir, `${r.l}${kind === 'a' ? ')' : ''}.${r.x}`);
+// 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
+const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3' };
+const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic' };
+const key = (r, kind) =>
+  `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
+
+// ── 원본 이미지 찾기 ────────────────────────────────────────────
+// 폴더를 어떤 식으로 풀었든(중간에 폴더가 하나 더 있어도) 찾도록 전체를 훑어서 색인을 만든다.
+const INDEX = new Map();               // "학기/교재/소단원/파일명" → 실제 경로
+const IMG = /^[ac]?\d+\)?\.(png|jpg)$/i;
+
+function scan(dir, depth = 0) {
+  if (depth > 6) return;
+  let items;
+  try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const it of items) {
+    const full = path.join(dir, it.name);
+    if (it.isDirectory()) scan(full, depth + 1);
+    else if (IMG.test(it.name)) {
+      const parts = full.split(path.sep);
+      for (const n of [4, 3]) {                    // 뒤에서 4칸 / 3칸 두 가지로 색인
+        if (parts.length >= n) {
+          const k = parts.slice(-n).join('/');
+          if (!INDEX.has(k)) INDEX.set(k, full);
+        }
+      }
+    }
+  }
+}
+
+function srcPath(r, kind) {
+  const file = `${r.l}${kind === 'a' ? ')' : ''}.${r.x}`;
+  const dirs = r.dir.split('/');                   // [학기, 교재, 소단원]
+  return INDEX.get(`${dirs.join('/')}/${file}`)
+      || INDEX.get(`${dirs.slice(1).join('/')}/${file}`)
+      || null;
+}
 
 // ── 1단계: 메타데이터 ────────────────────────────────────────────
 async function insertMeta() {
@@ -85,7 +120,7 @@ async function uploadImages() {
     while (i < jobs.length) {
       const [r, kind] = jobs[i++];
       const src = srcPath(r, kind);
-      if (!fs.existsSync(src)) { fail++; continue; }
+      if (!src) { fail++; if (fail <= 3) console.error(`\n  ✗ 파일 못 찾음: ${r.dir}/${r.l}${kind === 'a' ? ')' : ''}.${r.x}`); continue; }
       const body = fs.readFileSync(src);
       const { error } = await db.storage.from(BUCKET).upload(key(r, kind), body, {
         contentType: r.x === 'jpg' ? 'image/jpeg' : 'image/png', upsert: false,
@@ -102,7 +137,11 @@ async function uploadImages() {
 }
 
 console.log(`문제은행 업로드 시작 — ${DATA.length}문항, 이미지 ${DATA.length * 2}장`);
-console.log(`원본 폴더: ${ROOT}\n`);
+console.log(`원본 폴더: ${ROOT}`);
+process.stdout.write('  이미지 파일 찾는 중...');
+scan(ROOT);
+console.log(` ${INDEX.size / 2 | 0}장 발견\n`);
+if (INDEX.size === 0) { console.error('✗ 폴더 안에서 이미지를 하나도 못 찾았습니다. 경로가 맞는지 확인해 주세요.'); process.exit(1); }
 await insertMeta();
 await uploadImages();
 console.log('\n끝났습니다.');
