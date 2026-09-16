@@ -74,7 +74,7 @@ export default function TeacherGradingsPage() {
   const [busy, setBusy] = useState<string | null>(null)
 
   // 틀린 문제를 다시 뽑아 새 시험지를 만들고 인쇄 화면을 새 탭으로 연다
-  async function reprint(gradingId: string, mode: 'wrong' | 'similar') {
+  async function reprint(gradingId: string, mode: 'wrong' | 'twin' | 'similar') {
     setBusy(`${gradingId}:${mode}`)
     try {
       const res = await fetch('/api/reprint', {
@@ -355,22 +355,33 @@ export default function TeacherGradingsPage() {
                   </button>
                   {open && (
                     <div className="border-t border-gray-100 px-4 py-3">
-                      <div className="mb-3 flex gap-2">
+                      <div className="mb-3 grid grid-cols-3 gap-2">
                         <button
                           onClick={() => reprint(g.id, 'wrong')}
                           disabled={busy !== null}
-                          className="flex-1 rounded-lg border py-2 text-xs font-medium disabled:opacity-40"
+                          className="rounded-lg border py-2 text-xs font-medium disabled:opacity-40"
                           style={{ borderColor: NAVY, color: NAVY }}
+                          title="틀린 문제를 그대로 다시 뽑습니다"
                         >
-                          {busy === `${g.id}:wrong` ? '만드는 중…' : '틀린 문제 다시 출력'}
+                          {busy === `${g.id}:wrong` ? '만드는 중…' : '틀린 문제 그대로'}
+                        </button>
+                        <button
+                          onClick={() => reprint(g.id, 'twin')}
+                          disabled={busy !== null}
+                          className="rounded-lg border py-2 text-xs font-medium disabled:opacity-40"
+                          style={{ borderColor: NAVY, color: NAVY }}
+                          title="쎈↔쎈B의 짝 문제 — 문장은 같고 숫자만 다릅니다"
+                        >
+                          {busy === `${g.id}:twin` ? '만드는 중…' : '쌍둥이 문제'}
                         </button>
                         <button
                           onClick={() => reprint(g.id, 'similar')}
                           disabled={busy !== null}
-                          className="flex-1 rounded-lg py-2 text-xs font-medium text-white disabled:opacity-40"
+                          className="rounded-lg py-2 text-xs font-medium text-white disabled:opacity-40"
                           style={{ background: NAVY }}
+                          title="같은 유형에서 안 풀어본 다른 문제를 뽑습니다"
                         >
-                          {busy === `${g.id}:similar` ? '만드는 중…' : '같은 유형 유사문제 출력'}
+                          {busy === `${g.id}:similar` ? '만드는 중…' : '같은 유형 다른 문제'}
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">

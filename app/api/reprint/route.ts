@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   const supabase = db()
   const { gradingId, mode } = (await req.json()) as {
     gradingId: string
-    mode: 'wrong' | 'similar'
+    mode: 'wrong' | 'twin' | 'similar'
   }
 
   const { data: grading } = await supabase
@@ -75,6 +75,22 @@ export async function POST(req: Request) {
 
   if (mode === 'wrong') {
     problemIds = wrong.map((w) => w.problem_id as number)
+  } else if (mode === 'twin') {
+    // 쌍둥이 문제 — 쎈↔쎈B는 숫자만 다른 같은 문제라, 제대로 이해했는지 확인하기 좋다
+    const { data: tw } = await supabase
+      .from('problems')
+      .select('id, twin_id')
+      .in('id', wrong.map((w) => w.problem_id))
+    const twinOf = new Map<number, number | null>((tw ?? []).map((t: any) => [t.id, t.twin_id]))
+    for (const w of wrong) {
+      const t = twinOf.get(w.problem_id as number)
+      if (t) problemIds.push(t)
+    }
+    if (problemIds.length === 0)
+      return NextResponse.json(
+        { error: '틀린 문제에 쌍둥이 문제가 없습니다. (쎈·쎈B 문항만 짝이 있어요)' },
+        { status: 400 }
+      )
   } else {
     // 유사문제 — 같은 유형에서, 원래 시험지에 있던 문제와 이 학생이 이미 본 문제는 빼고 뽑는다
     const { data: onSheet } = await supabase
@@ -98,10 +114,19 @@ export async function POST(req: Request) {
         seen = (prevAns ?? []).map((a: any) => a.problem_id).filter(Boolean)
       }
     }
-    const exclude = new Set<number>([
-      ...(onSheet ?? []).map((r: any) => r.problem_id),
-      ...seen,
-    ])
+    const base = [...(onSheet ?? []).map((r: any) => r.problem_id), ...seen].filter(Boolean)
+    // 쎈↔쎈B 쌍둥이(숫자만 다른 같은 문제)도 같이 제외한다
+    let twins: number[] = []
+    if (base.length) {
+      const { data: tw } = await supabase
+        .from('problems')
+        .select('twin_id')
+        .in('id', Array.from(new Set(base)))
+        .not('twin_id', 'is', null)
+        .limit(20000)
+      twins = (tw ?? []).map((t: any) => t.twin_id)
+    }
+    const exclude = new Set<number>([...base, ...twins])
 
     // 원래 틀린 문제들의 난이도를 알아둔다(비슷한 난이도로 뽑으려고)
     const { data: wrongProblems } = await supabase
@@ -159,7 +184,7 @@ export async function POST(req: Request) {
     code = newCode()
   }
 
-  const label = mode === 'wrong' ? '오답' : '유사문제'
+  const label = mode === 'wrong' ? '오답' : mode === 'twin' ? '쌍둥이문제' : '유사문제'
   const title = `${grading.student_name ?? '학생'} · ${origin?.title ?? '시험지'} · ${label}`
 
   const { data: sheet, error: e1 } = await supabase
