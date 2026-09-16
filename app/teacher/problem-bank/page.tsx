@@ -64,6 +64,10 @@ export default function ProblemBankPage() {
       sessionStorage.removeItem('pb_preset')
       const v = JSON.parse(raw)
       if (v.byType === false) setByType(false)
+      if (v.grade && v.semester) {
+        const c = COURSES.find((x) => x.grade === v.grade && x.semester === Number(v.semester))
+        if (c) setCourse(c)
+      }
       if (v.books) setBooks(v.books)
       if (v.diffs) setDiffs(v.diffs)
       if (v.answerType) setAnswerType(v.answerType)

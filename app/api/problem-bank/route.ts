@@ -48,6 +48,23 @@ export async function GET(req: Request) {
   const supabase = db()
   const q = new URL(req.url).searchParams
 
+  // ?books=1 → 교재 목록 (+ 학년·학기별 문항 수)
+  if (q.get('books')) {
+    const rows = await all<any>((f, t) =>
+      supabase.from('problems').select('book, grade, semester, type_code').range(f, t)
+    )
+    const m = new Map<string, any>()
+    for (const r of rows) {
+      const b = m.get(r.book) ?? { book: r.book, total: 0, typed: 0, courses: {} as Record<string, number> }
+      b.total++
+      if (r.type_code) b.typed++
+      const key = `${r.grade}-${r.semester}`
+      b.courses[key] = (b.courses[key] ?? 0) + 1
+      m.set(r.book, b)
+    }
+    return NextResponse.json({ books: [...m.values()].sort((a, b) => b.total - a.total) })
+  }
+
   const grade = q.get('grade')
   const semester = q.get('semester')
   if (!grade || !semester)
