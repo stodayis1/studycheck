@@ -14,12 +14,22 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
   }
 
   if (currentUser?.is_locked) {
+    // 화면은 평소 대시보드 그대로 보이되, 투명 오버레이가 전체를 덮어서 아무것도 클릭/터치할 수 없게 막는다.
     return (
-      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#f9fafb' }}>
-        <div className="text-center">
-          <p className="text-lg font-bold" style={{ color: '#374151' }}>접근이 제한된 계정입니다</p>
-          <p className="text-sm mt-2" style={{ color: '#9ca3af' }}>문의사항은 원장님께 말씀해주세요.</p>
+      <div style={{ position: 'relative' }}>
+        <div className="flex min-h-screen bg-gray-50">
+          <TeacherSidebar />
+          <main className="flex-1 min-w-0 pb-16 md:pb-0">
+            {children}
+          </main>
         </div>
+        <div
+          onClick={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()}
+          onKeyDown={(e) => e.preventDefault()}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'transparent', cursor: 'default' }}
+        />
       </div>
     )
   }
