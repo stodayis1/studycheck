@@ -242,6 +242,9 @@ export async function GET(req: Request) {
         image: p?.image_path ? signed.get(p.image_path) ?? null : null,
         difficulty: p?.difficulty ?? null,
         isChoice: p?.answer_kind === 'choice',
+        // 쎈·쎈B는 이미지 맨 위에 문제번호 띠가 따로 있어 잘라내고,
+        // 베이직쎈은 번호와 발문이 같은 줄이라 자르면 문제가 잘린다
+        crop: p?.book === '쎈' || p?.book === '쎈B',
         typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,
         source: p?.book ? `${p.book} ${p.grade}-${p.semester} ${p.local_no}번` : null,
       }

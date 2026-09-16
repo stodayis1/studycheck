@@ -15,6 +15,7 @@ type P = {
   image: string | null
   difficulty: string | null
   isChoice: boolean
+  crop: boolean
   typeTitle: string | null
   source: string | null
 }
@@ -382,7 +383,7 @@ function Q({
 
   const onLoad = () => {
     const el = imgRef.current
-    if (el?.naturalWidth) setCrop((HEADER_CROP_PX / el.naturalWidth) * 100)
+    if (p.crop && el?.naturalWidth) setCrop((HEADER_CROP_PX / el.naturalWidth) * 100)
   }
 
   return (
