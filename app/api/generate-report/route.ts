@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes } from 'crypto'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
@@ -27,6 +28,9 @@ function monthRange(year: number, month: number) {
 
 export async function POST(req: NextRequest) {
   try {
+    const deny = await denyIfNotStaff(req)
+    if (deny) return deny
+
     // 서버 전용 라우트라서 서비스 롤 키를 쓴다. report_links에 RLS가 걸려있어서
     // anon 키로는 report_links insert가 막히기 때문(다른 테이블 읽기는 서비스 롤이 상위 권한이라 기존과 동일하게 다 됨).
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

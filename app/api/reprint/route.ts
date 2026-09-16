@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -40,6 +41,8 @@ function shuffle<T>(arr: T[]): T[] {
 
 // ───────────────────── 재출제 시험지 만들기 ─────────────────────
 export async function POST(req: Request) {
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
   const supabase = db()
   const { gradingId, mode } = (await req.json()) as {
     gradingId: string
@@ -210,6 +213,8 @@ export async function POST(req: Request) {
 
 // ───────────────────── 인쇄용 데이터 ─────────────────────
 export async function GET(req: Request) {
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
   const supabase = db()
   const code = new URL(req.url).searchParams.get('code')
   if (!code) return NextResponse.json({ error: 'code가 필요합니다.' }, { status: 400 })

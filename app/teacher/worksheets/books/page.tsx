@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/lib/apiFetch'
 
 const NAVY = '#0f3460'
 
@@ -26,7 +27,7 @@ export default function BooksPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/problem-bank?books=1')
+    apiFetch('/api/problem-bank?books=1')
       .then((r) => r.json())
       .then((d) => setBooks(d.books ?? []))
       .finally(() => setLoading(false))

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/lib/apiFetch'
 
 const NAVY = '#0f3460'
 
@@ -25,7 +26,7 @@ export default function WorksheetsPage() {
   const [bookCount, setBookCount] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch('/api/problem-bank?books=1')
+    apiFetch('/api/problem-bank?books=1')
       .then((r) => r.json())
       .then((d) => setBookCount((d.books ?? []).length))
       .catch(() => setBookCount(null))

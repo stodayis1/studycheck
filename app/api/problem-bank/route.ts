@@ -3,6 +3,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -45,6 +46,8 @@ function diffOf(p: any) {
 // ───────────────────────── GET ─────────────────────────
 // ?tree=1&grade=중1&semester=2  → 대단원 > 소단원 > 유형 트리 (+ 문항 수)
 export async function GET(req: Request) {
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
   const supabase = db()
   const q = new URL(req.url).searchParams
 
@@ -131,6 +134,8 @@ export async function GET(req: Request) {
 // ───────────────────────── POST ─────────────────────────
 // 조건에 맞게 문항을 뽑아 시험지를 만든다
 export async function POST(req: Request) {
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
   const supabase = db()
   const b = await req.json().catch(() => null)
   if (!b) return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })

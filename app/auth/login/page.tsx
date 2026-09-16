@@ -60,6 +60,7 @@ export default function LoginPage() {
           const name = loginId.trim()
           if (r?.reason === 'duplicate') throw new Error(`"${name}" 이름의 학생이 여러 명이에요!\n전화번호 뒷 4자리를 이름 뒤에 붙여주세요.\n예) ${name}1234`)
           if (r?.reason === 'not_found') throw new Error('아이디를 찾을 수 없어요. 학원에 문의해주세요.')
+          if (r?.reason === 'too_many') throw new Error('로그인 시도가 너무 많아요.\n15분 뒤에 다시 시도해주세요.')
           throw new Error('비밀번호가 올바르지 않습니다.\n보호자 전화번호 뒷 4자리를 입력해주세요.')
         }
 

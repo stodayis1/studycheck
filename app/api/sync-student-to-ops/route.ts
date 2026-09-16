@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 // 스터디체크에서 학생정보를 수정/삭제(퇴원처리)했을 때, 연동된 OPS(sumath-admin) 학생 레코드에도
 // 동일하게 반영하기 위한 연동 API. 두 앱은 DB가 완전히 분리되어 있어서 서비스롤 키로 직접 연결한다.
 // ops_student_id로 연결이 안 된 학생(OPS 등록 이전부터 있던 학생 등)은 조용히 스킵.
 export async function POST(req: NextRequest) {
   try {
+    const deny = await denyIfNotStaff(req)
+    if (deny) return deny
+
     const url = process.env.OPS_SUPABASE_URL
     const key = process.env.OPS_SUPABASE_SERVICE_ROLE_KEY
     if (!url || !key) {

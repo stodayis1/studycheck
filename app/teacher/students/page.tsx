@@ -7,6 +7,7 @@ import { cx } from '@/lib/utils'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/lib/apiFetch'
 
 interface Student {
   id?: string
@@ -34,7 +35,7 @@ interface Student {
 async function syncStudentToOps(opsStudentId: string | null | undefined, fields: Record<string, any>, teacherName?: string): Promise<{ ok: boolean; error?: string }> {
   if (!opsStudentId) return { ok: true }
   try {
-    const res = await fetch('/api/sync-student-to-ops', {
+    const res = await apiFetch('/api/sync-student-to-ops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ opsStudentId, fields, teacherName }),

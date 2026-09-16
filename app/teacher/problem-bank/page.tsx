@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/lib/apiFetch'
 
 const NAVY = '#0f3460'
 const GOLD = '#c8992e'
@@ -79,7 +80,7 @@ export default function ProblemBankPage() {
   useEffect(() => {
     let dead = false
     setLoading(true); setPicked(new Set()); setChapters([])
-    fetch(`/api/problem-bank?grade=${encodeURIComponent(course.grade)}&semester=${course.semester}`)
+    apiFetch(`/api/problem-bank?grade=${encodeURIComponent(course.grade)}&semester=${course.semester}`)
       .then((r) => r.json())
       .then((d) => { if (!dead) { setChapters(d.chapters ?? []); setOpen({}) } })
       .finally(() => { if (!dead) setLoading(false) })
@@ -107,7 +108,7 @@ export default function ProblemBankPage() {
   const submit = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await fetch('/api/problem-bank', {
+      const r = await apiFetch('/api/problem-bank', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

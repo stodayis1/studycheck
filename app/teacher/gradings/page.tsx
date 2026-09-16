@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/lib/apiFetch'
 
 type Sheet = {
   id: string
@@ -77,7 +78,7 @@ export default function TeacherGradingsPage() {
   async function reprint(gradingId: string, mode: 'wrong' | 'twin' | 'similar') {
     setBusy(`${gradingId}:${mode}`)
     try {
-      const res = await fetch('/api/reprint', {
+      const res = await apiFetch('/api/reprint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gradingId, mode }),

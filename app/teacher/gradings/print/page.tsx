@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { apiFetch } from '@/lib/apiFetch'
 
 const NAVY = '#0f3460'
 const GOLD = '#c8992e'
@@ -45,7 +46,7 @@ function PrintInner() {
 
   useEffect(() => {
     if (!code) return
-    fetch(`/api/reprint?code=${code}`)
+    apiFetch(`/api/reprint?code=${code}`)
       .then(async (r) => {
         const j = await r.json()
         if (!r.ok) throw new Error(j.error ?? '불러오지 못했습니다.')
