@@ -354,11 +354,17 @@ export default function TeacherDashboardPage() {
           <p className="text-xs font-bold text-gray-400 mb-3 tracking-wide uppercase">현재 진행 현황</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl p-3" style={{ background: '#F0FBF7' }}>
-              <p className="text-2xl font-black" style={{ color: '#085041' }}>{stats.activeWorksheets}</p>
+              {loading
+                ? <div className="w-10 h-7 rounded-lg animate-pulse" style={{ background: '#9FE1CB' }} />
+                : <p className="text-2xl font-black" style={{ color: '#085041' }}>{stats.activeWorksheets}</p>
+              }
               <p className="text-xs font-medium" style={{ color: '#0F6E56' }}>학습지 진행중</p>
             </div>
             <div className="rounded-xl p-3" style={{ background: '#EAF3DE' }}>
-              <p className="text-2xl font-black" style={{ color: '#27500A' }}>{stats.activeTextbooks}</p>
+              {loading
+                ? <div className="w-10 h-7 rounded-lg animate-pulse" style={{ background: '#B8D999' }} />
+                : <p className="text-2xl font-black" style={{ color: '#27500A' }}>{stats.activeTextbooks}</p>
+              }
               <p className="text-xs font-medium" style={{ color: '#3A7012' }}>교재 진행중</p>
             </div>
           </div>
@@ -395,31 +401,34 @@ export default function TeacherDashboardPage() {
           style={{ background: 'white', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <p className="text-xs font-bold text-gray-400 mb-2.5 tracking-wide uppercase">오늘 할 일</p>
           <div className="space-y-2 text-xs">
-            {stats.unwrittenNotes > 0 && (
+            {loading && (
+              <div className="w-full h-9 rounded-xl animate-pulse" style={{ background: '#f3f4f6' }} />
+            )}
+            {!loading && stats.unwrittenNotes > 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF5F5' }}>
                 <i className="ti ti-alert-circle" style={{ fontSize: 13, color: '#991b1b' }} />
                 <p style={{ color: '#991b1b' }}>수업일지 미입력 {stats.unwrittenNotes}건 · 학습관리에서 입력해주세요</p>
               </div>
             )}
-            {stats.pendingScore > 0 && (
+            {!loading && stats.pendingScore > 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FAEEDA' }}>
                 <i className="ti ti-pencil" style={{ fontSize: 13, color: '#633806' }} />
                 <p style={{ color: '#633806' }}>채점 대기 {stats.pendingScore}건 · 학습지관리에서 점수를 입력해주세요</p>
               </div>
             )}
-            {stats.pendingShare > 0 && (
+            {!loading && stats.pendingShare > 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF0EE' }}>
                 <i className="ti ti-message-circle" style={{ fontSize: 13, color: '#712B13' }} />
                 <p style={{ color: '#712B13' }}>학부모 공유 대기 {stats.pendingShare}건 · 알림장을 생성해주세요</p>
               </div>
             )}
-            {stats.needsAction > 0 && (
+            {!loading && stats.needsAction > 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF5F5' }}>
                 <i className="ti ti-alert-triangle" style={{ fontSize: 13, color: '#991b1b' }} />
                 <p style={{ color: '#991b1b' }}>채점 후 처리 필요 {stats.needsAction}건 · 학습지관리에서 레벨업/재도전/오답유사/완료를 선택해주세요</p>
               </div>
             )}
-            {stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && (
+            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#F0FBF7' }}>
                 <i className="ti ti-circle-check" style={{ fontSize: 13, color: '#085041' }} />
                 <p style={{ color: '#085041' }}>오늘 모든 업무 완료! 수고하셨습니다</p>
