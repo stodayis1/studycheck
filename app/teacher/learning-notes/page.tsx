@@ -2133,22 +2133,32 @@ export default function TeacherLearningNotesPage() {
             {/* 전달사항 - 대타 수업 등으로 다른 강사가 남긴, 아직 확인 안 한 메모 */}
             {handoffNotes.length > 0 && (
               <div className="rounded-xl px-4 py-3 mb-3 space-y-2.5" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
-                {handoffNotes.map((n) => (
-                  <div key={n.id} className="flex items-start gap-2">
-                    <span className="shrink-0" style={{ fontSize: 14 }}>📌</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold whitespace-pre-wrap" style={{ color: '#9a3412' }}>{n.content}</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: '#c2410c' }}>
-                        {n.from_teacher ?? '?'} 선생님 · {n.created_at.slice(0, 10)}
-                      </p>
+                {handoffNotes.map((n) => {
+                  // 받는 사람 본인만 "확인"으로 읽음 처리할 수 있게 한다. 안 그러면 메모를 남긴
+                  // 사람이 저장 직후 같은 화면에 뜬 자기 메모를 실수로 눌러서(예: "저장됐다"는
+                  // 뜻인 줄 알고) 정작 받아야 할 담당 강사가 보기도 전에 사라지는 문제가 생김.
+                  const targets = (n.to_teacher ?? '').split(/[,，、]/).map((t) => t.trim())
+                  const isRecipient = !!currentUser?.name && targets.includes(currentUser.name)
+                  return (
+                    <div key={n.id} className="flex items-start gap-2">
+                      <span className="shrink-0" style={{ fontSize: 14 }}>📌</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold whitespace-pre-wrap" style={{ color: '#9a3412' }}>{n.content}</p>
+                        <p className="text-[10px] mt-0.5" style={{ color: '#c2410c' }}>
+                          {n.from_teacher ?? '?'} 선생님 → {n.to_teacher ?? '담당 강사'} · {n.created_at.slice(0, 10)}
+                          {!isRecipient && ' · 담당 강사 확인 전'}
+                        </p>
+                      </div>
+                      {isRecipient && (
+                        <button onClick={() => markHandoffRead(n)}
+                          className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg"
+                          style={{ background: '#FDBA74', color: '#7c2d12' }}>
+                          확인
+                        </button>
+                      )}
                     </div>
-                    <button onClick={() => markHandoffRead(n)}
-                      className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg"
-                      style={{ background: '#FDBA74', color: '#7c2d12' }}>
-                      확인
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
