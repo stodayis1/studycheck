@@ -446,6 +446,22 @@ export default function TeacherMyRecordsPage() {
                   </span>
                 </div>
               )}
+              {viewingSession.hw_worksheet_range && (
+                <div className="flex justify-between py-2 border-b border-gray-50">
+                  <span className="text-gray-500">학습지 과제</span>
+                  <span className="font-semibold text-gray-900 text-right">{viewingSession.hw_worksheet_range}</span>
+                </div>
+              )}
+              {/* 교재/학습지를 따로 고르지 않고 메모로만 남긴 과제(예: "교재 과제 없음" 체크 후
+                  오답첨삭 등을 글로 적은 경우) - hw_textbook_page 안의 "📝 ..." 조각 */}
+              {!viewingSession.hw_textbook_name && viewingSession.hw_textbook_page?.split(' / ').find(p => p.startsWith('📝 ')) && (
+                <div className="py-2 border-b border-gray-50">
+                  <span className="text-gray-500 block mb-1">과제 메모</span>
+                  <p className="text-gray-800 whitespace-pre-wrap">
+                    {viewingSession.hw_textbook_page.split(' / ').find(p => p.startsWith('📝 '))!.slice(2).trim()}
+                  </p>
+                </div>
+              )}
               {noteFor(viewingSession.id)?.memo && (
                 <div className="py-2">
                   <span className="text-gray-500 block mb-1">메모</span>

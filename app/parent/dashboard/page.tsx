@@ -643,32 +643,48 @@ export default function ParentDashboardPage() {
                     </div>
                   )}
                   {/* 오늘 과제 */}
-                  {(activeSession.hw_textbook_name || activeSession.hw_worksheet_range) && (
-                    <div>
-                      <p className="text-[10px] text-gray-400 mb-1.5">오늘 과제</p>
-                      <div className="rounded-xl px-3 py-2.5 space-y-2" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
-                        {activeSession.hw_textbook_name && activeSession.hw_textbook_name.split(',').map((name, i) => {
-                          const pageEntry = activeSession.hw_textbook_page
-                            ? activeSession.hw_textbook_page.split('/').find((p: string) => p.includes(name.trim()))
-                            : null
-                          const pageOnly = pageEntry ? pageEntry.split('·').slice(-1)[0]?.trim() : null
-                          return (
-                            <div key={i} className="flex items-center gap-2">
-                              <i className="ti ti-book" style={{ fontSize: 12, color: '#993C1D', flexShrink: 0 }} />
-                              <span className="text-xs font-semibold text-gray-800 flex-1">{name.trim()}</span>
-                              {pageOnly && <span className="text-[10px] text-gray-400">{pageOnly}</span>}
+                  {(() => {
+                    // 교재/학습지를 따로 고르지 않고 메모로만 남긴 과제(예: "교재 과제 없음" 체크 후
+                    // 오답첨삭/오답유사 등 다른 과제를 글로 적은 경우)도 hw_textbook_page 안에
+                    // "📝 ..." 조각으로 저장돼 있는데, 예전엔 hw_textbook_name/hw_worksheet_range가
+                    // 둘 다 비어 있으면 "오늘 과제" 자체가 안 뜨는 문제가 있었음 - 메모도 함께 반영.
+                    const memoPart = activeSession.hw_textbook_page
+                      ?.split(' / ')
+                      .find((p: string) => p.startsWith('📝 '))
+                    if (!activeSession.hw_textbook_name && !activeSession.hw_worksheet_range && !memoPart) return null
+                    return (
+                      <div>
+                        <p className="text-[10px] text-gray-400 mb-1.5">오늘 과제</p>
+                        <div className="rounded-xl px-3 py-2.5 space-y-2" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                          {activeSession.hw_textbook_name && activeSession.hw_textbook_name.split(',').map((name, i) => {
+                            const pageEntry = activeSession.hw_textbook_page
+                              ? activeSession.hw_textbook_page.split('/').find((p: string) => p.includes(name.trim()))
+                              : null
+                            const pageOnly = pageEntry ? pageEntry.split('·').slice(-1)[0]?.trim() : null
+                            return (
+                              <div key={i} className="flex items-center gap-2">
+                                <i className="ti ti-book" style={{ fontSize: 12, color: '#993C1D', flexShrink: 0 }} />
+                                <span className="text-xs font-semibold text-gray-800 flex-1">{name.trim()}</span>
+                                {pageOnly && <span className="text-[10px] text-gray-400">{pageOnly}</span>}
+                              </div>
+                            )
+                          })}
+                          {activeSession.hw_worksheet_range && (
+                            <div className="flex items-center gap-2">
+                              <i className="ti ti-file-text" style={{ fontSize: 12, color: '#993C1D', flexShrink: 0 }} />
+                              <span className="text-xs font-semibold text-gray-800">{activeSession.hw_worksheet_range}</span>
                             </div>
-                          )
-                        })}
-                        {activeSession.hw_worksheet_range && (
-                          <div className="flex items-center gap-2">
-                            <i className="ti ti-file-text" style={{ fontSize: 12, color: '#993C1D', flexShrink: 0 }} />
-                            <span className="text-xs font-semibold text-gray-800">{activeSession.hw_worksheet_range}</span>
-                          </div>
-                        )}
+                          )}
+                          {memoPart && (
+                            <div className="flex items-start gap-2">
+                              <i className="ti ti-note" style={{ fontSize: 12, color: '#993C1D', flexShrink: 0, marginTop: 2 }} />
+                              <span className="text-xs font-semibold text-gray-800 whitespace-pre-wrap">{memoPart.slice(2).trim()}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                   {/* 달성률 / 성취율 */}
                   {activeNote && (
                     <div className="flex gap-1.5 flex-wrap">

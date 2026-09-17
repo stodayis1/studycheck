@@ -119,8 +119,12 @@ export default function ParentAssignmentsPage() {
     : `${lastMonth.getMonth() + 1}월`
 
   // 해당 월 수업일 필터 (과제가 있는 날만)
+  // hw_textbook_page 안에 "📝 ..." 메모만 있고 교재/학습지/영상이 전부 비어있는 날(예: "교재 과제
+  // 없음" 체크 후 오답첨삭 등 다른 과제를 메모로만 남긴 경우)도 과제가 있는 날로 쳐야 하는데
+  // 예전엔 hw_textbook_page를 안 봐서 그런 날이 통째로 목록에서 빠졌었음.
   const monthSessions = sessions.filter(s => {
-    const hasTask = s.hw_textbook_name || s.hw_worksheet_range || s.video_url
+    const hasMemo = !!s.hw_textbook_page?.split(' / ').find(p => p.startsWith('📝 '))
+    const hasTask = s.hw_textbook_name || s.hw_worksheet_range || s.video_url || hasMemo
     return s.session_date.startsWith(currentMonthStr) && hasTask
   })
 
@@ -175,6 +179,7 @@ export default function ParentAssignmentsPage() {
             const videoUrls = session.video_url
               ? session.video_url.split('\n').filter(Boolean)
               : []
+            const memoPart = session.hw_textbook_page?.split(' / ').find(p => p.startsWith('📝 '))
 
             const d = new Date(session.session_date)
             const dateLabel = `${d.getMonth() + 1}/${d.getDate()} (${DAYS[d.getDay()]})`
@@ -234,6 +239,17 @@ export default function ParentAssignmentsPage() {
                       </div>
                     )
                   })()}
+
+                  {/* 과제 메모 - 교재/학습지를 따로 고르지 않고 메모로만 남긴 과제 */}
+                  {memoPart && (
+                    <div className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <i className="ti ti-note" style={{ fontSize: 13, color: '#993C1D' }} />
+                        <span className="text-[10px] font-semibold" style={{ color: '#993C1D' }}>과제 메모</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-800 whitespace-pre-wrap">{memoPart.slice(2).trim()}</p>
+                    </div>
+                  )}
 
                   {/* 학습지 과제 */}
                   {(session.hw_worksheet_range || dayWS.length > 0) && (

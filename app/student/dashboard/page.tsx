@@ -552,6 +552,22 @@ export default function StudentDashboardPage() {
               </div>
             )}
 
+            {/* 과제 메모 - 교재/학습지를 따로 고르지 않고 메모로만 남긴 과제(예: "교재 과제 없음" 체크 후
+                오답첨삭/오답유사 등 다른 과제를 글로 적은 경우). hw_textbook_page 안에 "📝 ..." 조각으로
+                저장돼 있는데, 위 "교재 과제"는 hw_textbook_name 기준이라 이 경우 아무것도 안 보이는 문제가 있었음. */}
+            {(() => {
+              const memoPart = selectedSession.hw_textbook_page
+                ?.split(' / ')
+                .find((p) => p.startsWith('📝 '))
+              if (!memoPart) return null
+              return (
+                <div className="px-4 py-3 border-b border-gray-50">
+                  <p className="text-[10px] text-gray-400 mb-1.5">과제 메모</p>
+                  <p className="text-sm font-bold text-gray-800 whitespace-pre-wrap">{memoPart.slice(2).trim()}</p>
+                </div>
+              )
+            })()}
+
             {/* 학습지 과제 */}
             {selectedSession.hw_worksheet_range ? (
               <div className="px-4 py-3 border-b border-gray-50">
