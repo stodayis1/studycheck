@@ -30,6 +30,15 @@ interface FirstClassCheck {
   hasFeedback: boolean
 }
 
+interface HandoffNote {
+  id: string
+  student_id: string
+  student_name: string
+  content: string
+  from_teacher: string | null
+  created_at: string
+}
+
 export default function TeacherDashboardPage() {
   const { currentUser, isAdmin, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
   const [stats, setStats] = useState({
@@ -42,13 +51,42 @@ export default function TeacherDashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
   const [overdueConsultNames, setOverdueConsultNames] = useState<string[]>([])
+  const [handoffNotes, setHandoffNotes] = useState<HandoffNote[]>([])
 
   useEffect(() => {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
-      fetchFirstClassChecks(); fetchOverdueConsults()
+      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes()
     }
   }, [currentUser])
+
+  // 다른 강사(대타 수업 등)가 내 담당 학생에 대해 남긴, 아직 확인 안 한 전달사항.
+  // to_teacher는 학습일지 작성 시 그 학생의 students.teacher_name을 그대로 저장해두므로,
+  // 콤마로 여러 명(공동담당)이 들어있을 수 있어 canViewStudent와 같은 방식으로 이름을 쪼개 비교한다.
+  async function fetchHandoffNotes() {
+    if (!currentUser?.name) return
+    const { data } = await supabase.from('student_handoff_notes')
+      .select('id, student_id, content, from_teacher, to_teacher, created_at')
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+    const mine = (data ?? []).filter((n: any) =>
+      (n.to_teacher ?? '').split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
+    )
+    if (mine.length === 0) { setHandoffNotes([]); return }
+    const studentIds = [...new Set(mine.map((n: any) => n.student_id))]
+    const { data: sData } = await supabase.from('students').select('id, name').in('id', studentIds)
+    const nameById = new Map((sData ?? []).map((s: any) => [s.id, s.name]))
+    setHandoffNotes(mine.map((n: any) => ({
+      id: n.id, student_id: n.student_id, student_name: nameById.get(n.student_id) ?? '학생',
+      content: n.content, from_teacher: n.from_teacher, created_at: n.created_at,
+    })))
+  }
+
+  async function markHandoffRead(id: string) {
+    setHandoffNotes((prev) => prev.filter((n) => n.id !== id))
+    await supabase.from('student_handoff_notes')
+      .update({ is_read: true, read_at: new Date().toISOString() }).eq('id', id)
+  }
 
   // 상담기록 기준 3개월 초과 알림 - "기존 학생은 스터디체크에 상담기록이 아직 없으니 알림 대상에서 제외하고,
   // 처음 기록을 남기는 순간부터 그 날짜 기준으로 3개월을 센다" 원칙 (2026-09-17 원장님 확인).
@@ -277,6 +315,34 @@ export default function TeacherDashboardPage() {
                   <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && '⭐ '}{a.title}</p>
                   <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
                 </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 학생 전달사항 - 다른 강사(대타 수업 등)가 내 담당 학생에 대해 남긴 메모 */}
+        {handoffNotes.length > 0 && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #FDBA74', background: '#FFF7ED' }}>
+            <div className="px-4 py-2.5 flex items-center gap-1.5" style={{ background: '#FDBA74' }}>
+              <span style={{ fontSize: 14 }}>📌</span>
+              <span className="text-xs font-bold" style={{ color: '#7c2d12' }}>학생 전달사항 {handoffNotes.length}건</span>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#FDBA7440' }}>
+              {handoffNotes.map((n) => (
+                <div key={n.id} className="px-4 py-3 flex items-start gap-2">
+                  <Link href={`/teacher/learning-notes?student=${n.student_id}`} className="flex-1 min-w-0">
+                    <p className="text-xs font-bold" style={{ color: '#9a3412' }}>{n.student_name}</p>
+                    <p className="text-sm font-semibold mt-0.5 whitespace-pre-wrap" style={{ color: '#7c2d12' }}>{n.content}</p>
+                    <p className="text-[10px] mt-1" style={{ color: '#c2410c' }}>
+                      {n.from_teacher ?? '?'} 선생님 · {n.created_at.slice(0, 10)}
+                    </p>
+                  </Link>
+                  <button onClick={() => markHandoffRead(n.id)}
+                    className="shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg"
+                    style={{ background: '#fff', color: '#9a3412', border: '1px solid #FDBA74' }}>
+                    확인
+                  </button>
+                </div>
               ))}
             </div>
           </div>

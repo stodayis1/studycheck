@@ -57,6 +57,16 @@ interface Schedule {
   periods: number
 }
 
+interface HandoffNote {
+  id: string
+  student_id: string
+  content: string
+  from_teacher: string | null
+  to_teacher: string | null
+  is_read: boolean
+  created_at: string
+}
+
 interface ClassSession {
   id: string
   student_id: string
@@ -151,6 +161,12 @@ export default function TeacherLearningNotesPage() {
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteStudent, setNoteStudent] = useState<Student | null>(null)
   const [noteSession, setNoteSession] = useState<ClassSession | null>(null)
+
+  // 전달사항 (대타 수업 등으로 다른 강사 담당 학생을 봤을 때, 담당 강사에게 남기는 메모)
+  const [handoffNotes, setHandoffNotes] = useState<HandoffNote[]>([])
+  const [showHandoffForm, setShowHandoffForm] = useState(false)
+  const [handoffContent, setHandoffContent] = useState('')
+  const [savingHandoff, setSavingHandoff] = useState(false)
 
   // 수업일지 필드
   const [noteProgress, setNoteProgress] = useState('')
@@ -537,6 +553,40 @@ export default function TeacherLearningNotesPage() {
     return (hasContent || isExamPrepOnly) && hasHomework
   }
 
+  // 전달사항 - 안 읽은 것만 불러온다 (다음날 수업 시작 전이나 학습일지 열 때 바로 보이게)
+  async function fetchHandoffNotes(studentId: string) {
+    const { data } = await supabase.from('student_handoff_notes')
+      .select('*').eq('student_id', studentId).eq('is_read', false)
+      .order('created_at', { ascending: false })
+    setHandoffNotes(data ?? [])
+  }
+
+  // 지금 보고 있는 학생의 담당 강사(들)에게 전달사항을 남긴다. 대타 수업 등으로 남의 담당 학생을
+  // 봤을 때 "다음에 이 학생 수업 들어가는 선생님이 꼭 알아야 할 것"을 남기는 용도.
+  async function handleAddHandoff() {
+    if (!noteStudent || !handoffContent.trim()) return
+    setSavingHandoff(true)
+    const { error } = await supabase.from('student_handoff_notes').insert({
+      student_id: noteStudent.id,
+      content: handoffContent.trim(),
+      from_teacher: currentUser?.name ?? null,
+      to_teacher: noteStudent.teacher_name ?? null,
+    })
+    setSavingHandoff(false)
+    if (error) { alert('전달사항 저장에 실패했어요: ' + error.message); return }
+    setHandoffContent('')
+    setShowHandoffForm(false)
+    fetchHandoffNotes(noteStudent.id)
+  }
+
+  // 확인(읽음 처리) - 확인한 사람이 실제 수신자인지는 굳이 안 따진다(같이 보는 소규모 학원 특성상
+  // 원장님/강사 누구든 확인했으면 처리된 것으로 봐도 충분함).
+  async function markHandoffRead(note: HandoffNote) {
+    setHandoffNotes((prev) => prev.filter((n) => n.id !== note.id))
+    await supabase.from('student_handoff_notes')
+      .update({ is_read: true, read_at: new Date().toISOString() }).eq('id', note.id)
+  }
+
   function openNoteModal(student: Student, targetSession?: ClassSession) {
     setJustSavedNote(false)
     // 주임모드로 넓게 보이는 것뿐인 학생(진짜 담당 아님)은 작성 불가 - 버튼 단에서 이미 막지만 안전장치로 한번 더 확인
@@ -557,6 +607,9 @@ export default function TeacherLearningNotesPage() {
       .sort((a, b) => b.session_date.localeCompare(a.session_date))[0] ?? null
 
     setNoteStudent(student)
+    setShowHandoffForm(false)
+    setHandoffContent('')
+    fetchHandoffNotes(student.id)
     // 해당 학생 progress_checks만 다시 로딩 (1000행 limit 우회)
     supabase.from('progress_checks').select('*').eq('student_id', student.id).then(({ data }) => {
       if (data && data.length > 0) {
@@ -2075,6 +2128,60 @@ export default function TeacherLearningNotesPage() {
                 <p className="text-sm font-bold text-blue-800">{noteStudent.name}</p>
                 <p className="text-xs text-blue-500">{noteStudent.grade} · {todayStr}</p>
               </div>
+            </div>
+
+            {/* 전달사항 - 대타 수업 등으로 다른 강사가 남긴, 아직 확인 안 한 메모 */}
+            {handoffNotes.length > 0 && (
+              <div className="rounded-xl px-4 py-3 mb-3 space-y-2.5" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
+                {handoffNotes.map((n) => (
+                  <div key={n.id} className="flex items-start gap-2">
+                    <span className="shrink-0" style={{ fontSize: 14 }}>📌</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold whitespace-pre-wrap" style={{ color: '#9a3412' }}>{n.content}</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: '#c2410c' }}>
+                        {n.from_teacher ?? '?'} 선생님 · {n.created_at.slice(0, 10)}
+                      </p>
+                    </div>
+                    <button onClick={() => markHandoffRead(n)}
+                      className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg"
+                      style={{ background: '#FDBA74', color: '#7c2d12' }}>
+                      확인
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 전달사항 남기기 - 대타 수업 등으로 이 학생을 봤을 때, 담당 강사에게 남기는 메모 */}
+            <div className="mb-4">
+              {!showHandoffForm ? (
+                <button onClick={() => setShowHandoffForm(true)}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  style={{ background: '#fff', color: '#9a3412', border: '1px solid #FDBA74' }}>
+                  📌 전달사항 남기기
+                </button>
+              ) : (
+                <div className="rounded-xl px-3 py-3 space-y-2" style={{ background: '#FFFBF5', border: '1px solid #FDBA74' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: '#9a3412' }}>
+                    {noteStudent.teacher_name ? `${noteStudent.teacher_name} 선생님께` : '담당 강사님께'} 전달할 내용
+                  </p>
+                  <textarea value={handoffContent} onChange={(e) => setHandoffContent(e.target.value)}
+                    rows={2} placeholder="예: 오늘 분수 개념 어려워해서 다음 시간에 한 번 더 짚어주세요"
+                    className="w-full px-3 py-2 rounded-lg border text-sm resize-none focus:outline-none"
+                    style={{ borderColor: '#FDBA74' }} />
+                  <div className="flex gap-2">
+                    <button onClick={handleAddHandoff} disabled={savingHandoff || !handoffContent.trim()}
+                      className="flex-1 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-40"
+                      style={{ background: '#c2410c' }}>
+                      {savingHandoff ? '저장 중...' : '전달사항 저장'}
+                    </button>
+                    <button onClick={() => { setShowHandoffForm(false); setHandoffContent('') }}
+                      className="px-3 py-2 rounded-lg text-xs font-bold text-gray-500" style={{ background: '#f3f4f6' }}>
+                      취소
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 이전 수업 요약 */}
