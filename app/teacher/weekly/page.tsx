@@ -46,7 +46,11 @@ const KIND_LABEL: Record<Badge['kind'], string> = {
 }
 
 export default function WeeklyPage() {
-  const { currentUser, isAdmin, canViewStudent, loading: authLoading } = useAuth()
+  const {
+    currentUser, isAdmin, canManageAllStudents, canViewStudent,
+    isSupervisorAccount, isSupervisorModeActive, supervisorLabel,
+    loading: authLoading,
+  } = useAuth()
   const router = useRouter()
 
   const [monday, setMonday] = useState(() => mondayOf(new Date()))
@@ -55,7 +59,6 @@ export default function WeeklyPage() {
   const [loading, setLoading] = useState(true)
   const [grade, setGrade] = useState('')
   const [q, setQ] = useState('')
-  const [mine, setMine] = useState(true)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [detail, setDetail] = useState<{ student: Student; date: string; badges: Badge[] } | null>(null)
   const [busy, setBusy] = useState('')
@@ -77,13 +80,16 @@ export default function WeeklyPage() {
     return () => { dead = true }
   }, [monday])
 
+  // 볼 수 있는 범위는 계정이 정한다 (useAuth.canViewStudent 한 곳에서 판단)
+  //  · 원장·직원      → 전체
+  //  · 주임(주임모드) → 담당 학년 전체 (예: 중등주임 → 중1~중3)
+  //  · 일반 강사      → 본인 담당 학생만
   const rows = useMemo(() => {
-    let list = students
-    if (mine && !isAdmin()) list = list.filter((s) => canViewStudent(s))
+    let list = students.filter((s) => canViewStudent(s))
     if (grade) list = list.filter((s) => s.grade === grade)
     if (q.trim()) list = list.filter((s) => s.name.includes(q.trim()))
     return list
-  }, [students, mine, grade, q, currentUser])
+  }, [students, grade, q, currentUser, isSupervisorModeActive()])
 
   const grades = useMemo(
     () => [...new Set(students.map((s) => s.grade).filter(Boolean))].sort() as string[],
@@ -151,11 +157,14 @@ export default function WeeklyPage() {
           {ymd(dates[0]).slice(5)} ~ {ymd(dates[6]).slice(5)}
         </span>
 
-        {!isAdmin() && (
-          <button onClick={() => setMine(!mine)}
-            className={`px-3 h-8 rounded-lg border text-xs ${mine ? 'text-white' : 'bg-white text-gray-600'}`}
-            style={mine ? { background: NAVY, borderColor: NAVY } : {}}>내 담당</button>
-        )}
+        <span className="px-2.5 h-8 inline-flex items-center rounded-lg text-xs border"
+          style={{ background: '#eef2f8', color: NAVY, borderColor: '#c7d2e4' }}>
+          {canManageAllStudents()
+            ? '전체 학생'
+            : isSupervisorModeActive()
+              ? `${supervisorLabel() ?? '주임'} · 담당 학년 전체`
+              : '내 담당 학생'}
+        </span>
 
         <select value={grade} onChange={(e) => setGrade(e.target.value)}
           className="h-8 rounded-lg border text-xs px-2">
@@ -212,7 +221,14 @@ export default function WeeklyPage() {
               <tr><td colSpan={9} className="p-10 text-center text-gray-400">불러오는 중…</td></tr>
             )}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={9} className="p-10 text-center text-gray-400">해당하는 학생이 없습니다.</td></tr>
+              <tr><td colSpan={9} className="p-10 text-center text-gray-400">
+                해당하는 학생이 없습니다.
+                {isSupervisorAccount() && !isSupervisorModeActive() && (
+                  <div className="text-xs mt-2">
+                    왼쪽 메뉴 아래에서 <b>주임모드</b>를 켜면 담당 학년 전체가 보입니다.
+                  </div>
+                )}
+              </td></tr>
             )}
             {rows.map((s) => {
               const week = dates.flatMap((d) => cells[s.id]?.[ymd(d)] ?? [])
