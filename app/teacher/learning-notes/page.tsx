@@ -644,7 +644,9 @@ export default function TeacherLearningNotesPage() {
     setDailySubChapters([])
     setDailyConceptIds([])
     setDailyLastIdx(-1)
-    // 지난번에 "오늘은 새 과제 없음"으로 저장해뒀으면 그 상태 그대로 다시 열어줌
+    // 지난번에 "교재 과제 없음"으로 체크해뒀으면(=hw_textbook_page가 정말 아무것도 없어서
+    // NO_HOMEWORK_MARKER로 저장된 경우) 그 상태 그대로 다시 열어줌. 학습지/메모/영상 등
+    // 실제 값이 있었다면 마커가 안 쓰였을 것이므로, 아래 값들은 항상 실제 저장값 그대로 복원한다.
     const savedNoHomework = session?.hw_textbook_page === NO_HOMEWORK_MARKER
     setNoteNoHomework(savedNoHomework)
     setHwTextbookName(savedNoHomework ? '' : (session?.hw_textbook_name ?? ''))
@@ -656,12 +658,8 @@ export default function TeacherLearningNotesPage() {
     const savedHwOtherParts = savedHwParts.filter((p) => !p.startsWith('📝 '))
     setHwMemo(savedHwMemoPart ? savedHwMemoPart.slice(2).trim() : '')
     setHwTextbookPage(savedHwOtherParts.join(' / '))
-    setHwWorksheetRange(savedNoHomework ? '' : (session?.hw_worksheet_range ?? ''))
-    setHwVideoUrls(
-      !savedNoHomework && session?.video_url
-        ? session.video_url.split('\n').filter(Boolean)
-        : ['']
-    )
+    setHwWorksheetRange(session?.hw_worksheet_range ?? '')
+    setHwVideoUrls(session?.video_url ? session.video_url.split('\n').filter(Boolean) : [''])
     setShowNoteModal(true)
   }
 
@@ -1062,8 +1060,10 @@ export default function TeacherLearningNotesPage() {
         return dailyTestUnit || null
       })(),
       daily_test_score: dailyTestScore ? parseInt(dailyTestScore) : null,
-      hw_textbook_name: noteNoHomework ? null : (() => {
-        const tbNames = hwSelectedTBIds.map((id) => {
+      hw_textbook_name: (() => {
+        // "교재 과제 없음" 체크시엔 교재 선택 UI 자체가 숨겨지므로, 혹시 이전에 남아있던
+        // 선택값이 있어도 무시한다(교재 관련 항목은 통째로 뺀다). 학습지/시험대비/메모는 그대로 반영.
+        const tbNames = noteNoHomework ? [] : hwSelectedTBIds.map((id) => {
           const tb = studentTextbooks.find((t) => t.id === id)
           return tb ? tb.textbook_name : ''
         }).filter(Boolean)
@@ -1071,15 +1071,17 @@ export default function TeacherLearningNotesPage() {
           const ep = examPreps.find((e) => e.id === id)
           return ep ? `시험대비(${ep.inner_enough?.unit_name ?? ''})` : ''
         }).filter(Boolean)
-        const virtualNames = Object.entries(hwAutostepVirtual).filter(([, v]) => v.included).map(([name]) => name)
+        const virtualNames = noteNoHomework ? [] : Object.entries(hwAutostepVirtual).filter(([, v]) => v.included).map(([name]) => name)
         const all = [...tbNames, ...epNames, ...virtualNames]
         if (all.length > 0) return all.join(', ')
-        return hwTextbookName || null
+        return noteNoHomework ? null : (hwTextbookName || null)
       })(),
       // 오늘 새 과제가 없는 날(추가수업/오답풀이 위주 등)은 이 칸에 안내 문구를 저장한다.
-      // hw_* 필드가 전부 비어있으면 "학습일지를 안 썼다"로 오인돼 완료 표시가 안 뜨던 문제를 막기 위함
-      hw_textbook_page: noteNoHomework ? NO_HOMEWORK_MARKER : (() => {
-        const tbParts = hwSelectedTBIds.map((id) => {
+      // hw_* 필드가 전부 비어있으면 "학습일지를 안 썼다"로 오인돼 완료 표시가 안 뜨던 문제를 막기 위함.
+      // "교재 과제 없음"을 체크해도 아래 학습지/메모/영상에 입력한 내용이 있으면 그걸 그대로 저장한다
+      // (체크박스는 "교재 쪽엔 새로 나갈 게 없다"는 뜻이지 "오늘 과제 자체가 없다"는 뜻이 아님).
+      hw_textbook_page: (() => {
+        const tbParts = noteNoHomework ? [] : hwSelectedTBIds.map((id) => {
           const tb = studentTextbooks.find((t) => t.id === id)
           const ch = hwTBChapters[id] || ''
           const sub = hwTBSubChapters[id] || ''
@@ -1092,26 +1094,28 @@ export default function TeacherLearningNotesPage() {
           const page = hwEPPages[id] || ''
           return [`시험대비: ${ep.inner_enough?.unit_name ?? ''}`, page].filter(Boolean).join(' · ')
         }).filter(Boolean)
-        const virtualParts = Object.entries(hwAutostepVirtual)
+        const virtualParts = noteNoHomework ? [] : Object.entries(hwAutostepVirtual)
           .filter(([, v]) => v.included)
           .map(([workbook_name, v]) => [workbook_name, v.chapter, v.sub_chapter, v.page].filter(Boolean).join(' · '))
           .filter(Boolean)
         const memoPart = hwMemo ? `📝 ${hwMemo}` : ''
-        // 이번에 교재/시험대비를 새로 고르지 않았다면(=picker를 안 건드렸다면),
+        // 이번에 교재/시험대비를 새로 고르지 않았다면(=picker를 안 건드렸다면 & 교재 과제 없음도 아니라면),
         // 예전에 저장돼 있던 교재 관련 텍스트(hwTextbookPage, 메모 제외)는 지우지 않고 그대로 유지한다.
         // (안 그러면 메모만 살짝 고쳐 저장해도 예전 교재 정보가 통째로 사라짐)
-        const preservedOld = (tbParts.length === 0 && epParts.length === 0 && virtualParts.length === 0) ? hwTextbookPage : ''
+        const preservedOld = (!noteNoHomework && tbParts.length === 0 && epParts.length === 0 && virtualParts.length === 0) ? hwTextbookPage : ''
         const allParts = [preservedOld, ...tbParts, ...epParts, ...virtualParts, memoPart].filter(Boolean)
-        return allParts.length > 0 ? allParts.join(' / ') : null
+        if (allParts.length > 0) return allParts.join(' / ')
+        // 교재도, 학습지도, 메모도 진짜 아무것도 안 골랐을 때만 "과제 없음"으로 표시
+        return noteNoHomework ? NO_HOMEWORK_MARKER : null
       })(),
-      hw_worksheet_range: noteNoHomework ? null : (() => {
+      hw_worksheet_range: (() => {
         if (hwSelectedWSId) {
           const ws = worksheets.find((w) => w.id === hwSelectedWSId)
           return ws ? `${ws.grade_level} · ${ws.unit}${ws.unit_name ? ` (${ws.unit_name})` : ''} · ${ws.current_level}레벨` : null
         }
         return hwWorksheetRange || null
       })(),
-      video_url: noteNoHomework ? null : (hwVideoUrls.filter((u) => u.trim()).join('\n') || null),
+      video_url: hwVideoUrls.filter((u) => u.trim()).join('\n') || null,
       created_by: currentUser?.name,
     }
 
@@ -2784,15 +2788,15 @@ export default function TeacherLearningNotesPage() {
                   <input type="checkbox" checked={noteNoHomework}
                     onChange={(e) => setNoteNoHomework(e.target.checked)}
                     className="w-3.5 h-3.5 accent-[#F5C4B3]" />
-                  <span className="text-[11px] font-semibold text-gray-500">오늘은 새로 배부할 과제가 없어요 (추가수업/오답풀이 위주 등)</span>
+                  <span className="text-[11px] font-semibold text-gray-500">오늘은 교재 과제는 안 나가요 (추가수업/오답풀이 위주 등)</span>
                 </label>
 
                 {noteNoHomework && (
-                  <p className="text-[10px] text-gray-400 px-1">이 상태로 저장하면 "과제 없음"으로 표시되고, 입력완료 처리는 정상적으로 돼요</p>
+                  <p className="text-[10px] text-gray-400 px-1">교재 목록은 숨겨져요. 대신 나간 과제가 있으면 아래 학습지 과제나 메모에 적어 주세요 — 둘 다 비어 있으면 "과제 없음"으로 표시돼요</p>
                 )}
 
                 {/* 교재 과제 - 배정된 교재 기반 (다중 선택) */}
-                {(() => {
+                {!noteNoHomework && (() => {
                   const myTBs = noteStudent
                     ? studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned')
                     : []
@@ -2954,8 +2958,8 @@ export default function TeacherLearningNotesPage() {
 
                 {/* 오토스텝: 유형서를 따로 배정 안 했어도, 오늘 체크한 개념에 매핑된 유형편이 있으면
                     독립적인 "가상 카드"로 뜬다. 이미 그 교재가 배정돼 있어서 위 목록에 카드가 있다면
-                    거긴 인라인 제안 박스가 이미 있으니 중복해서 안 띄운다. */}
-                {(() => {
+                    거긴 인라인 제안 박스가 이미 있으니 중복해서 안 띄운다. (교재 과제 없음 체크시엔 숨김) */}
+                {!noteNoHomework && (() => {
                   if (!noteStudent) return null
                   const assignedNames = new Set(
                     studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'assigned').map((t) => t.textbook_name)
