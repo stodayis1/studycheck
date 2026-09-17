@@ -30,6 +30,7 @@ const SETTINGS_ITEM = { href: '/teacher/settings', label: '설정', icon: 'ti-se
 const IMPORT_ITEM = { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' }
 const GRADINGS_ITEM = { href: '/teacher/gradings', label: '채점결과', icon: 'ti-checkbox' }  // 관리자 전용
 const WORKSHEET_ITEM = { href: '/teacher/worksheets', label: '학습지출제', icon: 'ti-wand' }  // 관리자 전용
+const WEEKLY_ITEM = { href: '/teacher/weekly', label: '학습현황', icon: 'ti-calendar-stats' }  // 선생님 모두
 
 // 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
 const MOBILE_MAIN = NAV_ITEMS.slice(0, 4)
@@ -53,10 +54,13 @@ export function TeacherSidebar() {
 
   const adminItems = isAdmin() ? [SETTINGS_ITEM] : []
   // 채점결과는 원장님(관리자)만 - '평가관리' 바로 뒤에 붙인다
-  const EXAMS_AT = NAV_ITEMS.findIndex(i => i.href === '/teacher/exams')
+  const NOTES_AT = NAV_ITEMS.findIndex(i => i.href === '/teacher/learning-notes')
+  const BASE_ITEMS = NOTES_AT < 0 ? NAV_ITEMS
+    : [...NAV_ITEMS.slice(0, NOTES_AT + 1), WEEKLY_ITEM, ...NAV_ITEMS.slice(NOTES_AT + 1)]
+  const EXAMS_AT = BASE_ITEMS.findIndex(i => i.href === '/teacher/exams')
   const navItems = isAdmin()
-    ? [...NAV_ITEMS.slice(0, EXAMS_AT + 1), WORKSHEET_ITEM, GRADINGS_ITEM, ...NAV_ITEMS.slice(EXAMS_AT + 1)]
-    : NAV_ITEMS
+    ? [...BASE_ITEMS.slice(0, EXAMS_AT + 1), WORKSHEET_ITEM, GRADINGS_ITEM, ...BASE_ITEMS.slice(EXAMS_AT + 1)]
+    : BASE_ITEMS
   const mobileMore = navItems.slice(4)
   const desktopNavItems = showBulk
     ? [...navItems, BULK_ITEM, IMPORT_ITEM, ...adminItems]
