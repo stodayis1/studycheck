@@ -41,13 +41,38 @@ export default function TeacherDashboardPage() {
   const [togglingBulk, setTogglingBulk] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
+  const [overdueConsultNames, setOverdueConsultNames] = useState<string[]>([])
 
   useEffect(() => {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
-      fetchFirstClassChecks()
+      fetchFirstClassChecks(); fetchOverdueConsults()
     }
   }, [currentUser])
+
+  // 상담기록 기준 3개월 초과 알림 - "기존 학생은 스터디체크에 상담기록이 아직 없으니 알림 대상에서 제외하고,
+  // 처음 기록을 남기는 순간부터 그 날짜 기준으로 3개월을 센다" 원칙 (2026-09-17 원장님 확인).
+  async function fetchOverdueConsults() {
+    const { data: allStudents } = await supabase.from('students')
+      .select('id, name, school, grade, teacher_name').eq('is_active', true)
+    const myStudents = (allStudents ?? []).filter((s: any) => canViewStudent(s))
+    const myIds = new Set(myStudents.map((s: any) => s.id))
+    const { data: consultData } = await supabase.from('consultations').select('student_id, consulted_at')
+    const lastByStudent = new Map<string, string>()
+    for (const c of consultData ?? []) {
+      if (!myIds.has(c.student_id)) continue
+      const cur = lastByStudent.get(c.student_id)
+      if (!cur || c.consulted_at > cur) lastByStudent.set(c.student_id, c.consulted_at)
+    }
+    const todayMs = Date.now()
+    const overdue = myStudents.filter((s: any) => {
+      const last = lastByStudent.get(s.id)
+      if (!last) return false
+      const days = Math.floor((todayMs - new Date(last + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
+      return days > 90
+    }).map((s: any) => s.name)
+    setOverdueConsultNames(overdue)
+  }
 
   // 지난주~이번주 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인.
   // 관리자/직원은 전체, 주임모드는 담당 학년, 일반 강사는 본인 담당 학생만 - canViewStudent()로 통일해서 필터링.
@@ -430,7 +455,15 @@ export default function TeacherDashboardPage() {
                 <p style={{ color: '#991b1b' }}>채점 후 처리 필요 {stats.needsAction}건 · 학습지관리에서 레벨업/재도전/오답유사/완료를 선택해주세요</p>
               </div>
             )}
-            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && (
+            {!loading && overdueConsultNames.length > 0 && (
+              <Link href="/teacher/consultations" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF7ED' }}>
+                <i className="ti ti-phone" style={{ fontSize: 13, color: '#9a3412' }} />
+                <p style={{ color: '#9a3412' }}>
+                  상담 필요 {overdueConsultNames.length}명 · 마지막 상담 후 90일 초과 ({overdueConsultNames.slice(0, 3).join(', ')}{overdueConsultNames.length > 3 ? ' 외' : ''})
+                </p>
+              </Link>
+            )}
+            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && overdueConsultNames.length === 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#F0FBF7' }}>
                 <i className="ti ti-circle-check" style={{ fontSize: 13, color: '#085041' }} />
                 <p style={{ color: '#085041' }}>오늘 모든 업무 완료! 수고하셨습니다</p>

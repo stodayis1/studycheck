@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
   { href: '/teacher/work-status',    label: '업무현황',   icon: 'ti-briefcase' },
   { href: '/teacher/exam-prep',      label: '시험배정',   icon: 'ti-clipboard-list' },
+  { href: '/teacher/consultations',  label: '상담내역',   icon: 'ti-phone' },
   { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
   { href: '/teacher/announcements',  label: '공지사항',   icon: 'ti-speakerphone' },
 ]
