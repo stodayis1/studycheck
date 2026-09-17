@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -127,6 +128,9 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; sub: string }> 
 
 export default function TeacherLearningNotesPage() {
   const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades, supervisorLabel } = useAuth()
+  const searchParams = useSearchParams()
+  const deepLinkedStudentId = searchParams.get('student')
+  const deepLinkOpenedRef = useRef(false)
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [sessions, setSessions] = useState<ClassSession[]>([])
@@ -484,6 +488,18 @@ export default function TeacherLearningNotesPage() {
 
   const otherStudents = myStudents
     .filter((s) => !schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay))
+
+  // 대시보드 등 다른 화면에서 ?student=<id>로 들어오면 그 학생의 학습일지/알림장 모달을 자동으로 열어준다.
+  // (예: 첫수업 알림장 현황에서 학생 이름 클릭 시 바로 진입)
+  useEffect(() => {
+    if (deepLinkOpenedRef.current) return
+    if (!deepLinkedStudentId || loading) return
+    const target = myStudents.find((s) => s.id === deepLinkedStudentId)
+    if (target) {
+      deepLinkOpenedRef.current = true
+      openNoteModal(target)
+    }
+  }, [deepLinkedStudentId, loading, myStudents])
 
   // 이름으로 학생 바로 찾기 - 오늘 시간표를 안 내려도 특정 학생의 학습일지/알림장 화면으로 바로 진입할 수 있게
   const searchedStudents = studentSearch.trim()

@@ -314,7 +314,9 @@ export default function TeacherDashboardPage() {
                     }}>
                     <span className="flex items-center gap-2">
                       <span>{c.hasFeedback ? '✅' : '⚠️'}</span>
-                      <span>{c.name}</span>
+                      <Link href={`/teacher/learning-notes?student=${c.id}`} className="underline underline-offset-2 hover:opacity-70">
+                        {c.name}
+                      </Link>
                       <span className="font-normal text-gray-400">{c.school} · {c.teacher_name || '미배정'}</span>
                     </span>
                     <span className="font-normal text-gray-400">첫수업 {c.firstDate}</span>
