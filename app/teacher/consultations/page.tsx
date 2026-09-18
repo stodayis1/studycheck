@@ -26,6 +26,18 @@ interface Consultation {
 
 const OVERDUE_DAYS = 90
 
+const CONSULTATION_TEMPLATE = `1.
+성적 및 학습상담
+
+
+2.
+학부모님 건의 및 당부사항
+
+
+3.
+안내드린 사항 정리
+`
+
 export default function ConsultationsPage() {
   const { currentUser, canManageAllStudents, canViewStudent, isSupervisorModeActive, supervisorGrades } = useAuth()
   const searchParams = useSearchParams()
@@ -248,11 +260,23 @@ export default function ConsultationsPage() {
             </div>
 
             <div className="px-5 py-4 space-y-3" style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <p className="text-xs font-bold text-gray-500">상담기록 추가</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-gray-500">상담기록 추가</p>
+                <button
+                  onClick={() => {
+                    if (newContent.trim() && !confirm('입력 중인 내용을 표준 양식으로 바꿀까요?')) return
+                    setNewContent(CONSULTATION_TEMPLATE)
+                  }}
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-lg"
+                  style={{ background: '#F0F5F3', color: '#085041' }}>
+                  표준 양식 넣기
+                </button>
+              </div>
               <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)}
                 className="w-full rounded-xl px-3 py-2 text-sm" style={{ border: '1px solid #e5e7eb' }} />
               <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
-                placeholder="상담 내용을 입력해주세요" rows={3}
+                placeholder={'상담 내용을 입력해주세요\n\n예시 양식) 1. 성적 및 학습상담 / 2. 학부모님 건의 및 당부사항 / 3. 안내드린 사항 정리\n(우측 상단 "표준 양식 넣기" 버튼을 누르면 자동으로 채워져요)'}
+                rows={6}
                 className="w-full rounded-xl px-3 py-2 text-sm resize-none" style={{ border: '1px solid #e5e7eb' }} />
               <button onClick={handleAdd} disabled={saving || !newContent.trim()}
                 className="w-full rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-40"
@@ -272,7 +296,7 @@ export default function ConsultationsPage() {
                       <div className="space-y-2">
                         <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
                           className="w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1px solid #e5e7eb' }} />
-                        <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={3}
+                        <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={6}
                           className="w-full rounded-lg px-2 py-1.5 text-sm resize-none" style={{ border: '1px solid #e5e7eb' }} />
                         <div className="flex gap-2">
                           <button onClick={saveEdit} disabled={saving} className="flex-1 rounded-lg py-1.5 text-xs font-bold text-white" style={{ background: '#085041' }}>저장</button>
