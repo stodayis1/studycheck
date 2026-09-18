@@ -24,12 +24,17 @@ export default function WorksheetsPage() {
   const { isAdmin, loading } = useAuth()
   const router = useRouter()
   const [bookCount, setBookCount] = useState<number | null>(null)
+  const [tbCount, setTbCount] = useState<number | null>(null)
 
   useEffect(() => {
     apiFetch('/api/problem-bank?books=1')
       .then((r) => r.json())
-      .then((d) => setBookCount((d.books ?? []).length))
-      .catch(() => setBookCount(null))
+      .then((d) => {
+        const list = d.books ?? []
+        setBookCount(list.filter((b: any) => b.kind !== 'textbook').length)
+        setTbCount(list.filter((b: any) => b.kind === 'textbook').length)
+      })
+      .catch(() => { setBookCount(null); setTbCount(null) })
   }, [])
 
   const sections: { name: string; note: string; cards: Card[] }[] = [
@@ -46,7 +51,8 @@ export default function WorksheetsPage() {
         },
         {
           title: '교과서',
-          desc: '교과서 쌍둥이·유사 문제 출제',
+          badge: tbCount ? `+${tbCount}종` : undefined,
+          desc: '교과서 문제 출제 (레벨 구분 없음)',
           color: '#8b5cf6',
           href: '/teacher/worksheets/textbooks',
         },
@@ -65,7 +71,7 @@ export default function WorksheetsPage() {
       note: '',
       cards: [
         { title: '오답 · 오답유사', desc: '학생별 틀린 문제와 같은 유형 출제', color: '#f97316', href: '/teacher/gradings' },
-        { title: '고난도', desc: '난이도 상 · 쎈 C단계 중심', color: '#ef4444', preset: { diffs: ['상', '심화'], mode: 'hard', title: '고난도' } },
+        { title: '고난도', desc: '레벨 4 이상 (쎈 B상·C단계)', color: '#ef4444', preset: { levels: [4, 5, 6], mode: 'hard', title: '고난도' } },
         { title: '서술형', desc: '주관식 문항만 모아서', color: '#10b981', preset: { answerType: 'written', title: '서술형' } },
         { title: '모의고사 기출', desc: '아직 문제가 없습니다', color: '#94a3b8', soon: true },
       ],

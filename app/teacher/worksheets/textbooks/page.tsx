@@ -1,55 +1,36 @@
 'use client'
 
-// 교과서 연계 — 학년별 출판사 목록에서 골라 문제은행 화면으로 넘어갑니다 (관리자 전용)
+// 교과서 연계 — 교과서는 레벨을 매기지 않고 여기서 따로 뽑는다 (관리자 전용)
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 
 const NAVY = '#0f3460'
+const COURSES = ['중1-1', '중1-2', '중2-1', '중2-2', '중3-1', '중3-2']
 
-const GRADES = ['중1', '중2', '중3']
-const PREFIX = '교과서-'
-
-// book 이름 '교과서-NE능률' → 출판사 표시명 'NE능률'
-const publisherOf = (book: string) => book.startsWith(PREFIX) ? book.slice(PREFIX.length) : book
-
-type BookInfo = { book: string; total: number; typed: number; courses: Record<string, number> }
+type Book = { book: string; kind?: string; total: number; typed: number; courses: Record<string, number> }
 
 export default function TextbooksPage() {
   const { isAdmin, loading: authLoading } = useAuth()
   const router = useRouter()
-
-  const [grade, setGrade] = useState(GRADES[0])
-  const [books, setBooks] = useState<BookInfo[]>([])
+  const [books, setBooks] = useState<Book[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let dead = false
     apiFetch('/api/problem-bank?books=1')
       .then((r) => r.json())
-      .then((d) => { if (!dead) setBooks((d.books ?? []).filter((b: BookInfo) => b.book.startsWith(PREFIX))) })
-      .finally(() => { if (!dead) setLoading(false) })
-    return () => { dead = true }
+      .then((d) => setBooks((d.books ?? []).filter((b: Book) => b.kind === 'textbook')))
+      .finally(() => setLoading(false))
   }, [])
 
-  // 고른 학년에 문항이 하나라도 있는 출판사만 추림
-  const publishers = useMemo(() => {
-    return books
-      .map((b) => {
-        const semesters = [1, 2].filter((s) => (b.courses[`${grade}-${s}`] ?? 0) > 0)
-        const count = semesters.reduce((a, s) => a + (b.courses[`${grade}-${s}`] ?? 0), 0)
-        return { book: b.book, name: publisherOf(b.book), semesters, count }
-      })
-      .filter((p) => p.semesters.length > 0)
-  }, [books, grade])
-
-  const go = (book: string, semester: number) => {
-    sessionStorage.setItem('pb_preset', JSON.stringify({
-      grade, semester, books: [book], title: `${grade}-${semester} ${publisherOf(book)} 교과서`,
-    }))
+  const go = (b: Book, course?: string) => {
+    // 교과서는 레벨이 없으므로 레벨 조건을 걸지 않는다
+    const preset: Record<string, any> = { books: [b.book], levels: [], title: `${b.book} 연계` }
+    if (course) { const [g, s] = course.split('-'); preset.grade = g; preset.semester = Number(s) }
+    try { sessionStorage.setItem('pb_preset', JSON.stringify(preset)) } catch { /* 무시 */ }
     router.push('/teacher/problem-bank')
   }
 
@@ -58,51 +39,48 @@ export default function TextbooksPage() {
 
   return (
     <Shell>
-      <div className="px-5 pt-4">
-        <div className="flex rounded-lg overflow-hidden border text-sm w-fit">
-          {GRADES.map((g) => (
-            <button key={g} onClick={() => setGrade(g)}
-              className={`px-4 py-2 ${grade === g ? 'text-white font-semibold' : 'bg-white text-gray-600'}`}
-              style={grade === g ? { background: NAVY } : {}}>
-              {g}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="px-5 py-6">
+        {loading && <div className="text-gray-400 text-center py-10">불러오는 중…</div>}
 
-      <div className="max-w-[700px] mx-auto px-5 py-6">
-        {loading ? (
-          <div className="text-center text-gray-400 py-16">불러오는 중…</div>
-        ) : publishers.length === 0 ? (
+        {!loading && books.length === 0 && (
           <div className="text-center py-16">
-            <div className="text-gray-700 font-medium mb-2">{grade}에 등록된 교과서가 없습니다.</div>
+            <div className="text-gray-700 font-medium mb-2">아직 등록된 교과서가 없습니다.</div>
             <div className="text-sm text-gray-500 leading-relaxed">
               교과서 문제 PDF를 올려 주시면 유형별로 정리해서<br />여기에서 고를 수 있게 만들어 두겠습니다.
             </div>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {publishers.map((p) => (
-              <div key={p.book} className="bg-white border rounded-xl px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-semibold text-gray-800">{p.name}</div>
-                  <div className="text-xs text-gray-400">{p.count}문항</div>
-                </div>
-                <div className="flex gap-2">
-                  {p.semesters.map((s) => (
-                    <button key={s} onClick={() => go(p.book, s)}
-                      className="flex-1 py-2 rounded-lg border text-sm text-gray-700 hover:text-white transition"
-                      style={{ borderColor: NAVY }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = NAVY }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '' }}>
-                      {grade}-{s}학기
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {books.map((b) => (
+            <div key={b.book} className="bg-white border rounded-xl p-5" style={{ borderLeft: '4px solid #8b5cf6' }}>
+              <div className="flex items-baseline gap-2 mb-1">
+                <button onClick={() => go(b)} className="text-lg font-bold hover:underline" style={{ color: '#8b5cf6' }}>
+                  {b.book}
+                </button>
+                <span className="text-xs text-gray-400">{b.total.toLocaleString()}문항</span>
+              </div>
+              <div className="text-xs text-gray-600 mb-3">
+                유형 분류 {b.typed.toLocaleString()}문항 · 레벨 구분 없음
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                {COURSES.map((c) => {
+                  const n = b.courses[c] ?? 0
+                  return (
+                    <button key={c} disabled={!n} onClick={() => go(b, c)}
+                      className={`py-2 rounded-lg border text-xs ${
+                        n ? 'hover:bg-gray-50 text-gray-700' : 'opacity-35 cursor-not-allowed text-gray-400'
+                      }`}>
+                      <div className="font-medium">{c}</div>
+                      <div className="text-[10px] text-gray-400">{n ? `${n}문항` : '없음'}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </Shell>
   )
@@ -111,8 +89,8 @@ export default function TextbooksPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="교과서 연계" subtitle="학년과 출판사를 고르세요" showBack />
-      {children}
+      <Header title="교과서 연계" subtitle="교과서와 학기를 고르세요" showBack />
+      <div className="max-w-[1100px] mx-auto">{children}</div>
     </div>
   )
 }

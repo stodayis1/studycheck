@@ -10,7 +10,7 @@ import { apiFetch } from '@/lib/apiFetch'
 
 const NAVY = '#0f3460'
 
-type Book = { book: string; total: number; typed: number; courses: Record<string, number> }
+type Book = { book: string; kind?: string; total: number; typed: number; courses: Record<string, number> }
 
 // 교재 소개 문구 (없는 교재는 기본 문구)
 const INFO: Record<string, { color: string; desc: string }> = {
@@ -29,7 +29,7 @@ export default function BooksPage() {
   useEffect(() => {
     apiFetch('/api/problem-bank?books=1')
       .then((r) => r.json())
-      .then((d) => setBooks(d.books ?? []))
+      .then((d) => setBooks((d.books ?? []).filter((b: Book) => b.kind !== 'textbook')))
       .finally(() => setLoading(false))
   }, [])
 

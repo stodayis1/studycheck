@@ -17,7 +17,7 @@ type TypeRow = {
   title: string
   isFocus: boolean
   count: number
-  byDiff: Record<string, number>
+  byLevel: Record<string, number>
   byBook: Record<string, number>
   choice: number
   essay: number
@@ -30,7 +30,11 @@ const COURSES = [
   { grade: '중2', semester: 1 }, { grade: '중2', semester: 2 },
   { grade: '중3', semester: 1 }, { grade: '중3', semester: 2 },
 ]
-const DIFFS = ['대표', '하', '중', '상', '기본', '기출', '심화']
+// 학원 공통 난이도. 1=쎈A / 2=개념서 대표·확인 / 3=쎈B / 4=쎈B상·쎈C / 5=올림포스 고난도 / 6=고쟁이 최심화
+const LEVELS = [1, 2, 3, 4, 5, 6]
+const LEVEL_HINT: Record<number, string> = {
+  1: '기본 (쎈 A)', 2: '개념 확인', 3: '유형 (쎈 B)', 4: '심화 (쎈 B상·C)', 5: '고난도', 6: '최심화',
+}
 const BOOKS = ['쎈', '쎈B', '베이직쎈']
 const COUNT_PRESETS = [10, 20, 25, 30, 50]
 
@@ -47,7 +51,7 @@ export default function ProblemBankPage() {
 
   // 출제 조건
   const [count, setCount] = useState(20)
-  const [diffs, setDiffs] = useState<string[]>([])
+  const [levels, setLevels] = useState<number[]>([])
   const [books, setBooks] = useState<string[]>([])
   const [answerType, setAnswerType] = useState<'all' | 'choice' | 'written'>('all')
   const [noRepeat, setNoRepeat] = useState(true)
@@ -70,7 +74,7 @@ export default function ProblemBankPage() {
         if (c) setCourse(c)
       }
       if (v.books) setBooks(v.books)
-      if (v.diffs) setDiffs(v.diffs)
+      if (v.levels) setLevels(v.levels)
       if (v.answerType) setAnswerType(v.answerType)
       if (v.mode) setMode(v.mode)
       if (v.title) setTitle(v.title)
@@ -93,6 +97,13 @@ export default function ProblemBankPage() {
   )
   const pickedTypes = useMemo(() => allTypes.filter((t) => picked.has(t.code)), [allTypes, picked])
   const pool = pickedTypes.reduce((a, t) => a + t.count, 0)
+  // 고른 유형들의 레벨별 문항 수 (칩에 숫자로 띄운다)
+  const levelPool = useMemo(() => {
+    const m: Record<number, number> = {}
+    for (const t of pickedTypes)
+      for (const [k, n] of Object.entries(t.byLevel ?? {})) m[Number(k)] = (m[Number(k)] ?? 0) + (n as number)
+    return m
+  }, [pickedTypes])
 
   const toggle = (codes: string[]) => {
     setPicked((prev) => {
@@ -113,7 +124,7 @@ export default function ProblemBankPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           grade: course.grade, semester: course.semester,
-          typeCodes: [...picked], count, diffs, books, answerType,
+          typeCodes: [...picked], count, levels, books, answerType,
           noRepeat, perTypeMax, mode, title,
         }),
       })
@@ -234,8 +245,27 @@ export default function ProblemBankPage() {
               </div>
             </div>
 
-            <Field label="난이도">
-              <Chips all="전체" values={DIFFS} on={diffs} set={(v) => toggleArr(v, diffs, setDiffs)} clear={() => setDiffs([])} />
+            <Field label="레벨">
+              <div className="flex flex-wrap gap-1">
+                <button onClick={() => setLevels([])}
+                  className={`px-2.5 py-1 rounded-full border text-xs ${levels.length === 0 ? 'text-white' : 'bg-white text-gray-600'}`}
+                  style={levels.length === 0 ? { background: NAVY, borderColor: NAVY } : {}}>전체</button>
+                {LEVELS.map((n) => {
+                  const on = levels.includes(n)
+                  const cnt = levelPool[n] ?? 0
+                  return (
+                    <button key={n} title={LEVEL_HINT[n]} disabled={pickedTypes.length > 0 && cnt === 0}
+                      onClick={() => setLevels(on ? levels.filter((x) => x !== n) : [...levels, n])}
+                      className={`px-2.5 py-1 rounded-full border text-xs ${on ? 'text-white' : 'bg-white text-gray-600'} ${pickedTypes.length > 0 && cnt === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                      style={on ? { background: NAVY, borderColor: NAVY } : {}}>
+                      Lv{n}{pickedTypes.length > 0 ? ` (${cnt})` : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="text-[11px] text-gray-400 mt-1">
+                1 기본(쎈A) · 2 개념확인 · 3 유형(쎈B) · 4 심화(쎈B상·쎈C) · 5 고난도 · 6 최심화
+              </div>
             </Field>
 
             <Field label="교재">

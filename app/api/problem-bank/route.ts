@@ -35,12 +35,9 @@ async function all<T>(make: (from: number, to: number) => any): Promise<T[]> {
   return out
 }
 
-// 난이도 표시값 (베이직쎈은 난이도가 없어 단계로 대신한다)
-function diffOf(p: any) {
-  if (p.difficulty) return p.difficulty as string
-  if (p.book === '베이직쎈') return p.step === 'T' ? '기출' : '기본'
-  if (p.step === 'C') return '심화'
-  return '중'
+// 교과서는 레벨을 매기지 않는다 (별도 탭에서 뽑는다)
+function isTextbook(book: string | null) {
+  return !!book && book.startsWith('교과서')
 }
 
 // ───────────────────────── GET ─────────────────────────
@@ -54,11 +51,15 @@ export async function GET(req: Request) {
   // ?books=1 → 교재 목록 (+ 학년·학기별 문항 수)
   if (q.get('books')) {
     const rows = await all<any>((f, t) =>
-      supabase.from('problems').select('book, grade, semester, type_code').range(f, t)
+      supabase.from('problems').select('book, grade, semester, type_code, level').range(f, t)
     )
     const m = new Map<string, any>()
     for (const r of rows) {
-      const b = m.get(r.book) ?? { book: r.book, total: 0, typed: 0, courses: {} as Record<string, number> }
+      const b = m.get(r.book) ?? {
+        book: r.book,
+        kind: isTextbook(r.book) ? 'textbook' : 'market',   // 교과서 / 시중교재
+        total: 0, typed: 0, courses: {} as Record<string, number>,
+      }
       b.total++
       if (r.type_code) b.typed++
       const key = `${r.grade}-${r.semester}`
@@ -86,7 +87,7 @@ export async function GET(req: Request) {
   const probs = await all<any>((f, t) =>
     supabase
       .from('problems')
-      .select('type_code, book, step, difficulty, answer_kind, is_essay')
+      .select('type_code, book, step, difficulty, level, answer_kind, is_essay')
       .eq('grade', grade)
       .eq('semester', Number(semester))
       .not('type_code', 'is', null)
@@ -96,10 +97,10 @@ export async function GET(req: Request) {
   // 유형별 통계
   const stat: Record<string, any> = {}
   for (const p of probs) {
-    const s = (stat[p.type_code] ??= { total: 0, byDiff: {}, byBook: {}, choice: 0, essay: 0 })
+    const s = (stat[p.type_code] ??= { total: 0, byLevel: {}, byBook: {}, choice: 0, essay: 0 })
     s.total++
-    const d = diffOf(p)
-    s.byDiff[d] = (s.byDiff[d] ?? 0) + 1
+    const lv = p.level ?? 0                       // 0 = 레벨 없음(교과서)
+    s.byLevel[lv] = (s.byLevel[lv] ?? 0) + 1
     s.byBook[p.book] = (s.byBook[p.book] ?? 0) + 1
     if (p.answer_kind === 'choice') s.choice++
     if (p.is_essay) s.essay++
@@ -119,7 +120,7 @@ export async function GET(req: Request) {
       title: t.type_title,
       isFocus: t.is_focus,
       count: n,
-      byDiff: stat[t.code]?.byDiff ?? {},
+      byLevel: stat[t.code]?.byLevel ?? {},
       byBook: stat[t.code]?.byBook ?? {},
       choice: stat[t.code]?.choice ?? 0,
       essay: stat[t.code]?.essay ?? 0,
@@ -145,7 +146,7 @@ export async function POST(req: Request) {
     semester,
     typeCodes = [] as string[],
     count = 20,
-    diffs = [] as string[],       // 하/중/상/대표/기본/기출/심화 — 비면 전체
+    levels = [] as number[],      // 1~6 (0이면 레벨 없는 교과서) — 비면 전체
     books = [] as string[],       // 쎈/쎈B/베이직쎈 — 비면 전체
     answerType = 'all',           // all | choice | written
     noRepeat = true,              // 예전에 출제한 문항 빼기
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
   let rows = await all<any>((f, t) =>
     supabase
       .from('problems')
-      .select('id, book, grade, semester, sub_chapter_no, local_no, type_code, difficulty, step, is_essay, answer_kind')
+      .select('id, book, grade, semester, sub_chapter_no, local_no, type_code, difficulty, step, level, is_essay, answer_kind')
       .eq('grade', grade)
       .eq('semester', Number(semester))
       .in('type_code', typeCodes)
@@ -169,7 +170,7 @@ export async function POST(req: Request) {
   )
 
   if (books.length) rows = rows.filter((p) => books.includes(p.book))
-  if (diffs.length) rows = rows.filter((p) => diffs.includes(diffOf(p)))
+  if (levels.length) rows = rows.filter((p) => levels.includes(p.level ?? 0))
   if (answerType === 'choice') rows = rows.filter((p) => p.answer_kind === 'choice')
   if (answerType === 'written') rows = rows.filter((p) => p.answer_kind !== 'choice')
 
@@ -193,12 +194,12 @@ export async function POST(req: Request) {
     byType.get(p.type_code)!.push(p)
   }
 
-  const DIFF_ORDER: Record<string, number> = { 대표: 0, 하: 1, 기본: 1, 중: 2, 상: 3, 기출: 3, 심화: 4 }
+  const lv = (p: any) => p.level ?? 0
   const shuffle = (a: any[]) => a.sort(() => Math.random() - 0.5)
 
   for (const [k, v] of byType) {
-    if (mode === 'hard') v.sort((x, y) => (DIFF_ORDER[diffOf(y)] ?? 2) - (DIFF_ORDER[diffOf(x)] ?? 2))
-    else if (mode === 'focus') v.sort((x, y) => (DIFF_ORDER[diffOf(x)] ?? 2) - (DIFF_ORDER[diffOf(y)] ?? 2))
+    if (mode === 'hard') v.sort((x, y) => lv(y) - lv(x))
+    else if (mode === 'focus') v.sort((x, y) => lv(x) - lv(y))
     else shuffle(v)
     if (perTypeMax > 0) byType.set(k, v.slice(0, perTypeMax))
   }
@@ -232,7 +233,7 @@ export async function POST(req: Request) {
   if (preview)
     return NextResponse.json({
       count: picked.length,
-      problems: picked.map((p, i) => ({ no: i + 1, id: p.id, book: p.book, localNo: p.local_no, typeCode: p.type_code, diff: diffOf(p) })),
+      problems: picked.map((p, i) => ({ no: i + 1, id: p.id, book: p.book, localNo: p.local_no, typeCode: p.type_code, level: p.level })),
     })
 
   // 시험지 저장
