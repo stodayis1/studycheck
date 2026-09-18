@@ -7,9 +7,9 @@ import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { courseLabel } from '@/lib/course'
 
 const NAVY = '#0f3460'
-const COURSES = ['중1-1', '중1-2', '중2-1', '중2-2', '중3-1', '중3-2']
 
 type Book = { book: string; kind?: string; total: number; typed: number; courses: Record<string, number> }
 
@@ -65,14 +65,14 @@ export default function TextbooksPage() {
               </div>
 
               <div className="grid grid-cols-3 gap-1.5">
-                {COURSES.map((c) => {
-                  const n = b.courses[c] ?? 0
+                {Object.entries(b.courses).sort(([a], [c]) => a.localeCompare(c)).map(([k, n]) => {
+                  const [g, sem] = k.split('-')
                   return (
-                    <button key={c} disabled={!n} onClick={() => go(b, c)}
+                    <button key={k} disabled={!n} onClick={() => go(b, k)}
                       className={`py-2 rounded-lg border text-xs ${
                         n ? 'hover:bg-gray-50 text-gray-700' : 'opacity-35 cursor-not-allowed text-gray-400'
                       }`}>
-                      <div className="font-medium">{c}</div>
+                      <div className="font-medium">{courseLabel(g, sem)}</div>
                       <div className="text-[10px] text-gray-400">{n ? `${n}문항` : '없음'}</div>
                     </button>
                   )

@@ -48,6 +48,30 @@ export async function GET(req: Request) {
   const supabase = db()
   const q = new URL(req.url).searchParams
 
+  // ?courses=1 → 과정 목록 (유형표 기준). 고등이 늘어나도 코드를 고칠 필요가 없게 DB에서 읽는다
+  if (q.get('courses')) {
+    const types = await all<any>((f, t) =>
+      supabase.from('standard_types').select('grade, semester').range(f, t)
+    )
+    const probs = await all<any>((f, t) =>
+      supabase.from('problems').select('grade, semester').range(f, t)
+    )
+    const m = new Map<string, any>()
+    const key = (g: string, s: number) => `${g}-${s}`
+    for (const r of types) {
+      const k = key(r.grade, r.semester)
+      const c = m.get(k) ?? { grade: r.grade, semester: r.semester, types: 0, problems: 0 }
+      c.types++
+      m.set(k, c)
+    }
+    for (const r of probs) {
+      const k = key(r.grade, r.semester)
+      const c = m.get(k)
+      if (c) c.problems++
+    }
+    return NextResponse.json({ courses: [...m.values()] })
+  }
+
   // ?books=1 → 교재 목록 (+ 학년·학기별 문항 수)
   if (q.get('books')) {
     const rows = await all<any>((f, t) =>

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { courseLabel, courseGroup, type Course } from '@/lib/course'
 
 const NAVY = '#0f3460'
 const GOLD = '#c8992e'
@@ -25,10 +26,9 @@ type TypeRow = {
 type Sub = { no: number; title: string; types: TypeRow[]; total: number }
 type Chapter = { no: number; title: string; subs: Sub[]; total: number }
 
-const COURSES = [
-  { grade: '중1', semester: 1 }, { grade: '중1', semester: 2 },
-  { grade: '중2', semester: 1 }, { grade: '중2', semester: 2 },
-  { grade: '중3', semester: 1 }, { grade: '중3', semester: 2 },
+// 과정 목록은 DB(standard_types)에서 읽어온다. 고등 과목이 늘어나도 코드를 고칠 필요가 없다.
+const FALLBACK_COURSES: Course[] = [
+  { grade: '중1', semester: 1, label: '중1-1', level: '중등' },
 ]
 // 학원 공통 난이도. 1=쎈A / 2=개념서 대표·확인 / 3=쎈B / 4=쎈B상·쎈C / 5=올림포스 고난도 / 6=고쟁이 최심화
 const LEVELS = [1, 2, 3, 4, 5, 6]
@@ -43,7 +43,8 @@ export default function ProblemBankPage() {
   const router = useRouter()
   const [byType, setByType] = useState(true)   // 유형별 / 단원별 보기
 
-  const [course, setCourse] = useState(COURSES[0])
+  const [courses, setCourses] = useState<Course[]>(FALLBACK_COURSES)
+  const [course, setCourse] = useState<Course>(FALLBACK_COURSES[0])
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -61,6 +62,25 @@ export default function ProblemBankPage() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
+  useEffect(() => {
+    apiFetch('/api/problem-bank?courses=1')
+      .then((r) => r.json())
+      .then((d) => {
+        const list: Course[] = (d.courses ?? []).map((c: any) => ({
+          ...c, label: courseLabel(c.grade, c.semester), level: courseGroup(c.grade),
+        }))
+        // 중등 먼저, 그 안에서 학년·학기 순
+        list.sort((a, b) =>
+          (a.level === b.level ? 0 : a.level === '중등' ? -1 : 1) ||
+          a.grade.localeCompare(b.grade) || a.semester - b.semester)
+        if (list.length) {
+          setCourses(list)
+          setCourse((prev) => list.find((c) => c.grade === prev.grade && c.semester === prev.semester) ?? list[0])
+        }
+      })
+      .catch(() => { /* 기본값 유지 */ })
+  }, [])
+
   // 학습지 출제 메뉴에서 넘어온 조건 받기
   useEffect(() => {
     try {
@@ -70,8 +90,10 @@ export default function ProblemBankPage() {
       const v = JSON.parse(raw)
       if (v.byType === false) setByType(false)
       if (v.grade && v.semester) {
-        const c = COURSES.find((x) => x.grade === v.grade && x.semester === Number(v.semester))
-        if (c) setCourse(c)
+        setCourse((prev) => ({
+          grade: v.grade, semester: Number(v.semester),
+          label: courseLabel(v.grade, v.semester), level: courseGroup(v.grade),
+        }))
       }
       if (v.books) setBooks(v.books)
       if (v.levels) setLevels(v.levels)
@@ -155,15 +177,29 @@ export default function ProblemBankPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[180px_320px_1fr_340px] gap-0 border-t bg-white min-h-[70vh]">
         {/* ① 과정 선택 */}
         <Col title="과정 선택">
-          <div className="p-3 space-y-1">
-            {COURSES.map((c) => {
-              const on = c.grade === course.grade && c.semester === course.semester
+          <div className="p-3 space-y-3">
+            {(['중등', '고등'] as const).map((g) => {
+              const list = courses.filter((c) => c.level === g)
+              if (!list.length) return null
               return (
-                <button key={`${c.grade}${c.semester}`} onClick={() => setCourse(c)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm ${on ? 'text-white font-semibold' : 'hover:bg-gray-50 text-gray-700'}`}
-                  style={on ? { background: NAVY } : {}}>
-                  {c.grade}-{c.semester}
-                </button>
+                <div key={g}>
+                  <div className="text-[11px] text-gray-400 px-1 mb-1">{g}</div>
+                  <div className="space-y-1">
+                    {list.map((c) => {
+                      const on = c.grade === course.grade && c.semester === course.semester
+                      return (
+                        <button key={`${c.grade}${c.semester}`} onClick={() => setCourse(c)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm ${on ? 'text-white font-semibold' : 'hover:bg-gray-50 text-gray-700'}`}
+                          style={on ? { background: NAVY } : {}}>
+                          <span>{c.label}</span>
+                          <span className={`ml-1.5 text-[10px] ${on ? 'opacity-70' : 'text-gray-400'}`}>
+                            {c.problems ? `${c.problems.toLocaleString()}문항` : '문항 없음'}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -224,7 +260,7 @@ export default function ProblemBankPage() {
             <div>
               <div className="text-xs text-gray-500 mb-1">시험지 이름</div>
               <input value={title} onChange={(e) => setTitle(e.target.value)}
-                placeholder={`${course.grade}-${course.semester} 문제은행`}
+                placeholder={`${course.label} 문제은행`}
                 className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
 
