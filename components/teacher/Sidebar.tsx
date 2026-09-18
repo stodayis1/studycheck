@@ -72,7 +72,7 @@ export function TeacherSidebar() {
   return (
     <>
       {/* 데스크톱 사이드바 */}
-      <aside className="hidden md:flex flex-col w-56 min-h-screen sticky top-0"
+      <aside className="hidden md:flex print:hidden flex-col w-56 min-h-screen sticky top-0"
         style={{ background: '#F0FBF7', borderRight: '1px solid #e5e7eb' }}>
 
         {/* 로고 */}
@@ -178,7 +178,7 @@ export function TeacherSidebar() {
 
       {/* 모바일 관리자 토글 - 상단 고정 */}
       {currentUser?.role === 'admin' && (
-        <div className="md:hidden fixed top-3 right-3 z-50">
+        <div className="md:hidden print:hidden fixed top-3 right-3 z-50">
           <button onClick={toggleAdminMode}
             className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
             style={adminMode
@@ -192,7 +192,7 @@ export function TeacherSidebar() {
 
       {/* 모바일 주임 토글 - 상단 고정 */}
       {isSupervisorAccount() && (
-        <div className="md:hidden fixed top-3 right-3 z-50">
+        <div className="md:hidden print:hidden fixed top-3 right-3 z-50">
           <button onClick={toggleSupervisorMode}
             className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
             style={supervisorMode
@@ -206,7 +206,7 @@ export function TeacherSidebar() {
 
       {/* 모바일 더보기 시트 */}
       {moreOpen && (
-        <div className="md:hidden fixed inset-0 z-50" onClick={() => setMoreOpen(false)}>
+        <div className="md:hidden print:hidden fixed inset-0 z-50" onClick={() => setMoreOpen(false)}>
           <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.3)' }} />
           <div className="absolute bottom-16 left-0 right-0 rounded-t-2xl p-4 pb-6"
             style={{ background: 'white', boxShadow: '0 -4px 24px rgba(0,0,0,0.1)' }}
@@ -232,7 +232,7 @@ export function TeacherSidebar() {
       )}
 
       {/* 모바일 하단 탭 */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40"
+      <nav className="md:hidden print:hidden fixed bottom-0 left-0 right-0 z-40"
         style={{ background: '#F0FBF7', borderTop: '1px solid #e5e7eb' }}>
         <div className="flex h-16 max-w-lg mx-auto">
           {MOBILE_MAIN.map((item) => {

@@ -46,12 +46,13 @@ if (!URL || !KEY) { console.error('✗ .env.local 에 NEXT_PUBLIC_SUPABASE_URL �
 if (!ROOT || !fs.existsSync(ROOT)) { console.error('✗ 폴더 경로를 인자로 주세요.  예: node scripts\\upload-problems.mjs "C:\\Users\\USER\\Desktop\\문제은행"'); process.exit(1); }
 
 const db = createClient(URL, KEY, { auth: { persistSession: false } });
-const DATA_FILE = path.join(HERE, 'problems_data.json');
+// 세 번째 인자로 데이터 파일을 따로 줄 수 있다 (예: scripts/problems_ssen_cm1.json). 없으면 problems_data.json
+const DATA_FILE = process.argv[3] ? path.resolve(process.argv[3]) : path.join(HERE, 'problems_data.json');
 if (!fs.existsSync(DATA_FILE)) { console.error(`✗ ${DATA_FILE} 이 없습니다. 스크립트와 같은 폴더에 problems_data.json 을 두세요.`); process.exit(1); }
 const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
 // 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
-const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3' };
+const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1' };
 const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne' };
 const key = (r, kind) =>
   `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
@@ -99,6 +100,9 @@ async function insertMeta() {
       type_code: r.c, difficulty: r.d, step: r.p,
       is_essay: !!r.e, is_creative: !!r.v, is_important: !!r.i,
       image_path: key(r, 'q'), answer_image_path: key(r, 'a'),
+      // 선택 항목 — 데이터에 있을 때만 넣는다 (예전 데이터 파일은 그대로 동작)
+      ...(r.lv !== undefined && { level: r.lv }),
+      ...(r.k !== undefined && { answer_kind: r.k, answer_text: r.a ?? null }),
     }));
     const { error } = await db.from('problems')
       .upsert(batch, { onConflict: 'book,grade,semester,sub_chapter_no,local_no' });
