@@ -53,14 +53,14 @@ const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
 // 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
 const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1' };
-const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu' };
+const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light' };
 const key = (r, kind) =>
   `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
 
 // ── 원본 이미지 찾기 ────────────────────────────────────────────
 // 폴더를 어떤 식으로 풀었든(중간에 폴더가 하나 더 있어도) 찾도록 전체를 훑어서 색인을 만든다.
 const INDEX = new Map();               // "학기/교재/소단원/파일명" → 실제 경로
-const IMG = /^[ac]?\d+\)?\.(png|jpg)$/i;
+const IMG = /^[ac]?\d+(S\d+)?\)?\.(png|jpg)$/i;   // 01S03 처럼 번호에 S(연습문제)가 들어가는 교재도 있다
 
 function scan(dir, depth = 0) {
   if (depth > 6) return;
