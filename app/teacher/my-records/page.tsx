@@ -472,7 +472,7 @@ export default function TeacherMyRecordsPage() {
 
             {!canEditSession(viewingSession.session_date) ? (
               <p className="text-xs text-center text-gray-400 pt-2">
-                수정은 수업 당일과 다음날까지만 가능해요. 그 이후엔 관리자에게 문의해주세요.
+                수정은 수업 당일과 그 학생의 다음 수업일 오후 2시까지만 가능해요 (학습관리 화면에서). 그 이후엔 관리자에게 문의해주세요.
               </p>
             ) : (
               <p className="text-xs text-center text-gray-400 pt-2">

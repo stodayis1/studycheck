@@ -712,6 +712,25 @@ export default function TeacherAssignmentsPage() {
       : `✅ ${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
   }
 
+  // 레벨 낮춰 재도전: 혼자 힘으로는 그 레벨을 못 넘는 학생용. 단원은 반드시 통과해야 하지만
+  // 닿을 수 있는 높이(0.5 낮은 레벨)에서 통과시킨다. 1.0 레벨이 바닥.
+  function canRetryDown(w: StudentWorksheet) {
+    return w.current_level > 1.0
+  }
+  async function handleRetryDown(w: StudentWorksheet) {
+    if (!canRetryDown(w)) return
+    const lower = Math.max(1.0, w.current_level - 0.5)
+    const name = getStudentName(w.student_id)
+    if (!(await closeWorksheet(w, 'retry_down'))) return
+    await supabase.from('student_worksheets').insert({
+      student_id: w.student_id, subject: '수학',
+      grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
+      current_level: lower, status: 'assigned', worksheet_type: 'main',
+    })
+    fetchData()
+    flashToast(`✅ ${name} ${w.current_level}레벨 → ${lower}레벨로 낮춰서 같은 단원 재도전 배정했어요`)
+  }
+
   // 70점 미만 예외 처리: 원장은 사유를 남기고 바로 처리, 강사는 원장에게 승인 요청
   async function handleSubmitOverride() {
     if (!overrideWS) return
@@ -759,15 +778,16 @@ export default function TeacherAssignmentsPage() {
   }
 
   // 통과 못 한 채 멈춘 단원에 같은 레벨 재도전 배정 (마지막으로 채점한 레벨 그대로)
-  async function handleAssignUnitRetry(last: StudentWorksheet) {
+  async function handleAssignUnitRetry(last: StudentWorksheet, lower = false) {
+    const level = lower ? Math.max(1.0, last.current_level - 0.5) : last.current_level
     const { error } = await supabase.from('student_worksheets').insert({
       student_id: last.student_id, subject: '수학',
       grade_level: last.grade_level, unit: last.unit, unit_name: last.unit_name, semester: last.semester ?? null,
-      current_level: last.current_level, status: 'assigned', worksheet_type: 'main',
+      current_level: level, status: 'assigned', worksheet_type: 'main',
     })
     if (error) { alert('배정 실패: ' + error.message); return }
     fetchData()
-    flashToast(`✅ ${getStudentName(last.student_id)} ${last.unit} ${last.current_level}레벨 재도전 배정했어요`)
+    flashToast(`✅ ${getStudentName(last.student_id)} ${last.unit} ${level}레벨 재도전 배정했어요`)
   }
 
   async function loadActionLogs() {
@@ -973,11 +993,20 @@ export default function TeacherAssignmentsPage() {
                               </p>
                             </div>
                             {student && isEditable(student) && (last ?? sample) && (
-                              <button onClick={() => handleAssignUnitRetry(last ?? sample)}
-                                className="px-2.5 py-1 text-[10px] font-bold rounded-lg whitespace-nowrap shrink-0"
-                                style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
-                                재도전 배정
-                              </button>
+                              <>
+                                {canRetryDown(last ?? sample) && (
+                                  <button onClick={() => handleAssignUnitRetry(last ?? sample, true)}
+                                    className="px-2.5 py-1 text-[10px] font-bold rounded-lg whitespace-nowrap shrink-0"
+                                    style={{ background: 'white', color: '#991b1b', border: '1px solid #fca5a5' }}>
+                                    레벨↓ 재도전
+                                  </button>
+                                )}
+                                <button onClick={() => handleAssignUnitRetry(last ?? sample)}
+                                  className="px-2.5 py-1 text-[10px] font-bold rounded-lg whitespace-nowrap shrink-0"
+                                  style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
+                                  재도전 배정
+                                </button>
+                              </>
                             )}
                           </div>
                         )
@@ -1184,6 +1213,12 @@ export default function TeacherAssignmentsPage() {
                                                 <button onClick={() => handleRetry(w)}
                                                   className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
                                                   style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
+                                                {canRetryDown(w) && (
+                                                  <button onClick={() => handleRetryDown(w)}
+                                                    title={`${Math.max(1, w.current_level - 0.5)}레벨로 낮춰 같은 단원 재도전`}
+                                                    className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                    style={{ background: 'white', color: '#991b1b', border: '1px solid #fca5a5' }}>레벨↓ 재도전</button>
+                                                )}
                                                 <button onClick={() => handleSimilarAssign(w)}
                                                   className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
                                                   style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>오답유사</button>
@@ -1864,7 +1899,7 @@ export default function TeacherAssignmentsPage() {
               if (l.worksheet_type !== 'main' || l.score == null || l.score >= PASS_SCORE) return
               const r = row(name)
               r.under80++
-              if (l.action === 'retry') r.retry++
+              if (l.action === 'retry' || l.action === 'retry_down') r.retry++
               else if (l.action === 'similar') r.similar++
               else if (l.action?.startsWith('override')) r.override++
               else r.other++
@@ -2594,6 +2629,11 @@ export default function TeacherAssignmentsPage() {
                   <button onClick={() => { handleRetry(scoreWS); setShowScoreModal(false) }}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold"
                     style={{ background: '#fee2e2', color: '#991b1b', border: '2px solid #dc2626' }}>재도전</button>
+                  {canRetryDown(scoreWS) && (
+                    <button onClick={() => { handleRetryDown(scoreWS); setShowScoreModal(false) }}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                      style={{ background: 'white', color: '#991b1b', border: '2px solid #fca5a5' }}>레벨↓</button>
+                  )}
                   <button onClick={() => { handleSimilarAssign(scoreWS); setShowScoreModal(false) }}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold"
                     style={{ background: '#FFF5F2', color: '#712B13', border: '2px solid #F5C4B3' }}>오답유사</button>

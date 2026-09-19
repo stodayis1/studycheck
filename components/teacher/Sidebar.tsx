@@ -10,31 +10,48 @@ function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
 }
 
-const NAV_ITEMS = [
-  { href: '/teacher/dashboard',      label: '대시보드',   icon: 'ti-layout-dashboard' },
-  { href: '/teacher/students',       label: '학생관리',   icon: 'ti-users' },
-  { href: '/teacher/learning-notes', label: '학습관리',   icon: 'ti-notebook' },
-  { href: '/teacher/my-records',     label: '내 기록',     icon: 'ti-history' },
-  { href: '/teacher/assignments',    label: '학습지관리', icon: 'ti-file-text' },
-  { href: '/teacher/exams',          label: '평가관리',   icon: 'ti-trophy' },
-  { href: '/teacher/curriculum',     label: '과정관리',   icon: 'ti-books' },
-  { href: '/teacher/work-status',    label: '업무현황',   icon: 'ti-briefcase' },
-  { href: '/teacher/exam-prep',      label: '시험배정',   icon: 'ti-clipboard-list' },
-  { href: '/teacher/consultations',  label: '상담내역',   icon: 'ti-phone' },
-  { href: '/teacher/reports',        label: '보고서',     icon: 'ti-chart-bar' },
-  { href: '/teacher/announcements',  label: '공지사항',   icon: 'ti-speakerphone' },
-]
+type NavItem = { href: string; label: string; icon: string }
+type NavGroup = { title: string | null; items: NavItem[] }
 
-const BULK_ITEM = { href: '/teacher/bulk-progress', label: '진도일괄입력', icon: 'ti-list-check' }
-const SETTINGS_ITEM = { href: '/teacher/settings', label: '설정', icon: 'ti-settings' }
-const IMPORT_ITEM = { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' }
-const GRADINGS_ITEM = { href: '/teacher/gradings', label: '채점결과', icon: 'ti-checkbox' }  // 관리자 전용
-const WORKSHEET_ITEM = { href: '/teacher/worksheets', label: '학습지출제', icon: 'ti-wand' }  // 관리자 전용
-const WEEKLY_ITEM = { href: '/teacher/weekly', label: '학습현황', icon: 'ti-calendar-stats' }  // 선생님 모두
+// 아이콘은 전부 Tabler 외곽선 아이콘 한 종류로 통일 (이모지·채운 아이콘 섞지 않기)
+const ITEM = {
+  dashboard:     { href: '/teacher/dashboard',      label: '대시보드',     icon: 'ti-layout-dashboard' },
+  announcements: { href: '/teacher/announcements',  label: '공지사항',     icon: 'ti-speakerphone' },
+  manual:        { href: '/teacher/manual',         label: '사용 매뉴얼',  icon: 'ti-book-2' },
+  notes:         { href: '/teacher/learning-notes', label: '학습관리',     icon: 'ti-notebook' },
+  weekly:        { href: '/teacher/weekly',         label: '학습현황',     icon: 'ti-calendar-week' },
+  myRecords:     { href: '/teacher/my-records',     label: '내 기록',      icon: 'ti-history' },
+  bulk:          { href: '/teacher/bulk-progress',  label: '진도일괄입력', icon: 'ti-list-check' },
+  students:      { href: '/teacher/students',       label: '학생관리',     icon: 'ti-users' },
+  curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
+  consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
+  assignments:   { href: '/teacher/assignments',    label: '학습지관리',   icon: 'ti-file-text' },
+  exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
+  examPrep:      { href: '/teacher/exam-prep',      label: '시험배정',     icon: 'ti-target' },
+  reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
+  importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
+  worksheets:    { href: '/teacher/worksheets',     label: '학습지출제',   icon: 'ti-file-plus' },
+  gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
+  workStatus:    { href: '/teacher/work-status',    label: '업무현황',     icon: 'ti-briefcase' },
+  settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
+} satisfies Record<string, NavItem>
 
-// 모바일 하단탭: 앞 4개만 노출, 나머지는 더보기
-const MOBILE_MAIN = NAV_ITEMS.slice(0, 4)
-const MOBILE_MORE = NAV_ITEMS.slice(4)
+// 같은 성격끼리 묶는다. 업무현황·학습지출제·채점결과·설정은 원장 전용 화면이라(강사가 들어가면
+// "관리자만 접근" 안내만 뜸) 원장(관리자 모드)에게만 '원장 전용' 묶음으로 보인다.
+function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
+  const groups: NavGroup[] = [
+    { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
+    { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : [])] },
+    { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.consultations] },
+    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep] },
+    { title: '보고', items: [ITEM.reports, ITEM.importRecords] },
+  ]
+  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.gradings, ITEM.workStatus, ITEM.settings] })
+  return groups
+}
+
+// 모바일 하단탭 4개 (나머지는 더보기)
+const MOBILE_MAIN: NavItem[] = [ITEM.dashboard, ITEM.students, ITEM.notes, ITEM.myRecords]
 
 export function TeacherSidebar() {
   const pathname = usePathname()
@@ -51,28 +68,17 @@ export function TeacherSidebar() {
   }, [])
 
   const showBulk = isAdmin() || bulkEnabled
-
-  const adminItems = isAdmin() ? [SETTINGS_ITEM] : []
-  // 채점결과는 원장님(관리자)만 - '평가관리' 바로 뒤에 붙인다
-  const NOTES_AT = NAV_ITEMS.findIndex(i => i.href === '/teacher/learning-notes')
-  const BASE_ITEMS = NOTES_AT < 0 ? NAV_ITEMS
-    : [...NAV_ITEMS.slice(0, NOTES_AT + 1), WEEKLY_ITEM, ...NAV_ITEMS.slice(NOTES_AT + 1)]
-  const EXAMS_AT = BASE_ITEMS.findIndex(i => i.href === '/teacher/exams')
-  const navItems = isAdmin()
-    ? [...BASE_ITEMS.slice(0, EXAMS_AT + 1), WORKSHEET_ITEM, GRADINGS_ITEM, ...BASE_ITEMS.slice(EXAMS_AT + 1)]
-    : BASE_ITEMS
-  const mobileMore = navItems.slice(4)
-  const desktopNavItems = showBulk
-    ? [...navItems, BULK_ITEM, IMPORT_ITEM, ...adminItems]
-    : [...navItems, IMPORT_ITEM, ...adminItems]
-  const mobileMoreItems = showBulk
-    ? [...mobileMore, BULK_ITEM, IMPORT_ITEM, ...adminItems]
-    : [...mobileMore, IMPORT_ITEM, ...adminItems]
+  const navGroups = buildNavGroups(isAdmin(), showBulk)
+  const mobileMainHrefs = new Set(MOBILE_MAIN.map((i) => i.href))
+  const mobileMoreGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !mobileMainHrefs.has(i.href)) }))
+    .filter((g) => g.items.length > 0)
+  const isActiveHref = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
     <>
       {/* 데스크톱 사이드바 */}
-      <aside className="hidden md:flex print:hidden flex-col w-56 min-h-screen sticky top-0"
+      <aside className="hidden md:flex print:hidden flex-col w-56 h-screen sticky top-0"
         style={{ background: '#F0FBF7', borderRight: '1px solid #e5e7eb' }}>
 
         {/* 로고 */}
@@ -114,36 +120,44 @@ export function TeacherSidebar() {
         )}
 
         {/* 네비게이션 */}
-        <nav className="flex-1 px-3 py-2 space-y-0.5">
-          {desktopNavItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            const isBulk = item.href === '/teacher/bulk-progress' || item.href === '/teacher/import-records' || item.href === '/teacher/settings'
-            return (
-              <Link key={item.href} href={item.href}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-                style={isActive ? {
-                  background: '#9FE1CB',
-                  color: '#085041',
-                  fontWeight: 600,
-                  borderLeft: '3px solid #085041',
-                } : isBulk ? {
-                  color: '#6b7280',
-                  borderLeft: '3px solid transparent',
-                  borderTop: '1px dashed #e5e7eb',
-                  marginTop: 4,
-                } : {
-                  color: '#6b7280',
-                  borderLeft: '3px solid transparent',
-                }}>
-                <i className={`ti ${item.icon}`} style={{ fontSize: 16 }} />
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
+          {navGroups.map((group, gi) => (
+            <div key={group.title ?? 'top'} className={gi > 0 ? 'mt-3 pt-3' : ''}
+              style={gi > 0 ? { borderTop: '1px solid #e5e7eb' } : undefined}>
+              {group.title && (
+                <p className="px-3 pb-1 text-[10px] font-bold tracking-wider"
+                  style={{ color: group.title === '원장 전용' ? '#0F6E56' : '#9ca3af' }}>
+                  {group.title}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = isActiveHref(item.href)
+                  return (
+                    <Link key={item.href} href={item.href}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all"
+                      style={isActive ? {
+                        background: '#9FE1CB',
+                        color: '#085041',
+                        fontWeight: 600,
+                        borderLeft: '3px solid #085041',
+                      } : {
+                        color: '#4b5563',
+                        borderLeft: '3px solid transparent',
+                      }}>
+                      <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
+                        color: isActive ? '#085041' : '#6b7280' }} />
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* 캐릭터 */}
-        <div className="flex justify-center px-4 pb-1">
+        <div className="flex justify-center px-4 pb-1 shrink-0">
           <img src="/character.png" alt="캐릭터" className="h-20 object-contain"
             onError={(e) => { e.currentTarget.style.display='none' }} />
         </div>
@@ -212,20 +226,29 @@ export function TeacherSidebar() {
             style={{ background: 'white', boxShadow: '0 -4px 24px rgba(0,0,0,0.1)' }}
             onClick={(e) => e.stopPropagation()}>
             <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: '#e5e7eb' }} />
-            <div className="grid grid-cols-4 gap-3">
-              {mobileMoreItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                return (
-                  <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)}
-                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl transition-all"
-                    style={isActive
-                      ? { background: '#9FE1CB', color: '#085041' }
-                      : { background: '#f9fafb', color: '#6b7280' }}>
-                    <i className={`ti ${item.icon}`} style={{ fontSize: 22 }} />
-                    <span style={{ fontSize: 11, fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
-                  </Link>
-                )
-              })}
+            <div className="space-y-3 max-h-[65vh] overflow-y-auto">
+              {mobileMoreGroups.map((group) => (
+                <div key={group.title ?? 'top'}>
+                  {group.title && (
+                    <p className="px-1 pb-1.5 text-[10px] font-bold tracking-wider" style={{ color: '#9ca3af' }}>{group.title}</p>
+                  )}
+                  <div className="grid grid-cols-4 gap-2">
+                    {group.items.map((item) => {
+                      const isActive = isActiveHref(item.href)
+                      return (
+                        <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)}
+                          className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl transition-all"
+                          style={isActive
+                            ? { background: '#9FE1CB', color: '#085041' }
+                            : { background: '#f9fafb', color: '#6b7280' }}>
+                          <i className={`ti ${item.icon}`} style={{ fontSize: 22 }} />
+                          <span className="text-center leading-tight px-1" style={{ fontSize: 11, fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -236,7 +259,7 @@ export function TeacherSidebar() {
         style={{ background: '#F0FBF7', borderTop: '1px solid #e5e7eb' }}>
         <div className="flex h-16 max-w-lg mx-auto">
           {MOBILE_MAIN.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const isActive = isActiveHref(item.href)
             return (
               <Link key={item.href} href={item.href}
                 className="flex-1 flex flex-col items-center justify-center gap-1 transition-colors"

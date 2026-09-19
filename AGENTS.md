@@ -91,7 +91,11 @@ app/
   camp/                 방학특강 현황판 (공개, PIN은 클라이언트에 노출됨 — 주의)
 ```
 
-사이드바 메뉴는 `components/teacher/Sidebar.tsx`에서 조립한다. 원장 전용 메뉴는 `isAdmin()`으로 감싼다.
+사이드바 메뉴는 `components/teacher/Sidebar.tsx`의 `buildNavGroups`에서 묶음(수업/학생/과제·평가/보고/원장 전용)별로
+조립한다. 원장 전용 메뉴는 '원장 전용' 묶음에 넣는다. 아이콘은 Tabler 외곽선 아이콘(`ti-*`)만 쓴다.
+
+**선생님용 사용 매뉴얼**은 `app/teacher/manual/page.tsx`에 있다 (사이드바 「사용 매뉴얼」). 메뉴를 추가하거나
+화면 버튼 이름·규칙을 바꾸면 매뉴얼 문구도 같이 고칠 것 — 선생님들이 이걸 보고 일한다.
 
 ## 더 읽을 것
 

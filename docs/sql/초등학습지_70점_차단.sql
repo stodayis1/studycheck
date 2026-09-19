@@ -4,7 +4,7 @@
 --    옛 화면은 완료 처리 실패를 확인하지 않고 다음 레벨 학습지를 만들어서, 먼저 켜면 학습지가 꼬인다.
 --
 -- 규칙: 초등 본 학습지(main)가 70점 미만이면 passed로 닫을 수 있는 경우는
---   재도전(retry) / 오답유사(similar) / 원장(is_admin)의 예외(override_levelup, override_complete) 뿐.
+--   재도전(retry, 레벨 낮춰 retry_down) / 오답유사(similar) / 원장(is_admin)의 예외(override_levelup, override_complete) 뿐.
 -- 기록(worksheet_action_logs)은 이 함수가 같이 남긴다 - 기록 부분은 이미 적용돼 있고, 차단 부분만 추가된다.
 -- 되돌리려면 raise exception 블록만 빼고 같은 함수를 다시 create or replace 하면 된다.
 
@@ -14,7 +14,7 @@ begin
   if new.status = 'passed' and old.status is distinct from 'passed'
      and new.worksheet_type = 'main' and new.grade_level like '초%'
      and new.score is not null and new.score < 70
-     and coalesce(new.last_action, '') not in ('retry', 'similar')
+     and coalesce(new.last_action, '') not in ('retry', 'retry_down', 'similar')
      and not (coalesce(new.last_action, '') in ('override_levelup', 'override_complete') and public.is_admin())
   then
     raise exception '초등 레벨학습지 70점 미만은 재도전 또는 오답유사로만 넘길 수 있어요 (예외는 원장 승인)'
