@@ -33,7 +33,6 @@ type Answer = {
   student_answer: string | null
   is_correct: boolean | null
   graded_by?: string | null
-  ai_reason?: string | null
   photo_path?: string | null
 }
 
@@ -130,6 +129,23 @@ export default function TeacherGradingsPage() {
     })()
   }, [])
 
+  // 서술형: 선생님이 풀이 사진을 보고 O/X → 그 학생 점수 다시 계산
+  const markEssay = async (g: Grading, no: number, ok: boolean) => {
+    const { error } = await supabase
+      .from('grading_answers')
+      .update({ is_correct: ok, graded_by: 'teacher' })
+      .eq('grading_id', g.id)
+      .eq('no', no)
+    if (error) return alert('저장하지 못했습니다: ' + error.message)
+    const next = answers.map((a) =>
+      a.grading_id === g.id && a.no === no ? { ...a, is_correct: ok, graded_by: 'teacher' } : a
+    )
+    const score = next.filter((a) => a.grading_id === g.id && a.is_correct === true).length
+    await supabase.from('gradings').update({ score }).eq('id', g.id)
+    setAnswers(next)
+    setGradings((gs) => gs.map((x) => (x.id === g.id ? { ...x, score } : x)))
+  }
+
   // 학생 풀이 사진 (비공개 버킷 → 잠깐 쓰는 주소로 연다)
   const openPhoto = async (path: string) => {
     const { data } = await supabase.storage.from('grading-photos').createSignedUrl(path, 600)
@@ -166,7 +182,7 @@ export default function TeacherGradingsPage() {
       if (glist.length) {
         const { data: as } = await supabase
           .from('grading_answers')
-          .select('grading_id, no, type_code, student_answer, is_correct, graded_by, ai_reason, photo_path')
+          .select('grading_id, no, type_code, student_answer, is_correct, graded_by, photo_path')
           .in('grading_id', glist.map((g) => g.id))
           .limit(20000)
         setAnswers((as ?? []) as Answer[])
@@ -192,6 +208,7 @@ export default function TeacherGradingsPage() {
   const byProblem = useMemo(() => {
     const m = new Map<number, { ok: number; n: number }>()
     answers.forEach((a) => {
+      if (a.is_correct === null) return // 서술형 채점 대기
       const e = m.get(a.no) ?? { ok: 0, n: 0 }
       e.n += 1
       if (a.is_correct) e.ok += 1
@@ -216,6 +233,7 @@ export default function TeacherGradingsPage() {
   const byType = useMemo(() => {
     const m = new Map<string, { ok: number; n: number; nos: Set<number> }>()
     answers.forEach((a) => {
+      if (a.is_correct === null) return
       const key = a.type_code ?? '미분류'
       const e = m.get(key) ?? { ok: 0, n: 0, nos: new Set<number>() }
       e.n += 1
@@ -401,41 +419,55 @@ export default function TeacherGradingsPage() {
                             key={a.no}
                             className="rounded-md px-2 py-1 text-xs"
                             style={
-                              a.is_correct
-                                ? { background: '#eef2f8', color: NAVY }
-                                : { background: '#fdeceb', color: RED }
+                              a.is_correct === null
+                                ? { background: '#fff7e0', color: '#b7791f' }
+                                : a.is_correct
+                                  ? { background: '#eef2f8', color: NAVY }
+                                  : { background: '#fdeceb', color: RED }
                             }
                             title={a.student_answer ?? ''}
                           >
-                            {a.no} {a.is_correct ? '○' : `✗ ${a.student_answer ?? ''}`}
+                            {a.no} {a.is_correct === null ? '서술형 대기' : a.is_correct ? '○' : `✗ ${a.student_answer ?? ''}`}
                           </span>
                         ))}
                       </div>
-                      {/* AI가 채점한 식·서술형 답: 판단 이유와 풀이 사진 */}
-                      {answersOf(g.id).some((a) => a.graded_by === 'ai' || a.graded_by === 'ai_error') && (
+                      {/* 서술형: 풀이 사진을 보고 선생님이 채점 */}
+                      {answersOf(g.id).some((a) => a.graded_by === 'teacher_pending' || a.graded_by === 'teacher') && (
                         <div className="mt-3 space-y-1.5">
+                          <p className="text-xs font-semibold text-gray-500">서술형 채점</p>
                           {answersOf(g.id)
-                            .filter((a) => a.graded_by === 'ai' || a.graded_by === 'ai_error')
+                            .filter((a) => a.graded_by === 'teacher_pending' || a.graded_by === 'teacher')
                             .map((a) => (
-                              <div key={a.no} className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                                <span className="shrink-0 font-bold" style={{ color: a.is_correct ? NAVY : RED }}>
-                                  {a.no}번 {a.is_correct ? '○' : '✗'}
+                              <div key={a.no} className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs">
+                                <span className="w-10 shrink-0 font-bold" style={{ color: NAVY }}>
+                                  {a.no}번
                                 </span>
-                                <span className="min-w-0 flex-1 text-gray-600">
-                                  {a.graded_by === 'ai_error' && <b className="text-amber-600">[확인 필요] </b>}
-                                  {a.ai_reason}
-                                  {a.student_answer && a.student_answer !== '(풀이 사진)' && (
-                                    <span className="ml-1 font-mono text-gray-400">· {a.student_answer}</span>
-                                  )}
-                                </span>
-                                {a.photo_path && (
+                                {a.photo_path ? (
                                   <button
                                     onClick={() => openPhoto(a.photo_path!)}
-                                    className="shrink-0 rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600"
+                                    className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-700"
                                   >
-                                    풀이 사진
+                                    풀이 사진 보기
                                   </button>
+                                ) : (
+                                  <span className="text-gray-400">사진 없음</span>
                                 )}
+                                <span className="ml-auto flex gap-1">
+                                  <button
+                                    onClick={() => markEssay(g, a.no, true)}
+                                    className="h-7 w-9 rounded border text-sm font-bold"
+                                    style={a.is_correct === true ? { background: NAVY, color: '#fff', borderColor: NAVY } : { borderColor: '#cbd5e1', color: NAVY }}
+                                  >
+                                    ○
+                                  </button>
+                                  <button
+                                    onClick={() => markEssay(g, a.no, false)}
+                                    className="h-7 w-9 rounded border text-sm font-bold"
+                                    style={a.is_correct === false ? { background: RED, color: '#fff', borderColor: RED } : { borderColor: '#cbd5e1', color: RED }}
+                                  >
+                                    ✗
+                                  </button>
+                                </span>
                               </div>
                             ))}
                         </div>
