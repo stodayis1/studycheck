@@ -4,9 +4,11 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { aiGrade } from '@/lib/aiGrade'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const maxDuration = 120 // AI 채점(여러 문항 동시)에 시간이 걸린다
 
 const BUCKET = 'problem-images'
 
@@ -128,7 +130,56 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     typeCode: string | null
     studentAnswer: string
     isCorrect: boolean
+    kind?: 'choice' | 'number' | 'image'
+    latex?: string | null
+    photoPath?: string | null
+    gradedBy?: string
+    aiReason?: string | null
   }[] = body.answers ?? []
+
+  // ── 식·서술형 답(image 종류)은 AI가 채점한다 ──
+  const aiTargets = answers.filter((a) => a.kind === 'image' && a.problemId)
+  if (aiTargets.length) {
+    const { data: probs } = await supabase
+      .from('problems')
+      .select('id, answer_text, answer_image_path')
+      .in('id', aiTargets.map((a) => a.problemId!))
+    const byId = new Map((probs ?? []).map((p: any) => [p.id, p]))
+
+    await Promise.all(
+      aiTargets.map(async (a) => {
+        // 사진 경로는 이 시험지 폴더 안의 것만 인정
+        const photoPath = a.photoPath && a.photoPath.startsWith(`${code}/`) ? a.photoPath : null
+        a.photoPath = photoPath
+        const latex = (a.latex ?? '').trim()
+        if (!latex && !photoPath) {
+          a.isCorrect = false
+          a.gradedBy = 'ai'
+          a.aiReason = '답을 입력하지 않았습니다.'
+          return
+        }
+        const p: any = byId.get(a.problemId!)
+        const answerImageUrl = p?.answer_image_path
+          ? (await supabase.storage.from(BUCKET).createSignedUrl(p.answer_image_path, 600)).data?.signedUrl ?? null
+          : null
+        const studentPhotoUrl = photoPath
+          ? (await supabase.storage.from('grading-photos').createSignedUrl(photoPath, 600)).data?.signedUrl ?? null
+          : null
+        const r = await aiGrade({
+          answerImageUrl,
+          answerText: p?.answer_text ?? null,
+          studentLatex: latex || null,
+          studentPhotoUrl,
+        })
+        a.isCorrect = r.correct
+        a.gradedBy = r.ok ? 'ai' : 'ai_error'
+        a.aiReason = r.reason
+      })
+    )
+  }
+  answers.forEach((a) => {
+    if (!a.gradedBy) a.gradedBy = 'auto'
+  })
 
   const score = answers.filter((a) => a.isCorrect).length
 
@@ -157,10 +208,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
       type_code: a.typeCode,
       student_answer: a.studentAnswer,
       is_correct: a.isCorrect,
+      graded_by: a.gradedBy ?? null,
+      ai_reason: a.aiReason ?? null,
+      photo_path: a.photoPath ?? null,
     }))
   )
 
   if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, gradingId: grading.id, score, total: answers.length })
+  return NextResponse.json({
+    ok: true,
+    gradingId: grading.id,
+    score,
+    total: answers.length,
+    results: answers.map((a) => ({ no: a.no, isCorrect: a.isCorrect, gradedBy: a.gradedBy, aiReason: a.aiReason ?? null })),
+  })
 }

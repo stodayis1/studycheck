@@ -32,6 +32,9 @@ type Answer = {
   type_code: string | null
   student_answer: string | null
   is_correct: boolean | null
+  graded_by?: string | null
+  ai_reason?: string | null
+  photo_path?: string | null
 }
 
 type SheetProblem = {
@@ -127,6 +130,13 @@ export default function TeacherGradingsPage() {
     })()
   }, [])
 
+  // 학생 풀이 사진 (비공개 버킷 → 잠깐 쓰는 주소로 연다)
+  const openPhoto = async (path: string) => {
+    const { data } = await supabase.storage.from('grading-photos').createSignedUrl(path, 600)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    else alert('사진을 열 수 없습니다.')
+  }
+
   // 선택한 시험지 상세
   useEffect(() => {
     if (!sel) return
@@ -156,7 +166,7 @@ export default function TeacherGradingsPage() {
       if (glist.length) {
         const { data: as } = await supabase
           .from('grading_answers')
-          .select('grading_id, no, type_code, student_answer, is_correct')
+          .select('grading_id, no, type_code, student_answer, is_correct, graded_by, ai_reason, photo_path')
           .in('grading_id', glist.map((g) => g.id))
           .limit(20000)
         setAnswers((as ?? []) as Answer[])
@@ -401,6 +411,35 @@ export default function TeacherGradingsPage() {
                           </span>
                         ))}
                       </div>
+                      {/* AI가 채점한 식·서술형 답: 판단 이유와 풀이 사진 */}
+                      {answersOf(g.id).some((a) => a.graded_by === 'ai' || a.graded_by === 'ai_error') && (
+                        <div className="mt-3 space-y-1.5">
+                          {answersOf(g.id)
+                            .filter((a) => a.graded_by === 'ai' || a.graded_by === 'ai_error')
+                            .map((a) => (
+                              <div key={a.no} className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs">
+                                <span className="shrink-0 font-bold" style={{ color: a.is_correct ? NAVY : RED }}>
+                                  {a.no}번 {a.is_correct ? '○' : '✗'}
+                                </span>
+                                <span className="min-w-0 flex-1 text-gray-600">
+                                  {a.graded_by === 'ai_error' && <b className="text-amber-600">[확인 필요] </b>}
+                                  {a.ai_reason}
+                                  {a.student_answer && a.student_answer !== '(풀이 사진)' && (
+                                    <span className="ml-1 font-mono text-gray-400">· {a.student_answer}</span>
+                                  )}
+                                </span>
+                                {a.photo_path && (
+                                  <button
+                                    onClick={() => openPhoto(a.photo_path!)}
+                                    className="shrink-0 rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600"
+                                  >
+                                    풀이 사진
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

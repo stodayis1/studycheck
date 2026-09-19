@@ -3,6 +3,7 @@
 'use client'
 
 import { use, useEffect, useMemo, useState } from 'react'
+import { MathInput } from '@/components/grade/MathInput'
 
 const NAVY = '#0f3460'
 const GOLD = '#c8992e'
@@ -38,6 +39,30 @@ type SheetData = {
 
 const norm = (s: string) => s.replace(/[\s,]/g, '').trim()
 
+type Photo = { path: string | null; preview: string; uploading: boolean; error?: string }
+type AiResult = { isCorrect: boolean; gradedBy?: string; aiReason: string | null }
+
+// 휴대폰 사진은 크다 → 긴 변 1600px JPEG로 줄여서 올린다
+async function shrinkPhoto(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, no) => {
+      const i = new Image()
+      i.onload = () => ok(i)
+      i.onerror = no
+      i.src = url
+    })
+    const k = Math.min(1, 1600 / Math.max(img.width, img.height))
+    const c = document.createElement('canvas')
+    c.width = Math.round(img.width * k)
+    c.height = Math.round(img.height * k)
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+    return await new Promise<Blob>((ok) => c.toBlob((b) => ok(b!), 'image/jpeg', 0.85))
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 export default function GradePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params)
 
@@ -49,8 +74,9 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
 
   const [picks, setPicks] = useState<Record<number, string[]>>({})
   const [texts, setTexts] = useState<Record<number, string>>({})
-  const [selfMark, setSelfMark] = useState<Record<number, boolean>>({})
-  const [shown, setShown] = useState<Record<number, boolean>>({})
+  const [latex, setLatex] = useState<Record<number, string>>({})
+  const [photos, setPhotos] = useState<Record<number, Photo>>({})
+  const [ai, setAi] = useState<Record<number, AiResult>>({}) // 서버(AI)가 채점한 결과
 
   const [done, setDone] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -84,7 +110,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       const mine = norm(texts[p.no] ?? '')
       return mine !== '' && mine === norm(p.answerText ?? '')
     }
-    return selfMark[p.no] === true
+    return ai[p.no]?.isCorrect === true
   }
 
   const myAnswerLabel = (p: Problem) => {
@@ -92,14 +118,35 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       const v = picks[p.no] ?? []
       return v.length ? v.map((n) => CIRCLE[Number(n) - 1]).join(', ') : '무응답'
     }
+    if (p.answerKind === 'image') {
+      const t = (latex[p.no] ?? '').trim()
+      return t || (photos[p.no]?.path ? '(풀이 사진)' : '무응답')
+    }
     const t = (texts[p.no] ?? '').trim()
-    return t || (p.answerKind === 'image' ? '—' : '무응답')
+    return t || '무응답'
   }
 
   const answered = (p: Problem) => {
     if (p.answerKind === 'choice') return (picks[p.no] ?? []).length > 0
     if (p.answerKind === 'number') return (texts[p.no] ?? '').trim() !== ''
-    return selfMark[p.no] !== undefined
+    return (latex[p.no] ?? '').trim() !== '' || !!photos[p.no]?.path
+  }
+
+  const addPhoto = async (no: number, file: File | undefined) => {
+    if (!file) return
+    const preview = URL.createObjectURL(file)
+    setPhotos((ps) => ({ ...ps, [no]: { path: null, preview, uploading: true } }))
+    try {
+      const fd = new FormData()
+      fd.append('no', String(no))
+      fd.append('photo', await shrinkPhoto(file), 'photo.jpg')
+      const r = await fetch(`/api/grade/${code}/photo`, { method: 'POST', body: fd })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? '업로드 실패')
+      setPhotos((ps) => ({ ...ps, [no]: { path: j.path, preview, uploading: false } }))
+    } catch (e: any) {
+      setPhotos((ps) => ({ ...ps, [no]: { path: null, preview, uploading: false, error: e.message } }))
+    }
   }
 
   const allDone = data ? data.problems.every(answered) : false
@@ -112,10 +159,13 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       problemId: p.problemId,
       typeCode: p.typeCode,
       studentAnswer: myAnswerLabel(p),
-      isCorrect: judge(p),
+      isCorrect: p.answerKind === 'image' ? false : judge(p),
+      kind: p.answerKind,
+      latex: p.answerKind === 'image' ? latex[p.no] ?? null : null,
+      photoPath: p.answerKind === 'image' ? photos[p.no]?.path ?? null : null,
     }))
     try {
-      await fetch(`/api/grade/${code}`, {
+      const r = await fetch(`/api/grade/${code}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -124,6 +174,12 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
           answers,
         }),
       })
+      const j = await r.json()
+      if (r.ok && Array.isArray(j.results)) {
+        const m: Record<number, AiResult> = {}
+        j.results.forEach((x: any) => (m[x.no] = x))
+        setAi(m)
+      }
     } catch {
       /* 저장이 실패해도 결과는 보여준다 */
     }
@@ -220,6 +276,20 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
                     </span>
                   )}
                 </div>
+                {p.answerKind === 'image' && latex[p.no] && (
+                  <div className="mt-1 overflow-x-auto">
+                    <MathInput value={latex[p.no]} readOnly />
+                  </div>
+                )}
+                {p.answerKind === 'image' && ai[p.no]?.aiReason && (
+                  <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    AI 채점: {ai[p.no]!.aiReason}
+                  </p>
+                )}
+                {p.answerKind === 'image' && p.answerImage && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.answerImage} alt={`${p.no}번 정답`} className="mt-2 max-w-full rounded border border-slate-200" />
+                )}
                 {p.typeTitle && <p className="mt-1 text-xs text-slate-400">{p.typeTitle}</p>}
               </div>
             ))}
@@ -332,58 +402,36 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
             )}
 
             {p.answerKind === 'image' && (
-              <div className="space-y-3">
-                <input
-                  value={texts[p.no] ?? ''}
-                  onChange={(e) => setTexts((t) => ({ ...t, [p.no]: e.target.value }))}
-                  placeholder="내가 쓴 답 (예: a=2, b=3)"
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-base outline-none focus:border-slate-500"
+              <div className="space-y-2">
+                <MathInput
+                  value={latex[p.no] ?? ''}
+                  onChange={(v) => setLatex((t) => ({ ...t, [p.no]: v }))}
+                  placeholder="답을 입력하세요"
                 />
-                {!shown[p.no] ? (
-                  <button
-                    onClick={() => setShown((s) => ({ ...s, [p.no]: true }))}
-                    className="h-11 w-full rounded-lg text-sm font-medium text-white"
-                    style={{ background: NAVY }}
-                  >
-                    정답 확인하기
-                  </button>
-                ) : (
-                  <>
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="mb-1 text-[11px] text-slate-400">정답</p>
-                      {p.answerImage ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.answerImage} alt={`${p.no}번 정답`} className="max-w-full" />
-                      ) : (
-                        <p className="text-sm">{p.answerText ?? '정답 없음'}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setSelfMark((m) => ({ ...m, [p.no]: true }))}
-                        className="h-11 flex-1 rounded-lg border text-sm font-medium"
-                        style={
-                          selfMark[p.no] === true
-                            ? { background: NAVY, color: '#fff', borderColor: NAVY }
-                            : { borderColor: '#cbd5e1' }
-                        }
-                      >
-                        맞았어요
-                      </button>
-                      <button
-                        onClick={() => setSelfMark((m) => ({ ...m, [p.no]: false }))}
-                        className="h-11 flex-1 rounded-lg border text-sm font-medium"
-                        style={
-                          selfMark[p.no] === false
-                            ? { background: RED, color: '#fff', borderColor: RED }
-                            : { borderColor: '#cbd5e1' }
-                        }
-                      >
-                        틀렸어요
-                      </button>
-                    </div>
-                  </>
+                <label className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 text-sm text-slate-600 active:bg-slate-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => addPhoto(p.no, e.target.files?.[0])}
+                  />
+                  📷 {photos[p.no] ? '풀이 사진 다시 찍기' : '풀이 사진 찍기 (서술형)'}
+                </label>
+                {photos[p.no] && (
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photos[p.no].preview} alt="풀이 사진" className="h-16 w-16 rounded object-cover" />
+                    <span className="text-xs text-slate-500">
+                      {photos[p.no].uploading
+                        ? '올리는 중…'
+                        : photos[p.no].error
+                          ? `실패: ${photos[p.no].error}`
+                          : '사진이 올라갔어요'}
+                    </span>
+                  </div>
                 )}
+                <p className="text-[11px] text-slate-400">식·서술형 답은 제출하면 AI가 채점합니다.</p>
               </div>
             )}
           </div>
@@ -398,7 +446,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
             className="h-12 w-full rounded-xl font-semibold text-white disabled:opacity-50"
             style={{ background: allDone ? NAVY : '#94a3b8' }}
           >
-            {saving ? '저장 중…' : allDone ? '채점하기' : '채점하기 (안 푼 문제 있음)'}
+            {saving ? 'AI가 채점하고 있어요…' : allDone ? '채점하기' : '채점하기 (안 푼 문제 있음)'}
           </button>
         </div>
       </div>
