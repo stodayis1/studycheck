@@ -128,16 +128,20 @@ const WORKSHEET_UNITS = ['1단원','2단원','3단원','4단원','5단원','6단
 const GRADE_GROUPS = ['전체','초등','중등','고등']
 const GRADE_COUNT: Record<string, number> = { A: 3, B: 2, C: 1 }
 
-// ── 초등 레벨학습지 80점 규칙 ──
-// 초등 레벨학습지는 학기 중 학교 단원평가(학교 진도 순서대로 봄) 대비용이다. 80점 미만이면 레벨업/완료 없이
+// ── 초등 레벨학습지 70점 규칙 ──
+// 초등 레벨학습지는 학기 중 학교 단원평가(학교 진도 순서대로 봄) 대비용이다. 70점 미만이면 레벨업/완료 없이
 // 같은 레벨을 다시 풀어야 한다. 오답유사는 재도전을 "대신"하지 못하고, 오답유사를 채점하면 같은 레벨
 // 재도전이 자동 배정된다 (오답유사는 틀린 문제만 모은 거라 점수가 잘 나와서, 이걸로 통과시키면 실제로는
 // 그 레벨 전체를 통과한 적이 없는 채 다음 단원으로 넘어가게 됨). 꼭 넘겨야 하면 원장 승인을 받는다.
 // DB 트리거(worksheet_before_update)가 같은 규칙으로 막고 있으니 여기만 고쳐서 풀리지 않는다.
-const PASS_SCORE = 80
+const PASS_SCORE = 70
 
 function isElemMain(w: { worksheet_type: string; grade_level: string }) {
   return w.worksheet_type === 'main' && (w.grade_level ?? '').startsWith('초')
+}
+// 점수 색/안내에 쓰는 재도전 기준선 - 초등은 PASS_SCORE, 그 외(중등 레벨학습지)는 예전대로 80
+function retryLine(gradeLevel: string | null | undefined) {
+  return (gradeLevel ?? '').startsWith('초') ? PASS_SCORE : 80
 }
 function needsRetry(w: { worksheet_type: string; grade_level: string; score: number | null }) {
   return isElemMain(w) && w.score != null && w.score < PASS_SCORE
@@ -153,7 +157,7 @@ function getCurrentSemester(): { semester: 1 | 2; start: string } {
 }
 
 // 한 단원(학생·학년·학기·단원)의 통과 여부.
-// 통과 = 그 단원에서 가장 최근에 채점된 본 학습지(main)가 80점 이상. (한 번 80점을 넘긴 뒤 레벨업해서
+// 통과 = 그 단원에서 가장 최근에 채점된 본 학습지(main)가 70점 이상. (한 번 70점을 넘긴 뒤 레벨업해서
 // 낮은 점수로 끝났다면 통과가 아니다.) 진행중인 학습지가 남아있으면 아직 판정하지 않는다.
 type UnitPassState = 'pass' | 'progress' | 'fail'
 function getUnitPass(rows: StudentWorksheet[]): { state: UnitPassState; last: StudentWorksheet | null } | null {
@@ -279,7 +283,7 @@ export default function TeacherAssignmentsPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [showRecentPassed, setShowRecentPassed] = useState(false)
 
-  // 80점 미만 예외(레벨업/완료) - 강사는 요청만, 원장이 승인
+  // 70점 미만 예외(레벨업/완료) - 강사는 요청만, 원장이 승인
   const [overrideRequests, setOverrideRequests] = useState<OverrideRequest[]>([])
   const [overrideWS, setOverrideWS] = useState<StudentWorksheet | null>(null)
   const [overrideAction, setOverrideAction] = useState<'levelup' | 'complete'>('levelup')
@@ -442,7 +446,7 @@ export default function TeacherAssignmentsPage() {
     (searchText === '' || getStudentName(t.student_id).includes(searchText))
   )
 
-  // 이번 학기 "80점을 못 넘긴 채 멈춘 단원" - 학교 단원평가는 학교 진도 순서대로 보니까,
+  // 이번 학기 "70점을 못 넘긴 채 멈춘 단원" - 학교 단원평가는 학교 진도 순서대로 보니까,
   // 앞 단원을 통과 못 하고 넘어갔다면 그 단원평가는 코앞이거나 이미 지나간 것
   const unpassedUnits = (() => {
     const groups: Record<string, StudentWorksheet[]> = {}
@@ -460,6 +464,41 @@ export default function TeacherAssignmentsPage() {
       .sort((a, b) => getStudentName(a.student_id).localeCompare(getStudentName(b.student_id)) || a.sample.unit.localeCompare(b.sample.unit))
   })()
   const myPendingOverrides = overrideRequests.filter((r) => myStudentIds.has(r.student_id))
+
+  // 재도전 회차: 이번 학기 같은 학생·단원·레벨의 본 학습지(main)를 배정순으로 센다 (1차=처음, 2차=첫 재도전...)
+  // 오답유사는 회차에 넣지 않는다. 초등만 (학기별 전체 이력이 있는 건 초등뿐).
+  const retryRoundById = (() => {
+    const byId = new Map<string, StudentWorksheet>()
+    semesterWS.forEach((w) => byId.set(w.id, w))
+    const cur = getCurrentSemester()
+    worksheets.forEach((w) => {
+      if ((w.grade_level ?? '').startsWith('초') && w.semester === cur.semester && w.assigned_at >= cur.start) byId.set(w.id, w)
+    })
+    const groups: Record<string, StudentWorksheet[]> = {}
+    byId.forEach((w) => {
+      if (w.worksheet_type !== 'main') return
+      const key = `${w.student_id}|${w.grade_level}|${w.semester}|${w.unit}|${w.current_level}`
+      if (!groups[key]) groups[key] = []
+      groups[key].push(w)
+    })
+    const out: Record<string, number> = {}
+    Object.values(groups).forEach((arr) => {
+      arr.sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+      arr.forEach((w, i) => { out[w.id] = i + 1 })
+    })
+    return out
+  })()
+  function roundBadge(w: StudentWorksheet) {
+    const round = retryRoundById[w.id]
+    if (!round || round < 2) return null
+    return (
+      <span className="text-[9px] font-black px-1.5 py-0.5 rounded shrink-0"
+        title={`같은 레벨 ${round}번째 (재도전 ${round - 1}회)`}
+        style={round >= 3 ? { background: '#991b1b', color: 'white' } : { background: '#fee2e2', color: '#991b1b' }}>
+        {round}차
+      </span>
+    )
+  }
 
   const pendingWS = activeWorksheets.filter((w) => w.status === 'submitted' || w.status === 'similar_submitted')
   const pendingTB = activeTextbooks.filter((t) => t.status === 'submitted')
@@ -544,7 +583,7 @@ export default function TeacherAssignmentsPage() {
     // 점수만 저장하고, 다음 액션(레벨업/재도전/오답유사/완료)은 선생님이 직접 선택
     const { error } = await supabase.from('student_worksheets').update({ score, status: 'scored' }).eq('id', scoreWS.id)
     if (error) { setSavingScore(false); alert('점수 저장 실패: ' + error.message); return }
-    // 초등 오답유사: 원래 학습지가 80점 미만이었다면 오답유사 점수와 상관없이 같은 레벨 재도전을 자동 배정
+    // 초등 오답유사: 원래 학습지가 70점 미만이었다면 오답유사 점수와 상관없이 같은 레벨 재도전을 자동 배정
     if (scoreWS.worksheet_type === 'similar' && (scoreWS.grade_level ?? '').startsWith('초')) {
       let parentScore: number | null = null
       if (scoreWS.parent_worksheet_id) {
@@ -561,7 +600,7 @@ export default function TeacherAssignmentsPage() {
   }
 
   // 학습지를 완료(passed)로 닫는다. action은 DB 트리거가 처리 기록에 남기는 "누른 버튼".
-  // 실패하면(예: 80점 미만 규칙에 걸림) 다음 학습지를 만들지 않도록 false를 돌려준다.
+  // 실패하면(예: 70점 미만 규칙에 걸림) 다음 학습지를 만들지 않도록 false를 돌려준다.
   async function closeWorksheet(w: StudentWorksheet, action: string) {
     const { error } = await supabase.from('student_worksheets')
       .update({ status: 'passed', updated_at: new Date().toISOString(), last_action: action }).eq('id', w.id)
@@ -673,7 +712,7 @@ export default function TeacherAssignmentsPage() {
       : `✅ ${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
   }
 
-  // 80점 미만 예외 처리: 원장은 사유를 남기고 바로 처리, 강사는 원장에게 승인 요청
+  // 70점 미만 예외 처리: 원장은 사유를 남기고 바로 처리, 강사는 원장에게 승인 요청
   async function handleSubmitOverride() {
     if (!overrideWS) return
     const reason = overrideReason.trim()
@@ -872,12 +911,12 @@ export default function TeacherAssignmentsPage() {
                 </div>
               )}
 
-              {/* 원장: 80점 미만 예외 승인 대기 */}
+              {/* 원장: 70점 미만 예외 승인 대기 */}
               {isAdmin() && myPendingOverrides.length > 0 && (
                 <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #fcd34d' }}>
                   <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#fffbeb' }}>
                     <i className="ti ti-gavel" style={{ fontSize: 16, color: '#92400e' }} />
-                    <p className="text-sm font-bold" style={{ color: '#92400e' }}>80점 미만 예외 승인 요청 {myPendingOverrides.length}건</p>
+                    <p className="text-sm font-bold" style={{ color: '#92400e' }}>{PASS_SCORE}점 미만 예외 승인 요청 {myPendingOverrides.length}건</p>
                   </div>
                   <div className="divide-y divide-gray-50">
                     {myPendingOverrides.map((r) => {
@@ -913,7 +952,7 @@ export default function TeacherAssignmentsPage() {
                     className="w-full px-4 py-3 flex items-center gap-2 text-left" style={{ background: '#fef2f2' }}>
                     <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#991b1b' }} />
                     <div className="flex-1">
-                      <p className="text-sm font-bold" style={{ color: '#991b1b' }}>80점 못 넘기고 멈춘 단원 {unpassedUnits.length}건</p>
+                      <p className="text-sm font-bold" style={{ color: '#991b1b' }}>{PASS_SCORE}점 못 넘기고 멈춘 단원 {unpassedUnits.length}건</p>
                       <p className="text-[11px]" style={{ color: '#b91c1c' }}>이번 {getCurrentSemester().semester}학기 · 학교 단원평가 전에 재도전시켜 주세요</p>
                     </div>
                     <i className={`ti ${showUnpassed ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 14, color: '#b91c1c' }} />
@@ -930,7 +969,7 @@ export default function TeacherAssignmentsPage() {
                                 <span className="font-normal text-gray-500 ml-1.5">{formatUnit(sample.grade_level, sample.unit, sample.unit_name)}</span>
                               </p>
                               <p className="text-[10px] mt-0.5" style={{ color: '#991b1b' }}>
-                                {last ? `마지막 채점 ${last.current_level}레벨 ${last.score}점` : '채점 기록 없이 종료'}
+                                {last ? `마지막 채점 ${last.current_level}레벨${retryRoundById[last.id] >= 2 ? ` ${retryRoundById[last.id]}차` : ''} ${last.score}점` : '채점 기록 없이 종료'}
                               </p>
                             </div>
                             {student && isEditable(student) && (last ?? sample) && (
@@ -964,6 +1003,7 @@ export default function TeacherAssignmentsPage() {
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold text-gray-800">{getStudentName(w.student_id)}
                               <span className="font-normal text-gray-400 ml-1.5">{formatUnit(w.grade_level, w.unit, w.unit_name)} · {w.current_level}레벨</span>
+                              {retryRoundById[w.id] >= 2 && <span className="ml-1">{roundBadge(w)}</span>}
                             </p>
                             <p className="text-[10px] text-gray-400 mt-0.5">
                               {new Date(w.updated_at ?? w.assigned_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 완료
@@ -1110,13 +1150,14 @@ export default function TeacherAssignmentsPage() {
                                             style={{ color: w.current_level >= 4 ? '#993C1D' : '#6b7280' }}>
                                             Lv.{w.current_level}
                                           </span>
+                                          {roundBadge(w)}
                                         </div>
                                       </div>
                                       {/* 점수 */}
                                       <div className="shrink-0 w-12 text-right">
                                         {w.score != null
                                           ? <span className="text-xs font-black"
-                                              style={{ color: w.score >= 85 ? '#27500A' : w.score >= 80 ? '#633806' : '#991b1b' }}>
+                                              style={{ color: w.score >= 85 ? '#27500A' : w.score >= retryLine(w.grade_level) ? '#633806' : '#991b1b' }}>
                                               {w.score}점
                                             </span>
                                           : <span className="text-[10px] text-gray-300">-</span>}
@@ -1527,9 +1568,10 @@ export default function TeacherAssignmentsPage() {
                             <p className="text-xs text-gray-500">
                               {formatUnit(w.grade_level, w.unit, w.unit_name)} ·{' '}
                               <span className="font-semibold" style={{ color: w.current_level >= 4 ? '#993C1D' : '#374151' }}>{w.current_level}레벨</span>
+                              {retryRoundById[w.id] >= 2 && <span className="ml-1">{roundBadge(w)}</span>}
                               {w.score != null && (
                                 <span className="ml-2 font-bold" style={{
-                                  color: w.score >= 85 ? '#27500A' : w.score >= 80 ? '#633806' : '#991b1b'
+                                  color: w.score >= 85 ? '#27500A' : w.score >= retryLine(w.grade_level) ? '#633806' : '#991b1b'
                                 }}>{w.score}점</span>
                               )}
                             </p>
@@ -1660,6 +1702,8 @@ export default function TeacherAssignmentsPage() {
               // 같은 레벨을 여러 번 진행했다면 배정순으로 회차(2차/3차...)를 매긴다
               const roundByLevel: Record<number, StudentWorksheet[]> = {}
               unitWS.forEach((w) => {
+                // 오답유사는 같은 레벨이어도 재도전 회차가 아니다
+                if (w.worksheet_type !== 'main') return
                 if (!roundByLevel[w.current_level]) roundByLevel[w.current_level] = []
                 roundByLevel[w.current_level].push(w)
               })
@@ -1770,7 +1814,7 @@ export default function TeacherAssignmentsPage() {
                                     const round = st.roundOf(w)
                                     return (
                                       <span key={w.id} className="text-[10px] font-bold"
-                                        style={{ color: (w.score ?? 0) >= 85 ? '#22c55e' : (w.score ?? 0) >= 80 ? '#f59e0b' : '#ef4444' }}>
+                                        style={{ color: (w.score ?? 0) >= 85 ? '#22c55e' : (w.score ?? 0) >= retryLine(w.grade_level) ? '#f59e0b' : '#ef4444' }}>
                                         {w.current_level}레벨{round ? ` ${round}차` : ''} {w.score}점
                                       </span>
                                     )
@@ -1802,7 +1846,7 @@ export default function TeacherAssignmentsPage() {
               <span className="w-6 h-6 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin inline-block" />
             </div>
           ) : (() => {
-            // 최근 30일 초등 레벨학습지 처리 기록 - 선생님별로 80점 미만을 어떻게 처리했는지
+            // 최근 30일 초등 레벨학습지 처리 기록 - 선생님별로 70점 미만을 어떻게 처리했는지
             type Row = { name: string; under80: number; retry: number; similar: number; override: number; other: number; autoRetry: number; deleted: number }
             const byActor: Record<string, Row> = {}
             const row = (name: string) => {
@@ -1836,7 +1880,7 @@ export default function TeacherAssignmentsPage() {
                     <thead>
                       <tr style={{ background: '#f9fafb' }}>
                         <th className="px-3 py-2 text-left font-semibold text-gray-500">선생님</th>
-                        <th className="px-2 py-2 font-semibold text-gray-500">80점 미만 처리</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500">{PASS_SCORE}점 미만 처리</th>
                         <th className="px-2 py-2 font-semibold text-gray-500">재도전</th>
                         <th className="px-2 py-2 font-semibold text-gray-500">오답유사</th>
                         <th className="px-2 py-2 font-semibold text-gray-500">예외(승인)</th>
@@ -1980,11 +2024,11 @@ export default function TeacherAssignmentsPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <i className="ti ti-check" style={{ fontSize: 11, color: '#166534' }} />
-                    <span className="text-[10px] text-gray-500">통과 (마지막 채점 80점↑)</span>
+                    <span className="text-[10px] text-gray-500">통과 (마지막 채점 {PASS_SCORE}점↑)</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #dc2626' }} />
-                    <span className="text-[10px] text-gray-500">80점 못 넘기고 멈춤</span>
+                    <span className="text-[10px] text-gray-500">{PASS_SCORE}점 못 넘기고 멈춤</span>
                   </div>
                 </div>
 
@@ -2023,7 +2067,7 @@ export default function TeacherAssignmentsPage() {
                                       <span className="text-gray-300 text-[11px]">–</span>
                                     </div>
                                   ) : (
-                                    <div title={`${w.current_level}레벨 · ${pass?.state === 'pass' ? '통과' : pass?.state === 'fail' ? `80점 못 넘기고 멈춤${pass.last ? ` (마지막 ${pass.last.score}점)` : ''}` : '진행중'}${w.worksheet_type === 'similar' ? ' · 오답유사' : ''}`}
+                                    <div title={`${w.current_level}레벨 · ${pass?.state === 'pass' ? '통과' : pass?.state === 'fail' ? `${PASS_SCORE}점 못 넘기고 멈춤${pass.last ? ` (마지막 ${pass.last.score}점)` : ''}` : '진행중'}${w.worksheet_type === 'similar' ? ' · 오답유사' : ''}`}
                                       className="mx-auto flex flex-col items-center justify-center relative"
                                       style={{ width: 44, height: 36, borderRadius: 8, background: style.bg,
                                         border: pass?.state === 'fail' ? '2px solid #dc2626' : undefined }}>
@@ -2509,7 +2553,8 @@ export default function TeacherAssignmentsPage() {
             </div>
             <div className="rounded-xl p-3" style={{ background: '#fafafa' }}>
               <p className="text-sm font-bold text-gray-800">{getStudentName(scoreWS.student_id)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{formatUnit(scoreWS.grade_level, scoreWS.unit, scoreWS.unit_name)} · {scoreWS.current_level}레벨</p>
+              <p className="text-xs text-gray-500 mt-0.5">{formatUnit(scoreWS.grade_level, scoreWS.unit, scoreWS.unit_name)} · {scoreWS.current_level}레벨
+                {retryRoundById[scoreWS.id] >= 2 && <span className="ml-1">{roundBadge(scoreWS)}</span>}</p>
             </div>
             <input type="number" min="0" max="100" value={inputScore}
               onChange={(e) => setInputScore(e.target.value)}
@@ -2520,16 +2565,16 @@ export default function TeacherAssignmentsPage() {
             {inputScore && (
               <div className="rounded-xl p-3 text-center text-sm font-bold"
                 style={{
-                  background: parseInt(inputScore) >= 85 ? '#EAF3DE' : parseInt(inputScore) >= 80 ? '#FAEEDA' : '#fee2e2',
-                  color: parseInt(inputScore) >= 85 ? '#27500A' : parseInt(inputScore) >= 80 ? '#633806' : '#991b1b'
+                  background: parseInt(inputScore) >= 85 ? '#EAF3DE' : parseInt(inputScore) >= retryLine(scoreWS.grade_level) ? '#FAEEDA' : '#fee2e2',
+                  color: parseInt(inputScore) >= 85 ? '#27500A' : parseInt(inputScore) >= retryLine(scoreWS.grade_level) ? '#633806' : '#991b1b'
                 }}>
                 {scoreWS?.worksheet_type === 'twin'
                   ? '점수 저장 후 다음 액션 선택'
                   : scoreWS?.worksheet_type === 'similar' && (scoreWS.grade_level ?? '').startsWith('초')
-                  ? '저장하면 같은 레벨 재도전이 자동 배정돼요 (원래 학습지가 80점 미만인 경우)'
+                  ? '저장하면 같은 레벨 재도전이 자동 배정돼요 (원래 학습지가 70점 미만인 경우)'
                   : isElemMain(scoreWS) && parseInt(inputScore) < PASS_SCORE
-                  ? '✕ 80점 미만 — 재도전 또는 오답유사만 가능 (오답 풀이 꼭 해주세요)'
-                  : (parseInt(inputScore) >= 85 ? '✓ 레벨업 추천' : parseInt(inputScore) >= 80 ? '△ 레벨업/재도전 선택' : '✕ 재도전/오답유사 선택')}
+                  ? '✕ 70점 미만 — 재도전 또는 오답유사만 가능 (오답 풀이 꼭 해주세요)'
+                  : (parseInt(inputScore) >= 85 ? '✓ 레벨업 추천' : parseInt(inputScore) >= retryLine(scoreWS.grade_level) ? '△ 레벨업/재도전 선택' : '✕ 재도전/오답유사 선택')}
               </div>
             )}
             <div className="flex gap-2">
@@ -2582,14 +2627,14 @@ export default function TeacherAssignmentsPage() {
         </div>
       )}
 
-      {/* 80점 미만 예외 요청/처리 모달 */}
+      {/* 70점 미만 예외 요청/처리 모달 */}
       {overrideWS && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setOverrideWS(null)}>
           <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">{isAdmin() ? '80점 미만 예외 처리' : '원장님께 예외 요청'}</h3>
+              <h3 className="text-base font-bold text-gray-900">{isAdmin() ? `${PASS_SCORE}점 미만 예외 처리` : '원장님께 예외 요청'}</h3>
               <button onClick={() => setOverrideWS(null)} className="text-gray-400">
                 <i className="ti ti-x" style={{ fontSize: 18 }} />
               </button>
@@ -2602,7 +2647,7 @@ export default function TeacherAssignmentsPage() {
               </p>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
-              80점 미만은 원래 같은 레벨을 다시 풀어야 해요. 그래도 넘겨야 하는 이유를 적어주세요.
+              {PASS_SCORE}점 미만은 원래 같은 레벨을 다시 풀어야 해요. 그래도 넘겨야 하는 이유를 적어주세요.
               {!isAdmin() && ' 원장님이 승인하면 처리돼요.'}
             </p>
             <div className="flex gap-2">

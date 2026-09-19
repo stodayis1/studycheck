@@ -414,7 +414,7 @@ export default function TeacherReportsPage() {
     if (record.status === 'submitted') return { bg: 'bg-orange-50 border border-orange-200', text: '채점대기', textColor: 'text-orange-500' }
     if (record.score != null) {
       if (record.score >= 85) return { bg: 'bg-green-100', text: `${record.score}점`, textColor: 'text-green-700' }
-      if (record.score >= 80) return { bg: 'bg-yellow-100', text: `${record.score}점`, textColor: 'text-yellow-700' }
+      if (record.score >= ((record.grade_level ?? '').startsWith('초') ? 70 : 80)) return { bg: 'bg-yellow-100', text: `${record.score}점`, textColor: 'text-yellow-700' }
       return { bg: 'bg-red-100', text: `${record.score}점`, textColor: 'text-red-600' }
     }
     return { bg: 'bg-white', text: '-', textColor: 'text-gray-300' }
@@ -2044,8 +2044,8 @@ export default function TeacherReportsPage() {
                     <p className="text-[10px] font-bold text-gray-400 mr-1">범례:</p>
                     {[
                       { bg: 'bg-green-100', text: 'text-green-700', label: '85점↑ 통과' },
-                      { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '80~84점' },
-                      { bg: 'bg-red-100', text: 'text-red-600', label: '80점↓ 재도전' },
+                      { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '70~84점 (중등 80~84)' },
+                      { bg: 'bg-red-100', text: 'text-red-600', label: '70점 미만 재도전 (중등 80)' },
                       { bg: 'bg-white border border-blue-200', text: 'text-gray-800', label: '진행중' },
                       { bg: 'bg-purple-50 border border-purple-200', text: 'text-[#712B13]', label: '오답유사' },
                     ].map((item) => (
