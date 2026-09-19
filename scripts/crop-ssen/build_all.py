@@ -29,10 +29,20 @@ def bracket_range(a,r):
 brk=[]
 figs=[]; meta=[]; bracket=None; typ={}; curch=None
 def ext_top(a,r,xs,xe):
-    """if the expression next to the number reaches above it (braces, matrices), start higher"""
+    """the expression on the number's line may reach above it (matrices, fractions, braces)"""
+    from scipy import ndimage
+    # (1) old rule: rows of ink directly above the number, just right of it
     y=r['y0']-1
     while y>r['y0']-80 and ink(a[y:y+1, r['x1']+2:min(xe,r['x1']+170)]).sum()>=1: y-=1
-    return y+1 if y<r['y0']-4 else r['y0']
+    top=y+1 if y<r['y0']-4 else r['y0']
+    # (2) small blobs (matrix brackets, fraction parts) anywhere on the line that touch the number row
+    y0=max(0,r['y0']-90); y1=r['y1']+4
+    lab,n=ndimage.label(ink(a[y0:y1, r['x1']+2:xe]))
+    for i,sl in enumerate(ndimage.find_objects(lab)):
+        h=sl[0].stop-sl[0].start; w=sl[1].stop-sl[1].start
+        if h<=80 and w<=60 and sl[0].stop+y0>r['y0']+2 and sl[0].start+y0<r['y1']-2:
+            top=min(top,sl[0].start+y0)
+    return top if top<r['y0']-3 else r['y0']
 for pg in sorted(bypage):
     its=bypage[pg]; a=page(pg); H=a.shape[0]
     for r in its:
