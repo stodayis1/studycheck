@@ -93,6 +93,19 @@ function PrintInner() {
         </button>
       </div>
 
+      {/* 표의 tfoot은 인쇄할 때 매 쪽마다 반복된다 → 쪽마다 하단 띠(.foot) 높이만큼 자리를 비워
+          문제가 띠 밑으로 들어가 가려지지 않게 한다 */}
+      <table className="pagewrap">
+        <tfoot>
+          <tr>
+            <td>
+              <div className="foot-space" />
+            </td>
+          </tr>
+        </tfoot>
+        <tbody>
+          <tr>
+            <td>
       <div className="sheet">
         <div className="hdr">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -139,6 +152,11 @@ function PrintInner() {
               ))}
           </div>
         </div>
+      </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
         <div className="foot">
           <span className="msg">To look to the stars is the path itself.</span>
@@ -148,9 +166,18 @@ function PrintInner() {
             <img src="/character.png" alt="" />
           </span>
         </div>
-      </div>
 
       <style jsx global>{`
+        .pagewrap {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .pagewrap td {
+          padding: 0;
+        }
+        .foot-space {
+          height: 16mm;
+        }
         @page {
           size: A4;
           margin: 12mm 11mm 16mm 11mm;
