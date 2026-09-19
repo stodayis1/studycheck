@@ -29,6 +29,37 @@ interface StudentWorksheet {
   submitted_at: string | null
   updated_at?: string | null
   semester?: number | null
+  parent_worksheet_id?: string | null
+}
+
+interface OverrideRequest {
+  id: string
+  worksheet_id: string
+  student_id: string
+  requested_action: 'levelup' | 'complete'
+  reason: string
+  requested_by_name: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  decided_by_name: string | null
+  decided_at: string | null
+  created_at: string
+}
+
+interface ActionLog {
+  id: string
+  worksheet_id: string | null
+  student_id: string | null
+  event: 'status' | 'delete'
+  action: string | null
+  from_status: string | null
+  to_status: string | null
+  score: number | null
+  current_level: number | null
+  grade_level: string | null
+  unit: string | null
+  worksheet_type: string | null
+  actor_name: string | null
+  created_at: string
 }
 
 interface StudentTextbook {
@@ -97,6 +128,45 @@ const WORKSHEET_UNITS = ['1단원','2단원','3단원','4단원','5단원','6단
 const GRADE_GROUPS = ['전체','초등','중등','고등']
 const GRADE_COUNT: Record<string, number> = { A: 3, B: 2, C: 1 }
 
+// ── 초등 레벨학습지 80점 규칙 ──
+// 초등 레벨학습지는 학기 중 학교 단원평가(학교 진도 순서대로 봄) 대비용이다. 80점 미만이면 레벨업/완료 없이
+// 같은 레벨을 다시 풀어야 한다. 오답유사는 재도전을 "대신"하지 못하고, 오답유사를 채점하면 같은 레벨
+// 재도전이 자동 배정된다 (오답유사는 틀린 문제만 모은 거라 점수가 잘 나와서, 이걸로 통과시키면 실제로는
+// 그 레벨 전체를 통과한 적이 없는 채 다음 단원으로 넘어가게 됨). 꼭 넘겨야 하면 원장 승인을 받는다.
+// DB 트리거(worksheet_before_update)가 같은 규칙으로 막고 있으니 여기만 고쳐서 풀리지 않는다.
+const PASS_SCORE = 80
+
+function isElemMain(w: { worksheet_type: string; grade_level: string }) {
+  return w.worksheet_type === 'main' && (w.grade_level ?? '').startsWith('초')
+}
+function needsRetry(w: { worksheet_type: string; grade_level: string; score: number | null }) {
+  return isElemMain(w) && w.score != null && w.score < PASS_SCORE
+}
+
+// 지금 학기와 그 학기 시작일 (3~7월 1학기, 8~2월 2학기 - 레벨학습지 배정 기본값과 같은 기준)
+function getCurrentSemester(): { semester: 1 | 2; start: string } {
+  const now = new Date()
+  const m = now.getMonth() + 1
+  const y = now.getFullYear()
+  if (m >= 3 && m <= 7) return { semester: 1, start: `${y}-03-01` }
+  return { semester: 2, start: m >= 8 ? `${y}-08-01` : `${y - 1}-08-01` }
+}
+
+// 한 단원(학생·학년·학기·단원)의 통과 여부.
+// 통과 = 그 단원에서 가장 최근에 채점된 본 학습지(main)가 80점 이상. (한 번 80점을 넘긴 뒤 레벨업해서
+// 낮은 점수로 끝났다면 통과가 아니다.) 진행중인 학습지가 남아있으면 아직 판정하지 않는다.
+type UnitPassState = 'pass' | 'progress' | 'fail'
+function getUnitPass(rows: StudentWorksheet[]): { state: UnitPassState; last: StudentWorksheet | null } | null {
+  const target = rows.filter((w) => w.worksheet_type === 'main' || w.worksheet_type === 'similar')
+  if (target.length === 0) return null
+  const last = target
+    .filter((w) => w.worksheet_type === 'main' && w.score != null)
+    .sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())[0] ?? null
+  if (last && (last.score ?? 0) >= PASS_SCORE) return { state: 'pass', last }
+  if (target.some((w) => w.status !== 'passed')) return { state: 'progress', last }
+  return { state: 'fail', last }
+}
+
 function formatUnit(gradeLevel: string, unit: string, unitName: string) {
   if (unitName) {
     const chapterNum = unit.match(/^[Ⅰ-Ⅸ\d]+/)?.[0] ?? unit.replace(/[^0-9Ⅰ-Ⅸ]/g, '') ?? ''
@@ -130,7 +200,7 @@ function getChapterNameByOrder(concepts: Concept[], grade: string, semester: num
 
 export default function TeacherAssignmentsPage() {
   const { currentUser, isAdmin, canManageAllStudents, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
-  const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'level_report' | 'textbook'>('worksheet')
+  const [tab, setTab] = useState<'worksheet' | 'submissions' | 'unit_status' | 'level_report' | 'textbook' | 'action_log'>('worksheet')
   const [unitStatusStudent, setUnitStatusStudent] = useState<Student | null>(null)
   const [levelReportGrade, setLevelReportGrade] = useState<string>('초1')
   // 3~7월은 1학기, 8~2월은 2학기로 기본값을 잡는다 (레벨학습지에 학기 컬럼을 최근에 추가해서,
@@ -209,6 +279,22 @@ export default function TeacherAssignmentsPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [showRecentPassed, setShowRecentPassed] = useState(false)
 
+  // 80점 미만 예외(레벨업/완료) - 강사는 요청만, 원장이 승인
+  const [overrideRequests, setOverrideRequests] = useState<OverrideRequest[]>([])
+  const [overrideWS, setOverrideWS] = useState<StudentWorksheet | null>(null)
+  const [overrideAction, setOverrideAction] = useState<'levelup' | 'complete'>('levelup')
+  const [overrideReason, setOverrideReason] = useState('')
+  const [overrideSaving, setOverrideSaving] = useState(false)
+
+  // 이번 학기 초등 레벨학습지 (단원 통과 판정용 - 완료된 것 포함)
+  const [semesterWS, setSemesterWS] = useState<StudentWorksheet[]>([])
+  const [showUnpassed, setShowUnpassed] = useState(true)
+
+  // 원장 전용 처리 기록
+  const [actionLogs, setActionLogs] = useState<ActionLog[]>([])
+  const [actionLogRequests, setActionLogRequests] = useState<OverrideRequest[]>([])
+  const [actionLogsLoading, setActionLogsLoading] = useState(false)
+
   // 오토스텝 파일럿: 소단원 완료 시 학습일지에서 자동 생성되는 유형편 숙제 알림 (지금은 윤수지 전용)
   const [autostepAlerts, setAutostepAlerts] = useState<any[]>([])
   async function fetchAutostepAlerts() {
@@ -245,15 +331,21 @@ export default function TeacherAssignmentsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, wData, { data: tData }, { data: cData }, { data: mwData }] = await Promise.all([
+    const cur = getCurrentSemester()
+    const [{ data: sData }, wData, { data: tData }, { data: cData }, { data: mwData }, semData, { data: orData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       fetchActiveWorksheets(),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order').limit(5000),
       supabase.from('middle_worksheets').select('*').order('grade').order('semester').order('lesson_no'),
+      fetchAllRows<StudentWorksheet>(() => supabase.from('student_worksheets').select('*')
+        .like('grade_level', '초%').eq('semester', cur.semester).gte('assigned_at', cur.start).order('id')),
+      supabase.from('worksheet_override_requests').select('*').eq('status', 'pending').order('created_at'),
     ])
     if (sData) setStudents(sData)
     if (wData) setWorksheets(wData)
+    if (semData) setSemesterWS(semData)
+    if (orData) setOverrideRequests(orData)
     if (tData) setTextbooks(tData)
     if (cData) setConcepts(cData)
     if (mwData) setMiddleWorksheets(mwData)
@@ -350,6 +442,25 @@ export default function TeacherAssignmentsPage() {
     (searchText === '' || getStudentName(t.student_id).includes(searchText))
   )
 
+  // 이번 학기 "80점을 못 넘긴 채 멈춘 단원" - 학교 단원평가는 학교 진도 순서대로 보니까,
+  // 앞 단원을 통과 못 하고 넘어갔다면 그 단원평가는 코앞이거나 이미 지나간 것
+  const unpassedUnits = (() => {
+    const groups: Record<string, StudentWorksheet[]> = {}
+    semesterWS.forEach((w) => {
+      if (!myStudentIds.has(w.student_id)) return
+      const key = `${w.student_id}|${w.grade_level}|${w.unit}`
+      if (!groups[key]) groups[key] = []
+      groups[key].push(w)
+    })
+    return Object.values(groups)
+      .map((rows) => ({ rows, pass: getUnitPass(rows) }))
+      .filter((g) => g.pass?.state === 'fail')
+      .map((g) => ({ student_id: g.rows[0].student_id, sample: g.rows[0], last: g.pass!.last }))
+      .filter((u) => filterByGroup(students.filter((s) => s.id === u.student_id)).length > 0)
+      .sort((a, b) => getStudentName(a.student_id).localeCompare(getStudentName(b.student_id)) || a.sample.unit.localeCompare(b.sample.unit))
+  })()
+  const myPendingOverrides = overrideRequests.filter((r) => myStudentIds.has(r.student_id))
+
   const pendingWS = activeWorksheets.filter((w) => w.status === 'submitted' || w.status === 'similar_submitted')
   const pendingTB = activeTextbooks.filter((t) => t.status === 'submitted')
 
@@ -431,14 +542,40 @@ export default function TeacherAssignmentsPage() {
     if (isNaN(score) || score < 0 || score > 100) { alert('0~100 사이 점수를 입력해주세요.'); return }
     setSavingScore(true)
     // 점수만 저장하고, 다음 액션(레벨업/재도전/오답유사/완료)은 선생님이 직접 선택
-    await supabase.from('student_worksheets').update({ score, status: 'scored' }).eq('id', scoreWS.id)
+    const { error } = await supabase.from('student_worksheets').update({ score, status: 'scored' }).eq('id', scoreWS.id)
+    if (error) { setSavingScore(false); alert('점수 저장 실패: ' + error.message); return }
+    // 초등 오답유사: 원래 학습지가 80점 미만이었다면 오답유사 점수와 상관없이 같은 레벨 재도전을 자동 배정
+    if (scoreWS.worksheet_type === 'similar' && (scoreWS.grade_level ?? '').startsWith('초')) {
+      let parentScore: number | null = null
+      if (scoreWS.parent_worksheet_id) {
+        const { data } = await supabase.from('student_worksheets').select('score').eq('id', scoreWS.parent_worksheet_id).maybeSingle()
+        parentScore = data?.score ?? null
+      }
+      if (parentScore == null || parentScore < PASS_SCORE) {
+        await handleRetry({ ...scoreWS, score, status: 'scored' }, 'auto_retry')
+        setSavingScore(false); setShowScoreModal(false); setInputScore('')
+        return
+      }
+    }
     setSavingScore(false); setShowScoreModal(false); setInputScore(''); fetchData()
   }
 
-  async function handleLevelUp(w: StudentWorksheet) {
+  // 학습지를 완료(passed)로 닫는다. action은 DB 트리거가 처리 기록에 남기는 "누른 버튼".
+  // 실패하면(예: 80점 미만 규칙에 걸림) 다음 학습지를 만들지 않도록 false를 돌려준다.
+  async function closeWorksheet(w: StudentWorksheet, action: string) {
+    const { error } = await supabase.from('student_worksheets')
+      .update({ status: 'passed', updated_at: new Date().toISOString(), last_action: action }).eq('id', w.id)
+    if (error) { alert('처리 실패: ' + error.message); return false }
+    return true
+  }
+
+  async function handleLevelUp(w: StudentWorksheet, action: 'levelup' | 'override_levelup' = 'levelup') {
+    if (action === 'levelup' && needsRetry(w)) {
+      alert(`${PASS_SCORE}점 미만은 레벨업할 수 없어요. 재도전 또는 오답유사를 선택해주세요.`); return
+    }
     const nextLevel = Math.min(6.0, w.current_level + 0.5)
     const name = getStudentName(w.student_id)
-    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
+    if (!(await closeWorksheet(w, action))) return
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
@@ -451,14 +588,16 @@ export default function TeacherAssignmentsPage() {
   // 오답유사 학습지 배정 (기존엔 80점 미만이면 자동 배정됐지만, 이제 선생님이 직접 선택)
   async function handleSimilarAssign(w: StudentWorksheet) {
     const name = getStudentName(w.student_id)
-    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
+    if (!(await closeWorksheet(w, 'similar'))) return
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
       current_level: w.current_level, status: 'similar_assigned', worksheet_type: 'similar', parent_worksheet_id: w.id,
     })
     fetchData()
-    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리 → 오답유사 학습지 새로 배정했어요`)
+    flashToast(needsRetry(w)
+      ? `✅ ${name} 오답유사 학습지 배정 → 채점하면 ${w.current_level}레벨 재도전이 자동으로 배정돼요`
+      : `✅ ${name} ${w.current_level}레벨 완료 처리 → 오답유사 학습지 새로 배정했어요`)
   }
 
   async function handleDelete(id: string) {
@@ -510,29 +649,109 @@ export default function TeacherAssignmentsPage() {
     setWsAssigning(false); fetchData()
   }
 
-  async function handleComplete(w: StudentWorksheet) {
+  async function handleComplete(w: StudentWorksheet, action: 'complete' | 'override_complete' = 'complete') {
+    if (action === 'complete' && needsRetry(w)) {
+      alert(`${PASS_SCORE}점 미만은 완료할 수 없어요. 재도전 또는 오답유사를 선택해주세요.`); return
+    }
     const name = getStudentName(w.student_id)
-    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
+    if (!(await closeWorksheet(w, action))) return
     fetchData()
     flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리했어요 (목록에서 사라진 게 아니라 "최근 완료"로 이동)`)
   }
 
-  async function handleRetry(w: StudentWorksheet) {
+  async function handleRetry(w: StudentWorksheet, action: 'retry' | 'auto_retry' = 'retry') {
     const name = getStudentName(w.student_id)
-    await supabase.from('student_worksheets').update({ status: 'passed', updated_at: new Date().toISOString() }).eq('id', w.id)
+    if (!(await closeWorksheet(w, action))) return
     await supabase.from('student_worksheets').insert({
       student_id: w.student_id, subject: '수학',
       grade_level: w.grade_level, unit: w.unit, unit_name: w.unit_name, semester: w.semester ?? null,
       current_level: w.current_level, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
-    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
+    flashToast(action === 'auto_retry'
+      ? `✅ ${name} 오답유사 채점 완료 → ${w.current_level}레벨 재도전 학습지를 자동으로 배정했어요`
+      : `✅ ${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
   }
+
+  // 80점 미만 예외 처리: 원장은 사유를 남기고 바로 처리, 강사는 원장에게 승인 요청
+  async function handleSubmitOverride() {
+    if (!overrideWS) return
+    const reason = overrideReason.trim()
+    if (reason.length < 5) { alert('사유를 5자 이상 적어주세요.'); return }
+    setOverrideSaving(true)
+    const admin = isAdmin()
+    const { error } = await supabase.from('worksheet_override_requests').insert({
+      worksheet_id: overrideWS.id, student_id: overrideWS.student_id,
+      requested_action: overrideAction, reason,
+      requested_by_name: currentUser?.name ?? null,
+      ...(admin ? { status: 'approved', decided_by_name: currentUser?.name ?? null, decided_at: new Date().toISOString() } : {}),
+    })
+    if (error) { setOverrideSaving(false); alert('요청 실패: ' + error.message); return }
+    if (admin) {
+      if (overrideAction === 'levelup') await handleLevelUp(overrideWS, 'override_levelup')
+      else await handleComplete(overrideWS, 'override_complete')
+    } else {
+      flashToast(`📨 원장님께 승인 요청을 보냈어요 (${getStudentName(overrideWS.student_id)})`)
+      fetchData()
+    }
+    setOverrideSaving(false); setOverrideWS(null); setOverrideReason(''); setShowScoreModal(false)
+  }
+
+  async function handleDecideOverride(req: OverrideRequest, approve: boolean) {
+    let w = worksheets.find((x) => x.id === req.worksheet_id) ?? null
+    if (!w) {
+      const { data } = await supabase.from('student_worksheets').select('*').eq('id', req.worksheet_id).maybeSingle()
+      w = data ?? null
+    }
+    // 그 사이 강사가 재도전/오답유사로 이미 처리했다면 승인할 게 없다
+    const stillPending = !!w && w.status === 'scored'
+    if (approve && !stillPending) alert('이미 다른 방법으로 처리된 학습지라 승인하지 않고 닫을게요.')
+    const { error } = await supabase.from('worksheet_override_requests').update({
+      status: approve && stillPending ? 'approved' : 'rejected',
+      decided_by_name: currentUser?.name ?? null, decided_at: new Date().toISOString(),
+    }).eq('id', req.id)
+    if (error) { alert('처리 실패: ' + error.message); return }
+    if (approve && stillPending && w) {
+      if (req.requested_action === 'levelup') await handleLevelUp(w, 'override_levelup')
+      else await handleComplete(w, 'override_complete')
+    } else {
+      fetchData()
+    }
+  }
+
+  // 통과 못 한 채 멈춘 단원에 같은 레벨 재도전 배정 (마지막으로 채점한 레벨 그대로)
+  async function handleAssignUnitRetry(last: StudentWorksheet) {
+    const { error } = await supabase.from('student_worksheets').insert({
+      student_id: last.student_id, subject: '수학',
+      grade_level: last.grade_level, unit: last.unit, unit_name: last.unit_name, semester: last.semester ?? null,
+      current_level: last.current_level, status: 'assigned', worksheet_type: 'main',
+    })
+    if (error) { alert('배정 실패: ' + error.message); return }
+    fetchData()
+    flashToast(`✅ ${getStudentName(last.student_id)} ${last.unit} ${last.current_level}레벨 재도전 배정했어요`)
+  }
+
+  async function loadActionLogs() {
+    setActionLogsLoading(true)
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const [logs, { data: reqs }] = await Promise.all([
+      fetchAllRows<ActionLog>(() => supabase.from('worksheet_action_logs').select('*')
+        .gte('created_at', since).like('grade_level', '초%').order('created_at', { ascending: false }).order('id')),
+      supabase.from('worksheet_override_requests').select('*').gte('created_at', since).order('created_at', { ascending: false }),
+    ])
+    setActionLogs(logs)
+    setActionLogRequests(reqs ?? [])
+    setActionLogsLoading(false)
+  }
+
+  useEffect(() => {
+    if (tab === 'action_log') loadActionLogs()
+  }, [tab])
 
   // 완료 처리를 잘못 눌렀을 때 되돌리기 (점수입력 직후 상태로 복귀)
   async function handleRevertToScored(w: StudentWorksheet) {
     if (!confirm('되돌릴까요? 이 학습지를 다시 "결과대기" 상태로 되돌립니다. (그 사이 새로 배정된 학습지가 있다면 목록에서 따로 삭제해주세요)')) return
-    await supabase.from('student_worksheets').update({ status: 'scored', updated_at: new Date().toISOString() }).eq('id', w.id)
+    await supabase.from('student_worksheets').update({ status: 'scored', updated_at: new Date().toISOString(), last_action: 'revert' }).eq('id', w.id)
     fetchData()
     flashToast(`↩️ ${getStudentName(w.student_id)} ${w.current_level}레벨을 되돌렸어요`)
   }
@@ -601,6 +820,7 @@ export default function TeacherAssignmentsPage() {
             { key: 'unit_status', label: '단원 현황',    icon: 'ti-chart-bar' },
             { key: 'level_report', label: '레벨 현황판', icon: 'ti-table' },
             { key: 'textbook',    label: '병행교재',     icon: 'ti-book' },
+            ...(isAdmin() ? [{ key: 'action_log', label: '처리 기록', icon: 'ti-list-search' }] : []),
           ].map((t) => (
             <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all"
@@ -649,6 +869,82 @@ export default function TeacherAssignmentsPage() {
                     <p className="text-sm font-bold" style={{ color: '#712B13' }}>채점 대기 {pendingWS.length}건</p>
                     <p className="text-xs" style={{ color: '#993C1D' }}>학생이 제출한 레벨학습지가 있어요</p>
                   </div>
+                </div>
+              )}
+
+              {/* 원장: 80점 미만 예외 승인 대기 */}
+              {isAdmin() && myPendingOverrides.length > 0 && (
+                <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #fcd34d' }}>
+                  <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#fffbeb' }}>
+                    <i className="ti ti-gavel" style={{ fontSize: 16, color: '#92400e' }} />
+                    <p className="text-sm font-bold" style={{ color: '#92400e' }}>80점 미만 예외 승인 요청 {myPendingOverrides.length}건</p>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {myPendingOverrides.map((r) => {
+                      const w = worksheets.find((x) => x.id === r.worksheet_id)
+                      return (
+                        <div key={r.id} className="px-4 py-3 flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-800">
+                              {getStudentName(r.student_id)}
+                              {w && <span className="font-normal text-gray-500 ml-1.5">{formatUnit(w.grade_level, w.unit, w.unit_name)} · {w.current_level}레벨 · <b style={{ color: '#991b1b' }}>{w.score}점</b></span>}
+                            </p>
+                            <p className="text-[11px] text-gray-600 mt-0.5">
+                              <b>{r.requested_action === 'levelup' ? '레벨업' : '완료'}</b> 요청 · {r.requested_by_name ?? '-'} · "{r.reason}"
+                            </p>
+                          </div>
+                          <button onClick={() => handleDecideOverride(r, true)}
+                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg shrink-0"
+                            style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #639922' }}>승인</button>
+                          <button onClick={() => handleDecideOverride(r, false)}
+                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg shrink-0"
+                            style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>거절</button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 이번 학기 통과 못 한 채 멈춘 단원 */}
+              {unpassedUnits.length > 0 && (
+                <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #fca5a5' }}>
+                  <button onClick={() => setShowUnpassed((v) => !v)}
+                    className="w-full px-4 py-3 flex items-center gap-2 text-left" style={{ background: '#fef2f2' }}>
+                    <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#991b1b' }} />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold" style={{ color: '#991b1b' }}>80점 못 넘기고 멈춘 단원 {unpassedUnits.length}건</p>
+                      <p className="text-[11px]" style={{ color: '#b91c1c' }}>이번 {getCurrentSemester().semester}학기 · 학교 단원평가 전에 재도전시켜 주세요</p>
+                    </div>
+                    <i className={`ti ${showUnpassed ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 14, color: '#b91c1c' }} />
+                  </button>
+                  {showUnpassed && (
+                    <div className="divide-y divide-gray-50">
+                      {unpassedUnits.map(({ student_id, sample, last }) => {
+                        const student = students.find((s) => s.id === student_id)
+                        return (
+                          <div key={`${student_id}|${sample.grade_level}|${sample.unit}`} className="px-4 py-2.5 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-gray-800">
+                                {getStudentName(student_id)}
+                                <span className="font-normal text-gray-500 ml-1.5">{formatUnit(sample.grade_level, sample.unit, sample.unit_name)}</span>
+                              </p>
+                              <p className="text-[10px] mt-0.5" style={{ color: '#991b1b' }}>
+                                {last ? `마지막 채점 ${last.current_level}레벨 ${last.score}점` : '채점 기록 없이 종료'}
+                              </p>
+                            </div>
+                            {student && isEditable(student) && (last ?? sample) && (
+                              <button onClick={() => handleAssignUnitRetry(last ?? sample)}
+                                className="px-2.5 py-1 text-[10px] font-bold rounded-lg whitespace-nowrap shrink-0"
+                                style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
+                                재도전 배정
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -840,7 +1136,31 @@ export default function TeacherAssignmentsPage() {
                                               className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
                                               style={{ background: '#FAECE7', color: '#993C1D', border: '1px solid #F5C4B3' }}>점수입력</button>
                                           )}
-                                          {w.status === 'scored' && (
+                                          {w.status === 'scored' && needsRetry(w) && (() => {
+                                            const pendingReq = overrideRequests.find((r) => r.worksheet_id === w.id)
+                                            return (
+                                              <>
+                                                <button onClick={() => handleRetry(w)}
+                                                  className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                  style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>재도전</button>
+                                                <button onClick={() => handleSimilarAssign(w)}
+                                                  className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                  style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>오답유사</button>
+                                                {pendingReq ? (
+                                                  <span className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                    title={`사유: ${pendingReq.reason}`}
+                                                    style={{ background: '#f3f4f6', color: '#6b7280' }}>승인대기</span>
+                                                ) : (
+                                                  <button onClick={() => { setOverrideWS(w); setOverrideAction('levelup'); setOverrideReason('') }}
+                                                    className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
+                                                    style={{ background: 'white', color: '#9ca3af', border: '1px dashed #d1d5db' }}>
+                                                    {isAdmin() ? '예외처리' : '예외요청'}
+                                                  </button>
+                                                )}
+                                              </>
+                                            )
+                                          })()}
+                                          {w.status === 'scored' && !needsRetry(w) && (
                                             <>
                                               <button onClick={() => handleLevelUp(w)}
                                                 className="px-2 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap"
@@ -1476,6 +1796,113 @@ export default function TeacherAssignmentsPage() {
           })()
         )}
 
+        {tab === 'action_log' && isAdmin() && (
+          actionLogsLoading ? (
+            <div className="text-center py-8">
+              <span className="w-6 h-6 border-2 border-[#F5C4B3] border-t-transparent rounded-full animate-spin inline-block" />
+            </div>
+          ) : (() => {
+            // 최근 30일 초등 레벨학습지 처리 기록 - 선생님별로 80점 미만을 어떻게 처리했는지
+            type Row = { name: string; under80: number; retry: number; similar: number; override: number; other: number; autoRetry: number; deleted: number }
+            const byActor: Record<string, Row> = {}
+            const row = (name: string) => {
+              if (!byActor[name]) byActor[name] = { name, under80: 0, retry: 0, similar: 0, override: 0, other: 0, autoRetry: 0, deleted: 0 }
+              return byActor[name]
+            }
+            actionLogs.forEach((l) => {
+              const name = l.actor_name ?? '(이름 없음)'
+              if (l.event === 'delete') {
+                if (l.score != null) row(name).deleted++
+                return
+              }
+              if (l.to_status !== 'passed') return
+              if (l.action === 'auto_retry') { row(name).autoRetry++; return }
+              if (l.worksheet_type !== 'main' || l.score == null || l.score >= PASS_SCORE) return
+              const r = row(name)
+              r.under80++
+              if (l.action === 'retry') r.retry++
+              else if (l.action === 'similar') r.similar++
+              else if (l.action?.startsWith('override')) r.override++
+              else r.other++
+            })
+            const rows = Object.values(byActor).sort((a, b) => b.under80 - a.under80)
+            const notable = actionLogs.filter((l) =>
+              (l.event === 'delete' && l.score != null) || l.action?.startsWith('override'))
+            return (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 px-1">최근 30일 · 초등 레벨학습지 · 기록은 2026-09-19부터 쌓여요</p>
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: '#f9fafb' }}>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-500">선생님</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500">80점 미만 처리</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500">재도전</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500">오답유사</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500">예외(승인)</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500" title="규칙 적용 전 화면에서 레벨업/완료로 넘긴 것">규칙 밖</th>
+                        <th className="px-2 py-2 font-semibold text-gray-500">채점된 학습지 삭제</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {rows.length === 0 ? (
+                        <tr><td colSpan={7} className="text-center text-gray-400 py-6">아직 기록이 없어요</td></tr>
+                      ) : rows.map((r) => (
+                        <tr key={r.name}>
+                          <td className="px-3 py-2 font-bold text-gray-800">{r.name}</td>
+                          <td className="px-2 py-2 text-center font-bold">{r.under80}</td>
+                          <td className="px-2 py-2 text-center">{r.retry}</td>
+                          <td className="px-2 py-2 text-center">{r.similar}</td>
+                          <td className="px-2 py-2 text-center" style={{ color: r.override ? '#92400e' : undefined }}>{r.override}</td>
+                          <td className="px-2 py-2 text-center" style={{ color: r.other ? '#991b1b' : undefined, fontWeight: r.other ? 700 : undefined }}>{r.other}</td>
+                          <td className="px-2 py-2 text-center" style={{ color: r.deleted ? '#991b1b' : undefined, fontWeight: r.deleted ? 700 : undefined }}>{r.deleted}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {actionLogRequests.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <p className="px-4 py-3 text-sm font-bold text-gray-700" style={{ background: '#f9fafb' }}>예외 요청 내역</p>
+                    <div className="divide-y divide-gray-50">
+                      {actionLogRequests.map((r) => (
+                        <div key={r.id} className="px-4 py-2.5">
+                          <p className="text-xs text-gray-800">
+                            <b>{getStudentName(r.student_id)}</b> · {r.requested_action === 'levelup' ? '레벨업' : '완료'} · {r.requested_by_name ?? '-'}
+                            <span className="ml-1.5 text-[10px] font-bold" style={{ color: r.status === 'approved' ? '#27500A' : r.status === 'rejected' ? '#991b1b' : '#92400e' }}>
+                              {r.status === 'approved' ? '승인' : r.status === 'rejected' ? '거절' : '대기'}
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">"{r.reason}" · {new Date(r.created_at).toLocaleDateString('ko-KR')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {notable.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <p className="px-4 py-3 text-sm font-bold text-gray-700" style={{ background: '#f9fafb' }}>확인해볼 기록 (삭제·예외)</p>
+                    <div className="divide-y divide-gray-50">
+                      {notable.map((l) => (
+                        <div key={l.id} className="px-4 py-2.5 text-xs text-gray-700">
+                          <b>{l.student_id ? getStudentName(l.student_id) : '-'}</b>
+                          <span className="text-gray-500 ml-1.5">{l.grade_level} {l.unit} · {l.current_level}레벨 · {l.score}점</span>
+                          <span className="ml-1.5 font-bold" style={{ color: l.event === 'delete' ? '#991b1b' : '#92400e' }}>
+                            {l.event === 'delete' ? '삭제' : l.action === 'override_levelup' ? '예외 레벨업' : '예외 완료'}
+                          </span>
+                          <span className="text-gray-400 ml-1.5">{l.actor_name ?? '-'} · {new Date(l.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()
+        )}
+
         {tab === 'level_report' && (
           loading || worksheetsFullLoading || !worksheetsFullLoaded ? (
             <div className="text-center py-8">
@@ -1515,6 +1942,10 @@ export default function TeacherAssignmentsPage() {
                 new Date(b.updated_at ?? b.assigned_at).getTime() - new Date(a.updated_at ?? a.assigned_at).getTime()
               )[0]
             }
+            function getStudentUnitPass(studentId: string, unit: string) {
+              return getUnitPass(worksheetsFull.filter((w) =>
+                w.student_id === studentId && w.unit === unit && w.semester === levelReportSemester))
+            }
 
             return (
               <div className="space-y-3">
@@ -1549,7 +1980,11 @@ export default function TeacherAssignmentsPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <i className="ti ti-check" style={{ fontSize: 11, color: '#166534' }} />
-                    <span className="text-[10px] text-gray-500">완료 (체크 없으면 진행중)</span>
+                    <span className="text-[10px] text-gray-500">통과 (마지막 채점 80점↑)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #dc2626' }} />
+                    <span className="text-[10px] text-gray-500">80점 못 넘기고 멈춤</span>
                   </div>
                 </div>
 
@@ -1579,6 +2014,7 @@ export default function TeacherAssignmentsPage() {
                             {gradeStudents.map((s) => {
                               const w = getStudentUnit(s.id, unit)
                               const style = w ? LEVEL_STYLE[w.current_level] : null
+                              const pass = getStudentUnitPass(s.id, unit)
                               return (
                                 <td key={s.id} className="p-1 border-b border-gray-50 text-center">
                                   {!w || !style ? (
@@ -1587,11 +2023,12 @@ export default function TeacherAssignmentsPage() {
                                       <span className="text-gray-300 text-[11px]">–</span>
                                     </div>
                                   ) : (
-                                    <div title={`${w.current_level}레벨 · ${w.status === 'passed' ? '완료' : '진행중'}${w.worksheet_type === 'similar' ? ' · 오답유사' : ''}`}
+                                    <div title={`${w.current_level}레벨 · ${pass?.state === 'pass' ? '통과' : pass?.state === 'fail' ? `80점 못 넘기고 멈춤${pass.last ? ` (마지막 ${pass.last.score}점)` : ''}` : '진행중'}${w.worksheet_type === 'similar' ? ' · 오답유사' : ''}`}
                                       className="mx-auto flex flex-col items-center justify-center relative"
-                                      style={{ width: 44, height: 36, borderRadius: 8, background: style.bg }}>
+                                      style={{ width: 44, height: 36, borderRadius: 8, background: style.bg,
+                                        border: pass?.state === 'fail' ? '2px solid #dc2626' : undefined }}>
                                       <span className="font-extrabold" style={{ color: style.text, fontSize: 13 }}>{w.current_level}</span>
-                                      {w.status === 'passed' && (
+                                      {pass?.state === 'pass' && (
                                         <i className="ti ti-check" style={{ position: 'absolute', top: 2, right: 3, fontSize: 10, color: style.text }} />
                                       )}
                                     </div>
@@ -2088,6 +2525,10 @@ export default function TeacherAssignmentsPage() {
                 }}>
                 {scoreWS?.worksheet_type === 'twin'
                   ? '점수 저장 후 다음 액션 선택'
+                  : scoreWS?.worksheet_type === 'similar' && (scoreWS.grade_level ?? '').startsWith('초')
+                  ? '저장하면 같은 레벨 재도전이 자동 배정돼요 (원래 학습지가 80점 미만인 경우)'
+                  : isElemMain(scoreWS) && parseInt(inputScore) < PASS_SCORE
+                  ? '✕ 80점 미만 — 재도전 또는 오답유사만 가능 (오답 풀이 꼭 해주세요)'
                   : (parseInt(inputScore) >= 85 ? '✓ 레벨업 추천' : parseInt(inputScore) >= 80 ? '△ 레벨업/재도전 선택' : '✕ 재도전/오답유사 선택')}
               </div>
             )}
@@ -2103,6 +2544,23 @@ export default function TeacherAssignmentsPage() {
             {scoreWS && ['scored', 'retry'].includes(scoreWS.status) && (
               <div className="space-y-2 pt-2 border-t border-gray-100">
                 <p className="text-xs font-bold text-gray-600 text-center">다음 액션 선택</p>
+                {needsRetry(scoreWS) ? (
+                <div className="flex gap-2">
+                  <button onClick={() => { handleRetry(scoreWS); setShowScoreModal(false) }}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                    style={{ background: '#fee2e2', color: '#991b1b', border: '2px solid #dc2626' }}>재도전</button>
+                  <button onClick={() => { handleSimilarAssign(scoreWS); setShowScoreModal(false) }}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                    style={{ background: '#FFF5F2', color: '#712B13', border: '2px solid #F5C4B3' }}>오답유사</button>
+                  {!overrideRequests.some((r) => r.worksheet_id === scoreWS.id) && (
+                    <button onClick={() => { setOverrideWS(scoreWS); setOverrideAction('levelup'); setOverrideReason(''); setShowScoreModal(false) }}
+                      className="py-2.5 px-3 rounded-xl text-xs font-bold"
+                      style={{ background: 'white', color: '#9ca3af', border: '1px dashed #d1d5db' }}>
+                      {isAdmin() ? '예외처리' : '예외요청'}
+                    </button>
+                  )}
+                </div>
+                ) : (
                 <div className="flex gap-2">
                   <button onClick={() => { handleComplete(scoreWS); setShowScoreModal(false) }}
                     className="flex-1 py-2.5 text-sm font-bold rounded-xl"
@@ -2117,8 +2575,53 @@ export default function TeacherAssignmentsPage() {
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold"
                     style={{ background: '#FFF5F2', color: '#712B13', border: '2px solid #F5C4B3' }}>오답유사</button>
                 </div>
+                )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 80점 미만 예외 요청/처리 모달 */}
+      {overrideWS && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => setOverrideWS(null)}>
+          <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">{isAdmin() ? '80점 미만 예외 처리' : '원장님께 예외 요청'}</h3>
+              <button onClick={() => setOverrideWS(null)} className="text-gray-400">
+                <i className="ti ti-x" style={{ fontSize: 18 }} />
+              </button>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: '#fafafa' }}>
+              <p className="text-sm font-bold text-gray-800">{getStudentName(overrideWS.student_id)}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {formatUnit(overrideWS.grade_level, overrideWS.unit, overrideWS.unit_name)} · {overrideWS.current_level}레벨 ·{' '}
+                <b style={{ color: '#991b1b' }}>{overrideWS.score}점</b>
+              </p>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              80점 미만은 원래 같은 레벨을 다시 풀어야 해요. 그래도 넘겨야 하는 이유를 적어주세요.
+              {!isAdmin() && ' 원장님이 승인하면 처리돼요.'}
+            </p>
+            <div className="flex gap-2">
+              {([['levelup', '레벨업'], ['complete', '완료(단원 종료)']] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setOverrideAction(key)}
+                  className="flex-1 py-2 rounded-xl text-sm font-bold"
+                  style={overrideAction === key
+                    ? { background: '#1f2937', color: 'white' }
+                    : { background: '#f3f4f6', color: '#6b7280' }}>{label}</button>
+              ))}
+            </div>
+            <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
+              rows={3} placeholder="예: 실수로 틀린 문제가 대부분이고 오답 풀이 후 모두 맞힘"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            <button onClick={handleSubmitOverride} disabled={overrideSaving || overrideReason.trim().length < 5}
+              className="w-full py-3 rounded-xl font-bold disabled:opacity-50"
+              style={{ background: '#F5C4B3', color: '#712B13' }}>
+              {overrideSaving ? '처리중...' : isAdmin() ? '사유 남기고 처리' : '승인 요청 보내기'}
+            </button>
           </div>
         </div>
       )}
