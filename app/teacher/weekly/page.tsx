@@ -42,7 +42,7 @@ function tone(kind: Badge['kind'], v: number | null) {
   return { bg: '#fee2e2', fg: '#b91c1c', bd: '#fca5a5' }
 }
 const KIND_LABEL: Record<Badge['kind'], string> = {
-  book: '교재', sheet: '학습지', test: '테스트', exam: '시험지', attend: '출결',
+  book: '과제 달성', sheet: '과제 성취', test: '테스트', exam: '시험지', attend: '출결',
 }
 
 export default function WeeklyPage() {

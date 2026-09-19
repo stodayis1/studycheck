@@ -136,6 +136,30 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; sub: string }> 
   'default': { bg: '#f5f5f5', border: '#bdbdbd', sub: '#757575' },
 }
 
+// 과제 달성률/성취도 고르기: 빠른 버튼 + 5% 단위 슬라이더. value가 null이면 "아직 안 고름"(저장 불가).
+const PCT_QUICK = [0, 50, 70, 80, 90, 100]
+function PctPicker({ value, onChange, disabled }: { value: number | null; onChange: (v: number) => void; disabled?: boolean }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-1">
+        {PCT_QUICK.map((v) => (
+          <button key={v} type="button" disabled={disabled} onClick={() => onChange(v)}
+            className="flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all"
+            style={value === v
+              ? { background: '#712B13', color: 'white', borderColor: '#712B13' }
+              : { background: 'white', color: '#6b7280', borderColor: value == null ? '#fca5a5' : '#e5e7eb' }}>
+            {v}
+          </button>
+        ))}
+      </div>
+      <input type="range" min={0} max={100} step={5} value={value ?? 0} disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        onClick={(e) => onChange(Number((e.target as HTMLInputElement).value))}
+        className="w-full accent-[#F5C4B3]" style={value == null ? { opacity: 0.35 } : undefined} />
+    </div>
+  )
+}
+
 export default function TeacherLearningNotesPage() {
   const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades, supervisorLabel } = useAuth()
   const searchParams = useSearchParams()
@@ -192,8 +216,10 @@ export default function TeacherLearningNotesPage() {
   const [noteProgressConcepts, setNoteProgressConcepts] = useState<string[]>([])
   const [lastClickedIdx, setLastClickedIdx] = useState<number>(-1)
   const [noteAttendance, setNoteAttendance] = useState('정시')
-  const [noteAchievement, setNoteAchievement] = useState(100) // 과제 달성률
-  const [noteScorePct, setNoteScorePct] = useState(100)       // 과제 성취도 %
+  // 과제 달성률 / 과제 성취도 %. 새 일지는 null(미선택)로 시작하고 직접 골라야 저장된다.
+  // (예전엔 100으로 시작해서, 안 건드리고 저장하면 전부 100%·100점으로 쌓였다 - 2026-09 확인)
+  const [noteAchievement, setNoteAchievement] = useState<number | null>(null)
+  const [noteScorePct, setNoteScorePct] = useState<number | null>(null)
   const [noteWorksheetUnit, setNoteWorksheetUnit] = useState('')  // 채점한 학습지 단원 (지난 과제)
   const [noteWorksheetLevel, setNoteWorksheetLevel] = useState('') // 채점한 학습지 레벨
   const [noteExtraClass, setNoteExtraClass] = useState(false)
@@ -683,8 +709,8 @@ export default function TeacherLearningNotesPage() {
     setHwSelectedEPIds([])
     setHwEPPages({})
     // achievement_pct 컬럼 생기기 전 기존 기록은 boolean만 남아있어서, 그 경우엔 근사치로 복원
-    setNoteAchievement(note?.achievement_pct ?? (note ? (note.workbook_done ? 100 : note.worksheet_submitted ? 70 : 0) : 100))
-    setNoteScorePct(note?.worksheet_score ?? 100) // 예전엔 없는 필드(score_pct)를 읽어서 항상 100으로 초기화되던 버그 수정
+    setNoteAchievement(note?.achievement_pct ?? (note ? (note.workbook_done ? 100 : note.worksheet_submitted ? 70 : 0) : null))
+    setNoteScorePct(note?.worksheet_score ?? null) // 새 일지·값 없는 일지는 미선택으로 시작 (직접 골라야 저장)
     setNoteWorksheetUnit(note?.worksheet_unit ?? '')
     setNoteWorksheetLevel(note?.worksheet_level ?? '')
     setNoteExtraClass(note?.extra_class ?? false)
@@ -1039,6 +1065,10 @@ export default function TeacherLearningNotesPage() {
     if (!noteStudent) return
     if (noteStudent.on_leave) {
       alert(`${noteStudent.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 학습일지를 작성할 수 없어요 (복귀 후 다시 확인해주세요).`)
+      return
+    }
+    if (noteAttendance !== '결석' && (noteAchievement == null || noteScorePct == null)) {
+      alert('「과제 달성률」과 「과제 성취도」를 직접 골라주세요.\n(수업내용 탭 아래쪽 — 100%여도 100을 눌러야 저장돼요)')
       return
     }
     setSavingNote(true)
@@ -2591,17 +2621,15 @@ export default function TeacherLearningNotesPage() {
                 <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700"><i className="ti ti-chart-bar align-[-0.125em]" /> 과제 달성률</label>
-                    <span className="text-sm font-black" style={{ color: noteAchievement >= 85 ? '#16a34a' : noteAchievement >= 50 ? '#712B13' : '#dc2626' }}>
-                      {noteAchievement}%
-                    </span>
+                    {noteAchievement == null ? (
+                      <span className="text-xs font-bold" style={{ color: '#dc2626' }}>선택해주세요</span>
+                    ) : (
+                      <span className="text-sm font-black" style={{ color: noteAchievement >= 85 ? '#16a34a' : noteAchievement >= 50 ? '#712B13' : '#dc2626' }}>
+                        {noteAchievement}%
+                      </span>
+                    )}
                   </div>
-                  <input type="range" min={0} max={100} step={5} value={noteAchievement}
-                    disabled={noteAttendance === '결석'}
-                    onChange={(e) => setNoteAchievement(Number(e.target.value))}
-                    className="w-full accent-[#F5C4B3]" />
-                  <div className="flex justify-between text-[9px] text-gray-300 -mt-1">
-                    <span>0%</span><span>50%</span><span>100%</span>
-                  </div>
+                  <PctPicker value={noteAchievement} onChange={setNoteAchievement} disabled={noteAttendance === '결석'} />
                   {noteAttendance === '결석' && (
                     <p className="text-[11px] text-gray-400 mt-1.5">결석 처리 시 과제 항목은 기록되지 않아요.</p>
                   )}
@@ -2611,17 +2639,15 @@ export default function TeacherLearningNotesPage() {
                 <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700"><i className="ti ti-target align-[-0.125em]" /> 과제 성취도</label>
-                    <span className="text-sm font-black" style={{ color: noteScorePct >= 85 ? '#16a34a' : noteScorePct >= 70 ? '#712B13' : '#dc2626' }}>
-                      {noteScorePct}%
-                    </span>
+                    {noteScorePct == null ? (
+                      <span className="text-xs font-bold" style={{ color: '#dc2626' }}>선택해주세요</span>
+                    ) : (
+                      <span className="text-sm font-black" style={{ color: noteScorePct >= 85 ? '#16a34a' : noteScorePct >= 70 ? '#712B13' : '#dc2626' }}>
+                        {noteScorePct}%
+                      </span>
+                    )}
                   </div>
-                  <input type="range" min={0} max={100} step={5} value={noteScorePct}
-                    disabled={noteAttendance === '결석'}
-                    onChange={(e) => setNoteScorePct(Number(e.target.value))}
-                    className="w-full accent-[#F5C4B3]" />
-                  <div className="flex justify-between text-[9px] text-gray-300 -mt-1">
-                    <span>0%</span><span>50%</span><span>100%</span>
-                  </div>
+                  <PctPicker value={noteScorePct} onChange={setNoteScorePct} disabled={noteAttendance === '결석'} />
                   {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
                   <div className="flex gap-2 mt-2">
                     <input type="text" value={noteWorksheetUnit} onChange={(e) => setNoteWorksheetUnit(e.target.value)}

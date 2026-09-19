@@ -28,14 +28,6 @@ async function all<T>(make: (from: number, to: number) => any): Promise<T[]> {
   return out
 }
 
-// 교재 이름을 배지에 들어갈 만큼 줄인다  '[개념서] 6 다각형과 정다각형~대각선' → '개념서 6'
-function shortBook(s: string | null) {
-  if (!s) return null
-  const m = s.match(/^\[([^\]]+)\]\s*([0-9]+)?/)
-  if (m) return `${m[1]}${m[2] ? ' ' + m[2] : ''}`
-  return s.length > 12 ? s.slice(0, 12) + '…' : s
-}
-
 export async function GET(req: Request) {
   const deny = await denyIfNotStaff(req)
   if (deny) return deny
@@ -112,19 +104,21 @@ export async function GET(req: Request) {
     if (s.today_textbook_name || n?.textbook_submitted) {
       push(s.student_id, date, {
         kind: 'book',
-        label: shortBook(s.today_textbook_name) ?? '교재',
+        // 수업일지의 '과제 달성률' (숙제를 얼마나 해왔나). 교재 진도나 교재 점수가 아니다.
+        label: '과제 달성',
         value: n?.achievement_pct ?? null,
         unit: '%',
-        title: s.today_textbook_name,
+        title: s.today_textbook_name ? `과제 달성률 · ${s.today_textbook_name}` : '과제 달성률',
       })
     }
 
     if (n?.worksheet_submitted || n?.worksheet_score != null) {
       push(s.student_id, date, {
         kind: 'sheet',
-        label: n?.worksheet_unit ? `학습지 ${n.worksheet_unit}` : '학습지',
+        // 수업일지의 '과제 성취도' (해온 과제를 얼마나 맞았나). 학습지관리의 레벨학습지 점수가 아니다.
+        label: n?.worksheet_unit ? `과제 성취 ${n.worksheet_unit}` : '과제 성취',
         value: n?.worksheet_score ?? null,
-        unit: '점',
+        unit: '%',
       })
     }
 
