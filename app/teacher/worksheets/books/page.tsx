@@ -20,6 +20,7 @@ const INFO: Record<string, { color: string; desc: string }> = {
   '베이직쎈': { color: '#0ea5e9', desc: '기본·핵심유형 / 학교시험 기출' },
   '풍산자 필수유형': { color: '#16a34a', desc: '실력을 기르는 유형 · 내신 서술형 · 고득점 도약' },
   '풍산자 라이트유형': { color: '#65a30d', desc: '기본을 다지는 유형 · 실력을 높이는 연습 문제' },
+  '유형만렙': { color: '#2563eb', desc: 'A 개념확인 · B 유형 · 유형점검 · C 실력향상' },
 }
 
 export default function BooksPage() {
