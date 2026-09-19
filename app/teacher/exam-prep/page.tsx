@@ -993,7 +993,7 @@ export default function TeacherExamPrepPage() {
                   background: parseInt(inputScore) >= 90 ? '#EAF3DE' : parseInt(inputScore) >= 70 ? '#FAEEDA' : '#fee2e2',
                   color: parseInt(inputScore) >= 90 ? '#27500A' : parseInt(inputScore) >= 70 ? '#633806' : '#991b1b'
                 }}>
-                {parseInt(inputScore) >= 90 ? '우수 👍' : parseInt(inputScore) >= 70 ? '양호' : '추가 학습 필요'}
+                {parseInt(inputScore) >= 90 ? '우수' : parseInt(inputScore) >= 70 ? '양호' : '추가 학습 필요'}
               </div>
             )}
             <div className="flex gap-2">

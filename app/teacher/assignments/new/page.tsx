@@ -79,7 +79,7 @@ export default function NewAssignmentPage() {
         {/* 영상과제 */}
         <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${videoOn?'border-purple-200':'border-gray-100'}`}>
           <label className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer ${videoOn?'bg-purple-50':'bg-gray-50'}`}>
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-xl shrink-0">▶</div>
+            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-xl shrink-0"><i className="ti ti-player-play" /></div>
             <div className="flex-1"><p className="text-sm font-bold text-gray-700">영상과제</p><p className="text-[11px] text-gray-400">유튜브 등 영상 링크</p></div>
             <div className={`w-12 h-6 rounded-full relative transition-colors duration-200 ${videoOn?'bg-purple-500':'bg-gray-300'}`}>
               <input type="checkbox" checked={videoOn} onChange={()=>setVideoOn(v=>!v)} className="sr-only" />
@@ -103,7 +103,7 @@ export default function NewAssignmentPage() {
         {/* 교재과제 */}
         <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${textbookOn?'border-blue-200':'border-gray-100'}`}>
           <label className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer ${textbookOn?'bg-blue-50':'bg-gray-50'}`}>
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-xl shrink-0">📖</div>
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-xl shrink-0"><i className="ti ti-book" /></div>
             <div className="flex-1"><p className="text-sm font-bold text-gray-700">교재과제</p><p className="text-[11px] text-gray-400">교재명·페이지·문제 번호</p></div>
             <div className={`w-12 h-6 rounded-full relative transition-colors duration-200 ${textbookOn?'bg-blue-500':'bg-gray-300'}`}>
               <input type="checkbox" checked={textbookOn} onChange={()=>setTextbookOn(v=>!v)} className="sr-only" />
@@ -133,7 +133,7 @@ export default function NewAssignmentPage() {
         {/* 학습지과제 */}
         <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${worksheetOn?'border-green-200':'border-gray-100'}`}>
           <label className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer ${worksheetOn?'bg-green-50':'bg-gray-50'}`}>
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center text-xl shrink-0">📝</div>
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center text-xl shrink-0"><i className="ti ti-file-text" /></div>
             <div className="flex-1"><p className="text-sm font-bold text-gray-700">학습지과제</p><p className="text-[11px] text-gray-400">학습지 파일 배부</p></div>
             <div className={`w-12 h-6 rounded-full relative transition-colors duration-200 ${worksheetOn?'bg-green-500':'bg-gray-300'}`}>
               <input type="checkbox" checked={worksheetOn} onChange={()=>setWorksheetOn(v=>!v)} className="sr-only" />
@@ -144,7 +144,7 @@ export default function NewAssignmentPage() {
             <div className="px-4 py-4">
               <label className="block text-xs font-bold text-gray-700 mb-2">학습지 파일 업로드</label>
               <div className="border-2 border-dashed border-gray-200 rounded-xl py-8 flex flex-col items-center gap-2 bg-gray-50">
-                <span className="text-3xl">📤</span>
+                <i className="ti ti-upload" style={{ fontSize: 30 }} />
                 <p className="text-sm text-gray-500 font-medium">클릭하여 파일 선택</p>
                 <p className="text-xs text-gray-400">PDF, HWP · 최대 20MB</p>
               </div>
@@ -154,7 +154,7 @@ export default function NewAssignmentPage() {
 
         {/* 제출 버튼 */}
         <button onClick={handleSubmit} disabled={submitting} className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98] shadow-xl shadow-blue-200 disabled:opacity-50">
-          {submitting?<><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />등록 중...</>:<>📬 과제 배정하기</>}
+          {submitting?<><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />등록 중...</>:<><i className="ti ti-send align-[-0.125em]" /> 과제 배정하기</>}
         </button>
 
       </div>

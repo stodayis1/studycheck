@@ -93,7 +93,7 @@ export default function SettingsPage() {
 
       setShowAddModal(false)
       setNewName(''); setNewLoginId(''); setNewPassword(''); setNewRole('teacher')
-      showToast('✅ 계정이 추가됐어요!')
+      showToast('계정이 추가됐어요!')
       fetchProfiles()
     } catch (err: any) {
       setAddError('계정 생성 중 오류가 발생했어요: ' + (err.message ?? ''))
@@ -111,7 +111,7 @@ export default function SettingsPage() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
-      if (!token) { showToast('❌ 로그인 정보를 확인할 수 없어요. 다시 로그인 후 시도해주세요.'); return }
+      if (!token) { showToast('로그인 정보를 확인할 수 없어요. 다시 로그인 후 시도해주세요.'); return }
 
       const res = await fetch('/api/delete-account', {
         method: 'POST',
@@ -120,13 +120,13 @@ export default function SettingsPage() {
       })
       const result = await res.json()
       if (!res.ok) {
-        showToast('❌ 삭제 실패: ' + (result.error ?? '알 수 없는 오류'))
+        showToast('삭제 실패: ' + (result.error ?? '알 수 없는 오류'))
         return
       }
-      showToast('✅ 계정이 삭제됐어요')
+      showToast('계정이 삭제됐어요')
       fetchProfiles()
     } catch (err: any) {
-      showToast('❌ 삭제 중 오류가 발생했어요: ' + (err.message ?? ''))
+      showToast('삭제 중 오류가 발생했어요: ' + (err.message ?? ''))
     } finally {
       setDeletingId(null)
     }
@@ -146,7 +146,7 @@ export default function SettingsPage() {
     }
     setEditSaving(false)
     setEditProfile(null)
-    showToast('✅ 수정됐어요!')
+    showToast('수정됐어요!')
     fetchProfiles()
   }
 
@@ -178,7 +178,7 @@ export default function SettingsPage() {
       <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
         <Header title="설정" subtitle="시스템 및 계정 관리" />
         <div className="px-4 py-12 max-w-2xl mx-auto text-center">
-          <p className="text-3xl mb-3">🔒</p>
+          <p className="mb-3"><i className="ti ti-lock" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
           <p className="text-sm text-gray-500">이 페이지는 원장님만 볼 수 있어요.</p>
         </div>
       </div>
@@ -396,7 +396,7 @@ export default function SettingsPage() {
                   placeholder="변경하지 않으면 비워두세요"
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#9FE1CB]" />
                 {editPassword && (
-                  <p className="text-[10px] text-orange-500 mt-1">⚠ 비밀번호 변경은 Supabase 대시보드에서 직접 해주세요.</p>
+                  <p className="text-[10px] text-orange-500 mt-1"><i className="ti ti-alert-triangle align-[-0.125em]" /> 비밀번호 변경은 Supabase 대시보드에서 직접 해주세요.</p>
                 )}
               </div>
 

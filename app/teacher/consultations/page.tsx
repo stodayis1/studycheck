@@ -179,7 +179,7 @@ export default function ConsultationsPage() {
         {overdueStudents.length > 0 && (
           <div className="rounded-2xl px-4 py-3" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
             <div className="flex items-center gap-2 mb-1">
-              <span style={{ fontSize: 16 }}>📞</span>
+              <i className="ti ti-phone" style={{ fontSize: 16 }} />
               <p className="text-sm font-bold" style={{ color: '#9a3412' }}>
                 상담 필요 학생 {overdueStudents.length}명 · 마지막 상담 후 {OVERDUE_DAYS}일 초과
               </p>

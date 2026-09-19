@@ -521,7 +521,7 @@ export default function TeacherCurriculumPage() {
         return (
           <div className="flex items-center gap-1 shrink-0">
             <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ background: '#FEE2E2', color: '#991B1B' }}>
-              🗑 {t.delete_requested_by} 삭제요청
+              <i className="ti ti-trash align-[-0.125em]" /> {t.delete_requested_by} 삭제요청
             </span>
             <button onClick={() => handleDeleteTB(t.id)}
               className="text-[10px] text-red-500 hover:text-red-700 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">
@@ -567,7 +567,7 @@ export default function TeacherCurriculumPage() {
               {canManageAllStudents() && (
                 <button onClick={() => setShowCatalogManager(true)}
                   className="px-3 py-1.5 bg-gray-700 text-white text-xs font-semibold rounded-lg">
-                  📋 교재 목록
+                  <i className="ti ti-clipboard-list align-[-0.125em]" /> 교재 목록
                 </button>
               )}
               <button onClick={() => setShowTBModal(true)}
@@ -584,13 +584,13 @@ export default function TeacherCurriculumPage() {
         {/* 메인 탭 */}
         <div className="flex gap-2">
           {[
-            { key: 'progress', label: '📊 진도표' },
-            { key: 'textbook', label: '📚 교재배정' },
+            { key: 'progress', label: '진도표', icon: 'ti-chart-bar' },
+            { key: 'textbook', label: '교재배정', icon: 'ti-books' },
           ].map((t) => (
             <button key={t.key} onClick={() => setProgressTab(t.key as typeof progressTab)}
               className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
                 progressTab === t.key ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
-              {t.label}
+              <i className={`ti ${t.icon} mr-1 align-[-0.125em]`} />{t.label}
             </button>
           ))}
         </div>
@@ -720,7 +720,7 @@ export default function TeacherCurriculumPage() {
               })}
               {gradeFilteredStudents.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                  <p className="text-3xl mb-3">📊</p>
+                  <p className="mb-3"><i className="ti ti-chart-bar" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
                   <p className="text-sm text-gray-500">
                     {progressSubGrade ? `${progressSubGrade} 과정을 나간 학생이 없어요` : '학생이 없어요'}
                   </p>
@@ -776,7 +776,7 @@ export default function TeacherCurriculumPage() {
                     <p className="text-sm font-bold text-gray-900">{selectedProgressStudent.name} · {selectedProgressStudent.grade}</p>
                   </div>
                   <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                    <p className="text-3xl mb-3">📊</p>
+                    <p className="mb-3"><i className="ti ti-chart-bar" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
                     <p className="text-sm text-gray-500">아직 배정된 교재가 없어서 진도표를 표시할 커리큘럼 학년을 알 수 없어요.<br />교재배정 탭에서 먼저 교재를 배정해주세요.</p>
                   </div>
                 </div>
@@ -977,7 +977,7 @@ export default function TeacherCurriculumPage() {
           </div>
         ) : filteredStudents.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-            <p className="text-3xl mb-3">📚</p>
+            <p className="mb-3"><i className="ti ti-books" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
             <p className="text-sm text-gray-500">학생이 없어요</p>
           </div>
         ) : (
@@ -1119,7 +1119,7 @@ export default function TeacherCurriculumPage() {
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">📚 교재 목록 관리</h3>
+              <h3 className="text-base font-bold text-gray-900"><i className="ti ti-books align-[-0.125em]" /> 교재 목록 관리</h3>
               <button onClick={() => setShowCatalogManager(false)} className="text-gray-400">✕</button>
             </div>
 
@@ -1206,7 +1206,7 @@ export default function TeacherCurriculumPage() {
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">📚 과정 및 교재 배정</h3>
+              <h3 className="text-base font-bold text-gray-900"><i className="ti ti-books align-[-0.125em]" /> 과정 및 교재 배정</h3>
               <button onClick={() => { setShowTBModal(false); setTbMultiMode(false); setTbStudentIds([]); setTbAutostepLevel(null) }} className="text-gray-400">✕</button>
             </div>
 
@@ -1373,7 +1373,7 @@ export default function TeacherCurriculumPage() {
             {isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && (
               AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] ? (
                 <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
-                  <p className="text-xs font-bold text-indigo-800">⚡ 오토스텝 · 하루 진도량(스텝)을 선택하세요</p>
+                  <p className="text-xs font-bold text-indigo-800"><i className="ti ti-bolt align-[-0.125em]" /> 오토스텝 · 하루 진도량(스텝)을 선택하세요</p>
                   <div className="flex gap-2">
                     {[1, 2, 3].map((lvl) => (
                       <button key={lvl} type="button" onClick={() => setTbAutostepLevel(lvl)}
@@ -1408,7 +1408,7 @@ export default function TeacherCurriculumPage() {
             {/* 쎈B 오토스텝 파일럿 - 지금은 윤수지 학생 + 쎈B 교재 배정 시에만 노출 */}
             {isAutostepPilot(tbStudent?.id) && tbName === SSENB_TEXTBOOK_NAME && (
               <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
-                <p className="text-xs font-bold text-indigo-800">⚡ 쎈B 오토스텝 · 소단원 완료 시 자동 배부할 스텝을 선택하세요</p>
+                <p className="text-xs font-bold text-indigo-800"><i className="ti ti-bolt align-[-0.125em]" /> 쎈B 오토스텝 · 소단원 완료 시 자동 배부할 스텝을 선택하세요</p>
                 <div className="flex gap-2 flex-wrap">
                   {([1, 2, 3, 4] as const).map((step) => (
                     <button key={step} type="button" onClick={() => setTbSsenbStep(step)}
@@ -1440,7 +1440,7 @@ export default function TeacherCurriculumPage() {
                   !!AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] && tbAutostepLevel == null) ||
                 (isAutostepPilot(tbStudent?.id) && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep == null)}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-              {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : (tbMultiMode ? `📚 ${tbStudentIds.length}명에게 교재 배정하기` : '📚 교재 배정하기')}
+              {tbAssigning ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />배정 중...</> : <><i className="ti ti-books align-[-0.125em]" /> {tbMultiMode ? `${tbStudentIds.length}명에게 교재 배정하기` : '교재 배정하기'}</>}
             </button>
           </div>
         </div>

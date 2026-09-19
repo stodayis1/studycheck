@@ -176,13 +176,13 @@ export default function TeacherAnnouncementsPage() {
             </div>
           ) : items.filter((a) => a.is_active).length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-              <p className="text-3xl mb-3">📢</p>
+              <p className="mb-3"><i className="ti ti-speakerphone" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
               <p className="text-sm text-gray-500">등록된 공지사항이 없어요</p>
             </div>
           ) : (
             items.filter((a) => a.is_active).map((a) => (
               <div key={a.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                <p className="text-sm font-bold text-gray-900">{a.is_important && '⭐ '}{a.title}</p>
+                <p className="text-sm font-bold text-gray-900">{a.is_important && <i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} />}{a.title}</p>
                 <div className="text-xs text-gray-600 mt-1.5" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
                 <p className="text-[10px] text-gray-400 mt-2">{fmtDate(a.created_at)}</p>
               </div>
@@ -215,7 +215,7 @@ export default function TeacherAnnouncementsPage() {
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
 
             {/* 꾸미기 툴바 - 진하기/크기/폰트/색상 모두 "먼저 글자를 드래그해서 선택한 다음" 눌러야 그 부분에만 적용됨 */}
-            <p className="text-[10px] text-gray-400 -mb-1.5">💡 꾸밀 글자를 먼저 드래그해서 선택한 다음 아래 버튼을 눌러주세요</p>
+            <p className="text-[10px] text-gray-400 -mb-1.5"><i className="ti ti-bulb align-[-0.125em]" /> 꾸밀 글자를 먼저 드래그해서 선택한 다음 아래 버튼을 눌러주세요</p>
             <div className="space-y-2 bg-gray-50 rounded-xl p-2.5">
               {/* 굵기 */}
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -260,10 +260,10 @@ export default function TeacherAnnouncementsPage() {
               <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-gray-200">
                 <button type="button" onClick={() => setShowEmojiPicker((v) => !v)}
                   className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0', showEmojiPicker ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200')}>
-                  😊 이모지
+                  <i className="ti ti-mood-smile align-[-0.125em]" /> 이모지
                 </button>
                 <label className={cx('text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 cursor-pointer', uploadingImage ? 'bg-gray-200 text-gray-400' : 'bg-white text-gray-600 border border-gray-200')}>
-                  {uploadingImage ? '업로드 중...' : '🖼 사진'}
+                  {uploadingImage ? '업로드 중...' : <><i className="ti ti-photo align-[-0.125em]" /> 사진</>}
                   <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
                 </label>
               </div>
@@ -302,7 +302,7 @@ export default function TeacherAnnouncementsPage() {
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={isImportant} onChange={(e) => setIsImportant(e.target.checked)}
                 className="w-4 h-4 accent-orange-500" />
-              <span className="text-xs font-bold text-gray-700">⭐ 중요 공지로 표시</span>
+              <span className="text-xs font-bold text-gray-700"><i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} /> 중요 공지로 표시</span>
               <span className="text-[10px] text-gray-400">(학부모/학생/강사 화면 상단에 우선 노출돼요)</span>
             </label>
             <div className="flex gap-2">
@@ -323,7 +323,7 @@ export default function TeacherAnnouncementsPage() {
           </div>
         ) : items.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-            <p className="text-3xl mb-3">📢</p>
+            <p className="mb-3"><i className="ti ti-speakerphone" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
             <p className="text-sm text-gray-500">등록된 공지사항이 없어요</p>
           </div>
         ) : (
@@ -348,8 +348,8 @@ export default function TeacherAnnouncementsPage() {
                       className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-all">
                       <span className="w-8 shrink-0 text-[11px] text-gray-400">{items.length - idx}</span>
                       <span className="flex-1 min-w-0 flex items-center gap-1.5">
-                        {a.is_important && <span className="shrink-0">⭐</span>}
-                        {hasImage && <span className="shrink-0 text-xs">🖼</span>}
+                        {a.is_important && <i className="ti ti-star-filled shrink-0" style={{ color: '#f59e0b' }} />}
+                        {hasImage && <i className="ti ti-photo shrink-0 text-xs text-gray-400" />}
                         <span className="text-sm font-semibold text-gray-800 truncate">{a.title}</span>
                       </span>
                       <span className="hidden sm:block w-20 shrink-0 text-center text-[11px] text-gray-400">{a.created_by ?? '-'}</span>

@@ -143,7 +143,7 @@ export default function ImportRecordsPage() {
     }
 
     setSaving(false)
-    showToast(`✅ ${toSave.length}건 저장 완료!`)
+    showToast(`${toSave.length}건 저장 완료!`)
     setParsed([])
     setImage(null)
     setImagePreview(null)
@@ -238,7 +238,7 @@ export default function ImportRecordsPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-xs text-orange-500 mb-2">⚠ 학생을 찾지 못했어요. 직접 선택해주세요.</p>
+                  <p className="text-xs text-orange-500 mb-2"><i className="ti ti-alert-triangle align-[-0.125em]" /> 학생을 찾지 못했어요. 직접 선택해주세요.</p>
                   <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
                     {students.map(s => (
                       <button key={s.id} onClick={() => setMatchedStudent(s)}

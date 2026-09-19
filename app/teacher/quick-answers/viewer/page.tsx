@@ -113,9 +113,9 @@ function ViewerInner() {
         <div className="shrink-0 px-3 py-3 flex items-center justify-between gap-2" style={{ background: '#1f2937' }}>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setPageNum((p) => Math.max(1, p - 1))} disabled={pageNum <= 1}
-              className="px-3 py-2 rounded-lg text-xs font-bold" style={{ background: pageNum <= 1 ? '#374151' : '#4B5563', color: pageNum <= 1 ? '#6b7280' : '#fff' }}>◀ 이전</button>
+              className="px-3 py-2 rounded-lg text-xs font-bold" style={{ background: pageNum <= 1 ? '#374151' : '#4B5563', color: pageNum <= 1 ? '#6b7280' : '#fff' }}><i className="ti ti-chevron-left align-[-0.125em]" /> 이전</button>
             <button onClick={() => setPageNum((p) => Math.min(numPages, p + 1))} disabled={pageNum >= numPages}
-              className="px-3 py-2 rounded-lg text-xs font-bold" style={{ background: pageNum >= numPages ? '#374151' : '#4B5563', color: pageNum >= numPages ? '#6b7280' : '#fff' }}>다음 ▶</button>
+              className="px-3 py-2 rounded-lg text-xs font-bold" style={{ background: pageNum >= numPages ? '#374151' : '#4B5563', color: pageNum >= numPages ? '#6b7280' : '#fff' }}>다음 <i className="ti ti-chevron-right align-[-0.125em]" /></button>
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setZoomIdx((i) => Math.max(0, i - 1))} disabled={zoomIdx === 0}

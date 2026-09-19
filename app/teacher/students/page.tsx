@@ -341,7 +341,7 @@ export default function TeacherStudentsPage() {
           <div className="flex gap-2">
             <button onClick={() => fileInputRef.current?.click()}
               className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg">
-              📥 엑셀 업로드
+              <i className="ti ti-table-import align-[-0.125em]" /> 엑셀 업로드
             </button>
             <button onClick={() => { setNewStudent(EMPTY_STUDENT); setNewSchedules([]); setShowAddModal(true) }}
               className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
@@ -360,14 +360,14 @@ export default function TeacherStudentsPage() {
           <div className="bg-white rounded-2xl border border-green-200 shadow-sm overflow-hidden">
             <div className="px-4 py-3 bg-green-50 border-b border-green-100 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-green-800">📥 엑셀 업로드 미리보기</h3>
+                <h3 className="text-sm font-bold text-green-800"><i className="ti ti-table-import align-[-0.125em]" /> 엑셀 업로드 미리보기</h3>
                 <p className="text-xs text-green-600 mt-0.5">재원중인 학생 {importedStudents.length}명 확인됨</p>
               </div>
               <button onClick={() => setShowImport(false)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
             {importDone ? (
               <div className="p-6 text-center">
-                <p className="text-3xl mb-2">🎉</p>
+                <p className="mb-2"><i className="ti ti-confetti" style={{ fontSize: 32, color: '#16a34a' }} /></p>
                 <p className="text-base font-bold text-green-700">등록 완료!</p>
                 <p className="text-sm text-gray-500 mt-1">
                   <span className="text-green-600 font-bold">{importResult.added}명</span> 등록 ·{' '}
@@ -409,7 +409,7 @@ export default function TeacherStudentsPage() {
                     className="w-full py-3 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                     {importing
                       ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />등록 중...</>
-                      : <>✅ {importedStudents.length}명 일괄 등록하기</>}
+                      : <><i className="ti ti-circle-check align-[-0.125em]" /> {importedStudents.length}명 일괄 등록하기</>}
                   </button>
                 </div>
               </>
@@ -466,7 +466,7 @@ export default function TeacherStudentsPage() {
                         <button onClick={() => student.id && handleAckNew(student.id)}
                           title="눌러서 확인 처리"
                           className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                          🆕 NEW
+                          <i className="ti ti-sparkles align-[-0.125em]" /> NEW
                         </button>
                       )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
@@ -483,7 +483,7 @@ export default function TeacherStudentsPage() {
                             return next
                           })}
                           className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-50 text-pink-600">
-                          📋 상담메모
+                          <i className="ti ti-clipboard-list align-[-0.125em]" /> 상담메모
                         </button>
                       )}
                     </div>
@@ -576,7 +576,7 @@ export default function TeacherStudentsPage() {
             {/* W·I·S·E Step */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">
-                🎯 W·I·S·E Step
+                <i className="ti ti-target align-[-0.125em]" /> W·I·S·E Step
                 <span className="text-gray-400 font-normal ml-1">(현재 학습 단계)</span>
               </label>
               <div className="grid grid-cols-4 gap-2">
@@ -725,7 +725,7 @@ export default function TeacherStudentsPage() {
             {/* W·I·S·E Step */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">
-                🎯 W·I·S·E Step
+                <i className="ti ti-target align-[-0.125em]" /> W·I·S·E Step
                 <span className="text-gray-400 font-normal ml-1">(현재 학습 단계)</span>
               </label>
               <div className="grid grid-cols-4 gap-2">

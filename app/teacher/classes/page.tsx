@@ -125,7 +125,7 @@ export default function TeacherClassesPage() {
           </div>
         ) : times.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-            <p className="text-3xl mb-3">📅</p>
+            <p className="mb-3"><i className="ti ti-calendar" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
             <p className="text-sm font-semibold text-gray-600">{selectedDay}요일 수업이 없어요</p>
           </div>
         ) : (

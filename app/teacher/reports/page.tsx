@@ -862,7 +862,7 @@ export default function TeacherReportsPage() {
                 {mData.attendanceDetail?.some((a: any) => a.status === '미입력') && (
                   <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#9a3412', marginBottom: 4 }}>
-                      ⚠ 학습일지 미입력 {mData.attendanceDetail.filter((a: any) => a.status === '미입력').length}건
+                      <i className="ti ti-alert-triangle align-[-0.125em]" /> 학습일지 미입력 {mData.attendanceDetail.filter((a: any) => a.status === '미입력').length}건
                     </div>
                     <div style={{ fontSize: 11, color: '#c2410c' }}>
                       {mData.attendanceDetail.filter((a: any) => a.status === '미입력')
@@ -1176,7 +1176,7 @@ export default function TeacherReportsPage() {
             {gData && !gLoading && (
               gData.coreTests.length === 0 && gData.unitStats.length === 0 ? (
                 <div className="rounded-2xl p-8 text-center" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
-                  <p className="text-3xl mb-2">📋</p>
+                  <p className="mb-2"><i className="ti ti-clipboard-list" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
                   <p className="text-sm text-gray-400">아직 코어테스트나 학습지 점수 기록이 없어요</p>
                 </div>
               ) : (
@@ -1431,7 +1431,7 @@ export default function TeacherReportsPage() {
                           <div key={en.studentId} className="flex items-center gap-3 rounded-xl px-3 py-2"
                             style={en.studentId === rankFocusStudentId ? { background: '#FAECE7' } : { background: en.rank <= 3 ? '#f7f8fa' : 'transparent' }}>
                             <div className="text-sm font-bold" style={{ width: 28, flexShrink: 0, color: en.rank === 1 ? '#D85A30' : en.rank <= 3 ? '#0f3460' : '#9ca3af' }}>
-                              {en.rank === 1 ? '🥇' : en.rank === 2 ? '🥈' : en.rank === 3 ? '🥉' : en.rank}
+                              {en.rank <= 3 ? <i className="ti ti-medal" style={{ fontSize: 17, color: en.rank === 1 ? '#d4a017' : en.rank === 2 ? '#9ca3af' : '#b87333' }} /> : en.rank}
                             </div>
                             <div className="text-sm font-medium flex-1" style={{ color: '#374151' }}>{en.name}</div>
                             <div className="text-xs text-gray-400">{en.score}/{en.total}</div>
@@ -1503,7 +1503,7 @@ export default function TeacherReportsPage() {
                 <button onClick={() => setSelectedTeacher(null)}
                   className={cx('px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all',
                     selectedTeacher === null ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-500 border-gray-200')}>
-                  👩‍🏫 전체
+                  <i className="ti ti-school align-[-0.125em]" /> 전체
                 </button>
                 {teachers.map((t) => (
                   <button key={t} onClick={() => setSelectedTeacher(t)}
@@ -1973,7 +1973,7 @@ export default function TeacherReportsPage() {
               /* ── 초등 진단표 ── */
               studentUnits.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-3xl mb-2">📋</p>
+                  <p className="mb-2"><i className="ti ti-clipboard-list" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
                   <p className="text-sm text-gray-400">아직 과제 기록이 없어요</p>
                 </div>
               ) : (
@@ -2061,7 +2061,7 @@ export default function TeacherReportsPage() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-            <p className="text-4xl mb-3">📊</p>
+            <p className="mb-3"><i className="ti ti-chart-bar" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
             <p className="text-sm font-semibold text-gray-600">학생을 선택하면 보고서가 나와요</p>
             <p className="text-xs text-gray-400 mt-1">초등: 레벨별 진단표 · 중등: 단원/차시별 1차/오답유사 점수</p>
           </div>

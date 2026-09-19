@@ -243,7 +243,7 @@ export default function AdminPage() {
           if (unassigned.length === 0) return null
           return (
             <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-              <span className="text-red-500 text-lg shrink-0">⚠️</span>
+              <i className="ti ti-alert-triangle text-red-500 text-lg shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-bold text-red-700">담당강사 미배정 학생 {unassigned.length}명</p>
                 <p className="text-xs text-red-400 mt-0.5">
@@ -261,7 +261,7 @@ export default function AdminPage() {
           return (
             <div className="bg-[#FFF7ED] border border-[#FDBA74] rounded-2xl px-4 py-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[#9a3412] text-lg shrink-0">📋</span>
+                <i className="ti ti-clipboard-list text-[#9a3412] text-lg shrink-0" />
                 <p className="text-sm font-bold text-[#9a3412]">
                   첫수업 알림장 현황 (지난주~이번주, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
                 </p>
@@ -272,7 +272,7 @@ export default function AdminPage() {
                     className={cx('flex items-center justify-between rounded-xl px-3 py-2 text-xs',
                       c.hasFeedback ? 'bg-white/60 text-gray-500' : 'bg-white text-[#9a3412] font-bold')}>
                     <span className="flex items-center gap-2">
-                      <span>{c.hasFeedback ? '✅' : '⚠️'}</span>
+                      <span>{c.hasFeedback ? <i className="ti ti-circle-check" style={{ color: '#16a34a' }} /> : <i className="ti ti-alert-triangle" style={{ color: '#dc2626' }} />}</span>
                       <span>{c.student.name}</span>
                       <span className="font-normal text-gray-400">{c.student.school ?? ''} · {c.student.teacher_name ?? '미배정'}</span>
                     </span>

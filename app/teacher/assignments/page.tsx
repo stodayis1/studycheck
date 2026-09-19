@@ -621,7 +621,7 @@ export default function TeacherAssignmentsPage() {
       current_level: nextLevel, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
-    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리 → ${nextLevel}레벨 새로 배정했어요`)
+    flashToast(`${name} ${w.current_level}레벨 완료 처리 → ${nextLevel}레벨 새로 배정했어요`)
   }
 
   // 오답유사 학습지 배정 (기존엔 80점 미만이면 자동 배정됐지만, 이제 선생님이 직접 선택)
@@ -635,8 +635,8 @@ export default function TeacherAssignmentsPage() {
     })
     fetchData()
     flashToast(needsRetry(w)
-      ? `✅ ${name} 오답유사 학습지 배정 → 채점하면 ${w.current_level}레벨 재도전이 자동으로 배정돼요`
-      : `✅ ${name} ${w.current_level}레벨 완료 처리 → 오답유사 학습지 새로 배정했어요`)
+      ? `${name} 오답유사 학습지 배정 → 채점하면 ${w.current_level}레벨 재도전이 자동으로 배정돼요`
+      : `${name} ${w.current_level}레벨 완료 처리 → 오답유사 학습지 새로 배정했어요`)
   }
 
   async function handleDelete(id: string) {
@@ -695,7 +695,7 @@ export default function TeacherAssignmentsPage() {
     const name = getStudentName(w.student_id)
     if (!(await closeWorksheet(w, action))) return
     fetchData()
-    flashToast(`✅ ${name} ${w.current_level}레벨 완료 처리했어요 (목록에서 사라진 게 아니라 "최근 완료"로 이동)`)
+    flashToast(`${name} ${w.current_level}레벨 완료 처리했어요 (목록에서 사라진 게 아니라 "최근 완료"로 이동)`)
   }
 
   async function handleRetry(w: StudentWorksheet, action: 'retry' | 'auto_retry' = 'retry') {
@@ -708,8 +708,8 @@ export default function TeacherAssignmentsPage() {
     })
     fetchData()
     flashToast(action === 'auto_retry'
-      ? `✅ ${name} 오답유사 채점 완료 → ${w.current_level}레벨 재도전 학습지를 자동으로 배정했어요`
-      : `✅ ${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
+      ? `${name} 오답유사 채점 완료 → ${w.current_level}레벨 재도전 학습지를 자동으로 배정했어요`
+      : `${name} ${w.current_level}레벨 완료 처리 → 같은 레벨 재도전 학습지 새로 배정했어요`)
   }
 
   // 레벨 낮춰 재도전: 혼자 힘으로는 그 레벨을 못 넘는 학생용. 단원은 반드시 통과해야 하지만
@@ -728,7 +728,7 @@ export default function TeacherAssignmentsPage() {
       current_level: lower, status: 'assigned', worksheet_type: 'main',
     })
     fetchData()
-    flashToast(`✅ ${name} ${w.current_level}레벨 → ${lower}레벨로 낮춰서 같은 단원 재도전 배정했어요`)
+    flashToast(`${name} ${w.current_level}레벨 → ${lower}레벨로 낮춰서 같은 단원 재도전 배정했어요`)
   }
 
   // 70점 미만 예외 처리: 원장은 사유를 남기고 바로 처리, 강사는 원장에게 승인 요청
@@ -749,7 +749,7 @@ export default function TeacherAssignmentsPage() {
       if (overrideAction === 'levelup') await handleLevelUp(overrideWS, 'override_levelup')
       else await handleComplete(overrideWS, 'override_complete')
     } else {
-      flashToast(`📨 원장님께 승인 요청을 보냈어요 (${getStudentName(overrideWS.student_id)})`)
+      flashToast(`원장님께 승인 요청을 보냈어요 (${getStudentName(overrideWS.student_id)})`)
       fetchData()
     }
     setOverrideSaving(false); setOverrideWS(null); setOverrideReason(''); setShowScoreModal(false)
@@ -787,7 +787,7 @@ export default function TeacherAssignmentsPage() {
     })
     if (error) { alert('배정 실패: ' + error.message); return }
     fetchData()
-    flashToast(`✅ ${getStudentName(last.student_id)} ${last.unit} ${level}레벨 재도전 배정했어요`)
+    flashToast(`${getStudentName(last.student_id)} ${last.unit} ${level}레벨 재도전 배정했어요`)
   }
 
   async function loadActionLogs() {
@@ -812,7 +812,7 @@ export default function TeacherAssignmentsPage() {
     if (!confirm('되돌릴까요? 이 학습지를 다시 "결과대기" 상태로 되돌립니다. (그 사이 새로 배정된 학습지가 있다면 목록에서 따로 삭제해주세요)')) return
     await supabase.from('student_worksheets').update({ status: 'scored', updated_at: new Date().toISOString(), last_action: 'revert' }).eq('id', w.id)
     fetchData()
-    flashToast(`↩️ ${getStudentName(w.student_id)} ${w.current_level}레벨을 되돌렸어요`)
+    flashToast(`${getStudentName(w.student_id)} ${w.current_level}레벨을 되돌렸어요`)
   }
 
   async function handleTBAssign() {
@@ -1041,7 +1041,7 @@ export default function TeacherAssignmentsPage() {
                           <button onClick={() => handleRevertToScored(w)}
                             className="px-2.5 py-1 text-[10px] font-semibold rounded-lg whitespace-nowrap shrink-0"
                             style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>
-                            ↩️ 되돌리기
+                            <i className="ti ti-arrow-back-up align-[-0.125em]" /> 되돌리기
                           </button>
                         </div>
                       ))}
@@ -1380,7 +1380,7 @@ export default function TeacherAssignmentsPage() {
               return (
                 <div key={a.id} className="rounded-2xl px-4 py-3 flex items-center gap-3"
                   style={{ background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
-                  <span style={{ fontSize: 18 }}>⚡</span>
+                  <i className="ti ti-bolt" style={{ fontSize: 18, color: '#4338CA' }} />
                   <div className="flex-1">
                     <p className="text-sm font-bold" style={{ color: '#3730A3' }}>
                       {student?.name ?? '학생'} · 오토스텝 자동 숙제 알림

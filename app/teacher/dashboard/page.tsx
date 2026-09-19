@@ -312,7 +312,7 @@ export default function TeacherDashboardPage() {
             <div className="divide-y" style={{ borderColor: '#F5C4B360' }}>
               {announcements.map((a) => (
                 <Link key={a.id} href="/teacher/announcements" className="block px-4 py-2.5">
-                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && '⭐ '}{a.title}</p>
+                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && <i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} />}{a.title}</p>
                   <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
                 </Link>
               ))}
@@ -324,7 +324,7 @@ export default function TeacherDashboardPage() {
         {handoffNotes.length > 0 && (
           <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #FDBA74', background: '#FFF7ED' }}>
             <div className="px-4 py-2.5 flex items-center gap-1.5" style={{ background: '#FDBA74' }}>
-              <span style={{ fontSize: 14 }}>📌</span>
+              <i className="ti ti-pin" style={{ fontSize: 14 }} />
               <span className="text-xs font-bold" style={{ color: '#7c2d12' }}>학생 전달사항 {handoffNotes.length}건</span>
             </div>
             <div className="divide-y" style={{ borderColor: '#FDBA7440' }}>
@@ -389,7 +389,7 @@ export default function TeacherDashboardPage() {
           return (
             <div className="rounded-2xl px-4 py-3" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
               <div className="flex items-center gap-2 mb-2">
-                <span style={{ fontSize: 16 }}>📋</span>
+                <i className="ti ti-clipboard-list" style={{ fontSize: 16 }} />
                 <p className="text-sm font-bold" style={{ color: '#9a3412' }}>
                   첫수업 알림장 현황 (지난주~이번주, {missing.length}명 미작성 / 전체 {firstClassChecks.length}명)
                 </p>
@@ -404,7 +404,7 @@ export default function TeacherDashboardPage() {
                       fontWeight: c.hasFeedback ? 400 : 700,
                     }}>
                     <span className="flex items-center gap-2">
-                      <span>{c.hasFeedback ? '✅' : '⚠️'}</span>
+                      <span>{c.hasFeedback ? <i className="ti ti-circle-check" style={{ color: '#16a34a' }} /> : <i className="ti ti-alert-triangle" style={{ color: '#dc2626' }} />}</span>
                       <Link href={`/teacher/learning-notes?student=${c.id}`} className="underline underline-offset-2 hover:opacity-70">
                         {c.name}
                       </Link>

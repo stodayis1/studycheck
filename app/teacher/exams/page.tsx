@@ -1272,7 +1272,7 @@ export default function TeacherExamsPage() {
                               </>
                             ) : (
                               <button onClick={() => setCoreScoreDates(prev => ({ ...prev, [s.id]: coreDate }))}
-                                className="text-[10px] text-gray-400 hover:text-gray-600">📅 이 학생만 다른 날짜였어요</button>
+                                className="text-[10px] text-gray-400 hover:text-gray-600"><i className="ti ti-calendar align-[-0.125em]" /> 이 학생만 다른 날짜였어요</button>
                             )}
                           </div>
                         </div>

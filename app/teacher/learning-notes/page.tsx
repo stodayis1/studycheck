@@ -1648,13 +1648,13 @@ export default function TeacherLearningNotesPage() {
       {/* 탭 */}
       <div className="flex gap-2 px-4 pt-4 overflow-x-auto pb-1">
         {[
-          { key: 'today', label: '📓 수업일지' },
-          { key: 'schedule', label: '📅 시간표 관리' },
+          { key: 'today', label: '수업일지', icon: 'ti-notebook' },
+          { key: 'schedule', label: '시간표 관리', icon: 'ti-calendar' },
         ].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all whitespace-nowrap',
               tab === t.key ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
-            {t.label}
+            <i className={`ti ${t.icon} mr-1 align-[-0.125em]`} />{t.label}
           </button>
         ))}
       </div>
@@ -1674,7 +1674,7 @@ export default function TeacherLearningNotesPage() {
               {todayStudents.length > 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-                    <span className="text-sm font-bold text-gray-800">📅 오늘 ({todayDay}요일) 시간표</span>
+                    <span className="text-sm font-bold text-gray-800"><i className="ti ti-calendar align-[-0.125em]" /> 오늘 ({todayDay}요일) 시간표</span>
                     <span className="text-xs text-gray-400">{todayStudents.length}명</span>
                   </div>
                   <div className="p-3 overflow-x-auto">
@@ -1788,7 +1788,7 @@ export default function TeacherLearningNotesPage() {
                 <div>
                   <div className="flex items-center justify-between px-1 mb-2">
                     <p className="text-xs font-bold text-gray-800">
-                      📅 오늘 ({todayDay}요일) 수업 {todayStudents.length}명
+                      <i className="ti ti-calendar align-[-0.125em]" /> 오늘 ({todayDay}요일) 수업 {todayStudents.length}명
                       <span className="ml-1.5 font-normal text-gray-400">
                         · 입력완료 {todayStudents.length - missingStudents.length}/{todayStudents.length}
                       </span>
@@ -1843,7 +1843,7 @@ export default function TeacherLearningNotesPage() {
                               {isComplete ? (
                                 <span className="text-[10px] font-bold text-green-600">✓ 작성완료</span>
                               ) : note && (
-                                <span className="text-[10px] font-bold text-orange-500">📝 입력중 (수업내용/과제배부 확인)</span>
+                                <span className="text-[10px] font-bold text-orange-500"><i className="ti ti-pencil align-[-0.125em]" /> 입력중 (수업내용/과제배부 확인)</span>
                               )}
                             </div>
                           </div>
@@ -1852,7 +1852,7 @@ export default function TeacherLearningNotesPage() {
                               <>
                                 <button onClick={() => openFeedbackModal(student)}
                                   className="px-2.5 py-1 text-xs font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg">
-                                  💬 알림장
+                                  <i className="ti ti-message-circle align-[-0.125em]" /> 알림장
                                 </button>
                                 {note && session ? (() => {
                                   const editable = canEditNote(session.session_date, student.id)
@@ -1863,18 +1863,18 @@ export default function TeacherLearningNotesPage() {
                                           disabled={sendingKakao === session.id}
                                           className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
                                           style={{ background: '#FEE500' }}>
-                                          {sendingKakao === session.id ? '보내는 중...' : '💬 카톡 발송'}
+                                          {sendingKakao === session.id ? '보내는 중...' : <><i className="ti ti-send align-[-0.125em]" /> 카톡 발송</>}
                                         </button>
                                       )}
                                       <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
                                         className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
                                           editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>
-                                        {editable ? '수정' : '🔒 수정'}
+                                        {editable ? '수정' : <><i className="ti ti-lock align-[-0.125em]" /> 수정</>}
                                       </button>
                                       <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date, student.id) : alert('수업 당일과 다음 수업일 오후 2시까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
                                         className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
                                           editable ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100 cursor-not-allowed')}>
-                                        {editable ? '삭제' : '🔒 삭제'}
+                                        {editable ? '삭제' : <><i className="ti ti-lock align-[-0.125em]" /> 삭제</>}
                                       </button>
                                     </>
                                   )
@@ -1882,11 +1882,11 @@ export default function TeacherLearningNotesPage() {
                                   <>
                                     <button onClick={() => openNoteModal(student)}
                                       className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
-                                      ✏️ 입력
+                                      <i className="ti ti-pencil align-[-0.125em]" /> 입력
                                     </button>
                                     <button onClick={() => quickMarkAbsent(student)}
                                       className="px-2.5 py-1 text-xs font-semibold rounded-lg text-red-500 bg-red-50 border border-red-100">
-                                      🚫 결석
+                                      <i className="ti ti-user-x align-[-0.125em]" /> 결석
                                     </button>
                                   </>
                                 )}
@@ -1918,7 +1918,7 @@ export default function TeacherLearningNotesPage() {
                               ))}
                               {recentSession?.progress_content && (
                                 <span className="text-[10px] text-blue-500 w-full">
-                                  📖 지난 수업: {recentSession.progress_content}
+                                  <i className="ti ti-book align-[-0.125em]" /> 지난 수업: {recentSession.progress_content}
                                 </span>
                               )}
                             </div>
@@ -1929,7 +1929,7 @@ export default function TeacherLearningNotesPage() {
                         {note && session && (
                           <div className="px-4 py-2.5 flex flex-wrap gap-2">
                             {(session.progress_content || session.today_textbook_name) && (
-                              <span className="text-[10px] text-gray-500">📖 {session.progress_content || session.today_textbook_name}</span>
+                              <span className="text-[10px] text-gray-500"><i className="ti ti-book align-[-0.125em]" /> {session.progress_content || session.today_textbook_name}</span>
                             )}
                             <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
                               note.attendance === '결석' ? 'bg-red-100 text-red-600' :
@@ -1967,9 +1967,9 @@ export default function TeacherLearningNotesPage() {
                                 </span>
                               )
                             })()}
-                            {note.memo && <span className="text-[10px] text-gray-400">📝 {note.memo}</span>}
+                            {note.memo && <span className="text-[10px] text-gray-400"><i className="ti ti-note align-[-0.125em]" /> {note.memo}</span>}
                             {!canEditNote(session.session_date, student.id) && (
-                              <span className="text-[10px] text-gray-300 w-full mt-1">🔒 수정기간 종료 · 관리자 문의</span>
+                              <span className="text-[10px] text-gray-300 w-full mt-1"><i className="ti ti-lock align-[-0.125em]" /> 수정기간 종료 · 관리자 문의</span>
                             )}
                           </div>
                         )}
@@ -2020,12 +2020,12 @@ export default function TeacherLearningNotesPage() {
                           {/* 현재 진도 미리보기 */}
                           {mainTB && (
                             <div className="text-[10px] text-gray-400 truncate">
-                              📚 {mainTB.textbook_type} · {mainTB.textbook_name}
+                              <i className="ti ti-books align-[-0.125em]" /> {mainTB.textbook_type} · {mainTB.textbook_name}
                             </div>
                           )}
                           {recentSession?.progress_content && (
                             <div className="text-[10px] text-blue-400 truncate mt-0.5">
-                              📖 {recentSession.progress_content}
+                              <i className="ti ti-book align-[-0.125em]" /> {recentSession.progress_content}
                             </div>
                           )}
                           {!recentSession && (
@@ -2115,7 +2115,7 @@ export default function TeacherLearningNotesPage() {
 
             {/* 헤더 */}
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">📓 수업일지 입력</h3>
+              <h3 className="text-base font-bold text-gray-900"><i className="ti ti-notebook align-[-0.125em]" /> 수업일지 입력</h3>
               <button onClick={() => setShowNoteModal(false)} className="text-gray-400">✕</button>
             </div>
 
@@ -2141,7 +2141,7 @@ export default function TeacherLearningNotesPage() {
                   const isRecipient = !!currentUser?.name && targets.includes(currentUser.name)
                   return (
                     <div key={n.id} className="flex items-start gap-2">
-                      <span className="shrink-0" style={{ fontSize: 14 }}>📌</span>
+                      <i className="ti ti-pin shrink-0" style={{ fontSize: 14 }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold whitespace-pre-wrap" style={{ color: '#9a3412' }}>{n.content}</p>
                         <p className="text-[10px] mt-0.5" style={{ color: '#c2410c' }}>
@@ -2168,7 +2168,7 @@ export default function TeacherLearningNotesPage() {
                 <button onClick={() => setShowHandoffForm(true)}
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg"
                   style={{ background: '#fff', color: '#9a3412', border: '1px solid #FDBA74' }}>
-                  📌 전달사항 남기기
+                  <i className="ti ti-pin align-[-0.125em]" /> 전달사항 남기기
                 </button>
               ) : (
                 <div className="rounded-xl px-3 py-3 space-y-2" style={{ background: '#FFFBF5', border: '1px solid #FDBA74' }}>
@@ -2467,7 +2467,7 @@ export default function TeacherLearningNotesPage() {
                                           if (groups.length === 0) return null
                                           return (
                                             <div className="px-3 py-2.5 rounded-xl text-[11px] space-y-1" style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#3730a3' }}>
-                                              <p className="font-bold">📘 쎈B에서는 이렇게 나뉘어요 (진도 개념번호 기준)</p>
+                                              <p className="font-bold"><i className="ti ti-book-2 align-[-0.125em]" /> 쎈B에서는 이렇게 나뉘어요 (진도 개념번호 기준)</p>
                                               {groups.map(({ ssenbSubNo, orderRangeText }) => {
                                                 const probs = ssenbProblemMap.filter((p) => p.sub_chapter_no === ssenbSubNo)
                                                 if (probs.length === 0) return null
@@ -2590,7 +2590,7 @@ export default function TeacherLearningNotesPage() {
                 {/* 과제 달성률 - 결석이면 과제 자체가 없는 것이므로 비활성화 */}
                 <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-gray-700">📊 과제 달성률</label>
+                    <label className="text-xs font-bold text-gray-700"><i className="ti ti-chart-bar align-[-0.125em]" /> 과제 달성률</label>
                     <span className="text-sm font-black" style={{ color: noteAchievement >= 85 ? '#16a34a' : noteAchievement >= 50 ? '#712B13' : '#dc2626' }}>
                       {noteAchievement}%
                     </span>
@@ -2610,7 +2610,7 @@ export default function TeacherLearningNotesPage() {
                 {/* 과제 성취도 % - 결석이면 비활성화 */}
                 <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-gray-700">🎯 과제 성취도</label>
+                    <label className="text-xs font-bold text-gray-700"><i className="ti ti-target align-[-0.125em]" /> 과제 성취도</label>
                     <span className="text-sm font-black" style={{ color: noteScorePct >= 85 ? '#16a34a' : noteScorePct >= 70 ? '#712B13' : '#dc2626' }}>
                       {noteScorePct}%
                     </span>
@@ -2898,7 +2898,7 @@ export default function TeacherLearningNotesPage() {
             {noteTab === 'hw' && (
               <div className="space-y-4">
                 <div className="bg-green-50 rounded-xl p-3 text-xs text-green-700">
-                  💡 과제 배부 시 학생 앱 "오늘 과제" 탭에 자동으로 표시됩니다
+                  <i className="ti ti-bulb align-[-0.125em]" /> 과제 배부 시 학생 앱 "오늘 과제" 탭에 자동으로 표시됩니다
                 </div>
 
                 <label className="flex items-center gap-1.5 cursor-pointer">
@@ -2928,7 +2928,7 @@ export default function TeacherLearningNotesPage() {
                   return (
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-2">
-                        📖 교재 과제
+                        <i className="ti ti-book align-[-0.125em]" /> 교재 과제
                         <span className="ml-1.5 text-[10px] font-normal text-gray-400">복수 선택 가능</span>
                       </label>
                       {myTBs.length === 0 ? (
@@ -2999,7 +2999,7 @@ export default function TeacherLearningNotesPage() {
                                   <div className="mx-3 mb-2 px-2.5 py-2 rounded-lg flex items-center gap-2 flex-wrap"
                                     style={{ background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
                                     <span className="text-[10px]" style={{ color: '#4338CA' }}>
-                                      ⚡ 오늘 체크한 개념 매핑: {autostepSuggestion.pageText}
+                                      <i className="ti ti-bolt align-[-0.125em]" /> 오늘 체크한 개념 매핑: {autostepSuggestion.pageText}
                                     </span>
                                     <button onClick={applySuggestion}
                                       className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-md"
@@ -3014,7 +3014,7 @@ export default function TeacherLearningNotesPage() {
                                   <div className="mx-3 mb-2 px-2.5 py-2 rounded-lg flex items-start gap-2 flex-wrap"
                                     style={{ background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
                                     <span className="text-[10px] leading-relaxed" style={{ color: '#4338CA' }}>
-                                      ⚡ 오늘 체크한 개념 → 쎈B {tb.ssenb_step}스텝: {ssenbSuggestion.pageText}
+                                      <i className="ti ti-bolt align-[-0.125em]" /> 오늘 체크한 개념 → 쎈B {tb.ssenb_step}스텝: {ssenbSuggestion.pageText}
                                     </span>
                                     <button onClick={applySsenbSuggestion}
                                       className="ml-auto shrink-0 text-[10px] font-semibold px-2 py-1 rounded-md"
@@ -3105,7 +3105,7 @@ export default function TeacherLearningNotesPage() {
                               </span>
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">유형서(미배정)</span>
                               <span className="text-xs font-semibold text-gray-700">{s.workbook_name}</span>
-                              <span className="text-[10px] ml-auto" style={{ color: '#4338CA' }}>⚡ {s.pageText}</span>
+                              <span className="text-[10px] ml-auto" style={{ color: '#4338CA' }}><i className="ti ti-bolt align-[-0.125em]" /> {s.pageText}</span>
                             </button>
                             {v.included && (
                               <div className="px-3 pb-3 space-y-2 bg-indigo-50/30">
@@ -3139,7 +3139,7 @@ export default function TeacherLearningNotesPage() {
                   return (
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-2">
-                        📝 학습지 과제
+                        <i className="ti ti-file-text align-[-0.125em]" /> 학습지 과제
                         <span className="ml-1.5 text-[10px] font-normal text-gray-400">학습지관리탭과 자동연동</span>
                       </label>
                       {myWSList.length === 0 ? (
@@ -3225,7 +3225,7 @@ export default function TeacherLearningNotesPage() {
                   return (
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-2">
-                        🎯 시험대비 과제
+                        <i className="ti ti-target align-[-0.125em]" /> 시험대비 과제
                         <span className="ml-1.5 text-[10px] font-normal text-gray-400">시험배정 자동연동 · 복수 선택 가능</span>
                       </label>
                       <div className="space-y-2">
@@ -3267,7 +3267,7 @@ export default function TeacherLearningNotesPage() {
 
                 {/* 메모 (과제 배부) */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">📝 메모</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-2"><i className="ti ti-note align-[-0.125em]" /> 메모</label>
                   <textarea value={hwMemo} onChange={(e) => setHwMemo(e.target.value)}
                     placeholder="과제 관련 메모 (선택)"
                     rows={2}
@@ -3296,7 +3296,7 @@ export default function TeacherLearningNotesPage() {
           <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">💬 학부모 알림장 {editingFeedbackId ? '수정' : '작성'}</h3>
+              <h3 className="text-base font-bold text-gray-900"><i className="ti ti-message-circle align-[-0.125em]" /> 학부모 알림장 {editingFeedbackId ? '수정' : '작성'}</h3>
               <div className="flex items-center gap-2">
                 {editingFeedbackId && (
                   <button onClick={handleDeleteFeedback} className="text-[11px] text-red-500 hover:text-red-700 px-2 py-1 rounded-lg hover:bg-red-50 transition-all flex items-center gap-1">
@@ -3437,7 +3437,7 @@ export default function TeacherLearningNotesPage() {
             })()}
             {/* 사진 첨부 */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-2">📷 사진 첨부 <span className="font-normal text-gray-400">(선택 · 최대 5장)</span></label>
+              <label className="block text-xs font-bold text-gray-700 mb-2"><i className="ti ti-camera align-[-0.125em]" /> 사진 첨부 <span className="font-normal text-gray-400">(선택 · 최대 5장)</span></label>
               <div className="flex gap-2 flex-wrap">
                 {/* 기존에 저장된 사진들 */}
                 {existingImageUrls.map((url, idx) => (
@@ -3514,7 +3514,7 @@ export default function TeacherLearningNotesPage() {
                 className="flex-1 py-3 bg-[#F5C4B3] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                 {savingFeedback
                   ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />{uploadingImages ? '사진 업로드 중...' : '저장 중...'}</>
-                  : (editingFeedbackId ? '💬 알림장 수정' : '💬 알림장 저장')}
+                  : (editingFeedbackId ? <><i className="ti ti-message-circle align-[-0.125em]" /> 알림장 수정</> : <><i className="ti ti-message-circle align-[-0.125em]" /> 알림장 저장</>)}
               </button>
             </div>
           </div>
@@ -3638,7 +3638,7 @@ export default function TeacherLearningNotesPage() {
                   disabled={(!replyContent.trim() && replyImages.length === 0) || sendingReply}
                   className="text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-40 flex items-center gap-1"
                   style={{ background: '#F5C4B3', color: '#712B13' }}>
-                  {sendingReply ? '전송 중...' : '✉️ 답장 보내기'}
+                  {sendingReply ? '전송 중...' : <><i className="ti ti-send align-[-0.125em]" /> 답장 보내기</>}
                 </button>
               </div>
             </div>
@@ -3653,7 +3653,7 @@ export default function TeacherLearningNotesPage() {
           <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">📅 시간표 추가</h3>
+              <h3 className="text-base font-bold text-gray-900"><i className="ti ti-calendar-plus align-[-0.125em]" /> 시간표 추가</h3>
               <button onClick={() => setShowScheduleModal(false)} className="text-gray-400">✕</button>
             </div>
             <div>

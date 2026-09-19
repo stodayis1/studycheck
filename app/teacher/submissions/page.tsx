@@ -123,13 +123,13 @@ export default function TeacherSubmissionsPage() {
         {/* 탭 */}
         <div className="flex gap-2">
           {[
-            { key: 'worksheet', label: '📝 학습지' },
-            { key: 'textbook',  label: '📖 교재' },
+            { key: 'worksheet', label: '학습지', icon: 'ti-file-text' },
+            { key: 'textbook',  label: '교재', icon: 'ti-book' },
           ].map((t) => (
             <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
               className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
                 tab === t.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200')}>
-              {t.label}
+              <i className={`ti ${t.icon} mr-1 align-[-0.125em]`} />{t.label}
               {tab === t.key && (
                 <span className="ml-1.5 text-xs bg-white/20 px-1.5 py-0.5 rounded-full">
                   {tab === 'worksheet' ? activeWorksheets.length : activeTextbooks.length}
@@ -147,7 +147,7 @@ export default function TeacherSubmissionsPage() {
         {/* 요약 */}
         {tab === 'worksheet' && pendingWS.length > 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-            <span className="text-orange-500 text-lg">⏳</span>
+            <i className="ti ti-hourglass text-orange-500 text-lg" />
             <div>
               <p className="text-sm font-bold text-orange-700">채점 대기 {pendingWS.length}개</p>
               <p className="text-xs text-orange-400">학생이 제출한 학습지가 있어요</p>
@@ -156,7 +156,7 @@ export default function TeacherSubmissionsPage() {
         )}
         {tab === 'textbook' && pendingTB.length > 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-            <span className="text-orange-500 text-lg">⏳</span>
+            <i className="ti ti-hourglass text-orange-500 text-lg" />
             <div>
               <p className="text-sm font-bold text-orange-700">채점 대기 {pendingTB.length}개</p>
               <p className="text-xs text-orange-400">학생이 제출한 교재 과제가 있어요</p>
@@ -171,7 +171,7 @@ export default function TeacherSubmissionsPage() {
         ) : tab === 'worksheet' ? (
           activeWorksheets.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-              <p className="text-3xl mb-3">📝</p>
+              <p className="mb-3"><i className="ti ti-file-text" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
               <p className="text-sm text-gray-500">진행중인 학습지 과제가 없어요</p>
             </div>
           ) : (
@@ -219,7 +219,7 @@ export default function TeacherSubmissionsPage() {
         ) : (
           activeTextbooks.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-              <p className="text-3xl mb-3">📖</p>
+              <p className="mb-3"><i className="ti ti-book" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
               <p className="text-sm text-gray-500">진행중인 교재 과제가 없어요</p>
             </div>
           ) : (

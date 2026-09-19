@@ -170,7 +170,7 @@ export default function VideoSchedulePage() {
               <br />{nextUndone.concept.grade} {nextUndone.concept.semester}학기 #{nextUndone.concept.concept_order} {nextUndone.concept.concept_name}
             </div>
           ) : (
-            <div className="bg-white border border-orange-100 rounded-xl px-3 py-2 text-xs text-gray-600">🎉 전체 촬영 완료!</div>
+            <div className="bg-white border border-orange-100 rounded-xl px-3 py-2 text-xs text-gray-600"><i className="ti ti-confetti align-[-0.125em]" /> 전체 촬영 완료!</div>
           )}
         </div>
 
@@ -197,9 +197,9 @@ export default function VideoSchedulePage() {
             <div className="text-sm font-extrabold text-gray-800">{viewYear}년 {viewMonth + 1}월</div>
             <div className="flex gap-1.5">
               <button onClick={() => { let m = viewMonth - 1, y = viewYear; if (m < 0) { m = 11; y--; } setViewMonth(m); setViewYear(y) }}
-                className="px-2.5 py-1 rounded-lg text-xs border bg-white border-gray-200 text-gray-600">◀ 이전달</button>
+                className="px-2.5 py-1 rounded-lg text-xs border bg-white border-gray-200 text-gray-600"><i className="ti ti-chevron-left align-[-0.125em]" /> 이전달</button>
               <button onClick={() => { let m = viewMonth + 1, y = viewYear; if (m > 11) { m = 0; y++; } setViewMonth(m); setViewYear(y) }}
-                className="px-2.5 py-1 rounded-lg text-xs border bg-white border-gray-200 text-gray-600">다음달 ▶</button>
+                className="px-2.5 py-1 rounded-lg text-xs border bg-white border-gray-200 text-gray-600">다음달 <i className="ti ti-chevron-right align-[-0.125em]" /></button>
             </div>
           </div>
           <div className="grid grid-cols-7 gap-1.5">
@@ -225,7 +225,7 @@ export default function VideoSchedulePage() {
                       <button key={e.concept.id} onClick={() => toggleDone(e.concept.id)} disabled={savingId === e.concept.id}
                         className={cx('block w-full text-left rounded px-1 py-0.5 mb-0.5', isDone ? 'opacity-60' : 'hover:bg-orange-50')}>
                         <div className="text-[8.5px] font-bold text-orange-300 leading-tight">
-                          {e.concept.grade} {e.concept.semester}학기 #{e.concept.concept_order}{isDone ? ' ✅' : ''}
+                          {e.concept.grade} {e.concept.semester}학기 #{e.concept.concept_order}{isDone && <i className="ti ti-circle-check ml-1 align-[-0.125em]" style={{ color: '#16a34a' }} />}
                         </div>
                         <div className={cx('text-[9px] leading-tight line-clamp-2', isDone ? 'line-through text-green-600' : 'text-gray-600')}>
                           {e.concept.concept_name}
@@ -265,7 +265,7 @@ export default function VideoSchedulePage() {
                   const isDone = doneIds.has(s.concept.id)
                   return (
                     <tr key={s.concept.id} className="border-t border-gray-50">
-                      <td className="px-2 py-1.5 cursor-pointer" onClick={() => toggleDone(s.concept.id)}>{isDone ? '✅' : '⬜'}</td>
+                      <td className="px-2 py-1.5 cursor-pointer" onClick={() => toggleDone(s.concept.id)}>{isDone ? <i className="ti ti-square-check" style={{ color: '#16a34a' }} /> : <i className="ti ti-square" style={{ color: '#d1d5db' }} />}</td>
                       <td className={cx('px-2 py-1.5', isDone && 'text-gray-300')}>{fmtDate(s.date)}</td>
                       <td className="px-2 py-1.5">
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-500">{s.concept.grade} {s.concept.semester}학기</span>

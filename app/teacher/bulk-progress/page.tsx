@@ -146,7 +146,7 @@ export default function BulkProgressPage() {
         if (error) { showToast('저장 실패: ' + error.message); return }
         setProgressChecks(prev => prev.filter(p => p.id !== entry.id))
       }
-      showToast(`↩ "${concept.concept_name}" 해제`)
+      showToast(`"${concept.concept_name}" 해제`)
     } else {
       const existingForThisTB = progressChecks.find(p => p.concept_id === concept.id && p.student_textbook_id === selectedTextbook.id)
       if (existingForThisTB) {
@@ -160,7 +160,7 @@ export default function BulkProgressPage() {
         if (error) { showToast('저장 실패: ' + error.message); return }
         if (data) setProgressChecks(prev => [...prev, data])
       }
-      showToast(`✅ "${concept.concept_name}" 완료`)
+      showToast(`"${concept.concept_name}" 완료`)
     }
   }
 
@@ -179,7 +179,7 @@ export default function BulkProgressPage() {
         const removedIds = new Set(entries.map(e => e.id))
         setProgressChecks(prev => prev.filter(p => !removedIds.has(p.id)))
       }
-      showToast(`↩ "${chapter}" 전체 해제`)
+      showToast(`"${chapter}" 전체 해제`)
     } else {
       // 전체 체크 - 이 교재 소유의 행만 새로 만들거나 갱신 (다른 교재 행은 건드리지 않음)
       const toUpdate = chapterConcepts
@@ -206,7 +206,7 @@ export default function BulkProgressPage() {
         const withUpdates = prev.map(p => updatedIds.has(p.id) ? { ...p, check_count: level } : p)
         return [...withUpdates, ...inserted]
       })
-      showToast(`✅ "${chapter}" 전체 완료`)
+      showToast(`"${chapter}" 전체 완료`)
     }
     setSaving(false)
   }

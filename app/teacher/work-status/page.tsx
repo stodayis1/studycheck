@@ -387,7 +387,7 @@ export default function TeacherWorkStatusPage() {
             {pendingScore.length === 0 && longPending.length === 0 && retrying.length === 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
                 <i className="ti ti-circle-check" style={{ fontSize: 36, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
-                <p className="text-sm font-bold text-gray-600">미처리 학습지가 없어요 🎉</p>
+                <p className="text-sm font-bold text-gray-600">미처리 학습지가 없어요</p>
               </div>
             )}
           </div>
