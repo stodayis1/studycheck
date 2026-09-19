@@ -18,6 +18,7 @@ const INFO: Record<string, { color: string; desc: string }> = {
   '쎈': { color: '#ec4899', desc: 'B단계 유형 · C단계 심화' },
   '쎈B': { color: '#8b5cf6', desc: '쎈과 1:1로 짝지어진 쌍둥이 문제' },
   '베이직쎈': { color: '#0ea5e9', desc: '기본·핵심유형 / 학교시험 기출' },
+  '풍산자 필수유형': { color: '#16a34a', desc: '실력을 기르는 유형 · 내신 서술형 · 고득점 도약' },
 }
 
 export default function BooksPage() {
