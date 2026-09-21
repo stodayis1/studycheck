@@ -445,8 +445,9 @@ export default function TeacherReportsPage() {
     const twinWS = worksheets.filter((w) => w.student_id === studentId && w.worksheet_type === 'twin')
     // 각 레코드별로 독립 그룹 (같은 단원도 차수별로 개별 표시)
     // unit_name은 "개념1, 개념2, ..." 형태 → 첫개념~마지막개념으로 요약
+    // 레벨학습지 목록과 같게 최근에 내준 것이 맨 위로 온다
     return twinWS
-      .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
+      .sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())
       .map(w => {
         const conceptList = (w.unit_name ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
         const first = conceptList[0] ?? ''
@@ -1824,21 +1825,28 @@ export default function TeacherReportsPage() {
               const twinAvg = twinScored.length > 0 ? Math.round(twinScored.reduce((s, r) => s + (r.score ?? 0), 0) / twinScored.length) : null
 
               // 레벨학습지 단원별 요약 (unit+unit_name → 첫~마지막 개념)
+              // 묶는 기준에 학년·학기를 넣어야 한다 - "1단원"은 학기마다 다른 내용이라 unit만으로 묶으면
+              // 6-1 1단원과 6-2 1단원이 한 줄로 합쳐진다. 목록은 최근에 내준 것이 맨 위로 온다.
               const levelGroups = (() => {
                 const map: Record<string, WorksheetRecord[]> = {}
                 recentLevel.forEach(w => {
-                  const key = w.unit ?? ''
+                  const key = `${w.grade_level ?? ''}|${w.semester ?? ''}|${w.unit ?? ''}`
                   if (!map[key]) map[key] = []
                   map[key].push(w)
                 })
-                return Object.entries(map).map(([unit, recs]) => {
+                return Object.values(map).map((recs) => {
                   const names = recs.map(r => r.unit_name ?? '').filter(Boolean)
                   const first = names[0] ?? ''
                   const last = names[names.length - 1] ?? ''
                   const rangeLabel = first && first !== last ? `${first} ~ ${last}` : first
                   const latest = recs.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())[0]
+                  // "2단원"처럼 숫자만 있는 초등 단원은 몇 학년 몇 학기인지 같이 보여준다
+                  const unit = /^\d+단원$/.test(latest.unit ?? '')
+                    ? `${latest.grade_level ?? ''}${latest.semester ? ` ${latest.semester}학기` : ''} ${latest.unit}`.trim()
+                    : `${latest.grade_level ? latest.grade_level + ' ' : ''}${latest.unit ?? ''}`.trim()
                   return { unit, rangeLabel, record: latest, allRecs: recs }
-                })
+                }).sort((a, b) =>
+                  new Date(b.record.assigned_at).getTime() - new Date(a.record.assigned_at).getTime())
               })()
 
               return (
@@ -1893,7 +1901,10 @@ export default function TeacherReportsPage() {
                         <i className="ti ti-chart-bar" style={{ fontSize: 11 }} />레벨학습지
                       </p>
                       <div className="space-y-1.5 mt-2">
-                        {levelGroups.map(({ unit, rangeLabel, record: r }, idx) => {
+                        {levelGroups.map(({ unit, rangeLabel, record: r, allRecs }, idx) => {
+                          const dateLabel = r.assigned_at
+                            ? new Date(r.assigned_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })
+                            : ''
                           const scoreC = r.score == null ? '#9ca3af' : r.score >= 85 ? '#27500A' : r.score >= 80 ? '#633806' : '#991b1b'
                           const scoreBg = r.score == null ? '#f9fafb' : r.score >= 85 ? '#EAF3DE' : r.score >= 80 ? '#FAEEDA' : '#fee2e2'
                           return (
@@ -1903,8 +1914,15 @@ export default function TeacherReportsPage() {
                                 <p className="text-xs font-bold text-gray-800">
                                   {unit}
                                   <span className="text-[10px] font-semibold ml-1.5" style={{ color: '#993C1D' }}>{r.current_level}레벨</span>
+                                  {allRecs.length > 1 && (
+                                    <span className="text-[10px] font-semibold ml-1.5 text-gray-400">· 총 {allRecs.length}회</span>
+                                  )}
                                 </p>
-                                {rangeLabel && <p className="text-[10px] text-gray-400 mt-0.5 truncate">({rangeLabel})</p>}
+                                <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                                  {dateLabel && <span className="font-semibold">{dateLabel} 배정</span>}
+                                  {dateLabel && rangeLabel ? ' · ' : ''}
+                                  {rangeLabel}
+                                </p>
                               </div>
                               <div className="px-3 py-1.5 rounded-xl text-center shrink-0" style={{ background: scoreBg, minWidth: 56 }}>
                                 {r.score != null
@@ -1946,7 +1964,15 @@ export default function TeacherReportsPage() {
                                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded ml-1.5"
                                     style={{ background: '#EFF6FF', color: '#1e3a5f' }}>{r.memo ?? '1차'}</span>
                                 </p>
-                                {rangeLabel && <p className="text-[10px] text-gray-400 mt-0.5 truncate">({rangeLabel})</p>}
+                                <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                                  {r.assigned_at && (
+                                    <span className="font-semibold">
+                                      {new Date(r.assigned_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })} 배정
+                                    </span>
+                                  )}
+                                  {r.assigned_at && rangeLabel ? ' · ' : ''}
+                                  {rangeLabel}
+                                </p>
                               </div>
                               <div className="px-3 py-1.5 rounded-xl text-center shrink-0" style={{ background: scoreBg, minWidth: 56 }}>
                                 {r.score != null
