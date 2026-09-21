@@ -35,7 +35,7 @@ const LEVELS = [1, 2, 3, 4, 5, 6]
 const LEVEL_HINT: Record<number, string> = {
   1: '기본 (쎈 A)', 2: '개념 확인', 3: '유형 (쎈 B)', 4: '심화 (쎈 B상·C)', 5: '고난도', 6: '최심화',
 }
-const BOOKS = ['쎈', '쎈B', '베이직쎈', '풍산자 필수유형', '풍산자 라이트유형', '유형만렙', 'RPM', '개념+유형 개념편']
+const BOOKS = ['쎈', '쎈B', '베이직쎈', '풍산자 필수유형', '풍산자 라이트유형', '유형만렙', 'RPM', '개념+유형 개념편', '개념+유형 유형편']
 const COUNT_PRESETS = [10, 20, 25, 30, 50]
 
 export default function ProblemBankPage() {
