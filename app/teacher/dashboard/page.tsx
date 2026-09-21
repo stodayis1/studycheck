@@ -11,6 +11,8 @@ import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { fetchAllRows } from '@/lib/utils'
 
 const DAYS = ['일','월','화','수','목','금','토']
+// 배정만 하고 며칠째 안 걷히면 '미제출'로 볼지 (업무현황 화면의 '장기 미제출' 기준과 같게 유지)
+const LONG_PENDING_DAYS = 5
 
 interface Announcement {
   id: string
@@ -51,6 +53,9 @@ export default function TeacherDashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
   const [overdueConsultNames, setOverdueConsultNames] = useState<string[]>([])
+  // 배정만 하고 5일 넘게 안 걷힌 학습지 (초·중·고 전부). 채점 대기/처리 필요와 달리 알림이 없어서
+  // 학습지관리 목록을 펼쳐보기 전엔 아무도 모르던 건들 - 2026-09 원장님 요청으로 추가
+  const [longPending, setLongPending] = useState<{ count: number; names: string[] }>({ count: 0, names: [] })
   const [handoffNotes, setHandoffNotes] = useState<HandoffNote[]>([])
 
   useEffect(() => {
@@ -186,9 +191,10 @@ export default function TeacherDashboardPage() {
     const todayStr = new Date().toISOString().split('T')[0]
     // 주임모드일 때는 담당 학년 범위 학생도 다 봐야 해서, 조건절로 좁혀서 쿼리하는 대신
     // 전체를 가져와 canViewStudent()로 한 번에 걸러낸다 (관리자/직원/주임모드/일반 강사 전부 이 한 함수로 통일)
-    const { data: allStudents } = await supabase.from('students').select('id, grade, teacher_name').eq('is_active', true)
+    const { data: allStudents } = await supabase.from('students').select('id, name, grade, teacher_name').eq('is_active', true)
     const myStudents = (allStudents ?? []).filter((s: any) => canViewStudent(s))
     const myIds = new Set(myStudents.map((s: any) => s.id))
+    const nameById = new Map((allStudents ?? []).map((s: any) => [s.id, s.name]))
     const { data: todaySch } = await supabase.from('schedules').select('student_id').eq('day_of_week', todayDay).eq('is_active', true)
     const todayStudents = (todaySch ?? []).filter((s: any) => myIds.has(s.student_id)).length
     const { data: sessions } = await supabase.from('class_sessions').select('id, student_id').eq('session_date', todayStr)
@@ -226,7 +232,17 @@ export default function TeacherDashboardPage() {
       const wroteToday = new Set((todayFbData ?? []).map((f: any) => f.student_id))
       pendingShare = myTodayStudentIds.filter((sid: string) => !wroteToday.has(sid)).length
     }
-    const { data: allWS } = await supabase.from('student_worksheets').select('student_id, status').not('status', 'in', '("passed")')
+    const { data: allWS } = await supabase.from('student_worksheets').select('student_id, status, assigned_at').not('status', 'in', '("passed")')
+    // 배정한 지 5일이 지났는데 아직 제출 확인이 안 된 학습지 (오답유사 포함)
+    const lpCutoff = Date.now() - LONG_PENDING_DAYS * 86400000
+    const lpRows = (allWS ?? []).filter((w: any) =>
+      myIds.has(w.student_id) &&
+      (w.status === 'assigned' || w.status === 'similar_assigned') &&
+      w.assigned_at && new Date(w.assigned_at).getTime() < lpCutoff)
+    setLongPending({
+      count: lpRows.length,
+      names: Array.from(new Set(lpRows.map((w: any) => nameById.get(w.student_id)).filter(Boolean))) as string[],
+    })
     const { data: allTB } = await supabase.from('student_textbooks').select('student_id').eq('status', 'assigned')
     const activeWorksheets = (allWS ?? []).filter((w: any) => myIds.has(w.student_id)).length
     const activeTextbooks = (allTB ?? []).filter((t: any) => myIds.has(t.student_id)).length
@@ -521,6 +537,14 @@ export default function TeacherDashboardPage() {
                 <p style={{ color: '#991b1b' }}>채점 후 처리 필요 {stats.needsAction}건 · 학습지관리에서 레벨업/재도전/오답유사/완료를 선택해주세요</p>
               </div>
             )}
+            {!loading && longPending.count > 0 && (
+              <Link href="/teacher/assignments" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF5F5' }}>
+                <i className="ti ti-clock-exclamation" style={{ fontSize: 13, color: '#991b1b' }} />
+                <p style={{ color: '#991b1b' }}>
+                  미제출 학습지 {longPending.count}건 · 배정 후 {LONG_PENDING_DAYS}일 초과 ({longPending.names.slice(0, 3).join(', ')}{longPending.names.length > 3 ? ' 외' : ''})
+                </p>
+              </Link>
+            )}
             {!loading && overdueConsultNames.length > 0 && (
               <Link href="/teacher/consultations" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF7ED' }}>
                 <i className="ti ti-phone" style={{ fontSize: 13, color: '#9a3412' }} />
@@ -529,7 +553,7 @@ export default function TeacherDashboardPage() {
                 </p>
               </Link>
             )}
-            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && overdueConsultNames.length === 0 && (
+            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && overdueConsultNames.length === 0 && longPending.count === 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#F0FBF7' }}>
                 <i className="ti ti-circle-check" style={{ fontSize: 13, color: '#085041' }} />
                 <p style={{ color: '#085041' }}>오늘 모든 업무 완료! 수고하셨습니다</p>
