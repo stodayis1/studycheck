@@ -402,8 +402,13 @@ export default function TeacherReportsPage() {
       .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
   }
 
-  function getUsedLevels(studentId: string) {
-    const levels = [...new Set(worksheets.filter((w) => w.student_id === studentId).map((w) => w.current_level))].sort((a, b) => a - b)
+  // 표의 레벨 칸(열)을 만든다. 초등 진도표/중등 진도표를 따로 그리므로 그 표에 해당하는 기록만 보고
+  // 레벨을 뽑아야 한다 (안 그러면 그 표에 쓰지도 않는 레벨 칸이 줄줄이 빈칸으로 붙는다).
+  function getUsedLevels(studentId: string, isElem?: boolean) {
+    const rows = worksheets.filter((w) =>
+      w.student_id === studentId &&
+      (isElem === undefined || (w.grade_level ?? '').startsWith('초') === isElem))
+    const levels = [...new Set(rows.map((w) => w.current_level))].sort((a, b) => a - b)
     return levels.length > 0 ? levels : [1.0, 1.5, 2.0, 2.5, 3.0]
   }
 
@@ -2004,9 +2009,27 @@ export default function TeacherReportsPage() {
                 </div>
               ) : (
                 <>
+                  {/* 초등 과정과 중등 과정(선행)을 한 표에 섞으면 레벨 칸이 서로 비어 보여서 읽기 어렵다.
+                      과정별로 표를 나눠서 각각 "그 과정에서 쓴 레벨"만 칸으로 만든다. */}
+                  {[
+                    { key: 'elem', title: '초등 진도표', isElem: true },
+                    { key: 'mid', title: '중등 진도표', isElem: false },
+                  ].map((group) => {
+                    const groupUnits = studentUnits.filter((u) => (u.grade_level ?? '').startsWith('초') === group.isElem)
+                    if (groupUnits.length === 0) return null
+                    const usedLevels = getUsedLevels(selectedStudent.id, group.isElem)
+                    return (
+                    <div key={group.key}>
+                      <div className="px-4 py-2.5 flex items-center gap-2"
+                        style={{ background: group.isElem ? '#FAECE7' : '#EFF6FF', borderBottom: '1px solid #f0f0f0' }}>
+                        <i className="ti ti-table" style={{ fontSize: 13, color: group.isElem ? '#993C1D' : '#1e3a5f' }} />
+                        <p className="text-xs font-bold" style={{ color: group.isElem ? '#993C1D' : '#1e3a5f' }}>{group.title}</p>
+                        <span className="text-[10px]" style={{ color: group.isElem ? '#993C1D' : '#1e3a5f', opacity: 0.7 }}>
+                          단원별 · 레벨별 점수
+                        </span>
+                      </div>
                   <div className="overflow-x-auto">
                     {(() => {
-                      const usedLevels = getUsedLevels(selectedStudent.id)
                       return (
                         <table className="w-full text-xs border-collapse">
                           <thead>
@@ -2023,13 +2046,16 @@ export default function TeacherReportsPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {studentUnits.map(({ grade_level, unit, unit_name, semester }, idx) => (
+                            {groupUnits.map(({ grade_level, unit, unit_name, semester }, idx) => (
                               <tr key={idx} className="hover:bg-white/50">
                                 <td className="px-3 py-2.5 border-b border-r border-gray-100">
                                   <p className="font-bold text-gray-800">{unit}</p>
                                   <p className="text-gray-400 text-[10px]">{grade_level}{semester ? `-${semester}` : ''}</p>
                                 </td>
-                                <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600">{unit_name || '-'}</td>
+                                {/* 중등 단원명은 개념이 수십 개라 그대로 두면 한 행이 화면을 다 먹는다 - 두 줄까지만 */}
+                                <td className="px-3 py-2.5 border-b border-r border-gray-100 text-gray-600 max-w-[280px]">
+                                  <span className="line-clamp-2" title={unit_name || ''}>{unit_name || '-'}</span>
+                                </td>
                                 {usedLevels.map((level) => {
                                   const records = getRecords(selectedStudent.id, grade_level, unit, level)
                                   if (records.length === 0) {
@@ -2065,6 +2091,9 @@ export default function TeacherReportsPage() {
                       )
                     })()}
                   </div>
+                    </div>
+                    )
+                  })}
                   {/* 범례 */}
                   <div className="px-4 py-3 border-t border-gray-50 flex flex-wrap gap-3">
                     <p className="text-[10px] font-bold text-gray-400 mr-1">범례:</p>
