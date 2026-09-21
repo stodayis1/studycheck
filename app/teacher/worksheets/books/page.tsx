@@ -22,6 +22,7 @@ const INFO: Record<string, { color: string; desc: string }> = {
   '풍산자 라이트유형': { color: '#65a30d', desc: '기본을 다지는 유형 · 실력을 높이는 연습 문제' },
   '유형만렙': { color: '#2563eb', desc: 'A 개념확인 · B 유형 · 유형점검 · C 실력향상' },
   'RPM': { color: '#0891b2', desc: '교과서 문제 · 유형 익히기 · 시험에 꼭 나오는 문제 · 서술형 · 실력UP' },
+  '개념+유형 개념편': { color: '#7c3aed', desc: '필수예제 · 문제(유제) — 개념 잡을 때' },
 }
 
 export default function BooksPage() {
