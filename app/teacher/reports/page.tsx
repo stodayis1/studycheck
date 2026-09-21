@@ -358,9 +358,11 @@ export default function TeacherReportsPage() {
 
   // ── 초등용: 단원 × 레벨 테이블 ──
   // 같은 단원(예: 4단원)은 단원명이 기록마다 달라도 한 행으로 합친다
+  // 쌍둥이학습지(twin)는 제외한다 - 학생 학년(초6)으로 저장되는데 단원은 중등 대단원명이라
+  // 진도표에 섞이면 "초등 진도표에 Ⅰ 수와 연산" 같은 행이 생긴다. 쌍둥이는 아래 쌍둥이 목록에서 따로 본다.
   function getStudentUnits(studentId: string) {
     const studentWS = worksheets
-      .filter((w) => w.student_id === studentId)
+      .filter((w) => w.student_id === studentId && w.worksheet_type !== 'twin')
       .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
     const map = new Map<string, { grade_level: string; unit: string; unit_name: string; semester: number | null }>()
     studentWS.forEach((w) => {
@@ -397,7 +399,7 @@ export default function TeacherReportsPage() {
     return worksheets
       .filter((w) =>
         w.student_id === studentId && w.grade_level === gradeLevel &&
-        w.unit === unit && w.current_level === level
+        w.unit === unit && w.current_level === level && w.worksheet_type !== 'twin'
       )
       .sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
   }
@@ -406,7 +408,7 @@ export default function TeacherReportsPage() {
   // 레벨을 뽑아야 한다 (안 그러면 그 표에 쓰지도 않는 레벨 칸이 줄줄이 빈칸으로 붙는다).
   function getUsedLevels(studentId: string, isElem?: boolean) {
     const rows = worksheets.filter((w) =>
-      w.student_id === studentId &&
+      w.student_id === studentId && w.worksheet_type !== 'twin' &&
       (isElem === undefined || (w.grade_level ?? '').startsWith('초') === isElem))
     const levels = [...new Set(rows.map((w) => w.current_level))].sort((a, b) => a - b)
     return levels.length > 0 ? levels : [1.0, 1.5, 2.0, 2.5, 3.0]
