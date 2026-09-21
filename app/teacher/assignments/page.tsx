@@ -292,6 +292,8 @@ export default function TeacherAssignmentsPage() {
 
   // 이번 학기 초등 레벨학습지 (단원 통과 판정용 - 완료된 것 포함)
   const [semesterWS, setSemesterWS] = useState<StudentWorksheet[]>([])
+  // 최근 6개월 본 학습지 (2차·3차 회차 계산용 - 중등은 학기 값이 없어 학기로 못 자른다)
+  const [roundWS, setRoundWS] = useState<StudentWorksheet[]>([])
   const [showUnpassed, setShowUnpassed] = useState(true)
 
   // 원장 전용 처리 기록
@@ -336,7 +338,8 @@ export default function TeacherAssignmentsPage() {
   async function fetchData() {
     setLoading(true)
     const cur = getCurrentSemester()
-    const [{ data: sData }, wData, { data: tData }, { data: cData }, { data: mwData }, semData, { data: orData }] = await Promise.all([
+    const sixMonthsAgo = new Date(Date.now() - 182 * 24 * 60 * 60 * 1000).toISOString()
+    const [{ data: sData }, wData, { data: tData }, { data: cData }, { data: mwData }, semData, { data: orData }, roundData] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       fetchActiveWorksheets(),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
@@ -345,10 +348,14 @@ export default function TeacherAssignmentsPage() {
       fetchAllRows<StudentWorksheet>(() => supabase.from('student_worksheets').select('*')
         .like('grade_level', '초%').eq('semester', cur.semester).gte('assigned_at', cur.start).order('id')),
       supabase.from('worksheet_override_requests').select('*').eq('status', 'pending').order('created_at'),
+      fetchAllRows<StudentWorksheet>(() => supabase.from('student_worksheets')
+        .select('id, student_id, grade_level, unit, unit_name, semester, current_level, status, worksheet_type, score, assigned_at')
+        .eq('worksheet_type', 'main').gte('assigned_at', sixMonthsAgo).order('id')),
     ])
     if (sData) setStudents(sData)
     if (wData) setWorksheets(wData)
     if (semData) setSemesterWS(semData)
+    if (roundData) setRoundWS(roundData)
     if (orData) setOverrideRequests(orData)
     if (tData) setTextbooks(tData)
     if (cData) setConcepts(cData)
@@ -465,19 +472,20 @@ export default function TeacherAssignmentsPage() {
   })()
   const myPendingOverrides = overrideRequests.filter((r) => myStudentIds.has(r.student_id))
 
-  // 재도전 회차: 이번 학기 같은 학생·단원·레벨의 본 학습지(main)를 배정순으로 센다 (1차=처음, 2차=첫 재도전...)
-  // 오답유사는 회차에 넣지 않는다. 초등만 (학기별 전체 이력이 있는 건 초등뿐).
+  // 재도전 회차: 같은 학생·학년·학기·단원·레벨의 본 학습지(main)를 배정순으로 센다 (1차=처음, 2차=두 번째...)
+  // 오답유사는 회차에 넣지 않는다. 초·중·고 전부 (중등은 학기 값이 없어서 최근 6개월 안에서 센다).
   const retryRoundById = (() => {
     const byId = new Map<string, StudentWorksheet>()
+    roundWS.forEach((w) => byId.set(w.id, w))
     semesterWS.forEach((w) => byId.set(w.id, w))
-    const cur = getCurrentSemester()
-    worksheets.forEach((w) => {
-      if ((w.grade_level ?? '').startsWith('초') && w.semester === cur.semester && w.assigned_at >= cur.start) byId.set(w.id, w)
-    })
+    worksheets.forEach((w) => byId.set(w.id, w))
     const groups: Record<string, StudentWorksheet[]> = {}
     byId.forEach((w) => {
       if (w.worksheet_type !== 'main') return
-      const key = `${w.student_id}|${w.grade_level}|${w.semester}|${w.unit}|${w.current_level}`
+      // 중등 단원은 "Ⅰ 수와 연산 + Ⅱ 문자와 식"처럼 여러 대단원을 이어붙인 값이라, 고른 순서에 따라
+      // 같은 범위가 다른 문자열로 저장된다. 순서를 정렬해서 같은 범위는 같은 단원으로 센다.
+      const unitKey = (w.unit ?? '').split('+').map((s) => s.trim()).filter(Boolean).sort().join('+')
+      const key = `${w.student_id}|${w.grade_level}|${w.semester}|${unitKey}|${w.current_level}`
       if (!groups[key]) groups[key] = []
       groups[key].push(w)
     })
