@@ -116,6 +116,7 @@ export default function StudentDashboardPage() {
   const [studentId, setStudentId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [examPreps, setExamPreps] = useState<any[]>([])
+  const [unitExams, setUnitExams] = useState<any[]>([])
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   // 오토스텝: 개념 → 유형편/개념편 페이지 매핑 (concept_id 기준) - 학습 내용에 페이지 표시할 때 씀
@@ -205,6 +206,18 @@ export default function StudentDashboardPage() {
       .neq('status', 'done')
       .order('exam_date', { ascending: true, nullsFirst: false })
     if (epData) setExamPreps(epData)
+
+    // 학교 단원평가 (초등) - 초등은 중간·기말고사가 없어서 이게 곧 학교 성적이다.
+    // exams는 원래 직원 전용 테이블이라, 본인 학생의 단원평가만 읽을 수 있게 RLS를 따로 열었다
+    // (docs/sql/단원평가_학부모학생_공개.sql). 정책을 아직 안 건 DB에서는 빈 배열이 와서 카드가 안 보일 뿐 깨지지 않는다.
+    const { data: ueData } = await supabase
+      .from('exams')
+      .select('unit, unit_name, score, total_score, exam_date, semester')
+      .eq('student_id', sid)
+      .eq('exam_type', '학교시험')
+      .eq('title', '단원평가')
+      .order('exam_date', { ascending: false })
+    if (ueData) setUnitExams(ueData)
   }
 
   // 체크된 개념들의 페이지 범위를 "P.6~13" 식으로 압축. 매핑이 없으면 null(페이지 표시 생략).
@@ -629,6 +642,67 @@ export default function StudentDashboardPage() {
             <p className="text-sm font-bold text-gray-600">최근 수업 기록이 없어요</p>
           </div>
         )}
+
+        {/* 학교 단원평가 카드 - 초등만. 학부모 대시보드와 같은 내용·같은 규칙.
+            초등은 중간·기말고사가 없어서 단원평가가 곧 학교 성적이다.
+            기록이 하나도 없으면 카드를 아예 감춘다. */}
+        {(student?.grade ?? '').includes('초') && unitExams.length > 0 && (() => {
+          const m = new Date().getMonth()
+          const nowSem = m >= 2 && m <= 7 ? 1 : 2
+          const semesters = Array.from(new Set(unitExams.map((e: any) => e.semester).filter(Boolean)))
+          const sem = semesters.includes(nowSem) ? nowSem : (semesters.sort((a: any, b: any) => b - a)[0] ?? nowSem)
+
+          const byUnit: Record<number, any> = {}
+          unitExams.filter((e: any) => e.semester === sem).forEach((r: any) => {
+            const idx = parseInt((r.unit ?? '').replace('단원', ''))
+            if (!idx) return
+            if (!byUnit[idx] || r.exam_date >= byUnit[idx].exam_date) byUnit[idx] = r
+          })
+          const rows = Object.entries(byUnit)
+            .map(([idx, r]) => ({ idx: Number(idx), ...(r as any) }))
+            .filter((r) => r.score != null)
+            .sort((a, b) => a.idx - b.idx)
+          if (rows.length === 0) return null
+
+          const avg = Math.round(rows.reduce((s, r) => s + (r.score / (r.total_score || 100)) * 100, 0) / rows.length)
+          const tone = (p: number) => p >= 90 ? '#27500A' : p >= 70 ? '#633806' : '#991b1b'
+          const toneBg = (p: number) => p >= 90 ? '#EAF3DE' : p >= 70 ? '#FAEEDA' : '#fee2e2'
+
+          return (
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#BFDBFE' }}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#EFF6FF', borderBottom: '1px solid #f0f0f0' }}>
+                <i className="ti ti-school" style={{ fontSize: 16, color: '#1e3a5f' }} />
+                <h3 className="text-sm font-bold" style={{ color: '#1e3a5f' }}>학교 단원평가</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto"
+                  style={{ background: '#DBEAFE', color: '#1e3a5f' }}>
+                  {sem}학기 · 평균 {avg}점
+                </span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {rows.map((r) => {
+                  const p = Math.round((r.score / (r.total_score || 100)) * 100)
+                  return (
+                    <div key={r.idx} className="px-4 py-2.5 flex items-center gap-3">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0"
+                        style={{ background: '#f3f4f6', color: '#6b7280' }}>{r.idx}단원</span>
+                      <p className="text-xs font-semibold text-gray-700 flex-1 min-w-0 truncate">
+                        {r.unit_name || '-'}
+                      </p>
+                      <span className="text-[10px] text-gray-400 shrink-0">{(r.exam_date ?? '').slice(5)}</span>
+                      <span className="text-sm font-black px-2 py-0.5 rounded-lg shrink-0"
+                        style={{ background: toneBg(p), color: tone(p) }}>
+                        {r.score}점
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="px-4 py-2" style={{ background: '#fafafa' }}>
+                <p className="text-[10px] text-gray-400">학교에서 본 단원평가 결과예요. 학원 평가(진단·코어테스트)와는 별개예요.</p>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 시험대비 현황 카드 - 독립 표시 (4주 이내 시험) */}
         {examPreps.length > 0 && (() => {
