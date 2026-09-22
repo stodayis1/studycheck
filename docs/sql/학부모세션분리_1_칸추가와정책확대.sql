@@ -12,9 +12,20 @@
 --    2) 앱 배포           ← app/api/push/subscribe 가 두 칸을 모두 보도록 고친 것
 --    3) 학부모세션분리_2_로그인함수.sql  ← 그때부터 학부모 uid가 새 칸에 들어간다
 --
+-- 사전 확인(2026-09-22): 아래 정책 12개가 이름까지 실제로 존재함을 조회로 확인했다.
+--   students.staff_or_own (SELECT, using만) /
+--   class_sessions·exam_prep_assignments·feedbacks·learning_notes·progress_checks·schedules·
+--   student_exam_prep·student_textbooks·student_worksheets·video_watch_logs 의 staff_or_own_student (ALL, using+check) /
+--   feedback_replies.staff_or_own_via_feedback (ALL, using+check)
+--   session_uid를 쓰는 정책은 정확히 이 12개뿐이고, parent_session_uid 칸은 아직 없다.
+--
 -- 되돌리기: 이 파일은 되돌릴 필요가 없다(넓히기만 해서 기존 동작을 그대로 포함한다).
 --           굳이 되돌리려면 각 정책의 `or parent_session_uid = ...` 부분만 빼면 된다.
 --           데이터는 지우지 않는다. 컬럼도 남겨두면 아무 영향이 없다.
+
+-- 통째로 한 트랜잭션이다. 중간에 하나라도 실패하면 전부 되돌아간다 —
+-- 정책 12개 중 일부만 바뀐 어중간한 상태가 생기지 않는다.
+begin;
 
 -- ── 칸 추가 ────────────────────────────────────────────────────────────────
 alter table public.students add column if not exists parent_session_uid uuid;
@@ -118,6 +129,8 @@ alter policy staff_or_own_via_feedback on public.feedback_replies
   with check (is_staff() or feedback_id in (select id from public.feedbacks
     where student_id in (select id from public.students
       where session_uid = (select auth.uid()) or parent_session_uid = (select auth.uid()))));
+
+commit;
 
 -- ── 확인용 ─────────────────────────────────────────────────────────────────
 -- 아래가 12줄 나오고 전부 parent_session_uid를 포함해야 한다.

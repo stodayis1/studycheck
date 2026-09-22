@@ -17,6 +17,8 @@
 --           create or replace 하면 원래 동작으로 돌아간다. ①의 정책이 두 칸을 모두 받아주므로
 --           되돌리는 중에도 아무도 잠기지 않는다. 데이터는 지우지 않는다.
 
+begin;
+
 create or replace function public.student_login(p_login_id text, p_phone_last4 text, p_role text default 'student'::text)
 returns jsonb
 language plpgsql
@@ -77,6 +79,8 @@ begin
   return jsonb_build_object('ok', true, 'student_id', v_student.id, 'student_name', v_student.name);
 end;
 $function$;
+
+commit;
 
 -- ── 확인용 ─────────────────────────────────────────────────────────────────
 -- 실행 후 학부모 앱에서 한 번 로그인해보고, 그 학생 행에 parent_session_uid가 채워지는지 본다.
