@@ -7,6 +7,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { sourceLabel } from '@/lib/problemSource'
 
 type Sheet = {
   id: string
@@ -169,7 +170,7 @@ export default function TeacherGradingsPage() {
         supabase
           .from('exam_sheet_problems')
           .select(
-            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, book, local_no)'
+            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, book, grade, semester, page_no, local_no)'
           )
           .eq('sheet_id', sel.id)
           .order('no'),
@@ -221,7 +222,7 @@ export default function TeacherGradingsPage() {
         difficulty: p.problems?.difficulty ?? null,
         answerText: p.problems?.answer_text ?? null,
         typeTitle: p.problems?.type_code ? typeTitles[p.problems.type_code] ?? null : null,
-        source: p.problems?.book ? `${p.problems.book} ${p.problems.local_no}번` : null,
+        source: sourceLabel(p.problems),
         ok: e.ok,
         n: e.n,
         rate: e.n ? e.ok / e.n : 0,

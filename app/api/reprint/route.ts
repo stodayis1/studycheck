@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { sourceLabel } from '@/lib/problemSource'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -229,7 +230,7 @@ export async function GET(req: Request) {
   const { data: rows } = await supabase
     .from('exam_sheet_problems')
     .select(
-      'no, problems(id, book, grade, semester, sub_chapter_title, local_no, type_code, difficulty, answer_kind, image_path)'
+      'no, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, image_path)'
     )
     .eq('sheet_id', sheet.id)
     .order('no')
@@ -276,7 +277,7 @@ export async function GET(req: Request) {
         // 베이직쎈은 번호와 발문이 같은 줄이라 자르면 문제가 잘린다
         crop: p?.book === '쎈' || p?.book === '쎈B',
         typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,
-        source: p?.book ? `${p.book} ${p.grade}-${p.semester} ${p.local_no}번` : null,
+        source: sourceLabel(p),
       }
     }),
   })

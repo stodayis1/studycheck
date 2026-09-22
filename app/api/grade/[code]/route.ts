@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sourceLabel } from '@/lib/problemSource'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -44,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   const { data: rows, error: e2 } = await supabase
     .from('exam_sheet_problems')
     .select(
-      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, is_essay)'
+      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, is_essay)'
     )
     .eq('sheet_id', sheet.id)
     .order('no')
@@ -81,9 +82,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     return {
       no: r.no,
       problemId: p?.id ?? r.problem_id,
-      source: p?.book
-        ? `${p.book} ${p.grade}-${p.semester} ${p.sub_chapter_title} ${p.local_no}번`
-        : null,
+      source: sourceLabel(p),
       difficulty: p?.difficulty ?? null,
       typeCode: p?.type_code ?? null,
       typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,

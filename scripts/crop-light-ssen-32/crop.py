@@ -1,0 +1,87 @@
+import json, os, numpy as np
+from PIL import Image
+from qdet import page
+rows=[r for r in json.load(open('qnums_ok.json',encoding='utf8'))]
+brk=json.load(open('qbrk.json',encoding='utf8'))
+ends={(b['pg'],b['x0'],b['y0']):b['end'] for b in json.load(open('qbrk_end.json',encoding='utf8'))}
+heads=[dict(pg=h['pg'],half=h['half'],y0=h['y0']) for h in
+       json.load(open('pills_body.json',encoding='utf8'))+json.load(open('concepts.json',encoding='utf8'))]
+OUT='out/q'; os.makedirs(OUT,exist_ok=True)
+for f in os.listdir(OUT): os.remove(os.path.join(OUT,f))
+TOP=130; BOT=2210
+def cut_at_gap(g,x0,x1,ytop,ybot,gap=62):
+    band=(g[ytop:ybot, x0:x1]<170); rr=band.sum(1); W=x1-x0; run=0; start=None
+    for i,v in enumerate(rr):
+        if i<60: continue
+        if v<=0.004*W:
+            if run==0: start=i
+            run+=1
+            if run>=gap: return ytop+start
+        else: run=0
+    return ybot
+def trim(a,pad=8):
+    ink=(a<175); ys=np.where(ink.any(1))[0]
+    return a[max(0,ys[0]-pad):ys[-1]+pad+1] if len(ys) else None
+byp={}
+for r in rows: byp.setdefault(r['pg'],[]).append(r)
+brp={}
+for b in brk: brp.setdefault(b['pg'],[]).append(b)
+made=0; withinst=0
+for pg,ds in sorted(byp.items()):
+    im=page(pg); W=im.shape[1]; g=im.mean(2)
+    # 이 책은 늘 2단이다. 묶음 지시문 아래 번호가 들여쓰기 되므로 단을 x로 나누면 안 된다
+    MID=830
+    for d in ds: d['ci']=0 if d['x0']<MID else 1
+    for h in (0,1):
+        hs=[d for d in ds if d['ci']==h]
+        if not hs: continue
+        x0=max(30, min(d['x0'] for d in hs)-14)
+        x1=(MID if h==0 else W-34)
+        for d in hs:
+            d['cx0']=x0; d['cx1']=x1
+            right=[e for e in hs if abs(e['y0']-d['y0'])<30 and e['x0']>d['x0']+60]
+            left=[e for e in hs if abs(e['y0']-d['y0'])<30 and e['x0']<d['x0']-60]
+            if right: d['cx1']=min(min(e['x0'] for e in right)-18, x1)
+            if left: d['cx0']=max(d['x0']-14, x0)
+    for d in ds:
+        same=[e for e in ds if e['ci']==d['ci'] and e['y0']>d['y0']+25]
+        cy0=max(TOP, d['y0']-10)
+        cy1=min((min(e['y0'] for e in same)-12) if same else BOT, BOT)
+        cy1=cut_at_gap(g, d['cx0'], d['cx1'], cy0, cy1)
+        a=g[cy0:cy1, d['cx0']:d['cx1']].astype(np.uint8).copy()
+        # 원본 문항 번호를 지운다 (학습지에는 1,2,3… 으로 다시 번호가 매겨진다)
+        ny0=max(0, d['y0']-cy0-6); ny1=min(a.shape[0], d['y1']-cy0+6)
+        nx0=max(0, d['x0']-d['cx0']-6); nx1=min(a.shape[1], d['x1']-d['cx0']+8)
+        if ny1>ny0 and nx1>nx0: a[ny0:ny1, nx0:nx1]=255
+        a=trim(a)
+        if a is None or a.shape[0]<28: continue
+        # 같은 칸에서 바로 위에 있는 묶음 지시문 붙이기
+        cands=[b for b in brp.get(pg,[]) if (0 if b['x0']<830 else 1)==d['ci'] and b['y0']<d['y0']-20]
+        if cands:
+            bb=max(cands, key=lambda b:b['y0'])
+            # 지시문과 이 문항 사이에 다른 지시문이 없어야 한다
+            nxt=[e for e in ds if e['ci']==d['ci'] and bb['y0']<e['y0']<d['y0']]
+            first=min([e['y0'] for e in ds if e['ci']==d['ci'] and e['y0']>bb['y0']]+[d['y0']])
+            hs=[e for e in ds if e['ci']==d['ci']]                   # 같은 쪽 절반
+            ix0=max(30, min(e['cx0'] for e in hs))
+            ix1=(W-34) if d['ci']==1 else 830
+            iy0=max(TOP,bb['y0']-12)
+            ins=g[iy0: min(first-8, bb['y0']+330), ix0:ix1].astype(np.uint8).copy()
+            # 지시문 앞의 '[0012~0017]' 도 지운다
+            by0=bb.get('by0',bb['y0']); by1=bb.get('by1',bb['y1']); bx1=bb.get('bx1',bb['x0']+60)
+            ry0=max(0, by0-iy0-6); ry1=min(ins.shape[0], by1-iy0+6)
+            rx0=max(0, bb['x0']-ix0-16); rx1=min(ins.shape[1], bx1-ix0+18)
+            if ry1>ry0 and rx1>rx0: ins[ry0:ry1, rx0:rx1]=255
+            ins=trim(ins,4)
+            e_end=ends.get((bb['pg'],bb['x0'],bb['y0']))
+            # 이 문항과 지시문 사이에 유형·개념 머리말이 끼면 다른 묶음이다
+            hdr=any(h['pg']==pg and h['half']==d['ci'] and bb['y0']<h['y0']<d['y0'] for h in heads)
+            span_ok = (d['no']<=e_end) if e_end else (not hdr and len(nxt)<=4)
+            if ins is not None and 20<ins.shape[0]<360 and span_ok:
+                wmax=max(ins.shape[1], a.shape[1])
+                def padw(z):
+                    if z.shape[1]==wmax: return z
+                    return np.hstack([z, np.full((z.shape[0], wmax-z.shape[1]),255,np.uint8)])
+                a=np.vstack([padw(ins), np.full((10,wmax),255,np.uint8), padw(a)]); withinst+=1
+        Image.fromarray(a).save(f"{OUT}/{d['no']:04d}.png"); made+=1
+print('자른 문항',made,'| 지시문 붙임',withinst)

@@ -102,6 +102,7 @@ async function insertMeta() {
       image_path: key(r, 'q'), answer_image_path: key(r, 'a'),
       // 선택 항목 — 데이터에 있을 때만 넣는다 (예전 데이터 파일은 그대로 동작)
       ...(r.lv !== undefined && { level: r.lv }),
+      ...(r.pg !== undefined && { page_no: r.pg }),          // 교재에 인쇄된 쪽 번호
       ...(r.k !== undefined && { answer_kind: r.k, answer_text: r.a ?? null }),
     }));
     const { error } = await db.from('problems')
