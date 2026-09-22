@@ -14,6 +14,19 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray
 }
 
+// 이미 있는 구독이 지금 서버의 공개키로 만들어진 것인지 확인한다.
+// 확인할 수 없으면(브라우저가 options를 안 주는 경우) 기존 구독을 그대로 두는 쪽을 택한다 —
+// 멀쩡한 구독을 괜히 지우는 것보다 낫다.
+function usesPublicKey(sub: PushSubscription, publicKey: string): boolean {
+  const raw = sub.options?.applicationServerKey
+  if (!raw) return true
+  const bytes = new Uint8Array(raw)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+  const current = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return current === publicKey.replace(/=+$/, '')
+}
+
 export function isPushSupported() {
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window
 }
@@ -50,6 +63,15 @@ export async function subscribeToPush(opts: {
     await navigator.serviceWorker.ready
 
     let sub = await reg.pushManager.getSubscription()
+
+    // 서버의 VAPID 공개키가 바뀌면 그 전에 만들어진 구독은 못 쓴다 — 발송이 조용히 실패한다.
+    // 이때 그냥 두면 '알림 켜기'를 다시 눌러도 옛 구독을 그대로 재사용해서 계속 안 온다
+    // (학부모가 '알림 끄기 → 켜기'를 손으로 해야 한다). 그래서 키가 다르면 자동으로 버리고 새로 만든다.
+    if (sub && !usesPublicKey(sub, publicKey)) {
+      try { await sub.unsubscribe() } catch {}
+      sub = null
+    }
+
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
