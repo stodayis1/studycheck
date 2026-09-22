@@ -284,8 +284,27 @@ export default function TeacherExamsPage() {
     return tbGrade
   }
 
+  // 모달 안에서 평가 종류를 바꾸면 저장될 exam_type도 같이 바뀐다(저장은 tab 값을 쓴다).
+  // tab을 그대로 쓰므로 모달 안의 종류별 입력 UI도 한 번에 맞춰진다.
+  function switchModalType(t: ExamType) {
+    setTab(t)
+    // 종류마다 의미가 다른 칸들은 비운다 (점수는 입력 중일 수 있으니 그대로 둔다)
+    setExamTitle('')
+    setExamUnit('')
+    setExamUnitName('')
+    setExamLevel(null)
+    const myTBs = modalStudent ? studentTextbooks.filter((x) => x.student_id === modalStudent.id) : []
+    const tbGrade = myTBs[0]?.grade ?? ''
+    const rangeGrade = (t === '코어테스트' && modalStudent?.grade && !modalStudent.grade.includes('고'))
+      ? modalStudent.grade : tbGrade
+    const firstChapter = rangeGrade ? (concepts.filter((c) => c.grade === rangeGrade)[0]?.chapter ?? '') : ''
+    setActiveUnitTabs(firstChapter ? [firstChapter] : [])
+    setActiveSubTabs([])
+  }
+
+  // student가 null이면 모달 안에서 학생을 고른다 (헤더의 「+ 평가 등록」).
   // preset: 현황판·미기록 배너에서 바로 열 때 '단원평가 / 학기 / N단원'을 미리 채워준다
-  function openModal(student: Student, preset?: { title?: string; semester?: 1 | 2; unitIndex?: number }) {
+  function openModal(student: Student | null, preset?: { title?: string; semester?: 1 | 2; unitIndex?: number }) {
     setModalStudent(student)
     setExamDate(new Date().toISOString().split('T')[0])
     setExamTitle(preset?.title ?? '')
@@ -301,9 +320,9 @@ export default function TeacherExamsPage() {
     setExamSemester(preset?.semester ?? defaultSemester)
     setExamUnitIndex(preset?.unitIndex ?? 1)
     // 초기 탭: 오버라이드 없이 기본 학년 기준으로 계산
-    const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
+    const myTBs = student ? studentTextbooks.filter((t) => t.student_id === student.id) : []
     const tbGrade = myTBs[0]?.grade ?? ''
-    const rangeGrade = (tab === '코어테스트' && student.grade && !student.grade.includes('고'))
+    const rangeGrade = (tab === '코어테스트' && student?.grade && !student.grade.includes('고'))
       ? student.grade : tbGrade
     const firstGradeConcepts = rangeGrade
       ? concepts.filter((c) => c.grade === rangeGrade)
@@ -502,7 +521,7 @@ export default function TeacherExamsPage() {
                 style={{ background: '#EAF3DE', color: '#27500A' }}>
                 + 코어테스트 일괄입력
               </button>
-            : <button onClick={() => setShowModal(true)}
+            : <button onClick={() => openModal(null)}
                 className="px-3 py-1.5 rounded-xl text-xs font-semibold"
                 style={{ background: '#9FE1CB', color: '#085041' }}>
                 + 평가 등록
@@ -1022,6 +1041,30 @@ export default function TeacherExamsPage() {
                 <p className="text-xs text-gray-400 mt-0.5">{cfg.desc}</p>
               </div>
               <button onClick={() => setShowModal(false)} className="text-gray-400 text-xl">✕</button>
+            </div>
+
+            {/* 평가 종류 — 저장되는 종류는 '여기서 고른 값'이다.
+                예전에는 화면 위쪽 탭으로만 정해졌는데, 휴대폰처럼 탭이 스크롤로 사라진 화면에서
+                헤더의 「+ 평가 등록」으로 입력하면 기본값인 '입학테스트'로 저장되는 사고가 있었다
+                (2026-09-21, 초6 단원평가 6건. docs/sql/단원평가_잘못저장_복구_2026-09-21.sql) */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">
+                평가 종류 <span className="text-red-400">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {EXAM_TYPES.map((t) => (
+                  <button key={t} type="button" onClick={() => switchModalType(t)}
+                    className="py-2.5 rounded-xl text-xs font-bold border-2 transition-all"
+                    style={tab === t
+                      ? { background: EXAM_CONFIG[t].bg, color: EXAM_CONFIG[t].color, borderColor: EXAM_CONFIG[t].badge }
+                      : { background: 'white', color: '#9ca3af', borderColor: '#e5e7eb' }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] mt-1.5 font-semibold" style={{ color: cfg.color }}>
+                <b>{tab}</b>(으)로 저장돼요. 초등 학교 단원평가는 <b>학교시험</b>을 고르세요.
+              </p>
             </div>
 
             {/* 학생 선택 */}
