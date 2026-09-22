@@ -46,6 +46,8 @@ export default function TeacherDashboardPage() {
   const [stats, setStats] = useState({
     todayStudents: 0, unwrittenNotes: 0, pendingScore: 0, pendingShare: 0,
     activeWorksheets: 0, activeTextbooks: 0, needsAction: 0,
+    // 초등 학교 단원평가가 아직 안 들어간 학생 수 (담당 초등 학생이 없으면 카드 자체를 안 띄운다)
+    unitExamMissing: 0, elemCount: 0,
   })
   const [loading, setLoading] = useState(true)
   const [bulkProgressEnabled, setBulkProgressEnabled] = useState(false)
@@ -246,7 +248,26 @@ export default function TeacherDashboardPage() {
     const { data: allTB } = await supabase.from('student_textbooks').select('student_id').eq('status', 'assigned')
     const activeWorksheets = (allWS ?? []).filter((w: any) => myIds.has(w.student_id)).length
     const activeTextbooks = (allTB ?? []).filter((t: any) => myIds.has(t.student_id)).length
-    setStats({ todayStudents, unwrittenNotes, pendingScore, pendingShare, activeWorksheets, activeTextbooks, needsAction })
+    // 초등 학교 단원평가 미입력 - 초등은 중간·기말고사가 없어서 단원평가가 곧 학교 성적인데
+    // 기록이 잘 안 들어와서(2026-09 기준 담당 초등 75명 중 13명만 입력됨) 여기서도 짚어준다.
+    // 기준은 평가관리 화면의 안내와 똑같이 '이번 학기 1단원이 비어 있음' — 학교는 진도 순서대로
+    // 단원평가를 보니 1단원은 대부분 이미 끝났다. 두 화면의 숫자가 달라지면 안 되므로 규칙을 맞춘다.
+    const elemIds = myStudents.filter((s: any) => (s.grade ?? '').includes('초')).map((s: any) => s.id)
+    let unitExamMissing = 0
+    if (elemIds.length > 0) {
+      const mth = new Date().getMonth()
+      const nowSem = mth >= 2 && mth <= 7 ? 1 : 2
+      const { data: ueData } = await supabase.from('exams')
+        .select('student_id, score')
+        .eq('exam_type', '학교시험').eq('title', '단원평가')
+        .eq('semester', nowSem).eq('unit', '1단원')
+        .in('student_id', elemIds)
+      const done = new Set((ueData ?? []).filter((e: any) => e.score != null).map((e: any) => e.student_id))
+      unitExamMissing = elemIds.filter((id: string) => !done.has(id)).length
+    }
+
+    setStats({ todayStudents, unwrittenNotes, pendingScore, pendingShare, activeWorksheets, activeTextbooks, needsAction,
+      unitExamMissing, elemCount: elemIds.length })
     setLoading(false)
   }
 
@@ -290,6 +311,16 @@ export default function TeacherDashboardPage() {
       bg: stats.needsAction > 0 ? '#FFF5F5' : '#f9fafb',
       border: stats.needsAction > 0 ? '#fca5a5' : '#f3f4f6',
     },
+    // 담당 초등 학생이 있을 때만 (중·고등만 맡은 선생님에겐 의미 없는 카드라 아예 안 띄운다)
+    ...(stats.elemCount > 0 ? [{
+      label: '단원평가 미입력', value: stats.unitExamMissing, unit: '명',
+      // 평가관리는 열면 '입학테스트' 탭이 기본이라, 여기서 들어올 때는 학교시험 탭으로 바로 보낸다
+      href: '/teacher/exams?tab=학교시험',
+      icon: 'ti-school',
+      color: stats.unitExamMissing > 0 ? '#1e3a5f' : '#9ca3af',
+      bg: stats.unitExamMissing > 0 ? '#EFF6FF' : '#f9fafb',
+      border: stats.unitExamMissing > 0 ? '#93c5fd' : '#f3f4f6',
+    }] : []),
   ]
 
   const QUICK_MENUS = [

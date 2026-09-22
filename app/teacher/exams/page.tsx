@@ -166,6 +166,14 @@ export default function TeacherExamsPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  // 대시보드의 「단원평가 미입력」 카드처럼 ?tab=학교시험 으로 들어오면 그 탭을 바로 연다.
+  // 이 화면은 기본 탭이 '입학테스트'라서, 링크로 보내놓고 탭을 안 맞추면 엉뚱한 화면이 열린다.
+  // useSearchParams()는 Suspense 경계가 필요해서(Next 16) 마운트 후 location으로 한 번만 읽는다.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t && (EXAM_TYPES as readonly string[]).includes(t)) setTab(t as ExamType)
+  }, [])
+
   async function fetchData() {
     setLoading(true)
     const [{ data: sData }, { data: eData }, { data: cData }, { data: tbData }] = await Promise.all([
