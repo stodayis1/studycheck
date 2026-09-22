@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import KeyGuard from '@/components/KeyGuard'
 
 export const metadata: Metadata = {
   title: '수학의지혜 StudyCheck',
@@ -56,6 +57,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
       </head>
       <body className="bg-gray-50 text-gray-900 antialiased">
+        {/* F10·F12 차단 (components/KeyGuard.tsx). 선생님 화면까지 포함해 전체에 적용된다 —
+            선생님 화면만 빼려면 이 줄을 지우고 student/parent/grade 레이아웃에 각각 넣으면 된다. */}
+        <KeyGuard />
         {children}
       </body>
     </html>
