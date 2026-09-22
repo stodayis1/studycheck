@@ -42,13 +42,16 @@ export async function POST(req: NextRequest) {
 
     if (role === 'student' || role === 'parent') {
       if (!studentId) return NextResponse.json({ error: 'studentId가 필요해요.' }, { status: 400 })
+      // 학생 세션은 session_uid, 학부모 세션은 parent_session_uid에 들어간다
+      // (docs/sql/학부모세션분리_*.sql). 컬럼을 콕 집어 조회하지 않고 행을 받아 와서 비교하는 이유는,
+      // parent_session_uid가 아직 없는 DB에 이 코드가 먼저 배포돼도 깨지지 않게 하려는 것이다.
       const { data: student } = await supabase
         .from('students')
-        .select('id')
+        .select('*')
         .eq('id', studentId)
-        .eq('session_uid', uid)
         .maybeSingle()
-      if (!student) return NextResponse.json({ error: '본인 계정의 알림만 설정할 수 있어요.' }, { status: 403 })
+      const owns = !!student && (student.session_uid === uid || student.parent_session_uid === uid)
+      if (!owns) return NextResponse.json({ error: '본인 계정의 알림만 설정할 수 있어요.' }, { status: 403 })
       ownedStudentId = student.id
     } else {
       const { data: profile } = await supabase.from('users').select('id, role').eq('id', uid).single()
