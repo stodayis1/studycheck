@@ -2,7 +2,7 @@ import json, numpy as np
 from scipy import ndimage
 from qdet import page
 out=[]
-for i in range(5,173):
+for i in range(4,186):
     im=page(i); R,G,B=im[...,0],im[...,1],im[...,2]
     green=(G-R>12)&(G-B>18)&(G>80)&(G<205)
     lab,_=ndimage.label(green)

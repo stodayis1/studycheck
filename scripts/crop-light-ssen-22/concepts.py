@@ -2,13 +2,13 @@ import json, numpy as np
 from scipy import ndimage
 from qdet import page
 out=[]
-for i in range(5,173):
+for i in range(0,186):
     im=page(i); R,G,B=im[...,0],im[...,1],im[...,2]
     red=(R-G>40)&(R-B>40)&(R>120)
     lab,_=ndimage.label(red)
     for sl in ndimage.find_objects(lab):
         h=sl[0].stop-sl[0].start; w=sl[1].stop-sl[1].start
-        if 42<=h<=70 and 90<=w<=150 and red[sl].mean()>0.4:
+        if 40<=h<=74 and 84<=w<=160 and red[sl].mean()>0.34:
             out.append(dict(pg=i,x0=int(sl[1].start),y0=int(sl[0].start),
                             x1=int(sl[1].stop),y1=int(sl[0].stop),
                             half=0 if sl[1].start<500 else 1))

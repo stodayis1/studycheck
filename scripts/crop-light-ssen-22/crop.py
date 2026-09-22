@@ -1,9 +1,11 @@
 import json, os, numpy as np
 from PIL import Image
 from qdet import page
-rows=[r for r in json.load(open('qnums_ok.json',encoding='utf8')) if r['no']<=457]
+rows=[r for r in json.load(open('qnums_ok.json',encoding='utf8'))]
 brk=json.load(open('qbrk.json',encoding='utf8'))
 ends={(b['pg'],b['x0'],b['y0']):b['end'] for b in json.load(open('qbrk_end.json',encoding='utf8'))}
+heads=[dict(pg=h['pg'],half=h['half'],y0=h['y0']) for h in
+       json.load(open('pills_body.json',encoding='utf8'))+json.load(open('concepts.json',encoding='utf8'))]
 OUT='out/q'; os.makedirs(OUT,exist_ok=True)
 for f in os.listdir(OUT): os.remove(os.path.join(OUT,f))
 TOP=130; BOT=2210
@@ -50,7 +52,7 @@ for pg,ds in sorted(byp.items()):
         a=trim(a)
         if a is None or a.shape[0]<28: continue
         # 같은 칸에서 바로 위에 있는 묶음 지시문 붙이기
-        cands=[b for b in brp.get(pg,[]) if d['cx0']-20<=b['x0']<=d['cx1'] and b['y0']<d['y0']-20]
+        cands=[b for b in brp.get(pg,[]) if (0 if b['x0']<830 else 1)==d['ci'] and b['y0']<d['y0']-20]
         if cands:
             bb=max(cands, key=lambda b:b['y0'])
             # 지시문과 이 문항 사이에 다른 지시문이 없어야 한다
@@ -62,7 +64,9 @@ for pg,ds in sorted(byp.items()):
             ins=g[max(TOP,bb['y0']-12): min(first-8, bb['y0']+330), ix0:ix1].astype(np.uint8)
             ins=trim(ins,4)
             e_end=ends.get((bb['pg'],bb['x0'],bb['y0']))
-            span_ok = (d['no']<=e_end) if e_end else (len(nxt)<=2)
+            # 이 문항과 지시문 사이에 유형·개념 머리말이 끼면 다른 묶음이다
+            hdr=any(h['pg']==pg and h['half']==d['ci'] and bb['y0']<h['y0']<d['y0'] for h in heads)
+            span_ok = (d['no']<=e_end) if e_end else (not hdr and len(nxt)<=8)
             if ins is not None and 20<ins.shape[0]<360 and span_ok:
                 wmax=max(ins.shape[1], a.shape[1])
                 def padw(z):
