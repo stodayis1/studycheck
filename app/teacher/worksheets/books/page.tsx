@@ -24,6 +24,7 @@ const INFO: Record<string, { color: string; desc: string }> = {
   'RPM': { color: '#0891b2', desc: '교과서 문제 · 유형 익히기 · 시험에 꼭 나오는 문제 · 서술형 · 실력UP' },
   '개념+유형 개념편': { color: '#7c3aed', desc: '필수예제 · 문제(유제) — 개념 잡을 때' },
   '개념+유형 유형편': { color: '#db2777', desc: '유형별 문제 — 난이도 ●○○~●●● 표시' },
+  '라이트쎈': { color: '#0d9488', desc: 'A단계 기본 · B단계 유형 (쎈보다 쉬운 단계)' },
 }
 
 export default function BooksPage() {

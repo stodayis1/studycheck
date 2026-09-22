@@ -53,7 +53,7 @@ const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
 // 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
 const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1' };
-const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh' };
+const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh', '라이트쎈': 'light' };
 const key = (r, kind) =>
   `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
 
