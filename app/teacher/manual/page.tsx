@@ -135,13 +135,17 @@ const GROUPS: ManualGroup[] = [
       },
       {
         href: '/teacher/exams', label: '평가관리', icon: 'ti-clipboard-check',
-        summary: '입학테스트 · 진단평가 · 코어테스트 · 학교시험 점수를 기록해요.',
+        summary: '입학테스트 · 진단평가 · 코어테스트 · 학교시험 점수를 기록해요. 초등 단원평가는 위 파란 안내를 꼭 봐주세요.',
         steps: [
           '「+ 평가 등록」 → 날짜, 시험 종류, 범위, 레벨·점수.',
           '코어테스트는 「+ 코어테스트 일괄입력」으로 한 번에. 날짜가 다른 학생은 「이 학생만 다른 날짜였어요」.',
-          '초등 학교 단원평가 점수도 「학교시험」 탭에 넣어요 (학기+단원을 고르면 단원명이 자동으로 채워져요).',
+          '「학교시험」 탭 — 중·고등은 중간·기말고사, 초등은 학교 단원평가를 넣어요 (학기+단원을 고르면 단원명이 자동으로 채워져요).',
+          '「단원평가 현황판」: 학년별 담당 학생 × 1~8단원 점수 표. 빈칸을 누르면 그 자리에서 바로 입력돼요.',
         ],
-        notes: ['입학테스트는 신규 학생에게만 1회 등록하면 돼요.'],
+        notes: [
+          '입학테스트는 신규 학생에게만 1회 등록하면 돼요.',
+          '초등은 중간·기말고사가 없어요. 단원평가가 곧 학교 성적이라 볼 때마다 기록해주세요.',
+        ],
       },
       {
         href: '/teacher/exam-prep', label: '시험배정', icon: 'ti-target',
@@ -276,6 +280,51 @@ export default function TeacherManualPage() {
               <span className="px-1 rounded font-bold" style={{ background: '#991b1b', color: 'white' }}>3차</span>는
               같은 레벨을 몇 번째 푸는지예요. 3차가 보이면 풀이 방법을 바꾸거나 레벨을 낮춰주세요.</p>
             <p>「학습지 배정」 탭 맨 위 <b>"70점 못 넘기고 멈춘 단원"</b>은 단원평가 전에 다시 풀려야 하는 학생이에요. 「재도전 배정」을 눌러주세요.</p>
+          </div>
+        </section>
+
+        {/* 초등 학교시험 = 단원평가 - 초등 담당 선생님이 자주 놓치는 부분 */}
+        <section className="rounded-2xl p-4 space-y-3" style={{ background: '#EFF6FF', border: '1px solid #93c5fd' }}>
+          <h2 className="text-sm font-bold flex items-center gap-1.5" style={{ color: '#1e3a5f' }}>
+            <i className="ti ti-school" style={{ fontSize: 16 }} />초등 학교시험은 「단원평가」예요 (초등 담당 선생님 꼭 읽어주세요)
+          </h2>
+          <p className="text-xs leading-relaxed" style={{ color: '#1e40af' }}>
+            평가관리의 <b>「학교시험」</b> 탭에 중·고등은 <b>중간·기말고사</b>를 넣지만,
+            초등은 학교에서 보는 <b>단원평가</b> 점수를 넣어요. 초등은 중간·기말고사가 없으니
+            단원평가가 곧 학교 성적이에요. <b>단원평가를 본 날마다 점수를 기록해주세요.</b>
+          </p>
+
+          <div className="grid md:grid-cols-2 gap-2">
+            <div className="rounded-xl bg-white p-3" style={{ border: '1px solid #bfdbfe' }}>
+              <p className="text-xs font-bold" style={{ color: '#1e3a5f' }}>
+                <i className="ti ti-pencil-plus" style={{ fontSize: 13 }} /> 넣는 방법
+              </p>
+              <ul className="text-[11px] text-gray-600 mt-1 space-y-0.5">
+                <li>• 평가관리 → <b>「학교시험」</b> 탭 → 「+ 평가 등록」</li>
+                <li>• 시험 종류에서 <b>「단원평가」</b> 선택</li>
+                <li>• <b>학기 + 몇 단원</b>만 고르면 단원명은 자동으로 채워져요</li>
+                <li>• 점수를 넣고 저장</li>
+              </ul>
+            </div>
+            <div className="rounded-xl bg-white p-3" style={{ border: '1px solid #bfdbfe' }}>
+              <p className="text-xs font-bold" style={{ color: '#1e3a5f' }}>
+                <i className="ti ti-table" style={{ fontSize: 13 }} /> 한눈에 보는 방법
+              </p>
+              <ul className="text-[11px] text-gray-600 mt-1 space-y-0.5">
+                <li>• 「학교시험」 탭의 <b>「단원평가 현황판」</b>을 누르면</li>
+                <li>• 학년별로 <b>담당 학생 전체 × 1~8단원</b> 점수가 한 표에 나와요</li>
+                <li>• 빈칸(<b>–</b>)을 누르면 <b>그 학생 그 단원 입력창</b>이 바로 열려요</li>
+                <li>• 점수가 있는 칸을 누르면 고칠 수 있어요</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-white p-3 space-y-1.5 text-[11px] text-gray-700 leading-relaxed">
+            <p><b>맨 위 빨간 글씨</b>로 <b>"이번 학기 1단원 점수가 아직 없는 학생"</b>이 이름으로 떠요.
+              이름을 누르면 바로 입력창이 열립니다. 학교는 진도 순서대로 보니까 1단원은 대부분 이미 끝났어요.</p>
+            <p>학기를 잘못 고르면 다른 학기 칸에 들어가요. <b>1학기 · 2학기</b> 버튼을 먼저 확인해주세요.</p>
+            <p>단원평가 점수는 <b>학부모·학생 앱과 월간보고서</b>에도 그대로 나가요. 밀리면 학부모가 볼 기록이 비어 보입니다.</p>
+            <p>초등 레벨학습지가 바로 이 <b>단원평가 대비용</b>이에요 — 위 빨간 안내와 같이 봐주세요.</p>
           </div>
         </section>
 

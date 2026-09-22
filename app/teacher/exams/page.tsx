@@ -46,6 +46,8 @@ const EXAM_CONFIG: Record<ExamType, { color: string; bg: string; badge: string; 
 }
 
 const SCHOOL_EXAM_TYPES = ['중간고사', '기말고사', '단원평가']
+// 초등 단원평가 현황판의 학년 칩
+const ELEM_GRADES = ['초1', '초2', '초3', '초4', '초5', '초6']
 
 // 초등 대단원 입력 패널
 function ElementaryEntryPanel({ unitKey, unitLabel, entry, examTotalScore, tab, cfg, onChange, scoreBg, scoreColor, pct }: any) {
@@ -126,6 +128,9 @@ export default function TeacherExamsPage() {
   const [examUnitIndex, setExamUnitIndex] = useState(1)
   // 학교시험 탭 - 학생 카드에서 "단원별 점수 한눈에" 그리드에 쓸 학기
   const [gridSemester, setGridSemester] = useState<1 | 2>(defaultSemester)
+  // 학교시험 탭 - 보기 전환(학생별 / 초등 단원평가 현황판)과 현황판에서 고른 학년
+  const [schoolView, setSchoolView] = useState<'list' | 'board'>('list')
+  const [boardGrade, setBoardGrade] = useState('초1')
 
   // 개별 평가 수정/삭제 (등록된 값 실수로 잘못 올렸을 때 고치는 용도)
   const [editingExam, setEditingExam] = useState<Exam | null>(null)
@@ -238,6 +243,31 @@ export default function TeacherExamsPage() {
     return matchGrade && matchSearch
   })
 
+  // ── 초등 단원평가 현황판 ────────────────────────────────────────────────
+  // 중·고등은 학교시험 = 중간·기말고사지만, 초등은 학교에서 보는 단원평가가 학교시험이다.
+  // 기능은 원래 있었는데 학생 카드를 하나씩 펼쳐야만 보여서 초등 담당 선생님들이 모르고 지나쳤다.
+  // 그래서 학습지관리의 「레벨 현황판」과 같은 형태로, 학년별 전체를 한 표에 펼쳐 보여준다.
+  // 학년 칩으로 고르는 구조라 위쪽 학년그룹 필터(전체/초등/중등/고등)와는 무관하게 담당 초등 학생을 모두 넣는다.
+  const elemStudents = myStudents
+    .filter((s) => (s.grade ?? '').includes('초'))
+    .filter((s) => !searchText || s.name.includes(searchText) || s.school?.includes(searchText))
+
+  function unitExamOf(studentId: string, unitIndex: number, semester: 1 | 2) {
+    const rows = exams.filter((e) =>
+      e.student_id === studentId && e.exam_type === '학교시험' && e.title === '단원평가' &&
+      e.semester === semester && parseInt((e.unit ?? '').replace('단원', '')) === unitIndex)
+    if (rows.length === 0) return null
+    return rows.sort((a, b) => b.exam_date.localeCompare(a.exam_date))[0]
+  }
+
+  // 미기록 기준은 '1단원이 비어 있음' — 학교는 진도 순서대로 보니 1단원은 대부분 이미 끝났다.
+  const missingUnit1 = elemStudents.filter((s) => {
+    const rec = unitExamOf(s.id, 1, gridSemester)
+    return !rec || rec.score == null
+  })
+
+  const boardOn = tab === '학교시험' && schoolView === 'board' && elemStudents.length > 0
+
   // 시험 범위 학년 결정
   // 코어테스트: 학교 현행(학생 실제 학년) 고정 (고등은 concepts가 과목명 기준이라 교재 학년)
   // 입학테스트/진단평가: 선생님이 선택 가능 (기본값=배정 교재 학년, 고등=교재 과목명)
@@ -254,10 +284,11 @@ export default function TeacherExamsPage() {
     return tbGrade
   }
 
-  function openModal(student: Student) {
+  // preset: 현황판·미기록 배너에서 바로 열 때 '단원평가 / 학기 / N단원'을 미리 채워준다
+  function openModal(student: Student, preset?: { title?: string; semester?: 1 | 2; unitIndex?: number }) {
     setModalStudent(student)
     setExamDate(new Date().toISOString().split('T')[0])
-    setExamTitle('')
+    setExamTitle(preset?.title ?? '')
     setExamUnit('')
     setExamUnitName('')
     setExamLevel(null)
@@ -267,8 +298,8 @@ export default function TeacherExamsPage() {
     setUnitEntries({})
     setActiveSubTabs([])
     setRangeGradeOverride('')
-    setExamSemester(defaultSemester)
-    setExamUnitIndex(1)
+    setExamSemester(preset?.semester ?? defaultSemester)
+    setExamUnitIndex(preset?.unitIndex ?? 1)
     // 초기 탭: 오버라이드 없이 기본 학년 기준으로 계산
     const myTBs = studentTextbooks.filter((t) => t.student_id === student.id)
     const tbGrade = myTBs[0]?.grade ?? ''
@@ -531,10 +562,172 @@ export default function TeacherExamsPage() {
           </div>
         )}
 
+        {/* 초등 단원평가 안내 + 미기록 학생 (초등 담당 학생이 있을 때만) */}
+        {tab === '학교시험' && !loading && elemStudents.length > 0 && (
+          <>
+            <div className="rounded-xl px-4 py-3 text-xs"
+              style={{ background: '#EFF6FF', color: '#1e3a5f', border: '1px solid #3b82f640' }}>
+              <div className="flex items-start gap-2">
+                <i className="ti ti-info-circle" style={{ fontSize: 14, marginTop: 1 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold mb-0.5">초등은 「단원평가」가 학교시험이에요</p>
+                  <p style={{ color: '#3b6ea5' }}>
+                    중·고등은 중간·기말고사를 넣지만, 초등은 학교에서 본 <b>단원평가</b> 점수를 여기에 기록해요.
+                    학기와 단원만 고르면 단원명은 자동으로 채워져요.
+                  </p>
+                  {missingUnit1.length > 0 && (
+                    <div className="mt-2 pt-2" style={{ borderTop: '1px solid #3b82f630' }}>
+                      <p className="font-bold mb-1.5" style={{ color: '#991b1b' }}>
+                        {gridSemester}학기 1단원 점수가 아직 없는 학생 {missingUnit1.length}명
+                        <span className="font-normal" style={{ color: '#b45a5a' }}> — 이름을 누르면 바로 입력할 수 있어요</span>
+                      </p>
+                      <div className="flex gap-1 flex-wrap">
+                        {missingUnit1.map((s) => (
+                          <button key={s.id}
+                            onClick={() => openModal(s, { title: '단원평가', semester: gridSemester, unitIndex: 1 })}
+                            className="px-2 py-1 rounded-lg text-[11px] font-semibold transition-all"
+                            style={{ background: 'white', color: '#991b1b', border: '1px solid #fecaca' }}>
+                            {s.name} <span style={{ color: '#c99' }}>{s.grade}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              {([['list', '학생별'], ['board', '단원평가 현황판']] as const).map(([v, label]) => (
+                <button key={v} onClick={() => setSchoolView(v)}
+                  className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
+                  style={schoolView === v
+                    ? { background: '#EFF6FF', color: '#1e3a5f', border: '2px solid #3b82f6' }
+                    : { background: 'white', color: '#9ca3af', border: '2px solid #e5e7eb' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* 초등 단원평가 현황판 - 학년별 전체를 한 표에 (학습지관리 「레벨 현황판」과 같은 형태) */}
+        {boardOn && !loading && (() => {
+          const gradesAvailable = ELEM_GRADES.filter((g) => elemStudents.some((s) => s.grade === g))
+          const activeGrade = gradesAvailable.includes(boardGrade) ? boardGrade : (gradesAvailable[0] ?? '초1')
+          const gradeStudents = elemStudents
+            .filter((s) => s.grade === activeGrade)
+            .sort((a, b) => a.name.localeCompare(b.name))
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {ELEM_GRADES.map((g) => {
+                    const count = elemStudents.filter((s) => s.grade === g).length
+                    return (
+                      <button key={g} onClick={() => setBoardGrade(g)}
+                        className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                        style={activeGrade === g
+                          ? { background: '#3b82f6', color: 'white' }
+                          : { background: '#f3f4f6', color: '#9ca3af' }}>
+                        {g} {count > 0 ? `(${count})` : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {[1, 2].map((s) => (
+                    <button key={s} onClick={() => setGridSemester(s as 1 | 2)}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all"
+                      style={gridSemester === s
+                        ? { background: '#3b82f6', color: 'white', borderColor: '#3b82f6' }
+                        : { background: 'white', color: '#9ca3af', borderColor: '#e5e7eb' }}>
+                      {s}학기
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 flex-wrap px-1">
+                <div className="flex items-center gap-1">
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: scoreBg(90, 100) }} />
+                  <span className="text-[10px] text-gray-500">90점↑</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: scoreBg(75, 100) }} />
+                  <span className="text-[10px] text-gray-500">보통</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: scoreBg(50, 100) }} />
+                  <span className="text-[10px] text-gray-500">낮음</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: '#f9fafb', border: '1px dashed #e5e7eb' }} />
+                  <span className="text-[10px] text-gray-500">미기록 (눌러서 입력)</span>
+                </div>
+              </div>
+
+              {gradeStudents.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                  <p className="text-sm text-gray-500">{activeGrade} 담당 학생이 없어요</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-auto">
+                  <table className="text-xs border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left border-b border-r border-gray-100 whitespace-nowrap">단원</th>
+                        {gradeStudents.map((s) => (
+                          <th key={s.id} className="px-1.5 py-2 border-b border-gray-100 whitespace-nowrap font-semibold text-gray-700">
+                            {s.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {SCHOOL_UNIT_INDEXES.map((idx) => (
+                        <tr key={idx}>
+                          <td className="sticky left-0 z-10 bg-white px-3 py-2 border-r border-b border-gray-50 font-bold text-gray-700 whitespace-nowrap">
+                            {idx}단원
+                          </td>
+                          {gradeStudents.map((s) => {
+                            const rec = unitExamOf(s.id, idx, gridSemester)
+                            const unitName = getChapterNameByOrder(concepts, s.grade, gridSemester, idx)
+                            return (
+                              <td key={s.id} className="p-1 border-b border-gray-50 text-center">
+                                <button
+                                  onClick={() => rec
+                                    ? openEditModal(rec)
+                                    : openModal(s, { title: '단원평가', semester: gridSemester, unitIndex: idx })}
+                                  title={`${s.name} · ${idx}단원${unitName ? ` (${unitName})` : ''}${rec?.score != null ? ` · ${rec.score}점` : ' · 미기록'}`}
+                                  className="mx-auto flex items-center justify-center transition-all"
+                                  style={rec?.score != null
+                                    ? { width: 44, height: 36, borderRadius: 8, background: scoreBg(rec.score, rec.total_score) }
+                                    : { width: 44, height: 36, borderRadius: 8, background: '#f9fafb', border: '1px dashed #e5e7eb' }}>
+                                  <span className="font-extrabold" style={{
+                                    fontSize: 13,
+                                    color: rec?.score != null ? scoreColor(rec.score, rec.total_score) : '#d1d5db',
+                                  }}>
+                                    {rec?.score != null ? rec.score : '–'}
+                                  </span>
+                                </button>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* 학생별 평가 카드 */}
         {loading ? (
           <div className="text-center py-10"><span className="w-6 h-6 border-2 border-[#9FE1CB] border-t-transparent rounded-full animate-spin inline-block" /></div>
-        ) : (
+        ) : boardOn ? null : (
           <div className="space-y-3">
             {filteredStudents.map((student) => {
               const sExams = studentExams(student.id)
