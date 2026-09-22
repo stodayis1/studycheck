@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 // 학습일지에서 결석이 저장되면 이 라우트를 거쳐 OPS(학원 행정 프로그램)로 전달한다.
 // 공유 비밀키(OPS_SYNC_SECRET)는 서버에서만 다뤄야 하므로, 브라우저가 직접 OPS를 호출하지 않고
 // 반드시 이 서버 라우트를 한 번 거치도록 함(비밀키가 클라이언트 번들에 노출되지 않게).
 export async function POST(req: NextRequest) {
+  // 이 라우트는 OPS_SYNC_SECRET을 대신 붙여준다. 인증이 없으면 외부인이 OPS에 결석 데이터를 주입할 수 있다.
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
+
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ ok: false, error: 'invalid body' }, { status: 400 })
 

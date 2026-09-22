@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
 export async function POST(req: NextRequest) {
+  // 프롬프트를 그대로 Claude에 넘기므로, 인증이 없으면 학원 ANTHROPIC_API_KEY가 외부인의 AI 프록시로 쓰인다.
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
+
   try {
     const body = await req.json()
 

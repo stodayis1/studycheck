@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(req: NextRequest) {
+  // 이미지를 Claude로 보내므로 generate-feedback과 같은 이유로 직원 인증이 필요하다.
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
+
   try {
     const { image, mimeType } = await req.json()
 

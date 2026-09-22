@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Header } from '@/components/common/Header'
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 
 interface Student {
   id: string
@@ -76,7 +77,7 @@ export default function ImportRecordsPage() {
         reader.readAsDataURL(image)
       })
 
-      const res = await fetch('/api/parse-records', {
+      const res = await apiFetch('/api/parse-records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: base64, mimeType: image.type }),

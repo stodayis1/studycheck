@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
@@ -280,7 +281,7 @@ export default function TeacherLearningNotesPage() {
     if (!target.trim()) { alert('보낼 번호를 입력해주세요.'); return }
     setSendingKakao(sessionId)
     try {
-      const res = await fetch('/api/send-kakao', {
+      const res = await apiFetch('/api/send-kakao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, testPhone: target.trim() }),
@@ -293,7 +294,7 @@ export default function TeacherLearningNotesPage() {
       alert('카톡을 보냈어요!')
       // 카톡과 별도로, 앱 알림을 켜둔 학부모/학생에게도 푸시 발송 (실패해도 카톡 발송 자체는 이미 성공했으므로 조용히 무시)
       if (studentId) {
-        fetch('/api/push/send', {
+        apiFetch('/api/push/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -746,7 +747,7 @@ export default function TeacherLearningNotesPage() {
   // 행정팀이 같은 결석을 또 손으로 입력하는 이중작업을 없앤다. 실패해도 학습일지 저장 자체는
   // 이미 끝난 뒤라 화면에 영향 없음 — 실패는 콘솔에만 남기고 조용히 넘어감.
   function syncAbsenceToOPS(student: Student, absentDate: string) {
-    fetch('/api/sync-absence-to-ops', {
+    apiFetch('/api/sync-absence-to-ops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
@@ -643,7 +644,7 @@ export default function TeacherReportsPage() {
     setMGenerating(true)
     try {
       const prompt = `다음은 수학 학원 학생의 한 달 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회, 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
-      const res = await fetch('/api/generate-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
+      const res = await apiFetch('/api/generate-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
       const data = await res.json()
       setMComment(data.message ?? '')
     } catch { setMComment('') }
@@ -661,7 +662,7 @@ export default function TeacherReportsPage() {
     a.click()
     // 이미지를 저장(=발송 준비)하는 시점에 앱 알림을 켜둔 학부모/학생에게도 푸시 발송
     if (mData?.student?.id) {
-      fetch('/api/push/send', {
+      apiFetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -772,7 +773,7 @@ export default function TeacherReportsPage() {
     a.click()
     // 이미지를 저장(=발송 준비)하는 시점에 앱 알림을 켜둔 학부모/학생에게도 푸시 발송
     if (gData?.student?.id) {
-      fetch('/api/push/send', {
+      apiFetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

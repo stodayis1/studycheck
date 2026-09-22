@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 
@@ -267,7 +268,7 @@ export default function TeacherExamPrepPage() {
       .from('students').select('id').eq('school', schSchool).eq('grade', schGrade).eq('is_active', true)
     const targetIds = (targetStudents ?? []).map((s: any) => s.id)
     if (targetIds.length > 0) {
-      fetch('/api/push/send', {
+      apiFetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

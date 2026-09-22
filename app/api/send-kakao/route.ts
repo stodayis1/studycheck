@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { SolapiMessageService } from 'solapi'
 import { randomBytes } from 'crypto'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 // 학부모에게 보낼 링크가 가리키는 공개 사이트 주소 (배포된 실제 주소로 고정)
 const APP_URL = 'https://studycheck-five.vercel.app'
 
 export async function POST(req: NextRequest) {
+  // 실제 문자·알림톡이 발송되고 report_links가 생성된다. 인증 없이 열려 있으면 요금·스팸 사고가 난다.
+  const deny = await denyIfNotStaff(req)
+  if (deny) return deny
+
   try {
     // 서버 전용 라우트라서 서비스 롤 키를 쓴다. report_links에 RLS가 걸려있어서
     // anon 키로는 report_links insert가 막히기 때문(다른 테이블 읽기는 서비스 롤이 상위 권한이라 기존과 동일하게 다 됨).

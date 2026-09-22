@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { apiFetch } from '@/lib/apiFetch'
 
 export default function TestKakaoPage() {
   const [sessionId, setSessionId] = useState('992df295-59ce-48d5-8741-795f450b89e3') // 최온유, 정시 출석, 학습지100점/데일리테스트83점
@@ -12,7 +13,7 @@ export default function TestKakaoPage() {
     setLoading(true)
     setResult(null)
     try {
-      const res = await fetch('/api/send-kakao', {
+      const res = await apiFetch('/api/send-kakao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, testPhone }),

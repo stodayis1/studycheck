@@ -3,6 +3,8 @@
 // 브라우저 푸시 알림 구독/해제를 처리하는 클라이언트 헬퍼.
 // 실제 발송은 서버(app/api/push/send)에서 lib/sendPush.ts를 통해 이루어진다.
 
+import { apiFetch } from '@/lib/apiFetch'
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -56,7 +58,7 @@ export async function subscribeToPush(opts: {
     }
 
     const json = sub.toJSON()
-    const res = await fetch('/api/push/subscribe', {
+    const res = await apiFetch('/api/push/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
