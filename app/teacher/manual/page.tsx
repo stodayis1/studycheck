@@ -183,6 +183,7 @@ const GROUPS: ManualGroup[] = [
       { href: '/teacher/worksheets', label: '학습지출제', icon: 'ti-file-plus', adminOnly: true,
         summary: '문제은행으로 학습지를 만들고 QR 시험지로 인쇄해요.',
         steps: ['교재 연계 / 문제은행(유형별·단원별) / 목적별 중 고르기 → 조건 선택 → 인쇄 화면.',
+          '교재 연계 → 시중교재에서 학기 칸 아래 「문항 직접 고르기」를 누르면, 교재를 펴듯 쪽(또는 번호 구간)에서 문항을 골라 학습지를 만들 수 있어요. 고른 문항에 쌍둥이·유사 문제를 1~3개씩 붙일 수 있습니다.',
           '문항 그림에는 교재 원래 번호가 안 나와요(학습지는 1, 2, 3…으로 다시 매깁니다). 원래 몇 쪽 몇 번인지는 인쇄 화면 정답표의 「출처」에 「라이트쎈 중2-2 53쪽 0232번」처럼 나옵니다.'] },
       { href: '/teacher/gradings', label: '채점결과', icon: 'ti-checkbox', adminOnly: true,
         summary: '학생이 QR로 스스로 채점한 결과를 시험지별로 봐요.',
