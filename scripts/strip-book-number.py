@@ -127,6 +127,23 @@ def row_bands(m, min_gap=4):
     return bands
 
 
+# ★ 한 번 지운 그림을 또 지우면 문제 첫 줄을 잘라 먹는다.
+#    (번호를 지우고 나면 본문 첫 줄이 '100 이상 400 이하…' 처럼 다시 번호처럼 보인다)
+#    교재 번호는 **색 글자**이고 본문은 검은 글자라, 색이 있을 때만 지우도록 해서 막는다.
+COLOR_BOOKS = {'쎈', '쎈B', '베이직쎈'}
+
+
+def is_colored(im, box):
+    """그 자리에 색 글자가 있는지 — 교재 번호는 주황·초록이고 본문은 검다."""
+    x0, x1, y0, y1 = box
+    a = np.asarray(im.convert('RGB')).astype(int)[y0:y1 + 1, x0:x1 + 1]
+    if a.size == 0: return False
+    mx = a.max(2); mn = a.min(2)
+    dark = a.mean(2) < 190
+    if dark.sum() < 30: return False
+    return float(((mx - mn)[dark] > 30).mean()) > 0.35
+
+
 def strip(buf, book):
     im = Image.open(io.BytesIO(buf))
     a = np.asarray(im.convert('L')).astype(int)
@@ -141,6 +158,8 @@ def strip(buf, book):
     w = x1 - x0 + 1
     if not (14 <= w <= 150): return None, f'번호 폭 {w}'
     if after < 16: return None, '번호 뒤에 빈칸이 좁음'
+    if book in COLOR_BOOKS and not is_colored(im, (x0, x1, y0, y1)):
+        return None, '이미 지웠음(색 글자가 아님)'
 
     rgb = im.convert('RGB')
     if book in CUT_BOOKS:
