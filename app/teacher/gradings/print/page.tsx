@@ -2,7 +2,7 @@
 // 브라우저 인쇄(Ctrl+P)로 종이 또는 PDF로 뽑는다.
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
@@ -11,11 +11,17 @@ const NAVY = '#0f3460'
 const GOLD = '#c8992e'
 const HEADER_CROP_PX = 37 // 교재 이미지 맨 위의 문제번호 띠를 잘라낸다
 
-function chunk<T>(arr: T[], n: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n))
-  return out
-}
+// 문제 그림은 모두 200dpi 로 잘라 두었다. 그래서 「원본 px ÷ 200 × 25.4」mm 로 찍으면
+// 어느 교재·어느 문항이든 글씨 크기가 똑같아진다.  (칸에 맞춰 줄이면 긴 문항만 작아져 들쭉날쭉해진다)
+const DPI = 200
+const MM_PER_PX = 25.4 / DPI
+const CROP_MM = HEADER_CROP_PX * MM_PER_PX
+
+const PX_PER_MM = 96 / 25.4   // CSS 에서 1mm 는 96/25.4 px 로 정해져 있다
+const COL_MM = 87             // (190mm − 단 사이 16mm) ÷ 2
+const ROWGAP_MM = 7
+const PAGE1_MM = 203          // 1쪽은 머리말·인적사항 칸이 있어 낮다
+const PAGEN_MM = 237
 
 type P = {
   no: number
@@ -48,8 +54,13 @@ function PrintInner() {
   const [err, setErr] = useState<string | null>(null)
   const [showSource, setShowSource] = useState(false)
   const [showBadge, setShowBadge] = useState(true)
-  const [solveMm, setSolveMm] = useState(20)
+  const [solveMm, setSolveMm] = useState(10)
+  const [scale, setScale] = useState(1) // 그림 배율 — 전 문항에 똑같이 먹는다
   const [perCol, setPerCol] = useState(3) // 한 단에 넣을 문항 수 (2 또는 3)
+
+  // 문항마다 실제로 몇 mm 를 먹는지 미리 재 둔다 (안 보이는 곳에 한 번 그려서 잰다)
+  const measRef = useRef<HTMLDivElement | null>(null)
+  const [heights, setHeights] = useState<number[] | null>(null)
 
   useEffect(() => {
     if (!code) return
@@ -61,6 +72,70 @@ function PrintInner() {
       })
       .catch((e) => setErr(e.message))
   }, [code])
+
+  // 그림이 다 뜬 뒤에 높이를 잰다
+  useEffect(() => {
+    if (!data) return
+    setHeights(null)
+    let dead = false
+    const tick: () => void = () => {
+      if (dead) return
+      const el = measRef.current
+      if (!el) {
+        setTimeout(tick, 60)
+        return
+      }
+      const imgs = Array.from(el.querySelectorAll('img'))
+      if (imgs.some((i) => !i.complete)) {
+        setTimeout(tick, 80)
+        return
+      }
+      // requestAnimationFrame 은 탭이 뒤에 있으면 안 불린다 → setTimeout 을 쓴다
+      setTimeout(() => {
+        if (dead || !measRef.current) return
+        setHeights(Array.from(measRef.current.children).map((c) => (c as HTMLElement).offsetHeight))
+      }, 50)
+    }
+    tick()
+    return () => {
+      dead = true
+    }
+  }, [data, solveMm, showSource, showBadge, scale])
+
+  // 잰 높이로 쪽을 짠다.
+  //  · 왼쪽 단을 위에서부터 채우고, 꽉 차면 오른쪽 단으로 (세로 순서)
+  //  · 한 단에 최대 perCol 문항. 그림은 절대 줄이지 않고, 대신 「몇 개가 들어가는지」를 높이로 정한다
+  //  · 남는 자리는 그 단의 문항들이 풀이 여백으로 나눠 갖는다 → 아래가 휑하지 않다
+  const pages = useMemo(() => {
+    if (!data || !heights) return null
+    const n = data.problems.length
+    const gap = ROWGAP_MM * PX_PER_MM
+    const out: P[][][] = []
+    let i = 0
+    while (i < n) {
+      const limit = (out.length === 0 ? PAGE1_MM : PAGEN_MM) * PX_PER_MM
+      const page: P[][] = []
+      for (let c = 0; c < 2 && i < n; c++) {
+        const col: P[] = []
+        let used = 0
+        while (i < n && col.length < perCol) {
+          const need = (col.length ? gap : 0) + (heights[i] ?? 0)
+          if (col.length && used + need > limit) break
+          used += need
+          col.push(data.problems[i])
+          i++
+        }
+        if (!col.length) {
+          // 한 문항이 한 쪽보다 큰 경우 — 그래도 한 개는 넣는다 (넘치면 잘린다)
+          col.push(data.problems[i])
+          i++
+        }
+        page.push(col)
+      }
+      out.push(page)
+    }
+    return out
+  }, [data, heights, perCol])
 
   if (err) return <p className="p-10 text-center text-gray-500">{err}</p>
   if (!data) return <p className="p-10 text-center text-gray-400">불러오는 중…</p>
@@ -92,6 +167,19 @@ function PrintInner() {
           </select>
         </label>
         <label className="flex items-center gap-1.5">
+          그림 크기
+          <select
+            value={scale}
+            onChange={(e) => setScale(Number(e.target.value))}
+            className="rounded border px-1.5 py-0.5"
+          >
+            <option value={1}>원본</option>
+            <option value={0.9}>90%</option>
+            <option value={0.8}>80%</option>
+            <option value={0.7}>70%</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
           풀이 여백
           <input
             type="range"
@@ -102,6 +190,7 @@ function PrintInner() {
           />
           <span className="w-10 text-gray-400">{solveMm}mm</span>
         </label>
+        <span className="text-gray-400">{pages ? `${pages.length}쪽` : '…'}</span>
         <button
           onClick={() => window.print()}
           className="ml-auto rounded-lg px-4 py-2 font-medium text-white"
@@ -154,15 +243,27 @@ function PrintInner() {
           <div />
         </div>
 
-        {/* 한 쪽 = (한 단에 2~3문항) × 2단.
-            왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어가며, 좌우 줄 높이가 맞는다.
-            (예전에는 홀수는 왼쪽·짝수는 오른쪽으로 갈라 넣어 지그재그였고, 쪽마다 문항 수가 들쭉날쭉했다) */}
-        {chunk(data.problems, perCol * 2).map((group, gi) => (
+        {/* 한 쪽 = (한 단에 2~3문항) × 2단. 왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어간다.
+            그림은 모두 원본 크기(200dpi)로 찍고, 대신 「몇 문항이 들어가는지」를 높이를 재서 정한다.
+            그래서 문항마다 글씨 크기가 똑같다. */}
+        {(pages ?? []).map((page, gi) => (
           <div className="pagegrid" key={gi}>
-            {group.map((p) => (
-              <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} />
+            {page.map((col, ci) => (
+              <div className="pagecol" key={ci}>
+                {col.map((p) => (
+                  <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} scale={scale} />
+                ))}
+              </div>
             ))}
           </div>
+        ))}
+        {!pages && <p style={{ color: '#bbb', fontSize: '9pt' }}>쪽을 짜는 중…</p>}
+      </div>
+
+      {/* 높이를 재려고 안 보이는 곳에 한 벌 그려 둔다 (인쇄·화면 모두에 안 나온다) */}
+      <div className="measure" ref={measRef} aria-hidden>
+        {data.problems.map((p) => (
+          <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} scale={scale} />
         ))}
       </div>
             </td>
@@ -275,23 +376,42 @@ function PrintInner() {
         }
         /* 한 쪽 = 2~3줄 × 2단. 왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어간다.
            줄 높이를 1fr 로 고르게 나눠 좌우 문항이 같은 높이에서 시작한다 */
+        .measure {
+          position: absolute;
+          left: -9999px;
+          top: 0;
+          width: ${COL_MM}mm;
+          visibility: hidden;
+          pointer-events: none;
+        }
+        @media print {
+          .measure {
+            display: none !important;
+          }
+        }
         .pagegrid {
           position: relative;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          /* minmax(0,1fr) 이어야 칸이 내용 때문에 늘어나지 않는다.
-             1fr 로 두면 그림이 큰 문항에서 격자가 한 쪽보다 커져 통째로 다음 장으로 밀린다 */
-          grid-template-rows: repeat(${perCol}, minmax(0, 1fr));
-          grid-auto-flow: column;
           column-gap: 16mm;
-          row-gap: 7mm;
-          height: 237mm;
+          height: ${PAGEN_MM}mm;
           overflow: hidden;
           break-after: page;
         }
+        /* 한 단. 문항이 남는 자리를 고르게 나눠 가져 쪽 아래가 휑하지 않다 */
+        .pagecol {
+          display: flex;
+          flex-direction: column;
+          gap: ${ROWGAP_MM}mm;
+          height: 100%;
+          min-height: 0;
+        }
+        .pagecol > .q {
+          flex: 1 1 auto;
+        }
         /* 1쪽에는 머리말과 인적사항 칸이 있어 그만큼 낮다 */
         .pagegrid:first-of-type {
-          height: 203mm;
+          height: ${PAGE1_MM}mm;
         }
         .pagegrid:last-of-type {
           break-after: auto;
@@ -347,17 +467,15 @@ function PrintInner() {
         .b-상 {
           background: #c2255c;
         }
-        /* 칸 높이가 정해져 있으므로 그림은 칸에 맞춰 줄인다 (가로가 남아도 세로로 안 넘치게) */
+        /* 그림은 원본 크기(200dpi) 그대로 → 문항마다 글씨 크기가 같다.
+           칸에 맞춰 줄이면 긴 문항만 작아져서 들쭉날쭉해진다 */
         .qimg {
           overflow: hidden;
-          display: flex;
-          min-height: 0;
+          display: block;
         }
         .qimg img {
           max-width: 100%;
-          max-height: 100%;
-          object-fit: contain;
-          object-position: left top;
+          height: auto;
           display: block;
         }
         /* 남는 자리는 풀이 여백이 먹는다 → 답란이 칸 맨 아래에서 좌우로 나란히 맞는다 */
@@ -440,18 +558,20 @@ function Q({
   showSource,
   showBadge,
   solveMm,
+  scale,
 }: {
   p: P
   showSource: boolean
   showBadge: boolean
   solveMm: number
+  scale: number
 }) {
   const imgRef = useRef<HTMLImageElement | null>(null)
-  const [crop, setCrop] = useState(0) // % of width
+  const [wmm, setWmm] = useState(0) // 원본 크기(200dpi)로 찍었을 때의 가로 mm
 
   const onLoad = () => {
     const el = imgRef.current
-    if (p.crop && el?.naturalWidth) setCrop((HEADER_CROP_PX / el.naturalWidth) * 100)
+    if (el?.naturalWidth) setWmm(el.naturalWidth * MM_PER_PX)
   }
 
   return (
@@ -471,7 +591,12 @@ function Q({
             src={p.image}
             alt={`${p.no}번`}
             onLoad={onLoad}
-            style={{ marginTop: `-${crop}%` }}
+            style={{
+              // 원본 크기 그대로 (단보다 넓은 그림만 max-width 로 줄어든다)
+              width: wmm ? `${(wmm * scale).toFixed(2)}mm` : undefined,
+              // 교재 맨 위 문제번호 띠를 잘라낸다 — 200dpi 기준이라 항상 같은 mm 다
+              marginTop: p.crop ? `-${(CROP_MM * scale).toFixed(2)}mm` : undefined,
+            }}
           />
         ) : (
           <p style={{ color: '#bbb', fontSize: '9pt' }}>이미지를 불러오지 못했습니다</p>
