@@ -182,7 +182,8 @@ const GROUPS: ManualGroup[] = [
     items: [
       { href: '/teacher/worksheets', label: '학습지출제', icon: 'ti-file-plus', adminOnly: true,
         summary: '문제은행으로 학습지를 만들고 QR 시험지로 인쇄해요.',
-        steps: ['교재 연계 / 문제은행(유형별·단원별) / 목적별 중 고르기 → 조건 선택 → 인쇄 화면.'] },
+        steps: ['교재 연계 / 문제은행(유형별·단원별) / 목적별 중 고르기 → 조건 선택 → 인쇄 화면.',
+          '문항 그림에는 교재 원래 번호가 안 나와요(학습지는 1, 2, 3…으로 다시 매깁니다). 원래 몇 쪽 몇 번인지는 인쇄 화면 정답표의 「출처」에 「라이트쎈 중2-2 53쪽 0232번」처럼 나옵니다.'] },
       { href: '/teacher/gradings', label: '채점결과', icon: 'ti-checkbox', adminOnly: true,
         summary: '학생이 QR로 스스로 채점한 결과를 시험지별로 봐요.',
         steps: ['학생별 「틀린 문제 그대로」 「쌍둥이 문제」 「같은 유형 다른 문제」로 재출제.', '서술형은 「풀이 사진 보기」로 ○ / ✗.'] },

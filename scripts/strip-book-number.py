@@ -23,6 +23,8 @@
 """
 import argparse
 import io
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import sys
@@ -170,14 +172,17 @@ def main():
         print(f'{book}: 대상 {len(rows)}문항')
         if args.check: continue
         if args.dry: os.makedirs(PREVIEW, exist_ok=True)
-        done = changed = skipped = failed = 0
+        n = {'done': 0, 'changed': 0, 'skipped': 0, 'failed': 0}
         why = {}
-        for r in rows:
+        lock = threading.Lock()
+
+        def one(r):
             try:
                 buf = api(f'/storage/v1/object/{BUCKET}/' + urllib.parse.quote(r['image_path']), raw=True)
                 out, msg = strip(buf, book)
                 if out is None:
-                    skipped += 1; why[msg] = why.get(msg, 0) + 1
+                    with lock:
+                        n['skipped'] += 1; why[msg] = why.get(msg, 0) + 1
                 else:
                     if args.dry:
                         tag = f"{book}_{r['grade']}-{r['semester']}_{r['local_no']}".replace('/', '_')
@@ -187,15 +192,20 @@ def main():
                         api(f'/storage/v1/object/{BUCKET}/' + urllib.parse.quote(r['image_path']),
                             method='PUT', data=out,
                             headers={'Content-Type': 'image/png', 'x-upsert': 'true'}, raw=True)
-                    changed += 1
+                    with lock: n['changed'] += 1
             except Exception as e:
-                failed += 1
-                if failed < 4: print('  ✗', r['image_path'], e)
-            done += 1
-            if done % 100 == 0:
-                print(f'\r  {done}/{len(rows)} (고침 {changed} · 건너뜀 {skipped} · 실패 {failed})',
-                      end='', flush=True)
-        print(f'\n  끝 — 고침 {changed} · 건너뜀 {skipped} · 실패 {failed}')
+                with lock:
+                    n['failed'] += 1
+                    if n['failed'] < 4: print('  ✗', r['image_path'], e, flush=True)
+            with lock:
+                n['done'] += 1
+                if n['done'] % 200 == 0:
+                    print(f"  {n['done']}/{len(rows)} "
+                          f"(고침 {n['changed']} · 건너뜀 {n['skipped']} · 실패 {n['failed']})", flush=True)
+
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            list(ex.map(one, rows))
+        print(f"  끝 — 고침 {n['changed']} · 건너뜀 {n['skipped']} · 실패 {n['failed']}")
         if why: print('  건너뛴 까닭', why)
 
 
