@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sourceLabel } from '@/lib/problemSource'
+import { denyIfNotStaff } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -45,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   const { data: rows, error: e2 } = await supabase
     .from('exam_sheet_problems')
     .select(
-      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, is_essay)'
+      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, image_path, is_essay)'
     )
     .eq('sheet_id', sheet.id)
     .order('no')
@@ -65,9 +66,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     ;(types ?? []).forEach((t: any) => typeTitle.set(t.code, t.type_title))
   }
 
-  // 정답 이미지 임시 주소 (2시간)
+  // 정답 이미지 임시 주소 (2시간).
+  // ?full=1 은 선생님 채점 화면 전용 — 문제 그림까지 같이 준다(학생 화면에는 안 준다)
+  const full = new URL(_req.url).searchParams.get('full') === '1'
+  if (full) {
+    const deny = await denyIfNotStaff(_req)
+    if (deny) return deny
+  }
   const paths = (rows ?? [])
-    .map((r: any) => r.problems?.answer_image_path)
+    .flatMap((r: any) => [r.problems?.answer_image_path, full ? r.problems?.image_path : null])
     .filter(Boolean) as string[]
   const signed = new Map<string, string>()
   if (paths.length) {
@@ -91,6 +98,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       answerText: p?.answer_text ?? null,
       answerChoices: choiceDigits(p?.answer_text ?? null),
       answerImage: p?.answer_image_path ? signed.get(p.answer_image_path) ?? null : null,
+      image: full && p?.image_path ? signed.get(p.image_path) ?? null : null,
     }
   })
 
