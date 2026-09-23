@@ -7,6 +7,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { sourceLabel } from '@/lib/problemSource'
 
 type Sheet = {
   id: string
@@ -77,7 +78,7 @@ export default function TeacherGradingsPage() {
   const [busy, setBusy] = useState<string | null>(null)
 
   // 틀린 문제를 다시 뽑아 새 시험지를 만들고 인쇄 화면을 새 탭으로 연다
-  async function reprint(gradingId: string, mode: 'wrong' | 'twin' | 'similar') {
+  async function reprint(gradingId: string, mode: 'wrong' | 'twin' | 'similar' | 'wrong+similar') {
     setBusy(`${gradingId}:${mode}`)
     try {
       const res = await apiFetch('/api/reprint', {
@@ -169,7 +170,7 @@ export default function TeacherGradingsPage() {
         supabase
           .from('exam_sheet_problems')
           .select(
-            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, book, local_no)'
+            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, book, grade, semester, page_no, local_no)'
           )
           .eq('sheet_id', sel.id)
           .order('no'),
@@ -221,7 +222,7 @@ export default function TeacherGradingsPage() {
         difficulty: p.problems?.difficulty ?? null,
         answerText: p.problems?.answer_text ?? null,
         typeTitle: p.problems?.type_code ? typeTitles[p.problems.type_code] ?? null : null,
-        source: p.problems?.book ? `${p.problems.book} ${p.problems.local_no}번` : null,
+        source: sourceLabel(p.problems),
         ok: e.ok,
         n: e.n,
         rate: e.n ? e.ok / e.n : 0,
@@ -384,7 +385,7 @@ export default function TeacherGradingsPage() {
                   </button>
                   {open && (
                     <div className="border-t border-gray-100 px-4 py-3">
-                      <div className="mb-3 grid grid-cols-3 gap-2">
+                      <div className="mb-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <button
                           onClick={() => reprint(g.id, 'wrong')}
                           disabled={busy !== null}
@@ -411,6 +412,15 @@ export default function TeacherGradingsPage() {
                           title="같은 유형에서 안 풀어본 다른 문제를 뽑습니다"
                         >
                           {busy === `${g.id}:similar` ? '만드는 중…' : '같은 유형 다른 문제'}
+                        </button>
+                        <button
+                          onClick={() => reprint(g.id, 'wrong+similar')}
+                          disabled={busy !== null}
+                          className="rounded-lg py-2 text-xs font-medium text-white disabled:opacity-40"
+                          style={{ background: ORANGE }}
+                          title="틀린 문제와 그 유사문제를 한 장에 이어서 뽑습니다"
+                        >
+                          {busy === `${g.id}:wrong+similar` ? '만드는 중…' : '오답＋유사'}
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">

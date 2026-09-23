@@ -1,5 +1,7 @@
 // 재출제 API
-//  POST  { gradingId, mode: 'wrong' | 'similar' }  -> 새 시험지를 만들고 code를 돌려준다
+//  POST  { gradingId, mode }  -> 새 시험지를 만들고 code를 돌려준다
+//        mode: 'wrong'(틀린 문제 그대로) | 'twin'(쌍둥이) | 'similar'(같은 유형 다른 문제)
+//              | 'wrong+similar'(틀린 문제 + 그 유사문제를 이어서)
 //  GET   ?code=XXXXXX                              -> 인쇄 화면이 쓸 문제 이미지·QR을 돌려준다
 //
 // 문제은행은 RLS로 잠겨 있어서 전부 여기(서버)에서 service_role 키로 읽는다.
@@ -8,6 +10,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { sourceLabel } from '@/lib/problemSource'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -46,8 +49,12 @@ export async function POST(req: Request) {
   const supabase = db()
   const { gradingId, mode } = (await req.json()) as {
     gradingId: string
-    mode: 'wrong' | 'twin' | 'similar'
+    mode: 'wrong' | 'twin' | 'similar' | 'wrong+similar'
   }
+  // '+' 로 이어 붙이면 두 가지를 한 장에 담는다 (오답 먼저, 그 뒤에 유사문제)
+  const parts = String(mode ?? '').split('+').filter(Boolean)
+  if (!parts.length || parts.some((m) => !['wrong', 'twin', 'similar'].includes(m)))
+    return NextResponse.json({ error: '무엇을 뽑을지 알 수 없습니다.' }, { status: 400 })
 
   const { data: grading } = await supabase
     .from('gradings')
@@ -74,27 +81,27 @@ export async function POST(req: Request) {
   if (wrong.length === 0)
     return NextResponse.json({ error: '틀린 문제가 없습니다.' }, { status: 400 })
 
-  let problemIds: number[] = []
+  const problemIds: number[] = []
+  const notes: string[] = []
 
-  if (mode === 'wrong') {
-    problemIds = wrong.map((w) => w.problem_id as number)
-  } else if (mode === 'twin') {
+  if (parts.includes('wrong')) {
+    problemIds.push(...wrong.map((w) => w.problem_id as number))
+  }
+  if (parts.includes('twin')) {
     // 쌍둥이 문제 — 쎈↔쎈B는 숫자만 다른 같은 문제라, 제대로 이해했는지 확인하기 좋다
     const { data: tw } = await supabase
       .from('problems')
       .select('id, twin_id')
       .in('id', wrong.map((w) => w.problem_id))
     const twinOf = new Map<number, number | null>((tw ?? []).map((t: any) => [t.id, t.twin_id]))
+    let got = 0
     for (const w of wrong) {
       const t = twinOf.get(w.problem_id as number)
-      if (t) problemIds.push(t)
+      if (t) { problemIds.push(t); got++ }
     }
-    if (problemIds.length === 0)
-      return NextResponse.json(
-        { error: '틀린 문제에 쌍둥이 문제가 없습니다. (쎈·쎈B 문항만 짝이 있어요)' },
-        { status: 400 }
-      )
-  } else {
+    if (!got) notes.push('쌍둥이 문제가 없습니다 (쎈·쎈B 문항만 짝이 있어요)')
+  }
+  if (parts.includes('similar')) {
     // 유사문제 — 같은 유형에서, 원래 시험지에 있던 문제와 이 학생이 이미 본 문제는 빼고 뽑는다
     const { data: onSheet } = await supabase
       .from('exam_sheet_problems')
@@ -172,12 +179,14 @@ export async function POST(req: Request) {
         problemIds.push(arr[idx].id)
       }
     }
-    if (problemIds.length === 0)
-      return NextResponse.json(
-        { error: '같은 유형에서 새로 뽑을 문제가 없습니다.' },
-        { status: 400 }
-      )
+    if (!used.size) notes.push('같은 유형에서 새로 뽑을 문제가 없습니다')
   }
+
+  if (problemIds.length === 0)
+    return NextResponse.json(
+      { error: notes.join(' · ') || '뽑을 문제가 없습니다.' },
+      { status: 400 }
+    )
 
   // 새 시험지 등록
   let code = newCode()
@@ -187,7 +196,8 @@ export async function POST(req: Request) {
     code = newCode()
   }
 
-  const label = mode === 'wrong' ? '오답' : mode === 'twin' ? '쌍둥이문제' : '유사문제'
+  const LABEL: Record<string, string> = { wrong: '오답', twin: '쌍둥이문제', similar: '유사문제' }
+  const label = parts.map((m) => LABEL[m]).join('+')
   const title = `${grading.student_name ?? '학생'} · ${origin?.title ?? '시험지'} · ${label}`
 
   const { data: sheet, error: e1 } = await supabase
@@ -229,7 +239,7 @@ export async function GET(req: Request) {
   const { data: rows } = await supabase
     .from('exam_sheet_problems')
     .select(
-      'no, problems(id, book, grade, semester, sub_chapter_title, local_no, type_code, difficulty, answer_kind, image_path)'
+      'no, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, image_path)'
     )
     .eq('sheet_id', sheet.id)
     .order('no')
@@ -272,11 +282,11 @@ export async function GET(req: Request) {
         image: p?.image_path ? signed.get(p.image_path) ?? null : null,
         difficulty: p?.difficulty ?? null,
         isChoice: p?.answer_kind === 'choice',
-        // 쎈·쎈B는 이미지 맨 위에 문제번호 띠가 따로 있어 잘라내고,
-        // 베이직쎈은 번호와 발문이 같은 줄이라 자르면 문제가 잘린다
-        crop: p?.book === '쎈' || p?.book === '쎈B',
+        // 2026-09-23부터 교재 원본 번호는 저장된 그림에서 미리 지워 둔다
+        // (scripts/strip-book-number.py) → 인쇄할 때 따로 잘라낼 것이 없다
+        crop: false,
         typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,
-        source: p?.book ? `${p.book} ${p.grade}-${p.semester} ${p.local_no}번` : null,
+        source: sourceLabel(p),
       }
     }),
   })

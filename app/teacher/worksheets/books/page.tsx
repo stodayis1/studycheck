@@ -24,6 +24,7 @@ const INFO: Record<string, { color: string; desc: string }> = {
   'RPM': { color: '#0891b2', desc: '교과서 문제 · 유형 익히기 · 시험에 꼭 나오는 문제 · 서술형 · 실력UP' },
   '개념+유형 개념편': { color: '#7c3aed', desc: '필수예제 · 문제(유제) — 개념 잡을 때' },
   '개념+유형 유형편': { color: '#db2777', desc: '유형별 문제 — 난이도 ●○○~●●● 표시' },
+  '라이트쎈': { color: '#0d9488', desc: 'A단계 기본 · B단계 유형 (쎈보다 쉬운 단계)' },
 }
 
 export default function BooksPage() {
@@ -44,6 +45,15 @@ export default function BooksPage() {
     if (course) { const [g, s] = course.split('-'); preset.grade = g; preset.semester = Number(s) }
     try { sessionStorage.setItem('pb_preset', JSON.stringify(preset)) } catch { /* 무시 */ }
     router.push('/teacher/problem-bank')
+  }
+
+  // 교재를 펴듯 쪽에서 문항을 직접 고르는 화면으로
+  const pick = (b: Book, course: string) => {
+    const [g, s] = course.split('-')
+    try {
+      sessionStorage.setItem('bp_pick', JSON.stringify({ book: b.book, grade: g, semester: Number(s) }))
+    } catch { /* 무시 */ }
+    router.push('/teacher/worksheets/pick')
   }
 
   if (authLoading) return <Shell><div className="p-10 text-center text-gray-400">불러오는 중…</div></Shell>
@@ -74,13 +84,20 @@ export default function BooksPage() {
                   {Object.entries(b.courses).sort(([a], [c]) => a.localeCompare(c)).map(([k, n]) => {
                     const [g, sem] = k.split('-')
                     return (
-                      <button key={k} disabled={!n} onClick={() => go(b, k)}
-                        className={`py-2 rounded-lg border text-xs ${
-                          n ? 'hover:bg-gray-50 text-gray-700' : 'opacity-35 cursor-not-allowed text-gray-400'
-                        }`}>
-                        <div className="font-medium">{courseLabel(g, sem)}</div>
-                        <div className="text-[10px] text-gray-400">{n ? `${n}문항` : '없음'}</div>
-                      </button>
+                      <div key={k} className={`rounded-lg border overflow-hidden ${n ? '' : 'opacity-35'}`}>
+                        <button disabled={!n} onClick={() => go(b, k)}
+                          className={`w-full py-2 text-xs ${n ? 'hover:bg-gray-50 text-gray-700' : 'cursor-not-allowed text-gray-400'}`}>
+                          <div className="font-medium">{courseLabel(g, sem)}</div>
+                          <div className="text-[10px] text-gray-400">{n ? `${n}문항` : '없음'}</div>
+                        </button>
+                        <button disabled={!n} onClick={() => pick(b, k)}
+                          className={`w-full py-1.5 text-[11px] border-t ${
+                            n ? 'text-white' : 'cursor-not-allowed text-gray-400 bg-gray-100'
+                          }`}
+                          style={n ? { background: info.color } : undefined}>
+                          문항 직접 고르기
+                        </button>
+                      </div>
                     )
                   })}
                 </div>

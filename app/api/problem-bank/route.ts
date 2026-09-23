@@ -186,7 +186,7 @@ export async function POST(req: Request) {
   let rows = await all<any>((f, t) =>
     supabase
       .from('problems')
-      .select('id, book, grade, semester, sub_chapter_no, local_no, type_code, difficulty, step, level, is_essay, answer_kind')
+      .select('id, book, grade, semester, sub_chapter_no, page_no, local_no, type_code, difficulty, step, level, is_essay, answer_kind')
       .eq('grade', grade)
       .eq('semester', Number(semester))
       .in('type_code', typeCodes)
@@ -257,7 +257,7 @@ export async function POST(req: Request) {
   if (preview)
     return NextResponse.json({
       count: picked.length,
-      problems: picked.map((p, i) => ({ no: i + 1, id: p.id, book: p.book, localNo: p.local_no, typeCode: p.type_code, level: p.level })),
+      problems: picked.map((p, i) => ({ no: i + 1, id: p.id, book: p.book, pageNo: p.page_no ?? null, localNo: p.local_no, typeCode: p.type_code, level: p.level })),
     })
 
   // 시험지 저장

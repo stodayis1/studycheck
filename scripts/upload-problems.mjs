@@ -46,14 +46,17 @@ if (!URL || !KEY) { console.error('✗ .env.local 에 NEXT_PUBLIC_SUPABASE_URL �
 if (!ROOT || !fs.existsSync(ROOT)) { console.error('✗ 폴더 경로를 인자로 주세요.  예: node scripts\\upload-problems.mjs "C:\\Users\\USER\\Desktop\\문제은행"'); process.exit(1); }
 
 const db = createClient(URL, KEY, { auth: { persistSession: false } });
+// --overwrite : 이미 올라간 그림도 새 것으로 바꾼다 (문항 번호 지우기처럼 다시 자른 경우)
+const OVERWRITE = process.argv.includes('--overwrite');
 // 세 번째 인자로 데이터 파일을 따로 줄 수 있다 (예: scripts/problems_ssen_cm1.json). 없으면 problems_data.json
-const DATA_FILE = process.argv[3] ? path.resolve(process.argv[3]) : path.join(HERE, 'problems_data.json');
+const DATA_FILE = (process.argv[3] && !process.argv[3].startsWith('--'))
+  ? path.resolve(process.argv[3]) : path.join(HERE, 'problems_data.json');
 if (!fs.existsSync(DATA_FILE)) { console.error(`✗ ${DATA_FILE} 이 없습니다. 스크립트와 같은 폴더에 problems_data.json 을 두세요.`); process.exit(1); }
 const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
 // 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
 const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1' };
-const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh' };
+const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh', '라이트쎈': 'light' };
 const key = (r, kind) =>
   `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
 
@@ -102,6 +105,7 @@ async function insertMeta() {
       image_path: key(r, 'q'), answer_image_path: key(r, 'a'),
       // 선택 항목 — 데이터에 있을 때만 넣는다 (예전 데이터 파일은 그대로 동작)
       ...(r.lv !== undefined && { level: r.lv }),
+      ...(r.pg !== undefined && { page_no: r.pg }),          // 교재에 인쇄된 쪽 번호
       ...(r.k !== undefined && { answer_kind: r.k, answer_text: r.a ?? null }),
     }));
     const { error } = await db.from('problems')
@@ -127,7 +131,7 @@ async function uploadImages() {
       if (!src) { fail++; if (fail <= 3) console.error(`\n  ✗ 파일 못 찾음: ${r.dir}/${r.l}${kind === 'a' ? ')' : ''}.${r.x}`); continue; }
       const body = fs.readFileSync(src);
       const { error } = await db.storage.from(BUCKET).upload(key(r, kind), body, {
-        contentType: r.x === 'jpg' ? 'image/jpeg' : 'image/png', upsert: false,
+        contentType: r.x === 'jpg' ? 'image/jpeg' : 'image/png', upsert: OVERWRITE,
       });
       if (error) {
         if (/exists/i.test(error.message)) skip++;

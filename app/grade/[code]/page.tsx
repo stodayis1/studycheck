@@ -81,6 +81,22 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
 
   const [done, setDone] = useState(false)
   const [saving, setSaving] = useState(false)
+  // 선생님이 휴대폰 카메라로 QR을 찍어도 이 화면이 열린다 → 선생님이면 교사용 채점으로 갈 수 있게 한다
+  const [staff, setStaff] = useState(false)
+  useEffect(() => {
+    let alive = true
+    import('@/lib/supabase')
+      .then(({ supabase }) => supabase.auth.getUser())
+      .then(async ({ data }: any) => {
+        const u = data?.user
+        if (!u || u.is_anonymous) return
+        const { supabase } = await import('@/lib/supabase')
+        const { data: me } = await supabase.from('users').select('role').eq('id', u.id).maybeSingle()
+        if (alive && me && ['admin', 'teacher', 'staff'].includes(me.role)) setStaff(true)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   useEffect(() => {
     fetch(`/api/grade/${code}`)
@@ -203,6 +219,15 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
   if (!student)
     return (
       <Shell title={data.sheet.title}>
+        {staff && (
+          <a
+            href={`/teacher/grade/${code}`}
+            className="mb-3 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold"
+            style={{ color: NAVY }}
+          >
+            선생님이신가요? 정답을 보며 채점하려면 여기를 누르세요 →
+          </a>
+        )}
         <p className="mb-3 text-sm text-slate-500">본인 이름을 찾아 눌러 주세요.</p>
         <input
           value={q}

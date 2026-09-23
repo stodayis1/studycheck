@@ -31,7 +31,9 @@ const ITEM = {
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
   worksheets:    { href: '/teacher/worksheets',     label: '학습지출제',   icon: 'ti-file-plus' },
+  sheetList:     { href: '/teacher/worksheets/list', label: '출제한 학습지', icon: 'ti-files' },
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
+  scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
   workStatus:    { href: '/teacher/work-status',    label: '업무현황',     icon: 'ti-briefcase' },
   settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
 } satisfies Record<string, NavItem>
@@ -43,10 +45,10 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : [])] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.consultations] },
-    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep] },
+    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.scan] },
     { title: '보고', items: [ITEM.reports, ITEM.importRecords] },
   ]
-  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.gradings, ITEM.workStatus, ITEM.settings] })
+  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.gradings, ITEM.workStatus, ITEM.settings] })
   return groups
 }
 
