@@ -124,7 +124,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
         </div>
 
         {/* 번호별 정답 격자 */}
-        <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-8 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
           {data.problems.map((p) => {
             const m = marks[p.no]
             const tone = m === 'o' ? 'bg-blue-50 border-blue-200'
@@ -132,7 +132,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
             return (
               <button key={p.no} onClick={() => cycle(p.no)}
                 onDoubleClick={() => setOpen(open === p.no ? null : p.no)}
-                className={`relative border rounded-xl p-2 min-h-[74px] flex flex-col items-center justify-center ${tone}`}>
+                className={`relative border rounded-xl px-2 pt-5 pb-2 min-h-[104px] flex flex-col items-center justify-center ${tone}`}>
                 <span className="absolute top-1 left-2 text-[11px] text-gray-400">{p.no}</span>
                 {m === 'x' && <span className="absolute top-1 right-2 text-red-500 font-bold">✗</span>}
                 <Answer p={p} />
@@ -221,20 +221,27 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
   )
 }
 
-// 정답 한 칸 — 객관식은 동그라미 숫자, 숫자형은 글자, 그림형은 잘라 둔 정답 그림
+// 정답 한 칸 — 객관식은 동그라미 숫자, 숫자형은 글자, 그림형은 잘라 둔 정답 그림.
+// 그림 정답은 작게 잘려 있어서 칸 너비를 꽉 채워 보여 줘야 읽힌다.
 function Answer({ p, big }: { p: P; big?: boolean }) {
-  if (p.isEssay) return <span className="text-xs text-gray-400">서술형</span>
+  if (p.isEssay) return <span className="text-sm text-gray-400">서술형</span>
   if (p.answerChoices.length)
     return (
-      <span className={big ? 'text-2xl' : 'text-lg'} style={{ color: '#2563eb' }}>
+      <span className={big ? 'text-3xl' : 'text-2xl'} style={{ color: '#2563eb' }}>
         {p.answerChoices.map((d) => '①②③④⑤'[Number(d) - 1]).join(', ')}
       </span>
     )
   if (p.answerText)
-    return <span className={big ? 'text-xl' : 'text-sm'} style={{ color: '#2563eb' }}>{p.answerText}</span>
+    return <span className={big ? 'text-2xl' : 'text-base font-bold'} style={{ color: '#2563eb' }}>{p.answerText}</span>
   if (p.answerImage)
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={p.answerImage} alt="정답" className={big ? 'max-h-16' : 'max-h-9'} />
+    return (
+      <img
+        src={p.answerImage}
+        alt="정답"
+        className={big ? 'max-h-24 w-auto' : 'w-full max-h-[58px] object-contain'}
+      />
+    )
   return <span className="text-xs text-gray-300">정답 없음</span>
 }
 
