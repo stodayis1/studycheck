@@ -70,7 +70,7 @@ function getDefaultExamSeason(): string {
 }
 
 export default function TeacherExamPrepPage() {
-  const { currentUser, isAdmin, canManageAllStudents, isSupervisorModeActive } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, isSupervisorModeActive } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [innerEnough, setInnerEnough] = useState<InnerEnough[]>([])
   const [assignments, setAssignments] = useState<StudentExamPrep[]>([])
@@ -132,12 +132,9 @@ export default function TeacherExamPrepPage() {
   }
 
   // 직원(행정)도 시험대비 배정/현황/시험일정 관리를 할 수 있어야 함
-  const myStudents = students.filter((s) => {
-    if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    return teachers.includes(currentUser.name)
-  })
+  // 주임모드(중등주임 등)는 담당 학년 범위 전체를 '조회'할 수 있어야 한다.
+  // canViewStudent가 관리자/직원/주임모드/담당강사를 한 번에 판단한다 (hooks/useAuth.ts).
+  const myStudents = students.filter((s) => canViewStudent(s))
   const filteredStudents = myStudents.filter(s =>
     searchText === '' || s.name.includes(searchText) || s.school?.includes(searchText)
   )

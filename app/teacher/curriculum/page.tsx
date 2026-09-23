@@ -128,7 +128,7 @@ function getRoundLabel(round: number): string {
 }
 
 export default function TeacherCurriculumPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [examPreps, setExamPreps] = useState<any[]>([])
@@ -283,10 +283,7 @@ export default function TeacherCurriculumPage() {
   }
 
   const myStudents = students.filter((s) => {
-    if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    return teachers.includes(currentUser.name)
+    return canViewStudent(s)
   })
   const myStudentIds = new Set(myStudents.map((s) => s.id))
 

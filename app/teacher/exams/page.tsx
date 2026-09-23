@@ -94,7 +94,7 @@ function ElementaryEntryPanel({ unitKey, unitLabel, entry, examTotalScore, tab, 
 }
 
 export default function TeacherExamsPage() {
-  const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
@@ -190,12 +190,9 @@ export default function TeacherExamsPage() {
   }
 
   // 직원(행정)도 평가관리에서 점수 입력·단원(범위) 설정이 가능해야 함 - 특히 입학테스트 점수 기록이 주 업무
-  const myStudents = students.filter((s) => {
-    if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    return teachers.includes(currentUser.name)
-  })
+  // 주임모드(중등주임 등)는 담당 학년 범위 전체를 '조회'할 수 있어야 한다.
+  // canViewStudent가 관리자/직원/주임모드/담당강사를 한 번에 판단한다 (hooks/useAuth.ts).
+  const myStudents = students.filter((s) => canViewStudent(s))
 
   // 코어테스트 일괄입력 모달: 학년 또는 회차를 고르면(혹은 모달을 다시 열면) 이미 저장된 기록을 불러와 미리 채운다.
   // - 시험범위는 같은 학년+회차라면 어느 선생님이 입력했든(전체 students 기준) 가져와서 재입력할 필요가 없게 함

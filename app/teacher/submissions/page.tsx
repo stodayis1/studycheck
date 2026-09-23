@@ -53,7 +53,7 @@ const TB_STATUS: Record<string, { label: string; color: string; bg: string }> = 
 }
 
 export default function TeacherSubmissionsPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
@@ -83,6 +83,8 @@ export default function TeacherSubmissionsPage() {
   // 담당 학생만
   const myStudents = students.filter((s) => {
     if (isAdmin()) return true
+    // 주임모드는 담당 학년 범위를 조회할 수 있다
+    if (isSupervisorModeActive() && s.grade && supervisorGrades.includes(s.grade)) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)

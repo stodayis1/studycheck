@@ -41,7 +41,7 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; text: string }>
 }
 
 export default function TeacherClassesPage() {
-  const { currentUser, isAdmin } = useAuth()
+  const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,6 +65,8 @@ export default function TeacherClassesPage() {
   // 담당 학생 필터
   const myStudents = students.filter((s) => {
     if (isAdmin()) return true
+    // 주임모드는 담당 학년 범위를 조회할 수 있다 (수정 권한은 아래 담당 판정으로 따로 유지)
+    if (isSupervisorModeActive() && s.grade && supervisorGrades.includes(s.grade)) return true
     if (!currentUser?.name || !s.teacher_name) return false
     const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
