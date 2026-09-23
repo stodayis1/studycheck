@@ -11,6 +11,12 @@ const NAVY = '#0f3460'
 const GOLD = '#c8992e'
 const HEADER_CROP_PX = 37 // 교재 이미지 맨 위의 문제번호 띠를 잘라낸다
 
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n))
+  return out
+}
+
 type P = {
   no: number
   image: string | null
@@ -43,6 +49,7 @@ function PrintInner() {
   const [showSource, setShowSource] = useState(false)
   const [showBadge, setShowBadge] = useState(true)
   const [solveMm, setSolveMm] = useState(20)
+  const [perCol, setPerCol] = useState(3) // 한 단에 넣을 문항 수 (2 또는 3)
 
   useEffect(() => {
     if (!code) return
@@ -72,6 +79,17 @@ function PrintInner() {
         <label className="flex items-center gap-1.5">
           <input type="checkbox" checked={showSource} onChange={(e) => setShowSource(e.target.checked)} />
           출처·유형
+        </label>
+        <label className="flex items-center gap-1.5">
+          한 단에
+          <select
+            value={perCol}
+            onChange={(e) => setPerCol(Number(e.target.value))}
+            className="rounded border px-1.5 py-0.5"
+          >
+            <option value={2}>2문항</option>
+            <option value={3}>3문항</option>
+          </select>
         </label>
         <label className="flex items-center gap-1.5">
           풀이 여백
@@ -136,13 +154,16 @@ function PrintInner() {
           <div />
         </div>
 
-        {/* 2단 조판 — 왼쪽 단을 아래까지 채운 뒤 오른쪽 단으로 넘어간다.
-            (예전에는 홀수는 왼쪽·짝수는 오른쪽으로 갈라 넣어서 1,3,5 / 2,4,6 처럼 지그재그였다) */}
-        <div className="body">
-          {data.problems.map((p) => (
-            <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} />
-          ))}
-        </div>
+        {/* 한 쪽 = (한 단에 2~3문항) × 2단.
+            왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어가며, 좌우 줄 높이가 맞는다.
+            (예전에는 홀수는 왼쪽·짝수는 오른쪽으로 갈라 넣어 지그재그였고, 쪽마다 문항 수가 들쭉날쭉했다) */}
+        {chunk(data.problems, perCol * 2).map((group, gi) => (
+          <div className="pagegrid" key={gi}>
+            {group.map((p) => (
+              <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} />
+            ))}
+          </div>
+        ))}
       </div>
             </td>
           </tr>
@@ -252,23 +273,42 @@ function PrintInner() {
         .info div:last-child {
           border-right: 0;
         }
-        /* 왼쪽 단을 끝까지 채우고 오른쪽 단으로 넘어간다.
-           화면에서는 두 단 높이를 맞춰(balance) 보여 주고, 인쇄할 때는 쪽 아래까지 채운다(auto) */
-        .body {
-          column-count: 2;
-          column-gap: 18mm;
-          column-rule: 1px solid #d5d5d5;
+        /* 한 쪽 = 2~3줄 × 2단. 왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어간다.
+           줄 높이를 1fr 로 고르게 나눠 좌우 문항이 같은 높이에서 시작한다 */
+        .pagegrid {
+          position: relative;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          grid-template-rows: repeat(${perCol}, 1fr);
+          grid-auto-flow: column;
+          column-gap: 16mm;
+          row-gap: 7mm;
+          height: 237mm;
+          break-after: page;
+          break-inside: avoid;
         }
-        @media print {
-          .body {
-            column-fill: auto;
-          }
+        /* 1쪽에는 머리말과 인적사항 칸이 있어 그만큼 낮다 */
+        .pagegrid:first-of-type {
+          height: 203mm;
+        }
+        .pagegrid:last-of-type {
+          break-after: auto;
+        }
+        /* 두 단 사이 세로줄 */
+        .pagegrid::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          top: 0;
+          bottom: 0;
+          border-left: 1px solid #d5d5d5;
         }
         .q {
           break-inside: avoid;
-          -webkit-column-break-inside: avoid;
-          margin-bottom: 12px;
-          padding-bottom: 9px;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          padding-bottom: 6px;
           border-bottom: 1px dashed #dcdcdc;
         }
         .qhead {
@@ -305,14 +345,22 @@ function PrintInner() {
         .b-상 {
           background: #c2255c;
         }
+        /* 칸 높이가 정해져 있으므로 그림은 칸에 맞춰 줄인다 (가로가 남아도 세로로 안 넘치게) */
         .qimg {
           overflow: hidden;
+          display: flex;
+          min-height: 0;
         }
         .qimg img {
-          width: 100%;
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          object-position: left top;
           display: block;
         }
+        /* 남는 자리는 풀이 여백이 먹는다 → 답란이 칸 맨 아래에서 좌우로 나란히 맞는다 */
         .solve {
+          flex: 1;
           border-left: 2px solid #eceff5;
           margin: 5px 0 6px 3px;
         }
