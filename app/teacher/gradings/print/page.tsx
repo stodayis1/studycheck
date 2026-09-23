@@ -279,13 +279,15 @@ function PrintInner() {
           position: relative;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          grid-template-rows: repeat(${perCol}, 1fr);
+          /* minmax(0,1fr) 이어야 칸이 내용 때문에 늘어나지 않는다.
+             1fr 로 두면 그림이 큰 문항에서 격자가 한 쪽보다 커져 통째로 다음 장으로 밀린다 */
+          grid-template-rows: repeat(${perCol}, minmax(0, 1fr));
           grid-auto-flow: column;
           column-gap: 16mm;
           row-gap: 7mm;
           height: 237mm;
+          overflow: hidden;
           break-after: page;
-          break-inside: avoid;
         }
         /* 1쪽에는 머리말과 인적사항 칸이 있어 그만큼 낮다 */
         .pagegrid:first-of-type {
