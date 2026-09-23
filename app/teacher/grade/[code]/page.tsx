@@ -279,7 +279,22 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
 // 그림 정답(주로 서술형 풀이)은 글자로 옮길 수 없어서 그림 그대로다.
 // 작게 넣으면 안 읽히므로 칸을 꽉 채우고, 누르면 크게 펼친다.
 function Answer({ p, big }: { p: P; big?: boolean }) {
-  if (p.isEssay) return <span className="text-sm text-gray-400">서술형</span>
+  // 서술형이라도 해설집에 최종 단답이 적혀 있다 → 있으면 보여 준다.
+  // (풀이 과정은 학생이 쓴 것을 보고 매기고, 여기 단답은 맞았는지 빨리 보는 용도)
+  if (p.isEssay)
+    return (
+      <span className="flex flex-col items-center gap-0.5">
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">서술형</span>
+        {p.answerText ? (
+          <span className={big ? 'text-2xl' : 'text-base font-bold'} style={{ color: '#2563eb' }}>
+            {p.answerText}
+          </span>
+        ) : p.answerImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={p.answerImage} alt="정답" className="w-full object-contain" style={{ maxHeight: big ? undefined : 110 }} />
+        ) : null}
+      </span>
+    )
   if (p.answerChoices.length)
     return (
       <span className={big ? 'text-3xl' : 'text-2xl'} style={{ color: '#2563eb' }}>
