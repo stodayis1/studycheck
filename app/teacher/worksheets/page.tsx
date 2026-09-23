@@ -91,6 +91,19 @@ export default function WorksheetsPage() {
   return (
     <Shell>
       <div className="px-5 py-6">
+        {/* 전에 만든 학습지를 다시 찾으러 가는 길 */}
+        <button
+          onClick={() => router.push('/teacher/worksheets/list')}
+          className="w-full mb-6 flex items-center gap-3 rounded-xl border bg-white px-5 py-3.5 text-left transition hover:shadow-md"
+        >
+          <i className="ti ti-files text-xl" style={{ color: '#0F6E56' }} />
+          <span className="font-bold" style={{ color: NAVY }}>출제한 학습지</span>
+          <span className="text-xs text-gray-500">
+            전에 만든 학습지를 다시 인쇄하고, 누가 몇 점인지 봅니다
+          </span>
+          <i className="ti ti-chevron-right ml-auto text-gray-300" />
+        </button>
+
         {sections.map((s) => (
           <section key={s.name} className="mb-8">
             <div className="flex items-baseline gap-3 mb-3">
