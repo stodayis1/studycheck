@@ -8,6 +8,21 @@ const SESSION_KEY = 'studycheck_student'
 const ADMIN_MODE_KEY = 'studycheck_admin_mode'
 const SUPERVISOR_MODE_KEY = 'studycheck_supervisor_mode'
 
+// 모드(관리자/강사, 주임/강사)가 바뀌었다고 알리는 신호.
+// useAuth()는 화면마다 따로 호출돼서 각자 자기 상태를 들고 있다. 토글 버튼은 사이드바(레이아웃)에
+// 있는데, 레이아웃은 화면을 옮겨도 그대로 살아있고 화면만 새로 뜬다. 그래서 "지금 열려 있는 화면"의
+// useAuth는 토글을 눌러도 모르고 예전 모드로 계속 걸렀다 — 주임 선생님이 주임모드로 바꿔도
+// 그 화면에는 본인 담당 학생만 계속 보이던 원인. 이벤트로 모든 useAuth에 알린다.
+const MODE_EVENT = 'studycheck:mode-change'
+
+function readAdminMode() {
+  const saved = localStorage.getItem(ADMIN_MODE_KEY)
+  return saved === null ? true : saved === 'true'
+}
+function readSupervisorMode() {
+  return localStorage.getItem(SUPERVISOR_MODE_KEY) === 'true'
+}
+
 // 중등 학년 전체를 담당하는 주임인지 판별할 때 쓰는 기준 집합 (supervisor_grades가 이 셋과 정확히
 // 같으면 "중등주임"으로, 한 학년만 있으면 "OO 학년주임"으로 표시함 - middle-school-only 가정)
 const MIDDLE_GRADES = ['중1', '중2', '중3']
@@ -22,10 +37,14 @@ export function useAuth() {
   const [supervisorMode, setSupervisorModeState] = useState<boolean>(false) // true=주임모드(담당 범위 전체 조회), false=강사모드(내 학생만)
 
   useEffect(() => {
-    const savedMode = localStorage.getItem(ADMIN_MODE_KEY)
-    if (savedMode !== null) setAdminModeState(savedMode === 'true')
-    const savedSupMode = localStorage.getItem(SUPERVISOR_MODE_KEY)
-    if (savedSupMode !== null) setSupervisorModeState(savedSupMode === 'true')
+    function applyModes() {
+      setAdminModeState(readAdminMode())
+      setSupervisorModeState(readSupervisorMode())
+    }
+    applyModes()
+    // 같은 탭의 다른 화면(사이드바 등)에서 토글했을 때 + 다른 탭에서 바꿨을 때
+    window.addEventListener(MODE_EVENT, applyModes)
+    window.addEventListener('storage', applyModes)
 
     async function init() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -59,6 +78,11 @@ export function useAuth() {
       setLoading(false)
     }
     init()
+
+    return () => {
+      window.removeEventListener(MODE_EVENT, applyModes)
+      window.removeEventListener('storage', applyModes)
+    }
   }, [])
 
   async function signIn(email: string, password: string): Promise<{ error?: string }> {
@@ -111,6 +135,8 @@ export function useAuth() {
     const newMode = !adminMode
     setAdminModeState(newMode)
     localStorage.setItem(ADMIN_MODE_KEY, String(newMode))
+    // 지금 열려 있는 화면의 useAuth에도 알린다 (안 그러면 그 화면은 예전 모드로 계속 거른다)
+    window.dispatchEvent(new Event(MODE_EVENT))
   }
 
   // 이 계정이 주임으로 지정되어 있는지 (원장님이 관리자 화면에서 supervisor_grades를 지정해줌)
@@ -139,6 +165,7 @@ export function useAuth() {
     const newMode = !supervisorMode
     setSupervisorModeState(newMode)
     localStorage.setItem(SUPERVISOR_MODE_KEY, String(newMode))
+    window.dispatchEvent(new Event(MODE_EVENT))
   }
 
   // 이 학생을 "볼" 권한이 있는지 - 화면마다 제각각 구현되어 있던 teacher_name 매칭 로직을 한 곳으로 모음.
