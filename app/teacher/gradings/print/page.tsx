@@ -20,8 +20,10 @@ const CROP_MM = HEADER_CROP_PX * MM_PER_PX
 const PX_PER_MM = 96 / 25.4   // CSS 에서 1mm 는 96/25.4 px 로 정해져 있다
 const COL_MM = 87             // (190mm − 단 사이 16mm) ÷ 2
 const ROWGAP_MM = 7
-const PAGE1_MM = 203          // 1쪽은 머리말·인적사항 칸이 있어 낮다
-const PAGEN_MM = 237
+const SHEET_PAD_TOP_MM = 8
+// A4 297mm − 위아래 인쇄 여백(12+16) − 쪽마다 반복되는 하단 띠 자리(16mm) = 253mm.
+// 여기서 6mm 를 안전분으로 뺀다. (한 쪽 높이를 넘기면 격자가 통째로 다음 장으로 밀려 그 쪽이 빈다)
+const PAGEN_MM = 247
 
 type P = {
   no: number
@@ -60,7 +62,14 @@ function PrintInner() {
 
   // 문항마다 실제로 몇 mm 를 먹는지 미리 재 둔다 (안 보이는 곳에 한 번 그려서 잰다)
   const measRef = useRef<HTMLDivElement | null>(null)
+  const topRef = useRef<HTMLDivElement | null>(null)
   const [heights, setHeights] = useState<number[] | null>(null)
+  // 1쪽은 머리말·인적사항 칸만큼 낮다. 높이를 글로 적어 두면 머리말이 바뀔 때 어긋나므로 실제로 잰다
+  const [page1Mm, setPage1Mm] = useState(PAGEN_MM - 40)
+  // 짜 놓고 스스로 점검해서, 한 쪽을 넘긴 곳이 있으면 여유를 더 두고 다시 짠다
+  const sheetRef = useRef<HTMLDivElement | null>(null)
+  const [safetyMm, setSafetyMm] = useState(0)
+  const tries = useRef(0)
 
   useEffect(() => {
     if (!code) return
@@ -94,6 +103,10 @@ function PrintInner() {
       setTimeout(() => {
         if (dead || !measRef.current) return
         setHeights(Array.from(measRef.current.children).map((c) => (c as HTMLElement).offsetHeight))
+        const top = topRef.current
+        if (top) setPage1Mm(PAGEN_MM - SHEET_PAD_TOP_MM - top.offsetHeight / PX_PER_MM)
+        tries.current = 0
+        setSafetyMm(0)
       }, 50)
     }
     tick()
@@ -113,7 +126,7 @@ function PrintInner() {
     const out: P[][][] = []
     let i = 0
     while (i < n) {
-      const limit = (out.length === 0 ? PAGE1_MM : PAGEN_MM) * PX_PER_MM
+      const limit = ((out.length === 0 ? page1Mm : PAGEN_MM) - safetyMm) * PX_PER_MM
       const page: P[][] = []
       for (let c = 0; c < 2 && i < n; c++) {
         const col: P[] = []
@@ -135,7 +148,32 @@ function PrintInner() {
       out.push(page)
     }
     return out
-  }, [data, heights, perCol])
+  }, [data, heights, perCol, page1Mm, safetyMm])
+
+  // 그려 놓은 뒤 실제로 한 쪽을 넘긴 단이 있는지 본다.
+  // (넘치면 그 격자가 통째로 다음 장으로 밀려 빈 쪽이 생긴다 — 전에 1쪽이 비던 사고)
+  useEffect(() => {
+    if (!pages) return
+    const t = setTimeout(() => {
+      const root = sheetRef.current
+      if (!root) return
+      let over = false
+      root.querySelectorAll('.pagegrid').forEach((g) => {
+        const limit = (g as HTMLElement).offsetHeight
+        Array.from(g.children).forEach((col) => {
+          const kids = Array.from(col.children) as HTMLElement[]
+          const used =
+            kids.reduce((a, k) => a + k.offsetHeight, 0) + ROWGAP_MM * PX_PER_MM * (kids.length - 1)
+          if (used - limit > 2) over = true
+        })
+      })
+      if (over && tries.current < 3) {
+        tries.current += 1
+        setSafetyMm((m) => m + 5)
+      }
+    }, 150)
+    return () => clearTimeout(t)
+  }, [pages])
 
   if (err) return <p className="p-10 text-center text-gray-500">{err}</p>
   if (!data) return <p className="p-10 text-center text-gray-400">불러오는 중…</p>
@@ -213,7 +251,8 @@ function PrintInner() {
         <tbody>
           <tr>
             <td>
-      <div className="sheet">
+      <div className="sheet" ref={sheetRef}>
+        <div ref={topRef}>
         <div className="hdr">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="logo" src="/logo.png" alt="수학의지혜" />
@@ -242,12 +281,17 @@ function PrintInner() {
           <div>점수</div>
           <div />
         </div>
+        </div>
 
         {/* 한 쪽 = (한 단에 2~3문항) × 2단. 왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어간다.
             그림은 모두 원본 크기(200dpi)로 찍고, 대신 「몇 문항이 들어가는지」를 높이를 재서 정한다.
             그래서 문항마다 글씨 크기가 똑같다. */}
         {(pages ?? []).map((page, gi) => (
-          <div className="pagegrid" key={gi}>
+          <div
+            className={`pagegrid${gi === 0 ? ' first' : ''}${gi === pages!.length - 1 ? ' last' : ''}`}
+            key={gi}
+            style={gi === 0 ? { height: `${page1Mm.toFixed(1)}mm` } : undefined}
+          >
             {page.map((col, ci) => (
               <div className="pagecol" key={ci}>
                 {col.map((p) => (
@@ -303,7 +347,9 @@ function PrintInner() {
         .sheet {
           max-width: 190mm;
           margin: 0 auto;
-          padding: 8mm 0 20mm;
+          /* 아래 여백을 두면 마지막 쪽이 한 쪽을 넘겨 빈 장이 한 장 더 나온다.
+             하단 띠 자리는 tfoot 의 .foot-space 가 이미 잡아 준다 */
+          padding: ${SHEET_PAD_TOP_MM}mm 0 0;
           color: #111;
           font-size: 10.5pt;
         }
@@ -398,22 +444,22 @@ function PrintInner() {
           overflow: hidden;
           break-after: page;
         }
-        /* 한 단. 문항이 남는 자리를 고르게 나눠 가져 쪽 아래가 휑하지 않다 */
+        /* 한 단. 문항은 제 크기 그대로 — 늘지도 줄지도 않는다.
+           늘리면 단마다 풀이 여백이 달라져 문항 간격이 들쭉날쭉해지고,
+           줄이면 그림이 잘린다 */
         .pagecol {
           display: flex;
           flex-direction: column;
           gap: ${ROWGAP_MM}mm;
-          height: 100%;
-          min-height: 0;
+          align-items: stretch;
         }
         .pagecol > .q {
-          flex: 1 1 auto;
+          flex: 0 0 auto;
         }
-        /* 1쪽에는 머리말과 인적사항 칸이 있어 그만큼 낮다 */
-        .pagegrid:first-of-type {
-          height: ${PAGE1_MM}mm;
-        }
-        .pagegrid:last-of-type {
+        /* 1쪽 높이는 머리말을 실제로 재서 style 로 직접 넣는다.
+           :first-of-type 은 .sheet 의 첫 div 가 머리말이라 아무것도 잡지 못했다
+           → 1쪽 격자가 한 쪽보다 커져서 통째로 다음 장으로 밀리고 1쪽이 비었다 */
+        .pagegrid.last {
           break-after: auto;
         }
         /* 두 단 사이 세로줄 */
@@ -479,8 +525,8 @@ function PrintInner() {
           display: block;
         }
         /* 남는 자리는 풀이 여백이 먹는다 → 답란이 칸 맨 아래에서 좌우로 나란히 맞는다 */
+        /* 풀이 여백은 문항마다 똑같은 높이 */
         .solve {
-          flex: 1;
           border-left: 2px solid #eceff5;
           margin: 5px 0 6px 3px;
         }
