@@ -136,21 +136,12 @@ function PrintInner() {
           <div />
         </div>
 
+        {/* 2단 조판 — 왼쪽 단을 아래까지 채운 뒤 오른쪽 단으로 넘어간다.
+            (예전에는 홀수는 왼쪽·짝수는 오른쪽으로 갈라 넣어서 1,3,5 / 2,4,6 처럼 지그재그였다) */}
         <div className="body">
-          <div className="col">
-            {data.problems
-              .filter((_, i) => i % 2 === 0)
-              .map((p) => (
-                <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} />
-              ))}
-          </div>
-          <div className="col">
-            {data.problems
-              .filter((_, i) => i % 2 === 1)
-              .map((p) => (
-                <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} />
-              ))}
-          </div>
+          {data.problems.map((p) => (
+            <Q key={p.no} p={p} showSource={showSource} showBadge={showBadge} solveMm={solveMm} />
+          ))}
         </div>
       </div>
             </td>
@@ -261,22 +252,21 @@ function PrintInner() {
         .info div:last-child {
           border-right: 0;
         }
+        /* 왼쪽 단을 끝까지 채우고 오른쪽 단으로 넘어간다.
+           화면에서는 두 단 높이를 맞춰(balance) 보여 주고, 인쇄할 때는 쪽 아래까지 채운다(auto) */
         .body {
-          display: flex;
-          gap: 9mm;
+          column-count: 2;
+          column-gap: 18mm;
+          column-rule: 1px solid #d5d5d5;
         }
-        .col {
-          flex: 1;
-          min-width: 0;
-          border-right: 1px solid #d5d5d5;
-          padding-right: 9mm;
-        }
-        .col:last-child {
-          border-right: 0;
-          padding-right: 0;
+        @media print {
+          .body {
+            column-fill: auto;
+          }
         }
         .q {
           break-inside: avoid;
+          -webkit-column-break-inside: avoid;
           margin-bottom: 12px;
           padding-bottom: 9px;
           border-bottom: 1px dashed #dcdcdc;

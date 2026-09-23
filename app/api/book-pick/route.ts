@@ -68,12 +68,16 @@ function makeGroups(rows: any[]) {
       if (!m.has(k)) m.set(k, [])
       m.get(k)!.push(r)
     }
-    for (const [k, v] of [...m].sort((a, b) => Number(a[0].slice(1)) - Number(b[0].slice(1)))) {
+    // 쪽 순서대로. 쪽을 모르는 것(0)은 맨 뒤로 보낸다
+    const rank = (k: string) => (Number(k.slice(1)) || 99999)
+    for (const [k, v] of [...m].sort((a, b) => rank(a[0]) - rank(b[0]))) {
       const p = v[0].page_no
       groups.push({
         key: k,
         label: p ? `P.${p}` : '쪽 모름',
-        section: `${String(v[0].sub_chapter_no).padStart(2, '0')} ${v[0].sub_chapter_title ?? ''}`.trim(),
+        section: p
+          ? `${String(v[0].sub_chapter_no).padStart(2, '0')} ${v[0].sub_chapter_title ?? ''}`.trim()
+          : '쪽을 모르는 문항',
         count: v.length,
       })
     }
