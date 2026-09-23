@@ -273,9 +273,9 @@ export async function GET(req: Request) {
         image: p?.image_path ? signed.get(p.image_path) ?? null : null,
         difficulty: p?.difficulty ?? null,
         isChoice: p?.answer_kind === 'choice',
-        // 쎈·쎈B는 이미지 맨 위에 문제번호 띠가 따로 있어 잘라내고,
-        // 베이직쎈은 번호와 발문이 같은 줄이라 자르면 문제가 잘린다
-        crop: p?.book === '쎈' || p?.book === '쎈B',
+        // 2026-09-23부터 교재 원본 번호는 저장된 그림에서 미리 지워 둔다
+        // (scripts/strip-book-number.py) → 인쇄할 때 따로 잘라낼 것이 없다
+        crop: false,
         typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,
         source: sourceLabel(p),
       }

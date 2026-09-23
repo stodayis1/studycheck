@@ -46,8 +46,11 @@ if (!URL || !KEY) { console.error('✗ .env.local 에 NEXT_PUBLIC_SUPABASE_URL �
 if (!ROOT || !fs.existsSync(ROOT)) { console.error('✗ 폴더 경로를 인자로 주세요.  예: node scripts\\upload-problems.mjs "C:\\Users\\USER\\Desktop\\문제은행"'); process.exit(1); }
 
 const db = createClient(URL, KEY, { auth: { persistSession: false } });
+// --overwrite : 이미 올라간 그림도 새 것으로 바꾼다 (문항 번호 지우기처럼 다시 자른 경우)
+const OVERWRITE = process.argv.includes('--overwrite');
 // 세 번째 인자로 데이터 파일을 따로 줄 수 있다 (예: scripts/problems_ssen_cm1.json). 없으면 problems_data.json
-const DATA_FILE = process.argv[3] ? path.resolve(process.argv[3]) : path.join(HERE, 'problems_data.json');
+const DATA_FILE = (process.argv[3] && !process.argv[3].startsWith('--'))
+  ? path.resolve(process.argv[3]) : path.join(HERE, 'problems_data.json');
 if (!fs.existsSync(DATA_FILE)) { console.error(`✗ ${DATA_FILE} 이 없습니다. 스크립트와 같은 폴더에 problems_data.json 을 두세요.`); process.exit(1); }
 const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
@@ -128,7 +131,7 @@ async function uploadImages() {
       if (!src) { fail++; if (fail <= 3) console.error(`\n  ✗ 파일 못 찾음: ${r.dir}/${r.l}${kind === 'a' ? ')' : ''}.${r.x}`); continue; }
       const body = fs.readFileSync(src);
       const { error } = await db.storage.from(BUCKET).upload(key(r, kind), body, {
-        contentType: r.x === 'jpg' ? 'image/jpeg' : 'image/png', upsert: false,
+        contentType: r.x === 'jpg' ? 'image/jpeg' : 'image/png', upsert: OVERWRITE,
       });
       if (error) {
         if (/exists/i.test(error.message)) skip++;
