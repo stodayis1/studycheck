@@ -29,6 +29,8 @@ type P = {
   answerChoices: string[]
   answerImage: string | null
   image: string | null
+  solution?: string | null      // 해설집 풀이 (「상세」를 펼칠 때 받아 온다)
+  hasSolution?: boolean
 }
 type Student = { id: number; name: string; grade: string | null; class_time: string | null; teacher_name?: string | null }
 type Data = { sheet: { code: string; title: string }; problems: P[]; students: Student[] }
@@ -77,8 +79,20 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
       .then(async (r) => {
         const j = await r.json()
         if (!r.ok) return
-        const byNo = new Map<number, string | null>(j.problems.map((p: P) => [p.no, p.image]))
-        setData((d) => (d ? { ...d, problems: d.problems.map((p) => ({ ...p, image: byNo.get(p.no) ?? p.image })) } : d))
+        const byNo = new Map<number, P>(j.problems.map((p: P) => [p.no, p]))
+        setData((d) =>
+          d
+            ? {
+                ...d,
+                problems: d.problems.map((p) => ({
+                  ...p,
+                  image: byNo.get(p.no)?.image ?? p.image,
+                  solution: byNo.get(p.no)?.solution ?? p.solution,
+                  hasSolution: byNo.get(p.no)?.hasSolution ?? p.hasSolution,
+                })),
+              }
+            : d
+        )
       })
       .catch(() => setImgsOn(false))
   }, [needImages, imgsOn, code])
@@ -246,6 +260,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
                     <div className="text-lg"><Answer p={p} big /></div>
                   </div>
                 </div>
+                <Solution p={p} />
               </div>
             ))}
           </div>
@@ -269,6 +284,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
                 <div className="text-xs text-gray-500 mb-1">정답</div>
                 <div className="text-lg"><Answer p={p} big /></div>
               </div>
+              <Solution p={p} />
             </div>
           )
         })()}
@@ -331,6 +347,38 @@ function Answer({ p, big }: { p: P; big?: boolean }) {
       />
     )
   return <span className="text-xs text-gray-300">정답 없음</span>
+}
+
+// 해설집 풀이 — 증명 서술형은 정답만으로 매길 수 없어서 풀이를 그대로 본다.
+// 해설집에서 못 잘라낸 문항도 있어서, 있는 것만 단추가 뜬다.
+function Solution({ p }: { p: P }) {
+  const [open, setOpen] = useState(false)
+  if (!p.hasSolution && !p.solution) return null
+  return (
+    <div className="border-t">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 text-left text-sm flex items-center gap-2"
+        style={{ color: NAVY }}
+      >
+        <i className={`ti ti-chevron-${open ? 'down' : 'right'} text-gray-300`} />
+        <b>해설 풀이</b>
+        <span className="text-[11px] text-gray-400">
+          {p.isEssay ? '증명·서술형은 풀이를 보고 매기세요' : '푸는 과정'}
+        </span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3">
+          {p.solution ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.solution} alt={`${p.no}번 풀이`} className="w-full rounded border bg-white" />
+          ) : (
+            <p className="text-sm text-gray-400">풀이를 불러오는 중…</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function Chip({ children }: { children: React.ReactNode }) {

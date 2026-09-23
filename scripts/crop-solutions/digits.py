@@ -18,7 +18,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from crop import colored, labels, GW, GH        # noqa: E402
+import crop as _c   # noqa: E402
+from crop import colored, labels, GW, GH, glyphs, set_scale   # noqa: E402
 
 
 def cell(m, b, y0, y1):
@@ -56,6 +57,7 @@ def main():
     gp = os.path.join(a.work, 'glyphs.npy')
 
     if a.collect:
+        set_scale(a.dpi)
         d = pymupdf.open(a.pdf)
         rng = range(len(d))
         if a.pages:
@@ -70,11 +72,15 @@ def main():
             mid = W // 2
             for x0, x1 in [(0, mid), (mid, W)]:
                 for g in labels(m, x0, x1):
-                    if not (90 <= g['y0'] <= H - 80):
+                    if not (90 * _c.SC <= g['y0'] <= H - 80 * _c.SC):
                         continue
-                    for b in g['boxes']:
-                        if b[1] - b[0] > 26:        # 붙어 버린 숫자는 본보기로 안 쓴다
-                            continue
+                    # crop.py 가 읽을 때와 **똑같이** 잘라 모은다.
+                    # (다르게 모으면 본보기와 읽는 모양이 어긋나 닮은 정도가 낮게 나온다)
+                    xa = g['boxes'][0][0]
+                    xb = max(g['boxes'][-1][1], xa + int(_c.DW * 4))
+                    step = (xb - xa) / 4
+                    for i2 in range(4):
+                        b = [int(xa + i2 * step), int(xa + (i2 + 1) * step), g['y0'], g['y1']]
                         c = cell(m, b, g['y0'], g['y1'])
                         if c is not None:
                             raw.append(c)

@@ -59,7 +59,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     supabase
       .from('exam_sheet_problems')
       .select(
-        'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, image_path, is_essay)'
+        'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, image_path, solution_image_path, is_essay)'
       )
       .eq('sheet_id', sheet.id)
       .order('no'),
@@ -83,6 +83,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     .flatMap((r: any) => [
       r.problems?.answer_text ? null : r.problems?.answer_image_path,
       wantImages ? r.problems?.image_path : null,
+      wantImages ? r.problems?.solution_image_path : null,
     ])
     .filter(Boolean) as string[]
 
@@ -117,6 +118,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       answerChoices: choiceDigits(p?.answer_text ?? null),
       answerImage: p?.answer_image_path ? signed.get(p.answer_image_path) ?? null : null,
       image: wantImages && p?.image_path ? signed.get(p.image_path) ?? null : null,
+      // 해설집에서 잘라 낸 풀이 (증명 서술형 채점용). 없는 문항도 많다
+      solution: wantImages && p?.solution_image_path ? signed.get(p.solution_image_path) ?? null : null,
+      hasSolution: !!p?.solution_image_path,
     }
   })
 

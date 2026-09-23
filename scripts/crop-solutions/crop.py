@@ -32,21 +32,23 @@ def colored(im):
     return (mx - mn > 22) & (mx < 245) & (im.mean(2) < 228)
 
 
-def labels(m, x0, x1, hmin=18, hmax=36):
+def labels(m, x0, x1, hmin=None, hmax=None):
     """한 단 안에서 가로로 붙은 덩어리(=번호 후보)를 찾는다.
     번호는 단 왼쪽 끝 일정한 자리에 붙으므로, x 자리는 뒤에서 최빈값으로 거른다."""
+    hmin = hmin if hmin is not None else 18 * SC
+    hmax = hmax if hmax is not None else 36 * SC
     sub = m[:, x0:x1]
     lab, _ = ndimage.label(sub)
     bx = []
     for sl in ndimage.find_objects(lab):
         h = sl[0].stop - sl[0].start
         w = sl[1].stop - sl[1].start
-        if hmin <= h <= hmax and 4 <= w <= 95:   # 붙어 버린 숫자는 폭이 90까지 간다
+        if hmin <= h <= hmax and 4 * SC <= w <= 95 * SC:
             bx.append([sl[1].start + x0, sl[1].stop + x0, sl[0].start, sl[0].stop])
     bx.sort(key=lambda b: (b[2], b[0]))
     out, cur = [], []
     for b in bx:
-        if cur and (b[0] - cur[-1][1]) <= 12 and abs(b[2] - cur[-1][2]) <= 8:
+        if cur and (b[0] - cur[-1][1]) <= 18 * SC and abs(b[2] - cur[-1][2]) <= 8 * SC:
             cur.append(b)
         else:
             if cur:
@@ -57,15 +59,24 @@ def labels(m, x0, x1, hmin=18, hmax=36):
     res = []
     for g in out:
         wide = g[-1][1] - g[0][0]
-        # 4자리 번호 폭은 200dpi 에서 64~90px.
-        # 50px 쯤 되는 것은 「다른 풀이」 「전략」 같은 색 딱지다 → 넣으면 풀이가 잘린다
-        if not (58 <= wide <= 95):
+        # 4자리 번호는 200dpi 에서 폭 58~100px.
+        # 「다른 풀이」·「전략」 딱지는 50px 쯤이라 여기서 빠진다 —
+        # 딱지를 넣으면 '풀이의 경계'로 쓰여 풀이가 중간에 잘린다(0255 사고).
+        # 번호인지 아닌지는 폭이 아니라 **읽어 보고** 정한다(아래 ok).
+        if not (44 * SC <= wide <= 100 * SC):
             continue
         res.append(dict(x0=g[0][0], y0=min(b[2] for b in g), y1=max(b[3] for b in g), boxes=g))
     return res
 
 
-DW = 16.0        # 숫자 한 글자 폭 (200dpi 기준)
+DW = 16.0        # 숫자 한 글자 폭 (200dpi 기준). set_scale() 로 dpi 에 맞춘다
+SC = 1.0
+
+
+def set_scale(dpi):
+    global DW, SC
+    SC = dpi / 200.0
+    DW = 16.0 * SC
 
 
 def split(b):
@@ -78,10 +89,15 @@ def split(b):
     return [[int(b[0] + i * step), int(b[0] + (i + 1) * step), b[2], b[3]] for i in range(nd)]
 
 
-def glyphs(m, g):
+def glyphs(m, g, n=4):
+    """번호는 늘 4자리이고 글자 폭이 고르다 → 덩어리 경계를 믿지 말고 전체 폭을 n등분한다.
+    (숫자끼리 붙어 버린 곳이 많아 덩어리 경계로 자르면 자주 어긋난다)"""
     out = []
     y0, y1 = g['y0'], g['y1']
-    boxes = [q for b in g['boxes'] for q in split(b)]
+    xa = g['boxes'][0][0]
+    xb = max(g['boxes'][-1][1], xa + int(DW * n))     # 끝 자리가 안 잡혀도 폭을 채워서 읽는다
+    step = (xb - xa) / n
+    boxes = [[int(xa + i * step), int(xa + (i + 1) * step), y0, y1] for i in range(n)]
     for b in boxes:
         p = m[y0:y1, b[0]:b[1]]
         ys = np.where(p.any(1))[0]
@@ -112,6 +128,8 @@ def main():
     ap.add_argument('--first', type=int, default=1, help='첫 풀이의 문항 번호')
     ap.add_argument('--dry', action='store_true', help='자르지 않고 검출 결과만 본다')
     ap.add_argument('--digits', default='', help='이 해설집 글꼴로 만든 숫자 본보기 폴더(digits.py 참고)')
+    ap.add_argument('--conf', type=float, default=0.55, help='숫자로 인정할 닮은 정도')
+    ap.add_argument('--max', type=int, default=0, help='이 책의 가장 큰 문항 번호(넘으면 잘못 읽은 것)')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -129,82 +147,89 @@ def main():
         ids = sorted(LAB)
         T, names = C[ids], [LAB[i] for i in ids]
 
+    set_scale(a.dpi)
     d = pymupdf.open(a.pdf)
     rng = range(len(d))
     if a.pages:
         s, e = a.pages.split('-')
         rng = range(int(s), int(e) + 1)
 
-    # 1) 쪽마다 단을 나눠 번호를 찾고 읽는다
-    cols = []        # (쪽, 단, x0, x1, 번호목록)
+    # 1) 쪽마다 단을 나눠 **번호 자리만** 찾는다 (읽기는 기준 자리를 정한 뒤에)
+    cols = []
     pages = {}
-    xs = {}          # 단마다 번호가 붙는 x 자리 모으기
+    xs = {}
     for i in rng:
         pm = d[i].get_pixmap(dpi=a.dpi)
-        im = np.frombuffer(pm.samples, np.uint8).reshape(pm.height, pm.width, pm.n)[..., :3].astype(int)
+        im = np.frombuffer(pm.samples, np.uint8).reshape(pm.height, pm.width, pm.n)[..., :3].copy()
         pages[i] = im
         H, W = im.shape[:2]
-        m = colored(im)
+        m = colored(im.astype(int))
         mid = W // 2
         for c, (x0, x1) in enumerate([(0, mid), (mid, W)]):
             gs = [g for g in labels(m, x0, x1) if a.top <= g['y0'] <= H - a.bottom]
             gs.sort(key=lambda g: g['y0'])
             xs.setdefault(c, []).extend(g['x0'] - x0 for g in gs)
-            nums = []
-            for g in gs:
-                s2 = ''
-                conf = 1.0
-                for v in glyphs(m, g):
-                    v = np.asarray(v)
-                    if not v.any():
-                        s2 += '?'
-                        conf = 0
-                        continue
-                    sim = T @ v
-                    k = int(np.argmax(sim))
-                    s2 += names[k]
-                    conf = min(conf, float(sim[k]))
-                nums.append(dict(num=s2, conf=conf, y=g['y0'], x=g['x0']))
-            cols.append(dict(page=i, col=c, x0=x0, x1=x1, nums=nums))
+            cols.append(dict(page=i, col=c, x0=x0, x1=x1, gs=gs))
         if i % 10 == 0:
-            print(f'  쪽 {i} 누적 번호 {sum(len(c["nums"]) for c in cols)}', flush=True)
+            print(f'  쪽 {i} 누적 자리 {sum(len(c["gs"]) for c in cols)}', flush=True)
 
-    # 번호가 붙는 x 자리는 단마다 일정하다 → 최빈값에서 멀면 본문 속 초록 글자다
+    # 2) 번호가 붙는 기준 자리(단마다 한두 곳)를 정한다
     import collections
-    # 번호가 붙는 x 자리는 단마다 한두 군데로 몰린다 (숫자 폭 때문에 두 자리가 나온다)
-    # → 많이 몰린 자리들만 '번호 자리'로 인정하고, 그 밖의 색 글자는 버린다
     anchors = {}
     for c, v in xs.items():
-        if not v:
-            continue
         cnt = collections.Counter(v)
+        if not cnt:
+            continue
         top = cnt.most_common(1)[0][1]
-        cand = sorted(x for x, k in cnt.items() if k >= top * 0.25)
-        anchors[c] = [x for x in cand if x - cand[0] <= 60]     # 멀리 떨어진 자리는 본문 글자다
-    print('  번호가 붙는 x 자리:', anchors, ' 후보', {c: len(v) for c, v in xs.items()})
+        cand = sorted(x for x, k in cnt.items() if k >= top * 0.2)
+        anchors[c] = [x for x in cand if x - cand[0] <= 60 * SC]
+    print('  번호가 붙는 x 자리:', anchors)
+
+    # 3) 기준 자리에 맞춰 번호를 읽는다.
+    #    덩어리가 시작하는 곳이 아니라 **기준 자리**에서 4자리 폭을 읽어야 어긋나지 않는다
+    #    (앞자리 0이 따로 안 잡히거나 옆 글자가 붙는 일이 잦다)
     for c in cols:
         ax = anchors.get(c['col'], [])
-        keep = [n for n in c['nums'] if any(abs((n['x'] - c['x0']) - x) <= 6 for x in ax)]
-        # 같은 번호가 두 번 잡히는 일이 있다(앞 글자가 따로 떨어져서) → 같은 줄이면 하나로
-        keep.sort(key=lambda n: (n['y'], n['x']))
+        m = colored(pages[c['page']].astype(int))
+        nums = []
+        for g in c['gs']:
+            off = g['x0'] - c['x0']
+            near = min(ax, key=lambda x: abs(x - off)) if ax else off
+            if abs(near - off) > 8 * SC:
+                continue
+            g2 = dict(g)
+            g2['boxes'] = [[c['x0'] + near, c['x0'] + near + int(DW * 4), g['y0'], g['y1']]]
+            s2 = ''
+            conf = 1.0
+            for v in glyphs(m, g2):
+                v = np.asarray(v)
+                if not v.any():
+                    s2 += '?'
+                    conf = 0
+                    continue
+                sim = T @ v
+                k = int(np.argmax(sim))
+                s2 += names[k]
+                conf = min(conf, float(sim[k]))
+            ok = (s2.isdigit() and conf >= a.conf and (not a.max or 1 <= int(s2) <= a.max))
+            nums.append(dict(num=s2, conf=conf, y=g['y0'], x=g['x0'], ok=ok))
+        nums.sort(key=lambda n: (n['y'], n['x']))
         merged = []
-        for n in keep:
-            # 풀이 한 개는 아무리 짧아도 60px(200dpi)은 된다.
-            # 바로 밑에 또 잡히면 「전략」 배지 같은 색 딱지다 → 버린다
-            if merged and n['y'] - merged[-1]['y'] < 60:
+        for n in nums:
+            if merged and n['y'] - merged[-1]['y'] < 30 * SC:
+                if (n['ok'], n['conf']) > (merged[-1]['ok'], merged[-1]['conf']):
+                    merged[-1] = n
                 continue
             merged.append(n)
         c['nums'] = merged
-    for ci, c in enumerate(cols):
-        c['nums'].sort(key=lambda n: n['y'])
 
     flat = [(ci, k, n) for ci, c in enumerate(cols) for k, n in enumerate(c['nums'])]
 
     # 읽은 번호 중 **오름차순으로 이어지는 가장 긴 줄기**만 믿는다.
     # 잘못 잡힌 색 글자나 잘못 읽은 번호는 여기서 걸러진다.
     # (걸러진 자리도 '풀이의 경계'로는 그대로 쓴다 — 안 그러면 두 풀이가 한 장에 붙는다)
-    vals = [int(n['num']) if len(n['num']) == 4 and n['num'].isdigit() else None
-            for _, _, n in flat]
+    vals = [int(n['num']) if n['ok'] else None for _, _, n in flat]
+    print(f'  읽기: 4자리 숫자로 읽힌 자리 {sum(v is not None for v in vals)}/{len(vals)}')
     idx = [i2 for i2, v in enumerate(vals) if v is not None]
     best, prev = [], {}
     for i2 in idx:                                  # 가장 긴 증가 부분수열 (O(n^2), 몇 백 개라 충분)
