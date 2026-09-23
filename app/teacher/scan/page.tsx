@@ -40,6 +40,30 @@ export default function ScanPage() {
   }
   useEffect(() => stop, [])
 
+  // 한 번 허용했으면 들어오자마자 저절로 켠다.
+  // (시험지를 한 장 채점하고 돌아올 때마다 「카메라 켜기」를 다시 누르게 하지 않으려고)
+  useEffect(() => {
+    if (!staff || on) return
+    let dead = false
+    ;(async () => {
+      let ok = false
+      try {
+        // 크롬·안드로이드: 이미 허용했는지 직접 물어볼 수 있다
+        const st = await (navigator as any).permissions?.query({ name: 'camera' })
+        ok = st?.state === 'granted'
+      } catch {
+        /* 사파리에는 없다 */
+      }
+      // 사파리 등: 전에 이 기기에서 카메라가 열린 적이 있으면 그대로 연다
+      if (!ok) {
+        try { ok = localStorage.getItem('qrcam') === '1' } catch { ok = false }
+      }
+      if (ok && !dead) start()
+    })()
+    return () => { dead = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff])
+
   const start = async () => {
     setMsg('')
     try {
@@ -48,6 +72,7 @@ export default function ScanPage() {
         audio: false,
       })
       streamRef.current = stream
+      try { localStorage.setItem('qrcam', '1') } catch { /* 저장 못 해도 상관없다 */ }
       setOn(true)
       const v = videoRef.current
       if (v) {
@@ -71,6 +96,7 @@ export default function ScanPage() {
         if (code) { stop(); router.push(`/teacher/grade/${code}`) }
       }, 300)
     } catch {
+      try { localStorage.removeItem('qrcam') } catch { /* 무시 */ }
       setMsg('카메라를 열지 못했습니다. 아래에 시험지 코드를 직접 적어 주세요.')
     }
   }

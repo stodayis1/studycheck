@@ -43,46 +43,64 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   if (e1) return NextResponse.json({ error: e1.message }, { status: 500 })
   if (!sheet) return NextResponse.json({ error: '시험지를 찾을 수 없습니다.' }, { status: 404 })
 
-  const { data: rows, error: e2 } = await supabase
-    .from('exam_sheet_problems')
-    .select(
-      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, image_path, is_essay)'
-    )
-    .eq('sheet_id', sheet.id)
-    .order('no')
-
-  if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
-
-  // 유형 이름 붙이기
-  const codes = Array.from(
-    new Set((rows ?? []).map((r: any) => r.problems?.type_code).filter(Boolean))
-  )
-  const typeTitle = new Map<string, string>()
-  if (codes.length) {
-    const { data: types } = await supabase
-      .from('standard_types')
-      .select('code, type_title')
-      .in('code', codes)
-    ;(types ?? []).forEach((t: any) => typeTitle.set(t.code, t.type_title))
-  }
-
-  // 정답 이미지 임시 주소 (2시간).
-  // ?full=1 은 선생님 채점 화면 전용 — 문제 그림까지 같이 준다(학생 화면에는 안 준다)
-  const full = new URL(_req.url).searchParams.get('full') === '1'
+  // ?full=1  선생님 채점 화면 전용 (학생 화면에는 안 준다)
+  // ?images=1 문제 그림까지 — 「상세」를 펼칠 때만 부른다.
+  //           격자에는 정답만 있으면 되는데 문제 그림 24장을 미리 받느라 느렸다.
+  const sp = new URL(_req.url).searchParams
+  const full = sp.get('full') === '1'
+  const wantImages = full && sp.get('images') === '1'
   if (full) {
     const deny = await denyIfNotStaff(_req)
     if (deny) return deny
   }
+
+  // 문항과 학생 목록은 서로 상관이 없으니 같이 부른다 (순서대로 부르면 그만큼 느려진다)
+  const [{ data: rows, error: e2 }, { data: students }] = await Promise.all([
+    supabase
+      .from('exam_sheet_problems')
+      .select(
+        'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, image_path, is_essay)'
+      )
+      .eq('sheet_id', sheet.id)
+      .order('no'),
+    supabase
+      .from('students')
+      .select('id, name, grade, class_time, teacher_name')
+      .eq('is_active', true)
+      .order('name')
+      .limit(2000),
+  ])
+
+  if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
+
+  const codes = Array.from(
+    new Set((rows ?? []).map((r: any) => r.problems?.type_code).filter(Boolean))
+  )
+  // 임시 주소를 만들 그림만 고른다.
+  //  · 정답 그림: 글자 정답이 없는 문항만 (대부분은 글자라 만들 게 거의 없다)
+  //  · 문제 그림: 「상세」를 펼칠 때만
   const paths = (rows ?? [])
-    .flatMap((r: any) => [r.problems?.answer_image_path, full ? r.problems?.image_path : null])
+    .flatMap((r: any) => [
+      r.problems?.answer_text ? null : r.problems?.answer_image_path,
+      wantImages ? r.problems?.image_path : null,
+    ])
     .filter(Boolean) as string[]
+
+  const [typesRes, urlsRes] = await Promise.all([
+    codes.length
+      ? supabase.from('standard_types').select('code, type_title').in('code', codes)
+      : Promise.resolve({ data: [] as any[] }),
+    paths.length
+      ? supabase.storage.from(BUCKET).createSignedUrls(paths, 7200)
+      : Promise.resolve({ data: [] as any[] }),
+  ])
+
+  const typeTitle = new Map<string, string>()
+  ;(typesRes.data ?? []).forEach((t: any) => typeTitle.set(t.code, t.type_title))
   const signed = new Map<string, string>()
-  if (paths.length) {
-    const { data: urls } = await supabase.storage.from(BUCKET).createSignedUrls(paths, 7200)
-    ;(urls ?? []).forEach((u: any) => {
-      if (u.signedUrl && !u.error) signed.set(u.path, u.signedUrl)
-    })
-  }
+  ;(urlsRes.data ?? []).forEach((u: any) => {
+    if (u.signedUrl && !u.error) signed.set(u.path, u.signedUrl)
+  })
 
   const problems = (rows ?? []).map((r: any) => {
     const p = r.problems
@@ -98,16 +116,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       answerText: p?.answer_text ?? null,
       answerChoices: choiceDigits(p?.answer_text ?? null),
       answerImage: p?.answer_image_path ? signed.get(p.answer_image_path) ?? null : null,
-      image: full && p?.image_path ? signed.get(p.image_path) ?? null : null,
+      image: wantImages && p?.image_path ? signed.get(p.image_path) ?? null : null,
     }
   })
-
-  const { data: students } = await supabase
-    .from('students')
-    .select('id, name, grade, class_time, teacher_name')
-    .eq('is_active', true)
-    .order('name')
-    .limit(2000)
 
   return NextResponse.json({
     sheet,

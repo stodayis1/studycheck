@@ -66,6 +66,23 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
       .catch((e) => setErr(e.message))
   }, [code])
 
+  // 문제 그림은 「상세」를 볼 때만 받는다.
+  // 격자에는 정답만 있으면 되는데 24장을 미리 받느라 QR을 찍고 한참 기다려야 했다.
+  const [imgsOn, setImgsOn] = useState(false)
+  const needImages = detail || open != null
+  useEffect(() => {
+    if (!needImages || imgsOn) return
+    setImgsOn(true)
+    apiFetch(`/api/grade/${code}?full=1&images=1`)
+      .then(async (r) => {
+        const j = await r.json()
+        if (!r.ok) return
+        const byNo = new Map<number, string | null>(j.problems.map((p: P) => [p.no, p.image]))
+        setData((d) => (d ? { ...d, problems: d.problems.map((p) => ({ ...p, image: byNo.get(p.no) ?? p.image })) } : d))
+      })
+      .catch(() => setImgsOn(false))
+  }, [needImages, imgsOn, code])
+
   const total = data?.problems.length ?? 0
   const right = useMemo(() => Object.values(marks).filter((m) => m === 'o').length, [marks])
   const score = total ? Math.round((right / total) * 100) : 0
