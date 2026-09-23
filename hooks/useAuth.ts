@@ -180,6 +180,16 @@ export function useAuth() {
     return teachers.includes(currentUser.name)
   }
 
+  // 이 학생의 기록을 "고칠" 권한이 있는지 - canViewStudent와 짝이다.
+  // 주임모드는 담당 학년 범위를 넓게 "보기만" 하는 것이므로 여기서는 제외한다(확인용).
+  // 즉 주임은 중등 전체가 보이지만, 점수 입력·교재 배정 같은 기록은 본인 담당 학생에게만 남길 수 있다.
+  function canEditStudent(student: { teacher_name?: string | null }) {
+    if (canManageAllStudents()) return true
+    if (!currentUser?.name || !student.teacher_name) return false
+    const teachers = student.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    return teachers.includes(currentUser.name)
+  }
+
   // 서버 조회용 - 지금 이 계정이 볼 수 있는 학년 범위. 'all'이면 전체 조회(관리자/직원),
   // 배열이면 그 학년들만 넓게 조회(주임모드), null이면 기존처럼 담당 학생(teacher_name)만 걸러야 함.
   function visibleGradeScope(): 'all' | string[] | null {
@@ -191,6 +201,6 @@ export function useAuth() {
   return {
     currentUser, currentStudent, loading, role, signIn, signOut, isAdmin, canManageAllStudents, adminMode, toggleAdminMode,
     isSupervisorAccount, isSupervisorModeActive, supervisorMode, toggleSupervisorMode, supervisorGrades, supervisorLabel,
-    canViewStudent, visibleGradeScope,
+    canViewStudent, canEditStudent, visibleGradeScope,
   }
 }

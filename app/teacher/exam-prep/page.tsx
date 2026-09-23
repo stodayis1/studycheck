@@ -70,7 +70,7 @@ function getDefaultExamSeason(): string {
 }
 
 export default function TeacherExamPrepPage() {
-  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, isSupervisorModeActive } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, canEditStudent, isSupervisorModeActive } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [innerEnough, setInnerEnough] = useState<InnerEnough[]>([])
   const [assignments, setAssignments] = useState<StudentExamPrep[]>([])
@@ -135,6 +135,8 @@ export default function TeacherExamPrepPage() {
   // 주임모드(중등주임 등)는 담당 학년 범위 전체를 '조회'할 수 있어야 한다.
   // canViewStudent가 관리자/직원/주임모드/담당강사를 한 번에 판단한다 (hooks/useAuth.ts).
   const myStudents = students.filter((s) => canViewStudent(s))
+  // 주임모드는 넓게 "보기만" 한다. 배정·점수 입력은 담당 학생에게만 (hooks/useAuth.ts canEditStudent)
+  const myEditableStudents = students.filter((s) => canEditStudent(s))
   const filteredStudents = myStudents.filter(s =>
     searchText === '' || s.name.includes(searchText) || s.school?.includes(searchText)
   )
@@ -199,6 +201,8 @@ export default function TeacherExamPrepPage() {
   }, {} as Record<string, InnerEnough[]>)
 
   async function handleAssign() {
+    // 배정 대상 학생이 담당 학생인지 (모달 목록에서 이미 걸러지지만 한 번 더 확인)
+    if (selStudent && !canEditStudent(selStudent)) { alert(NOT_MINE); return }
     if (!selStudent || selUnitIds.length === 0) return
     setAssigning(true)
 
@@ -230,18 +234,29 @@ export default function TeacherExamPrepPage() {
     setAssigning(false); fetchAll()
   }
 
+  // 이 배정(id)이 내가 기록을 남겨도 되는 학생의 것인지 - 주임모드는 조회만이므로 막힌다
+  function canEditAssignment(id: string) {
+    const a = assignments.find((x) => x.id === id)
+    const st = students.find((x) => x.id === a?.student_id)
+    return !!st && canEditStudent(st)
+  }
+  const NOT_MINE = '담당 학생이 아니라 기록을 바꿀 수 없어요. (주임모드는 확인용이에요)'
+
   async function handleStatusChange(id: string, status: string) {
+    if (!canEditAssignment(id)) { alert(NOT_MINE); return }
     await supabase.from('student_exam_prep').update({ status }).eq('id', id)
     fetchAll()
   }
 
   async function handleDelete(id: string) {
+    if (!canEditAssignment(id)) { alert(NOT_MINE); return }
     await supabase.from('student_exam_prep').delete().eq('id', id)
     fetchAll()
   }
 
   async function handleSaveScore() {
     if (!scorePrep) return
+    if (!canEditAssignment(scorePrep.id)) { alert(NOT_MINE); return }
     const score = parseInt(inputScore)
     if (isNaN(score) || score < 0 || score > 100) { alert('0~100 점수를 입력해주세요'); return }
     setSavingScore(true)
@@ -771,7 +786,7 @@ export default function TeacherExamPrepPage() {
                   </div>
                 ) : (
                   <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                    {filteredStudents.map(s => (
+                    {filteredStudents.filter(s => canEditStudent(s)).map(s => (
                       <button key={s.id} onClick={() => { setSelStudent(s); setSelLevel(''); setSelUnitIds([]); setSelHighRange(''); setSelHighRange(''); setSelHighRange('') }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"

@@ -94,7 +94,7 @@ function ElementaryEntryPanel({ unitKey, unitLabel, entry, examTotalScore, tab, 
 }
 
 export default function TeacherExamsPage() {
-  const { currentUser, isAdmin, canManageAllStudents, canViewStudent } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, canEditStudent } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
@@ -193,6 +193,8 @@ export default function TeacherExamsPage() {
   // 주임모드(중등주임 등)는 담당 학년 범위 전체를 '조회'할 수 있어야 한다.
   // canViewStudent가 관리자/직원/주임모드/담당강사를 한 번에 판단한다 (hooks/useAuth.ts).
   const myStudents = students.filter((s) => canViewStudent(s))
+  // 주임모드는 넓게 "보기만" 한다. 점수를 넣고 고치는 것은 담당 학생에게만 (hooks/useAuth.ts canEditStudent)
+  const myEditableStudents = students.filter((s) => canEditStudent(s))
 
   // 코어테스트 일괄입력 모달: 학년 또는 회차를 고르면(혹은 모달을 다시 열면) 이미 저장된 기록을 불러와 미리 채운다.
   // - 시험범위는 같은 학년+회차라면 어느 선생님이 입력했든(전체 students 기준) 가져와서 재입력할 필요가 없게 함
@@ -224,7 +226,7 @@ export default function TeacherExamsPage() {
     const scoreUpdates: Record<string, string> = {}
     const dateUpdates: Record<string, string> = {}
     const idUpdates: Record<string, string> = {}
-    myStudents.forEach((s) => {
+    myEditableStudents.forEach((s) => {
       if (s.grade !== coreGrade) return
       const existing = matches.find((e) => e.student_id === s.id)
       if (existing) {
@@ -603,14 +605,19 @@ export default function TeacherExamsPage() {
                     <div className="mt-2 pt-2" style={{ borderTop: '1px solid #3b82f630' }}>
                       <p className="font-bold mb-1.5" style={{ color: '#991b1b' }}>
                         {gridSemester}학기 1단원 점수가 아직 없는 학생 {missingUnit1.length}명
-                        <span className="font-normal" style={{ color: '#b45a5a' }}> — 이름을 누르면 바로 입력할 수 있어요</span>
+                        <span className="font-normal" style={{ color: '#b45a5a' }}>
+                          {' '}— 담당 학생은 이름을 누르면 바로 입력할 수 있어요
+                        </span>
                       </p>
                       <div className="flex gap-1 flex-wrap">
                         {missingUnit1.map((s) => (
                           <button key={s.id}
+                            disabled={!canEditStudent(s)}
                             onClick={() => openModal(s, { title: '단원평가', semester: gridSemester, unitIndex: 1 })}
-                            className="px-2 py-1 rounded-lg text-[11px] font-semibold transition-all"
-                            style={{ background: 'white', color: '#991b1b', border: '1px solid #fecaca' }}>
+                            className="px-2 py-1 rounded-lg text-[11px] font-semibold transition-all disabled:cursor-default"
+                            style={canEditStudent(s)
+                              ? { background: 'white', color: '#991b1b', border: '1px solid #fecaca' }
+                              : { background: '#f9fafb', color: '#9ca3af', border: '1px solid #eee' }}>
                             {s.name} <span style={{ color: '#c99' }}>{s.grade}</span>
                           </button>
                         ))}
@@ -720,11 +727,12 @@ export default function TeacherExamsPage() {
                             return (
                               <td key={s.id} className="p-1 border-b border-gray-50 text-center">
                                 <button
+                                  disabled={!canEditStudent(s)}
                                   onClick={() => rec
                                     ? openEditModal(rec)
                                     : openModal(s, { title: '단원평가', semester: gridSemester, unitIndex: idx })}
-                                  title={`${s.name} · ${idx}단원${unitName ? ` (${unitName})` : ''}${rec?.score != null ? ` · ${rec.score}점` : ' · 미기록'}`}
-                                  className="mx-auto flex items-center justify-center transition-all"
+                                  title={`${s.name} · ${idx}단원${unitName ? ` (${unitName})` : ''}${rec?.score != null ? ` · ${rec.score}점` : ' · 미기록'}${canEditStudent(s) ? '' : ' (확인용 - 담당 강사만 입력)'}`}
+                                  className="mx-auto flex items-center justify-center transition-all disabled:cursor-default"
                                   style={rec?.score != null
                                     ? { width: 44, height: 36, borderRadius: 8, background: scoreBg(rec.score, rec.total_score) }
                                     : { width: 44, height: 36, borderRadius: 8, background: '#f9fafb', border: '1px dashed #e5e7eb' }}>
@@ -808,11 +816,16 @@ export default function TeacherExamsPage() {
                       {sExams.length === 0 && (
                         <span className="text-[10px] text-gray-300">기록없음</span>
                       )}
-                      <div onClick={(e) => { e.stopPropagation(); openModal(student) }}
-                        className="px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer"
-                        style={{ background: cfg.badge, color: cfg.color }}>
-                        + 등록
-                      </div>
+                      {canEditStudent(student) ? (
+                        <div onClick={(e) => { e.stopPropagation(); openModal(student) }}
+                          className="px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer"
+                          style={{ background: cfg.badge, color: cfg.color }}>
+                          + 등록
+                        </div>
+                      ) : (
+                        <span className="px-2 py-1 rounded-lg text-[9px] font-semibold"
+                          style={{ background: '#f3f4f6', color: '#9ca3af' }}>확인용</span>
+                      )}
                       <i className={`ti ${isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'}`}
                         style={{ fontSize: 14, color: '#9ca3af' }} />
                     </div>
@@ -944,10 +957,12 @@ export default function TeacherExamsPage() {
                                     <p className="text-[10px] text-gray-400 mt-0.5">{pct(exam.score, exam.total_score)}%</p>
                                   </div>
                                 )}
+                                {canEditStudent(student) && (
                                 <button onClick={(e) => { e.stopPropagation(); openEditModal(exam) }}
                                   className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100">
                                   <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                                 </button>
+                                )}
                               </div>
                               )
                             })}
@@ -1090,7 +1105,7 @@ export default function TeacherExamsPage() {
                 </div>
               ) : (
                 <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
-                  {filteredStudents.map((s) => (
+                  {filteredStudents.filter((s) => canEditStudent(s)).map((s) => (
                     <button key={s.id} onClick={() => setModalStudent(s)}
                       className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 text-left">
                       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
@@ -1478,7 +1493,7 @@ export default function TeacherExamsPage() {
                     학생별 점수 입력 <span className="font-normal text-gray-400">({coreGrade} 학생만 표시)</span>
                   </label>
                   <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {myStudents.filter(s => s.grade === coreGrade || s.grade.startsWith(coreGrade)).map(s => {
+                    {myEditableStudents.filter(s => s.grade === coreGrade || s.grade.startsWith(coreGrade)).map(s => {
                       const customDate = coreScoreDates[s.id]
                       return (
                         <div key={s.id} className="px-3 py-2 rounded-xl"

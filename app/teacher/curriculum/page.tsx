@@ -128,7 +128,7 @@ function getRoundLabel(round: number): string {
 }
 
 export default function TeacherCurriculumPage() {
-  const { currentUser, isAdmin, canManageAllStudents, canViewStudent } = useAuth()
+  const { currentUser, isAdmin, canManageAllStudents, canViewStudent, canEditStudent } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [examPreps, setExamPreps] = useState<any[]>([])
@@ -215,7 +215,19 @@ export default function TeacherCurriculumPage() {
   // 4회독, 5회독도 나올 수 있어서 예전처럼 3에서 0으로 강제로 되돌리지 않음)
   // 같은 개념에 교재별로 나뉜 기록이 여러 개 있을 수 있어서(과정관리 완료처리/진도일괄입력에서 생긴 것 포함),
   // 화면에 보이는 값(=그 중 가장 높은 값)을 기준으로 그 행을 이어서 올린다.
+  // 주임모드는 담당 학년을 넓게 "보기만" 한다. 기록을 바꾸는 건 담당 학생에게만.
+  const NOT_MINE = '담당 학생이 아니라 기록을 바꿀 수 없어요. (주임모드는 확인용이에요)'
+  function canEditById(studentId: string) {
+    const st = students.find((x) => x.id === studentId)
+    return !!st && canEditStudent(st)
+  }
+  function canEditTextbook(id: string) {
+    const tb = textbooks.find((t) => t.id === id)
+    return !!tb && canEditById(tb.student_id)
+  }
+
   async function handleProgressCheck(studentId: string, conceptId: string) {
+    if (!canEditById(studentId)) { alert(NOT_MINE); return }
     const key = `${studentId}_${conceptId}`
     if (updatingProgress === key) return
     setUpdatingProgress(key)
@@ -253,6 +265,7 @@ export default function TeacherCurriculumPage() {
 
   // 진도 체크 완전 해제 - 이 개념에 걸린 기록을(교재별로 나뉜 것까지 전부) 다 지워서 "미진도"로 되돌림
   async function handleResetProgressCheck(studentId: string, conceptId: string) {
+    if (!canEditById(studentId)) { alert(NOT_MINE); return }
     const key = `reset_${studentId}_${conceptId}`
     if (updatingProgress === key) return
     setUpdatingProgress(key)
@@ -270,6 +283,7 @@ export default function TeacherCurriculumPage() {
 
   // 연산서 진도 업데이트 (0/20/40/60/80/100)
   async function handleCalcProgress(textbookId: string, percent: number) {
+    if (!canEditTextbook(textbookId)) { alert(NOT_MINE); return }
     setUpdatingProgress(`calc_${textbookId}_${percent}`)
     const { error } = await supabase.from('student_textbooks')
       .update({ progress_percent: percent, updated_at: new Date().toISOString() })
@@ -339,6 +353,13 @@ export default function TeacherCurriculumPage() {
     // 대상 학생 결정: 다중모드면 체크된 학생들, 아니면 단일 학생
     const targetIds = tbMultiMode ? tbStudentIds : (tbStudent ? [tbStudent.id] : [])
     if (targetIds.length === 0) return
+    // 주임모드로 보이기만 하는 학생에게는 교재를 배정할 수 없다 (확인용)
+    const notMine = targetIds.filter((sid) => !canEditById(sid))
+    if (notMine.length > 0) {
+      const names = notMine.map((sid) => students.find((x) => x.id === sid)?.name ?? '?').join(', ')
+      alert(`${names} 학생은 담당이 아니라 배정할 수 없어요. (주임모드는 확인용이에요)`)
+      return
+    }
     setTbAssigning(true)
 
     for (const sid of targetIds) {
@@ -410,6 +431,7 @@ export default function TeacherCurriculumPage() {
 
   // 교재 완료
   async function handleCompleteTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'completed' } : t))
@@ -427,6 +449,7 @@ export default function TeacherCurriculumPage() {
 
   // 교재 중단
   async function handlePauseTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!confirm('이 교재를 중단 처리할까요? 나중에 다시 진행중으로 되돌릴 수 있어요.')) return
     await supabase.from('student_textbooks').update({ status: 'paused' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'paused' } : t))
@@ -434,12 +457,14 @@ export default function TeacherCurriculumPage() {
 
   // 교재 재개 (중단 → 진행중)
   async function handleResumeTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     await supabase.from('student_textbooks').update({ status: 'assigned' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'assigned' } : t))
   }
 
   // 교재 완전 삭제 - 원장님(관리자)만 가능. 강사는 삭제 자체가 안 되고 삭제요청만 할 수 있음
   async function handleDeleteTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!isAdmin()) { alert('교재 삭제는 원장님만 하실 수 있어요. 잘못 입력했다면 "삭제요청"을 눌러주세요.'); return }
     if (!confirm('이 교재 기록을 완전히 삭제할까요? 되돌릴 수 없어요.')) return
     await supabase.from('student_textbooks').delete().eq('id', id)
@@ -448,6 +473,7 @@ export default function TeacherCurriculumPage() {
 
   // 강사가 잘못 입력한 교재를 발견했을 때 - 직접 지우지 못하고 원장님께 삭제요청만 남김
   async function handleRequestDeleteTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!confirm('이 교재 삭제를 원장님께 요청할까요?')) return
     const requestedBy = currentUser?.name ?? '강사'
     const requestedAt = new Date().toISOString()
@@ -459,6 +485,7 @@ export default function TeacherCurriculumPage() {
 
   // 삭제요청 취소 (원장님이 확인해보니 삭제할 필요는 없었던 경우)
   async function handleCancelDeleteRequest(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!isAdmin()) return
     await supabase.from('student_textbooks').update({ delete_requested_by: null, delete_requested_at: null }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
@@ -501,11 +528,13 @@ export default function TeacherCurriculumPage() {
   }
 
   async function handleTBChecked(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     await supabase.from('student_textbooks').update({ status: 'checked' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'checked' } : t))
   }
 
   async function handleTBSubmitted(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     await supabase.from('student_textbooks').update({ status: 'submitted' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'submitted' } : t))
   }
