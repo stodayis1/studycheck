@@ -59,6 +59,27 @@ export default function WorksheetListPage() {
   const [gradeF, setGradeF] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Record<string, Grading[]>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+
+  // 그 학생이 틀린 문제로 새 학습지를 만들어 인쇄 화면을 새 탭으로 연다
+  const reprint = async (g: Grading, mode: 'wrong' | 'similar' | 'wrong+similar') => {
+    setBusy(`${g.id}:${mode}`)
+    try {
+      const r = await apiFetch('/api/reprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gradingId: g.id, mode }),
+      })
+      const j = await r.json()
+      if (!r.ok) {
+        alert(j.error ?? '만들지 못했습니다.')
+        return
+      }
+      window.open(`/teacher/gradings/print?code=${j.code}`, '_blank')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   useEffect(() => {
     apiFetch('/api/worksheets?limit=300')
@@ -206,23 +227,45 @@ export default function WorksheetListPage() {
                     아직 아무도 제출하지 않았습니다. 시험지의 QR을 찍으면 채점됩니다.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  <div className="space-y-1.5">
                     {detail[s.id].map((g) => {
                       const pct = g.total ? Math.round(((g.score ?? 0) / g.total) * 100) : 0
+                      const wrong = (g.total ?? 0) - (g.score ?? 0)
                       return (
                         <div
                           key={g.id}
-                          className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2"
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1.5 bg-white border rounded-xl px-3 py-2"
                         >
-                          <span className="flex-1 truncate text-sm">
+                          <span className="w-20 truncate text-sm font-medium">
                             {g.student_name ?? '이름 없음'}
                           </span>
-                          <span className="text-[11px] text-gray-300">
-                            {g.score}/{g.total}
+                          <span className="font-bold w-12" style={{ color: scoreColor(pct) }}>
+                            {pct}점
                           </span>
-                          <span className="font-bold" style={{ color: scoreColor(pct) }}>
-                            {pct}
+                          <span className="text-[11px] text-gray-400 w-24">
+                            {g.total}문항 중 {wrong}개 틀림
                           </span>
+                          {/* 이 학생 오답으로 바로 다시 뽑기 */}
+                          <div className="ml-auto flex items-center gap-1">
+                            {wrong > 0 ? (
+                              ([
+                                ['wrong', '오답'],
+                                ['similar', '유사문항'],
+                                ['wrong+similar', '오답＋유사'],
+                              ] as const).map(([m, label]) => (
+                                <button
+                                  key={m}
+                                  onClick={() => reprint(g, m)}
+                                  disabled={busy === `${g.id}:${m}`}
+                                  className="px-2.5 py-1.5 rounded-lg border text-[12px] text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                                >
+                                  {busy === `${g.id}:${m}` ? '만드는 중…' : label}
+                                </button>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-gray-300">다 맞았습니다</span>
+                            )}
+                          </div>
                         </div>
                       )
                     })}
