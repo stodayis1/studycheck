@@ -208,6 +208,16 @@ export default function WorksheetListPage() {
                 >
                   <i className="ti ti-printer mr-1" />출력하기
                 </a>
+                <a
+                  href={`/teacher/gradings/answers?code=${s.code}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: NAVY, color: NAVY }}
+                  title="선생님용 답지와 해설지"
+                >
+                  <i className="ti ti-list-check mr-1" />답지·해설
+                </a>
                 <Link
                   href="/teacher/gradings"
                   className="px-3 py-2 rounded-lg border text-sm text-gray-600"
