@@ -95,7 +95,12 @@ def glyphs(m, g, n=4):
     out = []
     y0, y1 = g['y0'], g['y1']
     xa = g['boxes'][0][0]
-    xb = max(g['boxes'][-1][1], xa + int(DW * n))     # 끝 자리가 안 잡혀도 폭을 채워서 읽는다
+    xb = g['boxes'][-1][1]
+    # 번호 폭은 책마다 조금 다르다 (중3-2는 64px, 중2-2는 56px @200dpi).
+    # 폭이 4자리로 볼 만하면 **그 폭을 그대로** n등분한다.
+    # 책에 맞지 않는 폭(DW*n)으로 고정하면 글자가 한 칸씩 밀려 못 읽는다.
+    if xb - xa < 44 * SC:
+        xb = xa + int(DW * n)                          # 끝 자리가 안 잡힌 경우만 채운다
     step = (xb - xa) / n
     boxes = [[int(xa + i * step), int(xa + (i + 1) * step), y0, y1] for i in range(n)]
     for b in boxes:

@@ -52,6 +52,10 @@ def main():
     ap.add_argument('--pages', default='')
     ap.add_argument('--dpi', type=int, default=200)
     ap.add_argument('--k', type=int, default=24)
+    # 본보기는 '번호가 확실한 것'만 모아야 깨끗하다.
+    # (「참고」·「채점 기준」 같은 색 딱지도 폭이 비슷해 섞이면 묶음이 지저분해진다)
+    ap.add_argument('--wmin', type=int, default=0)
+    ap.add_argument('--wmax', type=int, default=0)
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     gp = os.path.join(a.work, 'glyphs.npy')
@@ -73,6 +77,9 @@ def main():
             for x0, x1 in [(0, mid), (mid, W)]:
                 for g in labels(m, x0, x1):
                     if not (90 * _c.SC <= g['y0'] <= H - 80 * _c.SC):
+                        continue
+                    wide = g['boxes'][-1][1] - g['boxes'][0][0]
+                    if a.wmin and not (a.wmin <= wide <= a.wmax):
                         continue
                     # crop.py 가 읽을 때와 **똑같이** 잘라 모은다.
                     # (다르게 모으면 본보기와 읽는 모양이 어긋나 닮은 정도가 낮게 나온다)
