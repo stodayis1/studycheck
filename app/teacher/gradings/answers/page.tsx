@@ -46,6 +46,8 @@ function Inner() {
   const [err, setErr] = useState('')
   const [show, setShow] = useState<'both' | 'answers' | 'solutions'>('both')
   const [cols, setCols] = useState(4) // 답지 한 줄에 몇 칸
+  const [solCols, setSolCols] = useState(2) // 해설지 단 수
+  const [scale, setScale] = useState(1) // 해설 그림 배율
 
   useEffect(() => {
     if (!code) return
@@ -88,6 +90,22 @@ function Inner() {
           답지 칸 수
           <select value={cols} onChange={(e) => setCols(Number(e.target.value))} className="rounded border px-1.5 py-0.5">
             {[3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          해설지
+          <select value={solCols} onChange={(e) => setSolCols(Number(e.target.value))} className="rounded border px-1.5 py-0.5">
+            <option value={1}>1단</option>
+            <option value={2}>2단</option>
+            <option value={3}>3단</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          해설 크기
+          <select value={scale} onChange={(e) => setScale(Number(e.target.value))} className="rounded border px-1.5 py-0.5">
+            <option value={1}>원본</option>
+            <option value={0.9}>90%</option>
+            <option value={0.8}>80%</option>
           </select>
         </label>
         <span className="text-gray-400">
@@ -166,8 +184,7 @@ function Inner() {
                           ※ 쌍둥이 문항 <b>{p.solutionFrom}</b>의 풀이입니다 — 푸는 방법은 같고 숫자만 다릅니다.
                         </div>
                       )}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img className="solimg" src={p.solution} alt={`${p.no}번 풀이`} />
+                      <SolImg src={p.solution} no={p.no} scale={scale} />
                     </>
                   ) : (
                     <p className="nosol">해설이 아직 없습니다.</p>
@@ -213,8 +230,14 @@ function Inner() {
         .srcgrid b { color: ${NAVY}; }
         /* 해설지 */
         .pagebreak { break-before: page; }
-        .sols { display: flex; flex-direction: column; gap: 6mm; }
-        .sol { break-inside: avoid; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
+        /* 해설은 단으로 흘린다. 한 쪽에 하나씩 나오면 종이가 너무 아깝다 */
+        .sols { columns: ${solCols}; column-gap: 7mm; }
+        .sol {
+          break-inside: avoid;
+          -webkit-column-break-inside: avoid;
+          border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;
+          margin-bottom: 5mm;
+        }
         .solhead { display: flex; align-items: center; gap: 6px; padding: 4px 8px;
                    background: #eef2f8; border-bottom: 1px solid #e5e7eb; font-size: 9pt; }
         .solhead .num { font-weight: 800; color: ${NAVY}; font-size: 11pt; }
@@ -224,10 +247,29 @@ function Inner() {
         .b-대표 { background: ${GOLD}; } .b-하 { background: #4c6ef5; }
         .b-중 { background: #2f9e44; } .b-상 { background: #c2255c; }
         .borrow { font-size: 8pt; color: #b45309; background: #fffbeb; padding: 3px 8px; }
-        .solimg { width: 100%; display: block; }
+        /* 해설 그림은 해설집에서 200dpi 로 자른 것이다 → 원본 크기로 찍는다.
+           단 너비에 맞춰 늘리면 두 배로 커져서 한 쪽에 한 개밖에 안 들어간다 */
+        .solimg { max-width: 100%; height: auto; display: block; }
         .nosol, .empty { font-size: 9pt; color: #9ca3af; padding: 8px; }
       `}</style>
     </>
+  )
+}
+
+// 해설집에서 200dpi 로 자른 그림이라 「원본 px ÷ 200 × 25.4」mm 로 찍으면 책과 같은 크기가 된다
+const MM_PER_PX = 25.4 / 200
+
+function SolImg({ src, no, scale }: { src: string; no: number; scale: number }) {
+  const [wmm, setWmm] = useState(0)
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="solimg"
+      src={src}
+      alt={`${no}번 풀이`}
+      onLoad={(e) => setWmm(e.currentTarget.naturalWidth * MM_PER_PX)}
+      style={{ width: wmm ? `${(wmm * scale).toFixed(1)}mm` : undefined }}
+    />
   )
 }
 
