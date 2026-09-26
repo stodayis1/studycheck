@@ -57,7 +57,7 @@ export async function GET(req: Request) {
   if (twinIds.length) {
     const { data: tw } = await s
       .from('problems')
-      .select('id, book, grade, semester, page_no, local_no, solution_image_path')
+      .select('id, book, grade, semester, page_no, local_no, solution_image_path, answer_text')
       .in('id', Array.from(new Set(twinIds)))
     ;(tw ?? []).forEach((t: any) => (twins[t.id] = t))
   }
@@ -105,6 +105,9 @@ export async function GET(req: Request) {
       solution: own ? signed.get(own) ?? null : borrowed ? signed.get(borrowed) ?? null : null,
       // 쌍둥이 풀이를 빌려 왔으면 어디 것인지 밝힌다 (숫자가 달라 답은 다르다)
       solutionFrom: own ? null : borrowed ? sourceLabel(twin) : null,
+      // 쌍둥이 풀이는 **답이 다르다**(숫자만 바꾼 문제라서). 그 답도 같이 줘서
+      // 선생님이 "답이랑 해설이 안 맞네" 하고 헷갈리지 않게 한다.
+      solutionFromAnswer: own ? null : borrowed ? twin?.answer_text ?? null : null,
     }
   })
 

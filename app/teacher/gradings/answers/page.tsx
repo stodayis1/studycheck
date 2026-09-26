@@ -25,6 +25,7 @@ type P = {
   answerImage: string | null
   solution: string | null
   solutionFrom: string | null
+  solutionFromAnswer: string | null
 }
 type Data = {
   sheet: { code: string; title: string; grade: string | null; semester: number | null }
@@ -48,6 +49,7 @@ function Inner() {
   const [cols, setCols] = useState(4) // 답지 한 줄에 몇 칸
   const [solCols, setSolCols] = useState(2) // 해설지 단 수
   const [scale, setScale] = useState(1) // 해설 그림 배율
+  const [withBorrow, setWithBorrow] = useState(true) // 쌍둥이 풀이도 실을지
 
   useEffect(() => {
     if (!code) return
@@ -107,6 +109,10 @@ function Inner() {
             <option value={0.9}>90%</option>
             <option value={0.8}>80%</option>
           </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={withBorrow} onChange={(e) => setWithBorrow(e.target.checked)} />
+          쌍둥이 풀이도
         </label>
         <span className="text-gray-400">
           해설 {withSol.length}/{data.problems.length}문항
@@ -168,7 +174,7 @@ function Inner() {
             )}
             <div className="sols">
               {data.problems.map((p) => (
-                <div className="sol" key={p.no}>
+                <div className={`sol${p.solutionFrom ? ' borrowed' : ''}`} key={p.no}>
                   <div className="solhead">
                     <span className="num">{String(p.no).padStart(2, '0')}</span>
                     {p.difficulty && <span className={`badge b-${p.difficulty}`}>{p.difficulty}</span>}
@@ -177,11 +183,13 @@ function Inner() {
                     </span>
                     <span className="right">{p.source}</span>
                   </div>
-                  {p.solution ? (
+                  {p.solution && (withBorrow || !p.solutionFrom) ? (
                     <>
                       {p.solutionFrom && (
                         <div className="borrow">
-                          ※ 쌍둥이 문항 <b>{p.solutionFrom}</b>의 풀이입니다 — 푸는 방법은 같고 숫자만 다릅니다.
+                          <b>※ 이 문항의 풀이가 아닙니다.</b> 쎈B는 해설집이 없어 <b>{p.solutionFrom}</b>의
+                          풀이를 대신 실었습니다. 푸는 방법은 같지만 숫자가 달라{' '}
+                          <b>풀이 끝의 답({p.solutionFromAnswer ?? '?'})은 이 문항의 정답이 아닙니다.</b>
                         </div>
                       )}
                       <SolImg src={p.solution} no={p.no} scale={scale} />
@@ -246,7 +254,12 @@ function Inner() {
         .badge { font-size: 7pt; font-weight: 700; padding: 1px 6px; border-radius: 8px; color: #fff; }
         .b-대표 { background: ${GOLD}; } .b-하 { background: #4c6ef5; }
         .b-중 { background: #2f9e44; } .b-상 { background: #c2255c; }
-        .borrow { font-size: 8pt; color: #b45309; background: #fffbeb; padding: 3px 8px; }
+        /* 빌려 온 풀이는 한눈에 다르게 보여야 한다 (답이 다르므로) */
+        .borrow { font-size: 8pt; color: #9a3412; background: #fff7ed;
+                  border-top: 2px solid #fdba74; border-bottom: 1px solid #fed7aa;
+                  padding: 4px 8px; line-height: 1.5; }
+        .sol.borrowed { border-color: #fdba74; }
+        .sol.borrowed .solimg { opacity: 0.92; }
         /* 해설 그림은 해설집에서 200dpi 로 자른 것이다 → 원본 크기로 찍는다.
            단 너비에 맞춰 늘리면 두 배로 커져서 한 쪽에 한 개밖에 안 들어간다 */
         .solimg { max-width: 100%; height: auto; display: block; }
