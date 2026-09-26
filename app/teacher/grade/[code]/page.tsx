@@ -8,7 +8,7 @@
 //   · 칸을 누르면 ○ → ✗ → 안 함 으로 돌고
 //   · 「상세」를 켜면 그 문항의 문제·정답·출처(교재 몇 쪽 몇 번)까지 본다.
 
-import { use, useEffect, useMemo, useState } from 'react'
+import { Fragment, use, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
@@ -53,6 +53,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState('')
+  const [done, setDone] = useState(false)   // 저장 끝 — 두 번 저장하지 않게
 
   useEffect(() => {
     apiFetch(`/api/grade/${code}?full=1`)
@@ -126,7 +127,8 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
       })
       const j = await r.json()
       if (!r.ok) { setSaved(j.error ?? '저장하지 못했습니다.'); return }
-      setSaved(`${student?.name ?? '학생'} · ${score}점으로 저장했습니다. 채점결과 화면에서 볼 수 있어요.`)
+      setSaved('')
+      setDone(true)
     } finally { setSaving(false) }
   }
 
@@ -168,7 +170,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
             {list.map((s) => (
               <button
                 key={s.id}
-                onClick={() => setStudent(s)}
+                onClick={() => { setStudent(s); setDone(false); setSaved('') }}
                 className="border rounded-xl bg-white px-3 py-3 text-left hover:shadow-sm"
               >
                 <div className="font-semibold">{s.name}</div>
@@ -186,7 +188,7 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
 
   return (
     <Shell code={code} title={data.sheet.title}>
-      <div className="px-4 pb-28">
+      <div className="px-4 pb-44 md:pb-28">
         {/* 누구 것인지 늘 보이게 */}
         <div className="mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 bg-white">
           <i className="ti ti-user text-gray-300" />
@@ -214,97 +216,134 @@ export default function TeacherGradePage({ params }: { params: Promise<{ code: s
           </span>
         </div>
 
-        {/* 번호별 정답 격자 */}
+        {/* 번호별 정답 격자.
+            「상세」를 누르면 그 번호가 있는 **줄 바로 아래**에 펼쳐진다.
+            (전에는 격자를 다 지나 맨 밑까지 스크롤해야 보였다) */}
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           {data.problems.map((p) => {
             const m = marks[p.no]
             const tone = m === 'o' ? 'bg-blue-50 border-blue-200'
               : m === 'x' ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'
+            const isOpen = open === p.no
             return (
-              <button key={p.no} onClick={() => cycle(p.no)}
-                onDoubleClick={() => setOpen(open === p.no ? null : p.no)}
-                className={`relative border rounded-xl px-2 pt-5 pb-2 min-h-[104px] flex flex-col items-center justify-center overflow-hidden ${tone}`}>
-                <span className="absolute top-1 left-2 text-[11px] text-gray-400">{p.no}</span>
-                {m === 'x' && <span className="absolute top-1 right-2 text-red-500 font-bold">✗</span>}
-                <Answer p={p} />
-              </button>
+              <Fragment key={p.no}>
+                <div
+                  className={`relative border rounded-xl px-2 pt-5 pb-7 min-h-[104px] flex flex-col items-center justify-center overflow-hidden ${tone} ${
+                    isOpen ? 'ring-2 ring-offset-1' : ''
+                  }`}
+                  style={isOpen ? { borderColor: NAVY, boxShadow: `0 0 0 2px ${NAVY}` } : undefined}
+                >
+                  <button onClick={() => cycle(p.no)} className="absolute inset-0" aria-label={`${p.no}번 ○✗`} />
+                  <span className="absolute top-1 left-2 text-[11px] text-gray-400">{p.no}</span>
+                  {m === 'x' && <span className="absolute top-1 right-2 text-red-500 font-bold">✗</span>}
+                  <span className="pointer-events-none"><Answer p={p} /></span>
+                  <button
+                    onClick={() => setOpen(isOpen ? null : p.no)}
+                    className="absolute bottom-0 left-0 right-0 h-6 text-[11px] border-t bg-white/70"
+                    style={{ color: NAVY }}
+                  >
+                    <i className={`ti ti-chevron-${isOpen ? 'up' : 'down'} mr-0.5`} />
+                    {isOpen ? '닫기' : '상세'}
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="col-span-full border rounded-xl bg-white p-3" style={{ borderColor: NAVY }}>
+                    <Detail p={p} mark={m} onMark={() => cycle(p.no)} onClose={() => setOpen(null)} />
+                  </div>
+                )}
+              </Fragment>
             )
           })}
         </div>
 
-        {/* 상세 — 문제·정답·출처 */}
+        {/* 「상세」를 켜면 전부 펼친다 (한 장에 쭉 훑어볼 때) */}
         {detail && (
           <div className="mt-5 space-y-3">
             {data.problems.map((p) => (
-              <div key={p.no} className="border rounded-xl bg-white overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-2 border-b bg-gray-50">
-                  <span className="font-bold" style={{ color: NAVY }}>{p.no}번</span>
-                  {p.difficulty && <Chip>{p.difficulty}</Chip>}
-                  {p.typeTitle && <Chip>{p.typeTitle}</Chip>}
-                  <span className="ml-auto text-[11px] text-gray-400">{p.source}</span>
-                  <button onClick={() => cycle(p.no)}
-                    className={`ml-2 w-8 h-8 rounded-lg border text-sm ${
-                      marks[p.no] === 'o' ? 'bg-blue-50 border-blue-300 text-blue-600'
-                        : marks[p.no] === 'x' ? 'bg-red-50 border-red-300 text-red-600' : 'text-gray-400'
-                    }`}>
-                    {marks[p.no] === 'o' ? '○' : marks[p.no] === 'x' ? '✗' : '–'}
-                  </button>
-                </div>
-                <div className="p-3 grid grid-cols-1 md:grid-cols-[1fr_200px] gap-3">
-                  {p.image
-                    ? // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.image} alt={`${p.no}번 문제`} className="w-full rounded border" />
-                    : <div className="text-sm text-gray-400">문제 그림이 없습니다.</div>}
-                  <div className="rounded-lg border bg-blue-50/40 p-3">
-                    <div className="text-xs text-gray-500 mb-1">정답</div>
-                    <div className="text-lg"><Answer p={p} big /></div>
-                  </div>
-                </div>
-                <Solution p={p} />
+              <div key={p.no} className="border rounded-xl bg-white p-3">
+                <Detail p={p} mark={marks[p.no]} onMark={() => cycle(p.no)} />
               </div>
             ))}
           </div>
         )}
-
-        {/* 격자에서 두 번 눌러 펼친 한 문항 */}
-        {!detail && open != null && (() => {
-          const p = data.problems.find((q) => q.no === open)!
-          return (
-            <div className="mt-4 border rounded-xl bg-white p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-bold" style={{ color: NAVY }}>{p.no}번</span>
-                <span className="ml-auto text-[11px] text-gray-400">{p.source}</span>
-                <button onClick={() => setOpen(null)} className="text-gray-400 text-sm">닫기</button>
-              </div>
-              {p.image && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.image} alt="" className="w-full rounded border" />
-              )}
-              <div className="mt-2 rounded-lg border bg-blue-50/40 p-3">
-                <div className="text-xs text-gray-500 mb-1">정답</div>
-                <div className="text-lg"><Answer p={p} big /></div>
-              </div>
-              <Solution p={p} />
-            </div>
-          )
-        })()}
       </div>
 
-      {/* 아래 고정 줄 — 점수·학생·저장 */}
-      <div className="fixed bottom-0 left-0 right-0 border-t bg-white px-4 py-3">
+      {/* 아래 고정 줄 — 점수·학생·저장.
+          휴대폰에는 하단 탭(높이 64px, z-40)이 있어서 그 위에 올려야 한다.
+          전에는 z 값이 없어 탭에 가려 「채점 저장」이 아예 안 보였다. */}
+      <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-50 border-t bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <div className="max-w-[900px] mx-auto flex flex-wrap items-center gap-3">
           <div className="text-2xl font-extrabold" style={{ color: NAVY }}>{score}점</div>
           <div className="text-xs text-gray-400">{total}문항 중 {right}개 정답</div>
           <span className="ml-auto text-sm font-semibold" style={{ color: NAVY }}>{student.name}</span>
-          <button onClick={save} disabled={saving}
-            className="px-5 py-2.5 rounded-xl text-white font-bold disabled:opacity-40"
-            style={{ background: '#e8564a' }}>
-            {saving ? '저장 중…' : '채점 저장'}
-          </button>
+          {done ? (
+            <span className="px-4 py-2.5 rounded-xl text-sm font-bold" style={{ background: '#dcfce7', color: '#166534' }}>
+              <i className="ti ti-check mr-1" />저장 완료
+            </span>
+          ) : (
+            <button onClick={save} disabled={saving}
+              className="px-5 py-2.5 rounded-xl text-white font-bold disabled:opacity-40"
+              style={{ background: '#e8564a' }}>
+              {saving ? '저장 중…' : '채점 저장'}
+            </button>
+          )}
         </div>
-        {saved && <p className="max-w-[900px] mx-auto text-xs text-gray-500 mt-1">{saved}</p>}
+        {saved && <p className="max-w-[900px] mx-auto text-xs text-red-600 mt-1">{saved}</p>}
+        {/* 저장했으면 다음에 뭘 할지 바로 보여 준다 */}
+        {done && (
+          <div className="max-w-[900px] mx-auto mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-gray-500">
+              <b style={{ color: NAVY }}>{student.name}</b> · {score}점으로 기록했습니다.
+            </span>
+            <button onClick={() => router.push('/teacher/gradings')}
+              className="ml-auto px-3 py-1.5 rounded-lg border" style={{ borderColor: NAVY, color: NAVY }}>
+              채점결과 보기
+            </button>
+            <button onClick={() => router.push('/teacher/scan')}
+              className="px-3 py-1.5 rounded-lg text-white" style={{ background: NAVY }}>
+              다음 시험지 찍기
+            </button>
+          </div>
+        )}
       </div>
     </Shell>
+  )
+}
+
+// 한 문항 펼침 — 문제 그림·정답·출처·해설. 격자 줄 아래와 「상세」 목록에서 같이 쓴다.
+function Detail({
+  p, mark, onMark, onClose,
+}: { p: P; mark: Mark; onMark: () => void; onClose?: () => void }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="font-bold text-lg" style={{ color: NAVY }}>{p.no}번</span>
+        {p.difficulty && <Chip>{p.difficulty}</Chip>}
+        {p.typeTitle && <Chip>{p.typeTitle}</Chip>}
+        <button
+          onClick={onMark}
+          className={`ml-1 w-9 h-9 rounded-lg border ${
+            mark === 'o' ? 'bg-blue-50 border-blue-300 text-blue-600'
+              : mark === 'x' ? 'bg-red-50 border-red-300 text-red-600' : 'text-gray-400'
+          }`}
+        >
+          {mark === 'o' ? '○' : mark === 'x' ? '✗' : '–'}
+        </button>
+        <span className="ml-auto text-[11px] text-gray-400">{p.source}</span>
+        {onClose && <button onClick={onClose} className="text-gray-400 text-sm ml-2">닫기</button>}
+      </div>
+      <div className="rounded-lg border bg-blue-50/50 px-3 py-2 mb-2">
+        <span className="text-xs text-gray-500 mr-2">정답</span>
+        <span className="text-lg align-middle"><Answer p={p} big /></span>
+      </div>
+      {p.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={p.image} alt={`${p.no}번 문제`} className="w-full rounded border" />
+      ) : (
+        <p className="text-sm text-gray-400">문제 그림을 받는 중…</p>
+      )}
+      <Solution p={p} />
+    </>
   )
 }
 
