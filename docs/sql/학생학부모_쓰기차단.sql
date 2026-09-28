@@ -18,6 +18,8 @@
 --       (정책은 행 단위라 칸을 못 가린다. 점수는 학생이 못 건드려야 한다)
 --
 -- ⚠️ 직원(is_staff)은 어느 것도 달라지지 않는다. 선생님 화면은 그대로다.
+-- ⚠️ 서버(서비스 키)도 그대로다 — OPS 결석 동기화가 class_sessions·learning_notes에 직접 쓰는데,
+--    RLS는 서비스 키를 건너뛰지만 트리거는 안 건너뛰므로 트리거 안에서 따로 통과시킨다.
 -- ⚠️ 통째로 한 트랜잭션이라 중간에 실패하면 전부 되돌아간다.
 --
 -- 되돌리기: 파일 맨 아래 주석 참고(원래의 for all 정책 한 줄로 복구).
@@ -173,6 +175,15 @@ begin
     return new;              -- 선생님·직원·원장은 그대로
   end if;
 
+  -- ⚠️ 서버(서비스 키)는 반드시 통과시켜야 한다.
+  -- RLS는 서비스 키를 아예 건너뛰지만 **트리거는 서비스 키도 그대로 탄다.**
+  -- OPS(수학OPS)가 결석을 동기화할 때 StudyCheck의 class_sessions·learning_notes에 직접 upsert하는데
+  -- (sumath-admin/src/lib/studycheckPush.ts), 이때는 로그인한 사람이 없어서 is_staff()가 false다.
+  -- 이 줄이 없으면 OPS 결석 동기화가 통째로 막힌다.
+  if auth.uid() is null or auth.role() = 'service_role' then
+    return new;
+  end if;
+
   allowed := string_to_array(tg_argv[0], ',');
   foreach k in array allowed loop
     o := o - k;
@@ -217,7 +228,10 @@ commit;
 --                       'student_worksheets','feedbacks','feedback_replies')
 --     and p.polcmd::text = 'd' and p.polname <> 'staff_all';
 --
--- 2) 학생 앱에서 꼭 눌러볼 것 (이게 되면 정상)
+-- 2) OPS 결석 동기화가 여전히 되는지 (서버는 트리거를 통과해야 한다)
+--    OPS 학습일지에서 결석을 하나 저장해 보고, StudyCheck 그 학생 그 날짜에 반영되는지 확인.
+--
+-- 3) 학생 앱에서 꼭 눌러볼 것 (이게 되면 정상)
 --    · 과제 화면에서 「다 했어요」 체크
 --    · 학습지 「제출」
 --    · 알림장 열어서 읽음 처리 + 답글 쓰기
