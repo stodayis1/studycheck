@@ -117,6 +117,7 @@ export default function StudentDashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [unitExams, setUnitExams] = useState<any[]>([])
+  const [coreTests, setCoreTests] = useState<any[]>([])
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   // 오토스텝: 개념 → 유형편/개념편 페이지 매핑 (concept_id 기준) - 학습 내용에 페이지 표시할 때 씀
@@ -210,14 +211,18 @@ export default function StudentDashboardPage() {
     // 학교 단원평가 (초등) - 초등은 중간·기말고사가 없어서 이게 곧 학교 성적이다.
     // exams는 원래 직원 전용 테이블이라, 본인 학생의 단원평가만 읽을 수 있게 RLS를 따로 열었다
     // (docs/sql/단원평가_학부모학생_공개.sql). 정책을 아직 안 건 DB에서는 빈 배열이 와서 카드가 안 보일 뿐 깨지지 않는다.
+    // 단원평가(초등 학교시험)와 코어테스트를 한 번에 받아 종류별로 나눈다.
+    // 학교 중간·기말 내신 성적과 진단평가·입학테스트는 학원 관리용이라 RLS에서 막혀 있어 여기로 오지 않는다.
     const { data: ueData } = await supabase
       .from('exams')
-      .select('unit, unit_name, score, total_score, exam_date, semester')
+      .select('exam_type, title, unit, unit_name, score, total_score, exam_date, semester')
       .eq('student_id', sid)
-      .eq('exam_type', '학교시험')
-      .eq('title', '단원평가')
+      .in('exam_type', ['학교시험', '코어테스트'])
       .order('exam_date', { ascending: false })
-    if (ueData) setUnitExams(ueData)
+    if (ueData) {
+      setUnitExams(ueData.filter((e: any) => e.exam_type === '학교시험' && e.title === '단원평가'))
+      setCoreTests(ueData.filter((e: any) => e.exam_type === '코어테스트' && e.score != null))
+    }
   }
 
   // 체크된 개념들의 페이지 범위를 "P.6~13" 식으로 압축. 매핑이 없으면 null(페이지 표시 생략).
@@ -699,6 +704,50 @@ export default function StudentDashboardPage() {
               </div>
               <div className="px-4 py-2" style={{ background: '#fafafa' }}>
                 <p className="text-[10px] text-gray-400">학교에서 본 단원평가 결과예요. 학원 평가(진단·코어테스트)와는 별개예요.</p>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* 학원 코어테스트 카드 - 2개월마다 보는 학원 정기 평가.
+            학교 성적(단원평가)과 구분해서 보여준다. 기록이 없으면 카드를 감춘다. */}
+        {coreTests.length > 0 && (() => {
+          const rows = coreTests.slice(0, 6)
+          const latest = rows[0]
+          const tone = (p: number) => p >= 90 ? '#27500A' : p >= 70 ? '#633806' : '#991b1b'
+          const toneBg = (p: number) => p >= 90 ? '#EAF3DE' : p >= 70 ? '#FAEEDA' : '#fee2e2'
+          const pctOf = (r: any) => Math.round((r.score / (r.total_score || 100)) * 100)
+          return (
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#D5E7C2' }}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#EAF3DE', borderBottom: '1px solid #f0f0f0' }}>
+                <i className="ti ti-target" style={{ fontSize: 16, color: '#27500A' }} />
+                <h3 className="text-sm font-bold" style={{ color: '#27500A' }}>학원 코어테스트</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto"
+                  style={{ background: '#D5E7C2', color: '#27500A' }}>
+                  최근 {(latest.exam_date ?? '').slice(5)} · {latest.score}점
+                </span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {rows.map((r: any, i: number) => {
+                  const p = pctOf(r)
+                  return (
+                    <div key={i} className="px-4 py-2.5 flex items-center gap-3">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0"
+                        style={{ background: '#f3f4f6', color: '#6b7280' }}>{r.title || '평가'}</span>
+                      <p className="text-xs font-semibold text-gray-700 flex-1 min-w-0 truncate">
+                        {r.unit_name || '-'}
+                      </p>
+                      <span className="text-[10px] text-gray-400 shrink-0">{(r.exam_date ?? '').slice(5)}</span>
+                      <span className="text-sm font-black px-2 py-0.5 rounded-lg shrink-0"
+                        style={{ background: toneBg(p), color: tone(p) }}>
+                        {r.score}점
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="px-4 py-2" style={{ background: '#fafafa' }}>
+                <p className="text-[10px] text-gray-400">학원에서 2개월마다 보는 정기 평가예요. 학교 시험과는 별개예요.</p>
               </div>
             </div>
           )
