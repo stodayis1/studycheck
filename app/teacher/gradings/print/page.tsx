@@ -229,9 +229,19 @@ function PrintInner() {
           <span className="w-10 text-gray-400">{solveMm}mm</span>
         </label>
         <span className="text-gray-400">{pages ? `${pages.length}쪽` : '…'}</span>
+        <a
+          href={`/teacher/gradings/answers?code=${data.sheet.code}`}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto rounded-lg border px-3 py-2"
+          style={{ borderColor: NAVY, color: NAVY }}
+          title="선생님용 답지와 해설지"
+        >
+          답지·해설
+        </a>
         <button
           onClick={() => window.print()}
-          className="ml-auto rounded-lg px-4 py-2 font-medium text-white"
+          className="rounded-lg px-4 py-2 font-medium text-white"
           style={{ background: NAVY }}
         >
           인쇄 / PDF 저장
