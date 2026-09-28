@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
+import { reportPushResult, reportSendError } from '@/lib/reportSend'
 
 interface Student {
   id: string
@@ -291,7 +292,9 @@ export default function TeacherExamPrepPage() {
             tag: 'exam-schedule',
           },
         }),
-      }).catch(() => {})
+      })
+        .then((r) => reportPushResult(r, '시험 일정'))
+        .catch((e) => reportSendError(e, '시험 일정'))
     }
 
     setSchSchool(''); setSchGrade(''); setSchDate('')

@@ -8,6 +8,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
+import { reportPushResult, reportSendError } from '@/lib/reportSend'
 
 interface Student {
   id: string
@@ -305,7 +306,9 @@ export default function TeacherLearningNotesPage() {
               tag: 'daily-report',
             },
           }),
-        }).catch(() => {})
+        })
+        .then((r) => reportPushResult(r, '오늘 학습 안내'))
+        .catch((e) => reportSendError(e, '오늘 학습 안내'))
       }
     } catch (err) {
       console.error('카톡 발송 오류:', err)
@@ -758,7 +761,27 @@ export default function TeacherLearningNotesPage() {
         absent_date: absentDate,
         reason: '스터디체크 학습일지 결석 체크',
       }),
-    }).catch((e) => console.error('OPS 결석 동기화 요청 실패:', e))
+    })
+      .then(async (res): Promise<void> => {
+        // 결석은 OPS(행정)로 넘어가야 보강 안내가 나간다. 실패하면 학부모가 보강 안내를 못 받으므로
+        // 콘솔에만 남기지 않고 화면에 알린다(예전엔 console.error뿐이라 아무도 몰랐다).
+        const data = await res.json().catch((): any => null)
+        if (!res.ok || !data?.ok) {
+          alert(`${student.name} 학생 결석은 저장됐지만, OPS(행정시스템)에는 전달되지 않았어요.
+
+` +
+            `${data?.error ?? `서버 응답 ${res.status}`}
+
+보강 안내가 나가지 않습니다. 원장님께 알려주세요.`)
+        }
+      })
+      .catch((e: any): void => {
+        alert(`${student.name} 학생 결석을 OPS에 전달하지 못했어요.
+
+${e?.message ?? '연결 실패'}
+
+원장님께 알려주세요.`)
+      })
   }
 
   // 오토스텝: 개념을 체크하는 즉시(소단원 완료를 기다리지 않고) 그 개념에 매핑된 유형편 쪽수로 숙제 알림을 만든다.

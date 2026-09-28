@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
+import { reportPushResult, reportSendError } from '@/lib/reportSend'
 
 // 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
 function laTierColor(v: number | null, good = 85, mid = 70) {
@@ -673,7 +674,9 @@ export default function TeacherReportsPage() {
             tag: 'monthly-report',
           },
         }),
-      }).catch(() => {})
+      })
+        .then((r) => reportPushResult(r, '보고서'))
+        .catch((e) => reportSendError(e, '보고서'))
     }
   }
 
@@ -784,7 +787,9 @@ export default function TeacherReportsPage() {
             tag: 'grade-report',
           },
         }),
-      }).catch(() => {})
+      })
+        .then((r) => reportPushResult(r, '보고서'))
+        .catch((e) => reportSendError(e, '보고서'))
     }
   }
 

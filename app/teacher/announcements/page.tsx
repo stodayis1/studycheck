@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 import { COLOR_PALETTE, SIZE_PALETTE, FONT_PALETTE, EMOJI_PICKS, renderRichContent, stripRichTokens } from '@/lib/richContent'
+import { reportPushResult, reportSendError } from '@/lib/reportSend'
 
 interface Announcement {
   id: string
@@ -145,7 +146,9 @@ export default function TeacherAnnouncementsPage() {
             tag: 'announcement',
           },
         }),
-      }).catch(() => {})
+      })
+        .then((r) => reportPushResult(r, '공지사항'))
+        .catch((e) => reportSendError(e, '공지사항'))
     }
     setSaving(false)
     resetForm()
