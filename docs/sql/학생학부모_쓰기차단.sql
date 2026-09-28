@@ -228,8 +228,16 @@ commit;
 --                       'student_worksheets','feedbacks','feedback_replies')
 --     and p.polcmd::text = 'd' and p.polname <> 'staff_all';
 --
--- 2) OPS 결석 동기화가 여전히 되는지 (서버는 트리거를 통과해야 한다)
---    OPS 학습일지에서 결석을 하나 저장해 보고, StudyCheck 그 학생 그 날짜에 반영되는지 확인.
+-- 2) OPS 연동이 여전히 되는지 (서버는 트리거를 통과해야 한다)
+--    결석은 StudyCheck에서 체크하고 그게 OPS로 간다(주 방향). 이 경로는 선생님이 하는 일이라
+--    트리거와 무관하다.
+--    트리거를 타는 것은 **반대 방향**이다 — OPS가 StudyCheck의 class_sessions·learning_notes에
+--    서비스 키로 직접 쓰는 경우(sumath-admin/src/lib/studycheckPush.ts):
+--      · 학부모가 보강 안내 문자 링크에서 날짜를 고르거나 「보강 안 함」을 누를 때
+--      · OPS에서 보강을 확정·출석·취소 처리할 때
+--    확인: 위 동작을 하나 해보고 StudyCheck 학습일지 메모에
+--          「[OPS] 보강 예정: ...」 / 「[OPS] 보강 안 함으로 처리됨」이 붙는지 본다.
+--    (이 push는 실패해도 조용히 넘어가므로 — .catch(() => {}) — 화면엔 아무 표시가 없다)
 --
 -- 3) 학생 앱에서 꼭 눌러볼 것 (이게 되면 정상)
 --    · 과제 화면에서 「다 했어요」 체크
