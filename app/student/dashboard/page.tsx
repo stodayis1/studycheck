@@ -398,6 +398,10 @@ export default function StudentDashboardPage() {
 
   const DAYS = ['일','월','화','수','목','금','토']
   const selectedSession = sessions.find(s => s.session_date === (selectedDate ?? sessions[0]?.session_date))
+  // 결석한 날의 보강 진행 상황 - OPS가 makeup_note 칸에 넣어준다(docs/sql/보강칸_추가.sql)
+  const selectedMakeupNote = selectedSession
+    ? (notes.find(n => n.session_id === selectedSession.id) as any)?.makeup_note ?? null
+    : null
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -488,6 +492,22 @@ export default function StudentDashboardPage() {
         {/* 선택된 날짜 과제 카드 */}
         {selectedSession ? (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* 보강 — 결석한 날에만 뜬다 */}
+            {selectedMakeupNote && (
+              <div className="px-4 py-3" style={{ background: '#FFF5F2', borderBottom: '1px solid #F5C4B3' }}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>
+                    <i className="ti ti-calendar-repeat" style={{ fontSize: 12 }} /> 보강
+                  </span>
+                  <span className="text-xs font-bold" style={{ color: '#712B13' }}>{selectedMakeupNote}</span>
+                </div>
+                {String(selectedMakeupNote).includes('예정') && (
+                  <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: '#9a6b5a' }}>
+                    보강 날짜는 미리 말씀해 주시면 언제든 바꿔 드려요. 다만 예약한 날에 오지 못하면 그 보강은 다시 잡아 드리기 어려우니 양해 부탁드려요.
+                  </p>
+                )}
+              </div>
+            )}
             {/* 학습 내용 서브헤더 */}
             {(selectedSession.progress_content || buildProgressText(textbooks.filter(t => t.grade)[0], selectedSession.id)) && (
               <div>

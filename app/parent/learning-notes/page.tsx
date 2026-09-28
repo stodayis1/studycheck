@@ -261,6 +261,13 @@ export default function ParentLearningNotesPage() {
                       ) : (
                         <p className="text-xs text-gray-400">배움노트 미작성</p>
                       )}
+                      {/* 보강 — 결석한 날의 진행 상황 (OPS가 makeup_note 칸에 넣어준다) */}
+                      {(note as any)?.makeup_note && (
+                        <p className="text-xs font-semibold rounded-lg px-2.5 py-1.5 mt-1"
+                          style={{ background: '#FFF5F2', color: '#712B13' }}>
+                          <i className="ti ti-calendar-repeat" style={{ fontSize: 12 }} /> 보강: {(note as any).makeup_note}
+                        </p>
+                      )}
                       {note?.memo && (
                         <p className="text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5 mt-1">
                           📝 선생님 메모: {note.memo}

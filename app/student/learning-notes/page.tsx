@@ -295,6 +295,14 @@ export default function StudentLearningNotePage() {
                         <i className={`ti ${note.attendance === '정시' ? 'ti-circle-check' : note.attendance === '지각' ? 'ti-clock-exclamation' : 'ti-x'}`} style={{ fontSize: 11 }} />
                         {note.attendance}
                       </span>
+                      {/* 보강 (결석한 날에만) */}
+                      {(note as any).makeup_note && (
+                        <span className="text-[10px] font-semibold px-2 py-1 rounded-full flex items-center gap-1"
+                          style={{ background: '#FFF5F2', color: '#993C1D' }}>
+                          <i className="ti ti-calendar-repeat" style={{ fontSize: 11 }} />
+                          보강 {(note as any).makeup_note}
+                        </span>
+                      )}
                       {/* 학습지 */}
                       <span className="text-[10px] font-semibold px-2 py-1 rounded-full flex items-center gap-1"
                         style={{

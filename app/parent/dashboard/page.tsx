@@ -48,6 +48,7 @@ interface LearningNote {
   textbook_submitted: boolean
   workbook_done: boolean
   memo: string | null
+  makeup_note: string | null   // 결석한 날의 보강 진행 상황 (OPS가 채운다)
   video_started_at: string | null
   video_completed_at: string | null
 }
@@ -634,6 +635,24 @@ export default function ParentDashboardPage() {
                           background: activeNote.attendance === '정시' ? '#EAF3DE' : activeNote.attendance === '지각' ? '#FAEEDA' : '#fee2e2',
                           color: activeNote.attendance === '정시' ? '#27500A' : activeNote.attendance === '지각' ? '#633806' : '#991b1b'
                         }}>{activeNote.attendance}</span>
+                    </div>
+                  )}
+                  {/* 보강 — 결석한 날의 보강 진행 상황. OPS가 makeup_note 칸에 넣어준다
+                      (선생님 메모와 별개 칸 · docs/sql/보강칸_추가.sql) */}
+                  {activeNote?.makeup_note && (
+                    <div className="rounded-xl px-3 py-2.5" style={{ background: '#FFF5F2', border: '1px solid #F5C4B3' }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>
+                          <i className="ti ti-calendar-repeat" style={{ fontSize: 12 }} /> 보강
+                        </span>
+                        <span className="text-xs font-bold" style={{ color: '#712B13' }}>{activeNote.makeup_note}</span>
+                      </div>
+                      {activeNote.makeup_note.includes('예정') && (
+                        <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: '#9a6b5a' }}>
+                          보강 날짜는 미리 말씀해 주시면 언제든 바꿔 드려요.
+                          다만 예약하신 날에 오지 못하면 그 보강은 다시 잡아 드리기 어려우니 양해 부탁드려요.
+                        </p>
+                      )}
                     </div>
                   )}
                   {/* 수업 내용 */}
