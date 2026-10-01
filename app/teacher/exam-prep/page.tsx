@@ -148,7 +148,8 @@ export default function TeacherExamPrepPage() {
   function getSchoolName(student: Student) {
     if (!student.school) return ''
     const schoolList = [...new Set(innerEnough.map(ie => ie.school_name))]
-    const matched = schoolList.find(s => student.school.includes(s))
+    // 학교가 비어 있는 학생도 있으므로 ?? '' 로 막는다 (상담내역에서 같은 이유로 화면이 죽었다)
+    const matched = schoolList.find(s => (student.school ?? '').includes(s))
     return matched ?? student.school
   }
 

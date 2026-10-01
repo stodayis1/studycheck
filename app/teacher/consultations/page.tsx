@@ -103,7 +103,9 @@ export default function ConsultationsPage() {
   const overdueStudents = myStudents.filter((s) => isOverdue(s.id))
 
   const visibleStudents = myStudents
-    .filter((s) => !search.trim() || s.name.includes(search.trim()) || s.school.includes(search.trim()))
+    // 학교가 비어 있는 학생이 있다(전아윤 등). ?? '' 없이 school.includes()를 부르면
+    // 검색어를 넣는 순간 그 학생에서 터져서 화면 전체가 "This page couldn't load"가 된다.
+    .filter((s) => !search.trim() || s.name.includes(search.trim()) || (s.school ?? '').includes(search.trim()))
     .filter((s) => !onlyOverdue || isOverdue(s.id))
     .sort((a, b) => {
       const la = lastConsultByStudent.get(a.id)?.consulted_at ?? ''
