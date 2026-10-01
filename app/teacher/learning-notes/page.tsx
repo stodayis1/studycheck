@@ -580,7 +580,12 @@ export default function TeacherLearningNotesPage() {
     // 시험기간에 정규 진도 없이 시험대비(내신)만 배정한 날은 애초에 남길 "진도"가 없는 게 정상인데,
     // hasContent가 항상 false가 돼서 과제를 분명히 입력했는데도 "미완료"로 잘못 표시되는 문제 (정지후, 이준민 사례)
     const isExamPrepOnly = !!(session.hw_textbook_name?.includes('시험대비') || session.hw_textbook_page?.includes('시험대비'))
-    return (hasContent || isExamPrepOnly) && hasHomework
+    // 「오늘은 교재 과제는 안 나가요」를 켜고 오답풀이·추가수업만 한 날은 남길 '진도'가 없는 게 정상이다.
+    // 그런 날 선생님은 과제배부 탭 메모(저장될 때 "📝 "가 앞에 붙는다)에 무엇을 시켰는지 적는데,
+    // 그 메모는 진도(progress_content)가 아니라 과제칸(hw_textbook_page)에 들어가서 hasContent가 계속 false였다.
+    // → 분명히 다 적었는데도 「입력완료」가 안 뜨던 문제 (2026-09-28 홍채은 사례)
+    const isMemoOnlyDay = !!session.hw_textbook_page?.trim().startsWith('📝')
+    return (hasContent || isExamPrepOnly || isMemoOnlyDay) && hasHomework
   }
 
   // 전달사항 - 안 읽은 것만 불러온다 (다음날 수업 시작 전이나 학습일지 열 때 바로 보이게)

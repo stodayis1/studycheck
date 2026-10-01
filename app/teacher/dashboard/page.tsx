@@ -32,6 +32,28 @@ interface FirstClassCheck {
   hasFeedback: boolean
 }
 
+// 원장이 "새 상담기록이 올라왔는지" 대시보드에서 바로 보기 위한 것.
+// '마지막으로 확인한 시각'은 이 기기(브라우저)에만 저장한다 — 폰과 PC를 같이 쓰시면 각각 한 번씩 뜬다.
+// 처음 쓰는 기기에서는 최근 7일치를 새 글로 본다(그 전 것까지 한꺼번에 뜨면 의미가 없다).
+const CONSULT_SEEN_KEY = 'consultations_seen_at'
+const CONSULT_FALLBACK_DAYS = 7
+
+function consultSeenAt(): string {
+  const fallback = new Date(Date.now() - CONSULT_FALLBACK_DAYS * 86400000).toISOString()
+  if (typeof window === 'undefined') return fallback
+  try { return localStorage.getItem(CONSULT_SEEN_KEY) ?? fallback } catch { return fallback }
+}
+
+interface NewConsult {
+  id: string
+  student_id: string
+  student_name: string
+  teacher_name: string | null
+  consulted_at: string
+  content: string
+  created_at: string
+}
+
 interface HandoffNote {
   id: string
   student_id: string
@@ -55,6 +77,8 @@ export default function TeacherDashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
   const [overdueConsultNames, setOverdueConsultNames] = useState<string[]>([])
+  // 원장이 아직 못 본 새 상담기록
+  const [newConsults, setNewConsults] = useState<NewConsult[]>([])
   // 배정만 하고 5일 넘게 안 걷힌 학습지 (초·중·고 전부). 채점 대기/처리 필요와 달리 알림이 없어서
   // 학습지관리 목록을 펼쳐보기 전엔 아무도 모르던 건들 - 2026-09 원장님 요청으로 추가
   const [longPending, setLongPending] = useState<{ count: number; names: string[] }>({ count: 0, names: [] })
@@ -64,6 +88,7 @@ export default function TeacherDashboardPage() {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
       fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes()
+      fetchNewConsultations()
     }
   }, [currentUser])
 
@@ -117,6 +142,29 @@ export default function TeacherDashboardPage() {
       return days > 90
     }).map((s: any) => s.name)
     setOverdueConsultNames(overdue)
+  }
+
+  // 마지막으로 확인한 시각 이후에 새로 작성된 상담기록을 가져온다(원장 전용).
+  // '상담한 날짜(consulted_at)'가 아니라 '적어 올린 시각(created_at)' 기준이다 —
+  // 선생님이 지난주 상담을 오늘 적는 경우에도 새 글로 보여야 하기 때문이다.
+  async function fetchNewConsultations() {
+    if (!isAdmin()) return
+    const { data } = await supabase.from('consultations')
+      .select('id, student_id, teacher_name, consulted_at, content, created_at')
+      .gt('created_at', consultSeenAt())
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (!data || data.length === 0) { setNewConsults([]); return }
+    const ids = Array.from(new Set(data.map((c: any) => c.student_id)))
+    const { data: studs } = await supabase.from('students').select('id, name').in('id', ids)
+    const nameById = new Map((studs ?? []).map((s: any) => [s.id, s.name]))
+    setNewConsults(data.map((c: any) => ({ ...c, student_name: nameById.get(c.student_id) ?? '(이름 없음)' })))
+  }
+
+  // 「확인」을 누르면 지금 시각을 기억해서 다음부터는 그 뒤에 올라온 것만 새 글로 본다.
+  function markConsultsSeen() {
+    try { localStorage.setItem(CONSULT_SEEN_KEY, new Date().toISOString()) } catch { /* 사생활 보호 모드 등 */ }
+    setNewConsults([])
   }
 
   // 지난주~이번주 첫수업한 학생 중 첫수업 알림장(작성 기준: 첫수업일~+2일) 누락된 친구 확인.
@@ -392,6 +440,47 @@ export default function TeacherDashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* 원장 전용: 새로 올라온 상담기록. 선생님들이 상담을 기록하고 있는지 바로 보이게 한다 */}
+        {isAdmin() && newConsults.length > 0 && (
+          <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1.5px solid #FDBA74' }}>
+            <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#FFF7ED' }}>
+              <div className="flex items-center gap-2">
+                <i className="ti ti-message-2" style={{ fontSize: 16, color: '#9a3412' }} />
+                <p className="text-sm font-bold" style={{ color: '#9a3412' }}>새 상담기록</p>
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md"
+                  style={{ background: '#DC2626', color: 'white', letterSpacing: '0.02em' }}>
+                  NEW {newConsults.length}
+                </span>
+              </div>
+              <button onClick={markConsultsSeen}
+                className="text-[11px] font-bold px-2.5 py-1 rounded-lg"
+                style={{ background: 'white', color: '#9a3412', border: '1px solid #FDBA74' }}>
+                확인
+              </button>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#f3f4f6' }}>
+              {newConsults.slice(0, 5).map((c) => (
+                <Link key={c.id} href={`/teacher/consultations?student=${c.student_id}`}
+                  onClick={markConsultsSeen}
+                  className="block px-4 py-2.5 hover:bg-gray-50">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-bold text-gray-800">{c.student_name}</span>
+                    <span className="text-[10px] text-gray-400">{c.teacher_name || '작성자 미상'} · 상담일 {c.consulted_at}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 line-clamp-1">{stripRichTokens(c.content || '')}</p>
+                </Link>
+              ))}
+            </div>
+            {newConsults.length > 5 && (
+              <Link href="/teacher/consultations" onClick={markConsultsSeen}
+                className="block px-4 py-2 text-center text-[11px] font-bold hover:bg-gray-50"
+                style={{ color: '#9a3412', borderTop: '1px solid #f3f4f6' }}>
+                나머지 {newConsults.length - 5}건 더 보기
+              </Link>
+            )}
           </div>
         )}
 
