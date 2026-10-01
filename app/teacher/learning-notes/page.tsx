@@ -2060,13 +2060,16 @@ ${e?.message ?? '연결 실패'}
 
                       const editable = isEditable(student)
                       return (
-                        <button key={student.id}
-                          onClick={() => editable && openNoteModal(student)}
-                          disabled={!editable}
+                        // 카드 안에 알림장 버튼을 따로 두어야 해서 바깥을 div로 바꿨다(button 안에 button은 못 넣는다).
+                        <div key={student.id}
                           className={cx(
                             'bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left transition-all w-full md:w-auto min-w-[140px]',
-                            editable ? 'hover:border-blue-200 hover:shadow-md' : 'opacity-60 cursor-default'
+                            editable ? 'hover:border-blue-200 hover:shadow-md' : 'opacity-60'
                           )}>
+                          <button
+                            onClick={() => editable && openNoteModal(student)}
+                            disabled={!editable}
+                            className={cx('w-full text-left', !editable && 'cursor-default')}>
                           <div className="flex items-center gap-2 mb-1.5">
                             <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
                               {student.name[0]}
@@ -2093,7 +2096,17 @@ ${e?.message ?? '연결 실패'}
                           {!editable && (
                             <div className="text-[10px] font-bold text-gray-300 mt-1">보기 전용</div>
                           )}
-                        </button>
+                          </button>
+                          {/* 알림장은 수업 당일이 아니어도 쓸 수 있어야 한다.
+                              퇴근 후 다음날 학습일지를 쓰는 선생님이 많은데, 예전엔 이 카드에
+                              알림장 버튼이 없어서 그날이 지나면 학부모께 전달할 길이 없었다. */}
+                          {editable && (
+                            <button onClick={() => openFeedbackModal(student)}
+                              className="mt-2 w-full px-2.5 py-1 text-[11px] font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg hover:bg-purple-50">
+                              <i className="ti ti-message-circle align-[-0.125em]" /> 알림장
+                            </button>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
