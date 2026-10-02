@@ -32,6 +32,52 @@ type Data = {
   problems: P[]
 }
 
+
+// 정답을 보기 좋게 그린다.
+//  · 분수 a/b 는 **세로로 쌓아서** 진짜 분수처럼 (대분수 "1 9/17"도 같이)
+//  · 객관식 답이 숫자로 들어온 교재(RPM)는 동그라미 번호로 바꿔 보여 준다
+//  · 쉼표로 이어진 여러 답은 그대로 나열한다
+const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩']
+
+function Frac({ n, d }: { n: string; d: string }) {
+  return (
+    <span className="frac">
+      <span className="num">{n}</span>
+      <span className="den">{d}</span>
+    </span>
+  )
+}
+
+function AnsText({ text }: { text: string }) {
+  // "1 9/17" (대분수) → 1 + 9/17,  "19/35" → 분수,  나머지는 글자 그대로
+  const parts: React.ReactNode[] = []
+  const re = /(\d+)\s+(\d+)\/(\d+)|(\d+)\/(\d+)/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    if (m.index > last) parts.push(text.slice(last, m.index))
+    if (m[1]) {
+      parts.push(<span key={m.index} className="mixed"><b>{m[1]}</b><Frac n={m[2]} d={m[3]} /></span>)
+    } else {
+      parts.push(<Frac key={m.index} n={m[4]} d={m[5]} />)
+    }
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return <>{parts}</>
+}
+
+function Answer({ p }: { p: P }) {
+  if (p.choices.length) {
+    const marks = p.choices.map((c) => (/^\d$/.test(c) ? CIRCLED[Number(c) - 1] ?? c : c))
+    return <b className="circ">{marks.join(', ')}</b>
+  }
+  if (p.answerText) return <b><AnsText text={p.answerText} /></b>
+  // eslint-disable-next-line @next/next/no-img-element
+  if (p.answerImage) return <img src={p.answerImage} alt="" />
+  return <span className="none">—</span>
+}
+
 export default function AnswerKeyPage() {
   return (
     <Suspense fallback={null}>
@@ -46,7 +92,7 @@ function Inner() {
   const [data, setData] = useState<Data | null>(null)
   const [err, setErr] = useState('')
   const [show, setShow] = useState<'both' | 'answers' | 'solutions'>('both')
-  const [cols, setCols] = useState(4) // 답지 한 줄에 몇 칸
+  const [cols, setCols] = useState(3) // 문항 출처 표의 단 수
   const [solCols, setSolCols] = useState(2) // 해설지 단 수
   const [scale, setScale] = useState(1) // 해설 그림 배율
   const [withBorrow, setWithBorrow] = useState(true) // 쌍둥이 풀이도 실을지
@@ -88,10 +134,12 @@ function Inner() {
             )
           )}
         </div>
+        {/* 답지 칸은 답 길이에 맞춰 저절로 늘어나므로 칸 수를 고를 필요가 없다.
+            이 값은 아래 '문항 출처' 표의 단 수로만 쓴다. */}
         <label className="flex items-center gap-1.5">
-          답지 칸 수
+          출처 단 수
           <select value={cols} onChange={(e) => setCols(Number(e.target.value))} className="rounded border px-1.5 py-0.5">
-            {[3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+            {[2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <label className="flex items-center gap-1.5">
@@ -131,22 +179,11 @@ function Inner() {
         {show !== 'solutions' && (
           <section className="block-a">
             <Head title={`${data.sheet.title} — 답지`} sub={sub} code={data.sheet.code} />
-            <div className="akey" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+            <div className="akey">
               {data.problems.map((p) => (
                 <div className="acell" key={p.no}>
-                  <span className="ano">{String(p.no).padStart(2, '0')}</span>
-                  <span className="aval">
-                    {p.choices.length ? (
-                      <b className="circ">{p.choices.join(', ')}</b>
-                    ) : p.answerText ? (
-                      <b>{p.answerText}</b>
-                    ) : p.answerImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.answerImage} alt="" />
-                    ) : (
-                      <span className="none">—</span>
-                    )}
-                  </span>
+                  <span className="ano">{p.no}</span>
+                  <span className="aval"><Answer p={p} /></span>
                   {p.isEssay && <span className="tag">서술</span>}
                 </div>
               ))}
@@ -219,18 +256,25 @@ function Inner() {
         .hd .sub { font-size: 8.5pt; color: #666; margin-top: 2px; }
         .hd .code { margin-left: auto; text-align: right; font-size: 8pt; color: #555; }
         .hd .code b { display: block; font-size: 12pt; color: ${GOLD}; letter-spacing: 1px; }
-        /* 답지 — 번호와 답을 한 칸에 */
-        .akey { display: grid; gap: 0; border: 1px solid ${NAVY}; border-bottom: 0; }
-        .acell { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
-                 border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; min-height: 30px; }
-        .acell:nth-child(${cols}n) { border-right: 0; }
-        .ano { font-weight: 800; color: ${NAVY}; font-size: 9.5pt; min-width: 22px; }
-        .aval { flex: 1; min-width: 0; }
-        .aval b { color: #1d4ed8; }
-        .aval .circ { font-size: 13pt; }
-        .aval img { max-height: 22px; max-width: 100%; vertical-align: middle; }
+        /* 답지 — 번호는 작게 왼쪽 위, 답은 크게. 칸 너비는 답 길이에 맞춰 늘어난다.
+           (칸을 똑같이 나누면 '20, 16, 16, 16' 같은 긴 답이 줄바꿈돼 읽기 나쁘다) */
+        .akey { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+        .acell { position: relative; display: flex; align-items: center; justify-content: center;
+                 min-width: 58px; padding: 10px 12px 8px; border: 1px solid #dbe3ef;
+                 border-radius: 10px; background: #f7f9fd; }
+        .ano { position: absolute; top: 3px; left: 7px; font-size: 7.5pt; color: #94a3b8; font-weight: 700; }
+        .aval { font-size: 13pt; line-height: 1.15; color: #1d4ed8; white-space: nowrap; }
+        .aval b { color: #1d4ed8; font-weight: 700; }
+        .aval .circ { font-size: 14pt; }
+        .aval img { max-height: 26px; max-width: 220px; vertical-align: middle; }
         .aval .none { color: #cbd5e1; }
-        .tag { font-size: 6.5pt; color: #b45309; background: #fef3c7; border-radius: 6px; padding: 1px 4px; }
+        /* 분수는 세로로 쌓는다 */
+        .frac { display: inline-flex; flex-direction: column; align-items: center;
+                vertical-align: middle; margin: 0 1px; line-height: 1.05; }
+        .frac .num { border-bottom: 1.2px solid currentColor; padding: 0 3px; }
+        .frac .den { padding: 0 3px; }
+        .mixed { display: inline-flex; align-items: center; gap: 2px; }
+        .tag { position: absolute; top: 3px; right: 6px; font-size: 6.5pt; color: #b45309; }
         /* 출처 표 */
         .src { margin-top: 8mm; }
         .srchead { font-size: 9pt; font-weight: 700; color: ${NAVY}; margin-bottom: 4px; }
