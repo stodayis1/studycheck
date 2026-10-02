@@ -75,10 +75,33 @@ def spans_of(page):
 
 
 def column_split(page):
-    """가운데 세로 구분선 x좌표 (없으면 쪽 한가운데)"""
+    """좌·우 단을 가르는 x좌표.
+
+    세로 구분선이 있으면 그것을 쓰고, 없으면 **글자가 전혀 없는 가운데 빈 띠**의 한가운데를 쓴다.
+    예전에는 구분선이 없으면 무조건 쪽 한가운데로 잡았는데, 그러면 단 경계가 실제보다 왼쪽이라
+    문장 끝이 잘려 나갔다 (중2-1 「…모두 고른 것은?」이 「…모두 고른」으로 잘림).
+    """
     xs = [round(d['rect'].x0) for d in page.get_drawings()
           if d['rect'].width < 2 and d['rect'].height > 300]
-    return xs[0] if xs else page.rect.width / 2
+    if xs:
+        return xs[0]
+    W = int(page.rect.width)
+    used = bytearray(W + 2)
+    for z in spans_of(page):
+        a, b = int(max(0, z['bbox'][0])), int(min(W, z['bbox'][2]))
+        for i in range(a, b + 1):
+            used[i] = 1
+    best, run, start = (0, W // 2), 0, 0
+    for i in range(int(W * 0.33), int(W * 0.67)):
+        if not used[i]:
+            if run == 0:
+                start = i
+            run += 1
+            if run > best[0]:
+                best = (run, start + run // 2)
+        else:
+            run = 0
+    return best[1]
 
 
 def number_groups(sp, minsize=12.5):
@@ -98,7 +121,9 @@ def number_groups(sp, minsize=12.5):
             cl.append([z])
     out = []
     for c in cl:
-        t = ''.join(z['text'].strip() for z in c)
+        # PDF 안에 눈에 안 보이는 제어문자가 섞여 있다 ('95 ' 처럼).
+        # strip()으로는 안 지워져서 중1-2에서 163문항이 숫자로 인식되지 않았다 → 숫자만 남긴다.
+        t = re.sub(r'[^0-9]', '', ''.join(z['text'] for z in c))
         if re.fullmatch(r'\d{4}', t):
             out.append((t, c))
     return out
@@ -170,8 +195,8 @@ def read_directions(doc):
                             if (c[0]['bbox'][0] < div) == (x0 < div) and c[0]['bbox'][1] > y1]
                 if same_col:
                     y1 = min(min(same_col) - 4, y1 + 46)
-                lo = 55 if x0 < div else div + 8
-                hi = (div - 8) if x0 < div else p.rect.width - 45
+                lo = 45 if x0 < div else div + 6
+                hi = (div - 4) if x0 < div else p.rect.width - 12
                 for n in range(int(m.group(1)), int(m.group(2)) + 1):
                     out['%04d' % n] = dict(pg=pi, rect=(lo, y0 - 3, hi, y1 + 2))
     return out
@@ -345,8 +370,9 @@ def main():
         nxt = groups[gi + 1][1][0] if gi + 1 < len(groups) else None
         same_col = nxt and nxt['pg'] == g[0]['pg'] and nxt['col'] == g[0]['col']
         ybottom = (nxt['y'] - 6) if same_col else g[0]['h'] - 40
-        lo = 55 if g[0]['col'] == 0 else g[0]['div'] + 8
-        hi = (g[0]['div'] - 8) if g[0]['col'] == 0 else g[0]['w'] - 45
+        # 가로 범위는 넉넉하게. 좁게 잡아 문장 끝이 잘리면 문제를 못 읽는다.
+        lo = 45 if g[0]['col'] == 0 else g[0]['div'] + 6
+        hi = (g[0]['div'] - 4) if g[0]['col'] == 0 else g[0]['w'] - 12
         g.sort(key=lambda r: r.get('x', lo))
         for k, r in enumerate(g):
             r['y1'] = ybottom
