@@ -214,6 +214,21 @@ def api(path, params=None, method='GET', data=None):
     return json.loads(b) if b and method == 'GET' else None
 
 
+def fetch_all(path, params):
+    """Supabase는 한 번에 1000행까지만 준다(AGENTS.md 함정 4번).
+    limit만 크게 줘도 서버가 1000에서 자른다 — 조용히 잘려서 문항이 빠진다.
+    (쎈 공통수학1 1316문항 중 316개가 이렇게 누락됐었다) 그래서 쪽 단위로 끝까지 가져온다."""
+    STEP = 1000
+    out = []
+    off = 0
+    while True:
+        q = dict(params); q['limit'] = STEP; q['offset'] = off
+        got = api(path, q) or []
+        out.extend(got)
+        if len(got) < STEP: return out
+        off += STEP
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('pdf'); ap.add_argument('book'); ap.add_argument('grade'); ap.add_argument('semester')
@@ -223,9 +238,9 @@ def main():
     load_env()
 
     print(f'{a.book} {a.grade}-{a.semester}  (인쇄 쪽 = PDF 쪽 + {a.offset})')
-    rows = api('/rest/v1/problems', {'select': 'id,local_no', 'book': 'eq.' + a.book,
+    rows = fetch_all('/rest/v1/problems', {'select': 'id,local_no', 'book': 'eq.' + a.book,
                                      'grade': 'eq.' + a.grade, 'semester': 'eq.' + a.semester,
-                                     'limit': 5000})
+                                     })
     nums = [int(r['local_no']) for r in rows if str(r['local_no']).isdigit()]
     if not nums: sys.exit('✗ 이 교재는 번호가 숫자가 아닙니다(쎈B·베이직쎈 형식).')
     hi = max(nums) + 20
