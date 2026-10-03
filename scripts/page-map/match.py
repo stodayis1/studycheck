@@ -19,21 +19,23 @@
   (라이트쎈으로 재보니 정확히 맞춘 게 9%뿐이었다)
 
 쓰는 법 (PowerShell)
-  python scripts/page-map/match.py "<문제집 PDF>" 쎈B 중1 2 --offset 1
-  python scripts/page-map/match.py "<문제집 PDF>" 쎈B 중1 2 --offset 1 --write
+  python scripts/page-map/match.py "<문제집 PDF>" 쎈B 중1 2 --offset 0
+  python scripts/page-map/match.py "<문제집 PDF>" 쎈B 중1 2 --offset 0 --write
 
   --check  : 이미 page_no가 있는 교재(라이트쎈)에 쓰면 정답과 맞춰 정확도를 보여 준다
-  --offset : 교재에 인쇄된 쪽 = PDF 쪽 + offset
+  --offset : **교재에 인쇄된 쪽 − PDF 쪽.** 대부분 0이고, 앞에 표지가 더 있으면 그만큼 커진다.
 
 ★ offset 은 책마다 다르다. 반드시 먼저 재고 넣을 것.
   python scripts/page-map/match.py "<PDF>" --footer 50
-  → PDF 50쪽의 바닥글 그림을 저장한다. 거기 찍힌 쪽번호가 56이면 offset 은 6이다.
-  (2026-10-03: 전부 1로 넣었다가 쎈B 3권·베이직쎈 4권의 쪽번호가 통째로 어긋났다.
-   베이직쎈 중1-1만 6이고 나머지는 0이었다.)
+  → PDF 50쪽의 바닥글 그림을 저장한다. 거기 찍힌 쪽번호가 56이면 --offset 6.
 
   재어 본 값
     베이직쎈 중1-1 = 6 · 중1-2 = 0 · 중2-1 = 0 · 중2-2 = 0
     쎈B 중1-2 = 0 · 중2-2 = 0 · 중3-2 = 0
+
+  (2026-10-03: 예전 판은 offset 에 1을 넣어야 PDF 쪽이 나왔다 — assign 이 0부터 세기
+   때문이다. 그걸 모르고 0으로 바꿨다가 쎈B 3권·베이직쎈 4권이 통째로 1쪽씩 당겨졌다.
+   지금은 코드가 1을 알아서 더하므로 offset 은 보이는 그대로 넣으면 된다.)
 """
 import argparse
 import io
@@ -186,7 +188,8 @@ def main():
     ap.add_argument('semester', nargs='?')
     ap.add_argument('--footer', type=int, metavar='N',
                     help='PDF N쪽의 바닥글을 그림으로 저장만 한다 (offset 재려고)')
-    ap.add_argument('--offset', type=int, default=1)
+    ap.add_argument('--offset', type=int, default=0,
+                    help='교재에 인쇄된 쪽 − PDF 쪽 (대부분 0)')
     ap.add_argument('--min-score', type=float, default=0.30)
     ap.add_argument('--shrink', type=int, default=SHRINK, help='줄이는 배수 (작을수록 정확하고 느리다)')
     ap.add_argument('--limit', type=int, default=0, help='시험 삼아 앞의 몇 문항만')
@@ -197,7 +200,7 @@ def main():
     utf8_console()
 
     if a.footer:
-        # offset 재기 — 거기 찍힌 쪽번호에서 이 N 을 빼면 offset 이다
+        # offset 재기 — 거기 찍힌 쪽번호에서 이 N 을 빼면 --offset 값이다
         doc = pymupdf.open(a.pdf)
         pm = doc[a.footer - 1].get_pixmap(dpi=150)
         im = Image.open(io.BytesIO(pm.tobytes('png'))).convert('RGB')
@@ -264,12 +267,29 @@ def main():
         assign[i] = p
         p = int(bk[i, p])
 
-    found = [(assign[i] + a.offset) if S[i, assign[i]] >= a.min_score else None for i in range(N)]
+    # assign 은 0부터 세는 PDF 쪽 번호다 → +1 해야 사람이 세는 PDF 쪽이 되고,
+    # 거기에 offset(인쇄된 쪽 − PDF 쪽)을 더해야 교재에 인쇄된 쪽이 된다.
+    found = [(assign[i] + 1 + a.offset) if S[i, assign[i]] >= a.min_score else None
+             for i in range(N)]
     ok = [i for i, x in enumerate(found) if x]
     print('  쪽을 붙일 문항 %d / %d' % (len(ok), N))
     seq = [found[i] for i in ok]
     print('  쪽이 거꾸로인 곳 %d  ← 0이어야 한다'
           % sum(1 for j in range(1, len(seq)) if seq[j] < seq[j - 1]))
+
+    # ★ 자가검증 — '몇 개 붙었나' 는 맞았다는 뜻이 아니다.
+    #   정렬은 어떤 경우에도 순서가 맞는 답을 하나 만들어 내므로, 점수를 같이 봐야 한다.
+    #   (2026-10-03: 붙은 개수 99%만 보고 넘어갔다가 쪽이 통째로 1씩 어긋난 걸 못 봤다)
+    if ok:
+        best = [int(np.argmax(S[i])) for i in ok]
+        agree = sum(1 for j, i in enumerate(ok) if best[j] == assign[i])
+        sc = sorted(float(S[i, assign[i]]) for i in ok)
+        med = sc[len(sc) // 2]
+        print('  홀로 봐도 같은 자리 %d / %d (%d%%) · 점수 중앙값 %.2f'
+              % (agree, len(ok), 100 * agree // len(ok), med))
+        if agree * 100 // len(ok) < 80 or med < 0.5:
+            print('  ⚠ 맞춰보기가 약합니다. 교재 PDF가 그림과 같은 판인지,')
+            print('    --offset 이 맞는지(--footer 로 재보기) 확인하세요.')
 
     if a.check:
         have = [i for i in ok if rows[i].get('page_no')]
