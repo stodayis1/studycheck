@@ -64,6 +64,19 @@ async function syncAnswers(supabase: any, paperId: string, answersText: string |
   return n
 }
 
+// 이너프원 문항(enough_problems) 찾기 — 선생님이 적은 교재 · 단원 · 문항번호로.
+// 단원은 「대푯값과 산포도 - 3회차」처럼 줄표가 있든 없든 같은 것으로 본다.
+// (표가 아직 없으면 — docs/sql/시험지분석_3 실행 전 — 조용히 null)
+const unitKey = (s: any) => String(s ?? '').replace(/\s*-\s*(\d회차)/, ' $1').replace(/\s+/g, ' ').trim()
+async function findEnoughProblem(supabase: any, book: any, unit: any, no: any): Promise<string | null> {
+  const n = Number(String(no ?? '').replace(/[^0-9]/g, ''))
+  if (!book || !unit || !n) return null
+  const { data, error } = await supabase.from('enough_problems').select('id')
+    .eq('book', String(book).trim()).eq('unit', unitKey(unit)).eq('problem_no', n)
+    .order('created_at', { ascending: false }).limit(1)
+  return error ? null : data?.[0]?.id ?? null
+}
+
 // 요청 보낸 직원의 이름·역할 (denyIfNotStaff 를 통과한 뒤에만 부른다)
 async function whoAmI(supabase: any, req: Request): Promise<{ name: string; role: string }> {
   const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
@@ -232,6 +245,17 @@ export async function GET(req: Request) {
     }
     const { data: sheet } = await supabase.from('exam_sheets').select('code').eq('note', sheetNote(id)).maybeSingle()
 
+    // 매칭된 이너프원 문항의 그림 (기출과 나란히 보여 준다)
+    const enoughIds = Array.from(new Set((matches ?? []).map((m: any) => m.enough_problem_id).filter(Boolean)))
+    const enoughImg: Record<string, { url: string | null; twin: string | null; page: number | null }> = {}
+    if (enoughIds.length) {
+      const { data: eps } = await supabase.from('enough_problems').select('id, image_path, twin_of, page_no').in('id', enoughIds)
+      const pths = (eps ?? []).map((e: any) => e.image_path)
+      const { data: urls } = pths.length ? await supabase.storage.from(FILE_BUCKET).createSignedUrls(pths, 7200) : { data: [] as any[] }
+      const byPath = new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
+      ;(eps ?? []).forEach((e: any) => { enoughImg[e.id] = { url: byPath.get(e.image_path) ?? null, twin: e.twin_of, page: e.page_no } })
+    }
+
     return NextResponse.json({
       paper,
       sheetCode: sheet?.code ?? null,
@@ -245,7 +269,12 @@ export async function GET(req: Request) {
         figure_url: x.figure_path ? signed[x.figure_path] ?? null : bankImg[x.problem_id] ?? null,
         from_pdf: !x.figure_path && !!bankImg[x.problem_id],      // PDF 에서 잘라 넣은 문항
       })),
-      matches: matches ?? [],
+      matches: (matches ?? []).map((m: any) => ({
+        ...m,
+        enough_url: enoughImg[m.enough_problem_id]?.url ?? null,
+        enough_twin: enoughImg[m.enough_problem_id]?.twin ?? null,
+        enough_page: enoughImg[m.enough_problem_id]?.page ?? null,
+      })),
       enough: enoughNow,
       me: { name: me.name, isAdmin: me.role === 'admin' },
     })
@@ -515,6 +544,11 @@ export async function POST(req: Request) {
           delete m.use_in_blog
         }
         const row = pick(m, ['question_id', 'question_no', 'enough_book', 'enough_unit', 'enough_problem_no', 'match_level', 'memo', 'use_in_blog'])
+        // 적은 교재·단원·번호에 해당하는 이너프원 문항이 있으면 이어 준다 → 그림이 나란히 보인다
+        if (row.enough_book && row.enough_unit && row.enough_problem_no) {
+          const epId = await findEnoughProblem(supabase, row.enough_book, row.enough_unit, row.enough_problem_no)
+          if (epId) row.enough_problem_id = epId
+        }
         const { error } = m.id
           ? await supabase.from('exam_enough_matches').update(row).eq('id', m.id)
           : await supabase.from('exam_enough_matches').insert({ ...row, paper_id: b.paperId, created_by: me.name })

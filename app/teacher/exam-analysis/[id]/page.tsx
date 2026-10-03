@@ -385,8 +385,62 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
         <button onClick={add} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ background: GREEN }}>추가</button>
       </div>
 
+      {/* 기출 문항 ↔ 이너프원 문항을 그림으로 나란히 */}
+      {!!data.matches.length && (
+        <div className="mb-5 space-y-3">
+          {Array.from(new Set(data.matches.map((x: any) => normNo(x.question_no ?? '')))).filter(Boolean)
+            .sort((a: any, b: any) => (Number(a) || 999) - (Number(b) || 999) || String(a).localeCompare(String(b)))
+            .map((no: any) => {
+              const q = data.questions.find((x: any) => normNo(x.question_no) === no)
+              const rows = data.matches.filter((x: any) => normNo(x.question_no ?? '') === no)
+                .sort((a: any, b: any) => MATCH_LEVELS.indexOf(a.match_level) - MATCH_LEVELS.indexOf(b.match_level))
+              const best = hit.best[no]
+              return (
+                <div key={no} className="rounded-xl border p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm">
+                    <span className="font-bold" style={{ color: GREEN }}>기출 {noLabel(no)}</span>
+                    <LevelChip level={best} />
+                    {!HIT_LEVELS.includes(best) && <span className="text-xs text-gray-400">적중으로 세지 않음</span>}
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    <div className="w-[300px] shrink-0">
+                      <p className="mb-1 text-[11px] font-semibold text-gray-500">기출 문항</p>
+                      {q?.figure_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <a href={q.figure_url} target="_blank" rel="noreferrer"><img src={q.figure_url} alt={`기출 ${no}번`} className="w-full rounded border bg-white" /></a>
+                        : <p className="rounded border bg-gray-50 p-4 text-center text-xs text-gray-400">기출 그림 없음</p>}
+                    </div>
+                    {rows.map((row: any) => (
+                      <div key={row.id} className="w-[300px] shrink-0">
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px]">
+                          <LevelChip level={row.match_level} />
+                          <span className="min-w-0 truncate font-semibold text-gray-600" title={`${row.enough_book} · ${row.enough_unit} · ${row.enough_problem_no}번`}>
+                            {row.enough_unit} {row.enough_problem_no}번
+                          </span>
+                          <label className="ml-auto flex shrink-0 items-center gap-1 text-gray-500" title={isAdmin ? '블로그에 쓸 문항' : '원장님만 정할 수 있습니다'}>
+                            <input type="checkbox" checked={!!row.use_in_blog} disabled={!isAdmin} onChange={() => toggleBlog(row)} />블로그
+                          </label>
+                        </div>
+                        {row.enough_url
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <a href={row.enough_url} target="_blank" rel="noreferrer"><img src={row.enough_url} alt={`이너프원 ${row.enough_problem_no}번`} className="w-full rounded border bg-white" /></a>
+                          : <p className="rounded border bg-gray-50 p-4 text-center text-xs text-gray-400">이너프원 그림 없음<br />(교재명 · 단원 · 번호가 목록과 같아야 연결됩니다)</p>}
+                        <p className="mt-1 text-[11px] leading-snug text-gray-500">
+                          {row.enough_book}{row.enough_page ? ` · ${row.enough_page}쪽` : ''}{row.enough_twin ? ` · 쌍둥이 원본: ${row.enough_twin}` : ''}
+                        </p>
+                        {row.memo && <p className="mt-0.5 text-[11px] leading-snug text-gray-700">{row.memo}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+        </div>
+      )}
+
       {!data.matches.length ? <p className="py-6 text-center text-xs text-gray-400">아직 매칭 기록이 없습니다.</p> : (
         <div className="overflow-x-auto">
+          <p className="mb-1 text-xs font-semibold text-gray-500">매칭 기록 전체 (표)</p>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-[11px] text-gray-500">
               {['기출 문항', '이너프원 교재', '단원', '문항번호', '매칭 정도', '분석 메모', '블로그 사용', '입력', ''].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
@@ -416,6 +470,17 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
 }
 
 // ───────────────────────── 작은 부품 ─────────────────────────
+function LevelChip({ level }: { level?: string }) {
+  const style: Record<string, any> = {
+    쌍둥이: { background: '#085041', color: '#fff' },
+    '매우 유사': { background: '#9FE1CB', color: '#085041' },
+    '유형 유사': { background: '#E1F5EE', color: '#085041' },
+    참고: { background: '#f3f4f6', color: '#6b7280' },
+  }
+  if (!level) return null
+  return <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={style[level] ?? style['참고']}>{level}</span>
+}
+
 function DiscEditor({ nos, onChange }: { nos: string[]; onChange: (nos: string[]) => void }) {
   const [v, setV] = useState('')
   const add = () => {
