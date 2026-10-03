@@ -24,6 +24,16 @@
 
   --check  : 이미 page_no가 있는 교재(라이트쎈)에 쓰면 정답과 맞춰 정확도를 보여 준다
   --offset : 교재에 인쇄된 쪽 = PDF 쪽 + offset
+
+★ offset 은 책마다 다르다. 반드시 먼저 재고 넣을 것.
+  python scripts/page-map/match.py "<PDF>" --footer 50
+  → PDF 50쪽의 바닥글 그림을 저장한다. 거기 찍힌 쪽번호가 56이면 offset 은 6이다.
+  (2026-10-03: 전부 1로 넣었다가 쎈B 3권·베이직쎈 4권의 쪽번호가 통째로 어긋났다.
+   베이직쎈 중1-1만 6이고 나머지는 0이었다.)
+
+  재어 본 값
+    베이직쎈 중1-1 = 6 · 중1-2 = 0 · 중2-1 = 0 · 중2-2 = 0
+    쎈B 중1-2 = 0 · 중2-2 = 0 · 중3-2 = 0
 """
 import argparse
 import io
@@ -171,9 +181,11 @@ def order_key(s):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('pdf')
-    ap.add_argument('book')
-    ap.add_argument('grade')
-    ap.add_argument('semester')
+    ap.add_argument('book', nargs='?')
+    ap.add_argument('grade', nargs='?')
+    ap.add_argument('semester', nargs='?')
+    ap.add_argument('--footer', type=int, metavar='N',
+                    help='PDF N쪽의 바닥글을 그림으로 저장만 한다 (offset 재려고)')
     ap.add_argument('--offset', type=int, default=1)
     ap.add_argument('--min-score', type=float, default=0.30)
     ap.add_argument('--shrink', type=int, default=SHRINK, help='줄이는 배수 (작을수록 정확하고 느리다)')
@@ -183,6 +195,21 @@ def main():
     a = ap.parse_args()
     globals()['SHRINK'] = a.shrink
     utf8_console()
+
+    if a.footer:
+        # offset 재기 — 거기 찍힌 쪽번호에서 이 N 을 빼면 offset 이다
+        doc = pymupdf.open(a.pdf)
+        pm = doc[a.footer - 1].get_pixmap(dpi=150)
+        im = Image.open(io.BytesIO(pm.tobytes('png'))).convert('RGB')
+        im = im.crop((0, im.height - 115, im.width, im.height - 35))
+        out = os.path.join(HERE, '_footer.png')
+        im.save(out)
+        print('PDF %d쪽의 바닥글 → %s' % (a.footer, out))
+        print('거기 찍힌 쪽번호에서 %d 를 빼면 --offset 값입니다.' % a.footer)
+        return
+
+    if not (a.book and a.grade and a.semester):
+        ap.error('교재·학년·학기를 주세요 (또는 --footer 로 offset 만 재세요)')
     load_env()
 
     rows = fetch_all('/rest/v1/problems', {
