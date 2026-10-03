@@ -84,6 +84,49 @@ export function handsolveLabel(fileName: string): string | null {
   return m ? m[1] : null
 }
 
+// ───────────────────── 적중률 ─────────────────────
+// 적중 = 이너프원에 쌍둥이 · 매우 유사 · 유형 유사 문항이 있는 기출 문항. 「참고」는 적중으로 세지 않는다.
+// (원장님 결정 2026-10-03)
+export const HIT_LEVELS = ['쌍둥이', '매우 유사', '유형 유사']
+
+// 정답표(한 줄에 「번호 정답」)에서 문항번호만 뽑는다
+export function answerNos(text: string | null | undefined): string[] {
+  return String(text ?? '').split(/\r?\n/)
+    .map((l) => normNo(l.trim().split(/\s+/)[0] ?? ''))
+    .filter(Boolean)
+}
+
+// 전체 문항 = 정답표의 번호 + 타이핑한 문항 번호 (둘 다 없으면 적중률을 낼 수 없다)
+export function hitSummary(
+  answersText: string | null | undefined,
+  questionNos: string[],
+  matches: { question_no?: string | null; match_level?: string | null }[]
+) {
+  const all = Array.from(new Set([...answerNos(answersText), ...questionNos.map(normNo)].filter(Boolean)))
+    .sort((a, b) => sortOrderOf(a) - sortOrderOf(b))
+  // 문항마다 가장 높은 매칭 정도 하나만 센다
+  const best: Record<string, string> = {}
+  for (const m of matches) {
+    const no = normNo(m.question_no ?? '')
+    if (!no || !m.match_level) continue
+    const rank = MATCH_LEVELS.indexOf(m.match_level)
+    if (!(no in best) || rank < MATCH_LEVELS.indexOf(best[no])) best[no] = m.match_level
+  }
+  const total = all.length
+  // 정답표에 없는 번호(오타)는 세지 않는다 — 분자만 커져 적중률이 부풀지 않게
+  const counted = Object.keys(best).filter((no) => !total || all.includes(no))
+  const hitNos = counted.filter((no) => HIT_LEVELS.includes(best[no]))
+  const byLevel: Record<string, number> = {}
+  for (const no of counted) byLevel[best[no]] = (byLevel[best[no]] ?? 0) + 1
+  return {
+    total, hit: hitNos.length, byLevel, best,
+    rate: total ? Math.round((hitNos.length / total) * 100) : null,
+    missNos: all.filter((no) => !hitNos.includes(no)),
+    // 정답표에 없는 번호로 적은 매칭 (번호 오타일 수 있다)
+    strayNos: total ? Object.keys(best).filter((no) => !all.includes(no)) : [],
+  }
+}
+
 // ───────────────────── 한꺼번에 붙여넣기 해석 ─────────────────────
 // [문항 1]
 // 유형: 객관식

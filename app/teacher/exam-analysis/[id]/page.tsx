@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { supabase } from '@/lib/supabase'
 import {
   FILE_KINDS, MATCH_LEVELS, REVIEW_DIFFICULTIES, TASKS,
-  checkFileName, expectedPaperFileName, handsolveLabel, noLabel, normNo,
+  HIT_LEVELS, checkFileName, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import { Card, Field, GREEN, INPUT, post } from '@/components/exam-analysis/ui'
@@ -287,6 +287,10 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
     () => Array.from(new Set((data.enough ?? []).map((e: any) => `이너프원 ${paper.school_name} ${paper.grade} (${e.level})`))) as string[],
     [data.enough, paper]
   )
+  const hit = useMemo(
+    () => hitSummary(paper.answers_text, data.questions.map((x: any) => x.question_no), data.matches),
+    [paper.answers_text, data.questions, data.matches]
+  )
   const add = async () => {
     if (!m.question_no) { alert('기출 문항번호를 적어 주세요.'); return }
     const q = data.questions.find((x: any) => normNo(x.question_no) === normNo(m.question_no))
@@ -313,6 +317,29 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
           {['대기', '진행중', '완료'].map((x) => <option key={x}>{x}</option>)}
         </select>
       }>
+      {/* 적중률 — 유형 유사 이상이 있는 문항 ÷ 전체 문항 */}
+      <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: '#F0FBF7' }}>
+        {hit.total ? (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <span className="text-2xl font-bold" style={{ color: GREEN }}>적중률 {hit.rate}%</span>
+              <span className="text-gray-600">전체 {hit.total}문항 중 {hit.hit}문항 적중</span>
+              <span className="text-xs text-gray-500">
+                {MATCH_LEVELS.map((lv) => `${lv} ${hit.byLevel[lv] ?? 0}`).join(' · ')}
+              </span>
+              {paper.match_status !== '완료' && <span className="text-xs text-amber-700">대조 작업 중 — 끝나면 오른쪽 위를 「완료」로 바꿔 주세요</span>}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              적중 기준: {HIT_LEVELS.join(' · ')} (참고는 세지 않음). 한 문항에 여러 개를 적으면 가장 가까운 것 하나로 셉니다.
+            </p>
+            {!!hit.missNos.length && <p className="mt-1 text-xs text-gray-500">아직 적중이 없는 문항: {hit.missNos.map(noLabel).join(', ')}</p>}
+            {!!hit.strayNos.length && <p className="mt-1 text-xs text-amber-700">정답표에 없는 번호로 적힌 매칭: {hit.strayNos.map(noLabel).join(', ')} (번호를 확인해 주세요)</p>}
+          </>
+        ) : (
+          <p className="text-gray-500">전체 문항 수를 알 수 없어 적중률을 낼 수 없습니다. 「정답 · 변별 · 손풀이」 탭에 정답표를 넣으면 계산됩니다.</p>
+        )}
+      </div>
+
       <div className="mb-4 grid gap-2 text-sm lg:grid-cols-[90px_1fr_1fr_110px_120px_1fr_auto] items-end">
         <Field label="기출 문항"><input className={INPUT} value={m.question_no} onChange={(e) => setM({ ...m, question_no: e.target.value })} placeholder="18" /></Field>
         <Field label="이너프원 교재명">

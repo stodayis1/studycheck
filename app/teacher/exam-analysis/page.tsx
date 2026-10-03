@@ -128,7 +128,7 @@ export default function ExamAnalysisPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] text-gray-500" style={{ background: '#F0FBF7' }}>
-                  {['학교 · 학년', '시험명', '시험 종료일', '시험지', '정답', '변별문항', '손풀이', '총평', '이너프원', '문제은행', '블로그', '담당자', '작업 기한', '비고'].map((h) => (
+                  {['학교 · 학년', '시험명', '시험 종료일', '시험지', '정답', '변별문항', '손풀이', '총평', '이너프원', '적중률', '문제은행', '블로그', '담당자', '작업 기한', '비고'].map((h) => (
                     <th key={h} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -155,6 +155,9 @@ export default function ExamAnalysisPage() {
                       <td className="px-3 py-2.5"><Chip ok={s.handsolve >= Math.max(nDisc, 1)} warn={s.handsolve > 0 && s.handsolve < nDisc}>{s.handsolve ? `${s.handsolve}장` : '대기'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={!!t.review} warn={!t.review && reviewed}>{t.review ? '완료' : reviewed ? '작성중' : '대기'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={p.match_status === '완료'} warn={p.match_status === '진행중'}>{p.match_status}{s.matches ? ` ${s.matches}` : ''}</Chip></td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {s.hitRate == null ? <Chip>-</Chip> : <Chip ok={p.match_status === '완료'} warn={p.match_status !== '완료'}>{s.hitRate}% ({s.hit}/{s.total})</Chip>}
+                      </td>
                       <td className="px-3 py-2.5"><Chip ok={s.questions > 0 && s.reflected === s.questions} warn={s.questions > 0 && s.reflected < s.questions}>{s.questions ? `${s.reflected}/${s.questions}` : '대기'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={p.blog_status === '업로드완료'} warn={p.blog_status === '작성중'}>{p.blog_status}</Chip></td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">

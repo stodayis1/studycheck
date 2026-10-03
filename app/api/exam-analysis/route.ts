@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
-  bankAnswer, checkFileName, examPrefix, handsolveLabel, normNo, sortOrderOf, sourceKey,
+  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, sortOrderOf, sourceKey,
 } from '@/lib/examAnalysis'
 
 export const dynamic = 'force-dynamic'
@@ -101,8 +101,8 @@ export async function GET(req: Request) {
       if (error) return bad(error.message, 500)
       const [files, questions, matches] = await Promise.all([
         all((f, t) => supabase.from('exam_paper_files').select('paper_id, kind').range(f, t)),
-        all((f, t) => supabase.from('exam_questions').select('paper_id, bank_status').range(f, t)),
-        all((f, t) => supabase.from('exam_enough_matches').select('paper_id').range(f, t)),
+        all((f, t) => supabase.from('exam_questions').select('paper_id, bank_status, question_no').range(f, t)),
+        all((f, t) => supabase.from('exam_enough_matches').select('paper_id, question_no, match_level').range(f, t)),
       ])
       const stat: Record<string, any> = {}
       const of = (id: string) => (stat[id] ??= { files: 0, handsolve: 0, questions: 0, reflected: 0, matches: 0 })
@@ -112,7 +112,17 @@ export async function GET(req: Request) {
         if (x.bank_status === '반영완료') of(x.paper_id).reflected++
       }
       for (const m of matches) of(m.paper_id).matches++
-      return NextResponse.json({ papers: (papers ?? []).map((p: any) => ({ ...p, stat: of(p.id) })) })
+      // 적중률 (이너프원에 유형 유사 이상이 있는 문항 ÷ 전체 문항)
+      return NextResponse.json({
+        papers: (papers ?? []).map((p: any) => {
+          const h = hitSummary(
+            p.answers_text,
+            questions.filter((x) => x.paper_id === p.id).map((x) => x.question_no),
+            matches.filter((m) => m.paper_id === p.id)
+          )
+          return { ...p, stat: { ...of(p.id), hit: h.hit, total: h.total, hitRate: h.rate } }
+        }),
+      })
     }
 
     const id = q.get('id')
