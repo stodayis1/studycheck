@@ -28,6 +28,7 @@ const ITEM = {
   assignments:   { href: '/teacher/assignments',    label: '학습지관리',   icon: 'ti-file-text' },
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
   examPrep:      { href: '/teacher/exam-prep',      label: '시험배정',     icon: 'ti-target' },
+  examAnalysis:  { href: '/teacher/exam-analysis',  label: '시험지 분석',  icon: 'ti-file-analytics' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
   worksheets:    { href: '/teacher/worksheets',     label: '학습지출제',   icon: 'ti-file-plus' },
@@ -45,7 +46,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : [])] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.consultations] },
-    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.scan] },
+    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis, ITEM.scan] },
     { title: '보고', items: [ITEM.reports, ITEM.importRecords] },
   ]
   if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.gradings, ITEM.workStatus, ITEM.settings] })

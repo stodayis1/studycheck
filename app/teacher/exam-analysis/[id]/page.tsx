@@ -1,0 +1,430 @@
+'use client'
+
+// 시험지 분석 — 학교별 상세.
+// 탭: 기본·파일 / 정답·변별·손풀이 / 총평 / 기출문제(→문제은행) / 이너프원 매칭 / 블로그
+// 자료는 전부 서버(app/api/exam-analysis)를 거친다. 「문제은행 반영」과 「블로그」 결정은 원장만.
+
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Header } from '@/components/common/Header'
+import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/lib/apiFetch'
+import { supabase } from '@/lib/supabase'
+import {
+  FILE_KINDS, MATCH_LEVELS, REVIEW_DIFFICULTIES, TASKS,
+  checkFileName, expectedPaperFileName, handsolveLabel, noLabel, normNo,
+} from '@/lib/examAnalysis'
+import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
+import { Card, Field, GREEN, INPUT, post } from '@/components/exam-analysis/ui'
+
+const TABS = ['기본 · 파일', '정답 · 변별 · 손풀이', '총평', '기출문제', '이너프원 매칭', '블로그']
+
+// 파일명으로 구분을 알아낸다: …_문제.pdf → 문제, …_손풀이_김T.png → 손풀이
+function kindOf(name: string) {
+  const n = name.normalize('NFC')
+  if (n.includes('_손풀이_')) return '손풀이'
+  const m = n.match(/_(문제정답해설|문제|정답|해설)\.pdf$/i)
+  return m ? m[1] : '기타'
+}
+
+export default function ExamPaperPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
+  const { currentUser, loading } = useAuth()
+  const [data, setData] = useState<any>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [tab, setTab] = useState(0)
+  const [draft, setDraft] = useState<any>({})       // 아직 저장 안 한 글 칸
+  const [busy, setBusy] = useState('')
+
+  const load = useCallback(async () => {
+    const r = await apiFetch(`/api/exam-analysis?id=${id}`)
+    const j = await r.json()
+    if (!r.ok) { setErr(j.error ?? '불러오지 못했습니다.'); return }
+    setData(j)
+  }, [id])
+  useEffect(() => { if (!loading && currentUser) load() }, [loading, currentUser, load])
+
+  if (err) return <Shell title="시험지 분석"><p className="p-10 text-center text-sm text-red-600">{err}</p></Shell>
+  if (!data) return <Shell title="시험지 분석"><p className="p-10 text-center text-gray-400">불러오는 중…</p></Shell>
+
+  const paper = data.paper
+  const isAdmin = !!data.me?.isAdmin
+  const val = (k: string) => (k in draft ? draft[k] : paper[k]) ?? ''
+  const set = (k: string, v: any) => setDraft((d: any) => ({ ...d, [k]: v }))
+  const dirty = (keys: string[]) => keys.some((k) => k in draft)
+
+  // 바로 저장 (체크·선택)
+  const saveNow = async (patch: any) => {
+    setData((d: any) => ({ ...d, paper: { ...d.paper, ...patch } }))
+    const r = await post({ action: 'savePaper', id, patch })
+    if (!r.ok) { alert(r.error ?? '저장하지 못했습니다.'); load() }
+  }
+  // 글 칸 묶음 저장
+  const saveDraft = async (keys: string[]) => {
+    const patch: any = {}
+    keys.forEach((k) => { if (k in draft) patch[k] = draft[k] })
+    if (!Object.keys(patch).length) return
+    setBusy('save')
+    const r = await post({ action: 'savePaper', id, patch })
+    setBusy('')
+    if (!r.ok) { alert(r.error ?? '저장하지 못했습니다.'); return }
+    setData((d: any) => ({ ...d, paper: { ...d.paper, ...patch } }))
+    setDraft((d: any) => { const n = { ...d }; keys.forEach((k) => delete n[k]); return n })
+  }
+  const SaveBtn = ({ keys }: { keys: string[] }) => (
+    <button onClick={() => saveDraft(keys)} disabled={!dirty(keys) || busy === 'save'}
+      className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>
+      {dirty(keys) ? '저장' : '저장됨'}
+    </button>
+  )
+
+  // ── 파일 올리기
+  const upload = async (fileList: FileList | null, forced?: string) => {
+    if (!fileList?.length) return
+    for (const file of Array.from(fileList)) {
+      const kind = forced ?? kindOf(file.name)
+      const warn = checkFileName(paper, kind, file.name)
+      if (warn && !confirm(`${file.name}\n\n${warn}\n\n그래도 「${kind}」(으)로 올릴까요?`)) continue
+      setBusy(`올리는 중: ${file.name}`)
+      const u = await post({ action: 'uploadUrl', paperId: id, fileName: file.name })
+      if (!u.ok) { alert(u.error); continue }
+      const { error } = await supabase.storage.from('exam-analysis').uploadToSignedUrl(u.path, u.token, file, { contentType: file.type })
+      if (error) { alert(`올리지 못했습니다: ${error.message}`); continue }
+      const a = await post({
+        action: 'addFile', paperId: id, kind, path: u.path, fileName: file.name,
+        mimeType: file.type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
+      })
+      if (!a.ok) alert(a.error)
+    }
+    setBusy('')
+    load()
+  }
+  const removeFile = async (f: any) => {
+    if (!confirm(`「${f.file_name}」 파일을 지울까요? 되돌릴 수 없습니다.`)) return
+    const r = await post({ action: 'deleteFile', id: f.id })
+    if (!r.ok) alert(r.error)
+    load()
+  }
+
+  const tasks = paper.tasks ?? {}
+  const paperFiles = data.files.filter((f: any) => f.kind !== '손풀이')
+  const handFiles = data.files.filter((f: any) => f.kind === '손풀이')
+  const discNos: string[] = paper.discriminating_nos ?? []
+
+  return (
+    <Shell title={`${paper.school_name} ${paper.grade}`} subtitle={`${paper.exam_name ?? ''}${paper.exam_end_date ? ` · 시험 종료 ${paper.exam_end_date}` : ''}`}>
+      {/* 선생님 체크리스트 — 어느 탭에서나 보인다 */}
+      <div className="mb-4 rounded-xl border bg-white px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <span className="text-xs font-bold" style={{ color: GREEN }}>할 일</span>
+        {TASKS.map((t) => (
+          <label key={t.key} className="flex items-center gap-1.5 cursor-pointer"
+            style={t.key === 'needs_check' && tasks[t.key] ? { color: '#B45309', fontWeight: 600 } : undefined}>
+            <input type="checkbox" checked={!!tasks[t.key]}
+              onChange={(e) => saveNow({ tasks: { ...tasks, [t.key]: e.target.checked } })} />
+            {t.label}
+          </label>
+        ))}
+        {paper.work_due_date && <span className="ml-auto text-xs text-gray-400">작업 기한 {paper.work_due_date}</span>}
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {TABS.map((t, i) => (
+          <button key={t} onClick={() => setTab(i)} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+            style={tab === i ? { background: GREEN, color: '#fff' } : { background: '#fff', color: '#4b5563', border: '1px solid #e5e7eb' }}>
+            {t}
+          </button>
+        ))}
+        {busy && busy !== 'save' && <span className="self-center text-xs text-gray-400">{busy}</span>}
+      </div>
+
+      {/* ───────── 기본 · 파일 ───────── */}
+      {tab === 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="시험 정보">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <Field label="학교 · 학년"><div className="py-2 font-semibold">{paper.school_name} {paper.grade}</div></Field>
+              <Field label="연도 · 학기 · 구분"><div className="py-2">{paper.exam_year}년 {paper.term}학기 {paper.exam_type}</div></Field>
+              <Field label="시험명"><input className={INPUT} value={val('exam_name')} onChange={(e) => set('exam_name', e.target.value)} /></Field>
+              <Field label="시험 종료일"><input type="date" className={INPUT} value={val('exam_end_date')} onChange={(e) => set('exam_end_date', e.target.value)} /></Field>
+              <Field label="시험범위" wide><input className={INPUT} value={val('exam_scope')} onChange={(e) => set('exam_scope', e.target.value)} placeholder="예) 이차방정식 ~ 이차함수의 그래프" /></Field>
+              <Field label="담당자"><input className={INPUT} value={val('assignee')} onChange={(e) => set('assignee', e.target.value)} /></Field>
+              <Field label="작업 기한"><input type="date" className={INPUT} value={val('work_due_date')} onChange={(e) => set('work_due_date', e.target.value)} /></Field>
+              <Field label="우선순위">
+                <select className={INPUT} value={paper.priority} onChange={(e) => saveNow({ priority: e.target.value })}>
+                  {['높음', '보통', '낮음'].map((x) => <option key={x}>{x}</option>)}
+                </select>
+              </Field>
+              <Field label="비고" wide><textarea className={INPUT} rows={2} value={val('note')} onChange={(e) => set('note', e.target.value)} /></Field>
+            </div>
+            <div className="mt-3 text-right"><SaveBtn keys={['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note']} /></div>
+          </Card>
+
+          <Card title="시험지 파일">
+            <p className="mb-2 text-xs text-gray-500">
+              파일명 규칙: <b>{expectedPaperFileName(paper, '문제')}</b> (구분은 문제 · 정답 · 해설 · 문제정답해설).
+              파일명 끝의 구분을 보고 자동으로 나눠 담습니다.
+            </p>
+            <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="시험지 PDF 올리기" />
+            <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
+          </Card>
+        </div>
+      )}
+
+      {/* ───────── 정답 · 변별 · 손풀이 ───────── */}
+      {tab === 1 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="정답">
+            <p className="mb-2 text-xs text-gray-500">한 줄에 「번호 정답」 을 적어 주세요. 예) <code>1 ③</code> · <code>서술형2 x=3</code></p>
+            <textarea className={INPUT + ' font-mono'} rows={14} value={val('answers_text')} onChange={(e) => set('answers_text', e.target.value)}
+              placeholder={'1 ③\n2 ①\n…\n서술형1 12'} />
+            <div className="mt-3 text-right"><SaveBtn keys={['answers_text']} /></div>
+          </Card>
+
+          <div className="space-y-4">
+            <Card title="변별문항 (2~3개)">
+              <DiscEditor nos={discNos} onChange={(nos) => saveNow({ discriminating_nos: nos })} />
+              {discNos.length > 3 && <p className="mt-2 text-xs text-amber-700">변별문항은 2~3개가 기준입니다.</p>}
+            </Card>
+            <Card title="손풀이 이미지">
+              <p className="mb-2 text-xs text-gray-500">
+                파일명 규칙: <b>{paper.school_name}_{paper.grade}_18번_손풀이_김T.png</b> (JPG·PNG). 여러 장을 한 번에 올릴 수 있습니다.
+              </p>
+              <FileDrop accept=".png,.jpg,.jpeg" onFiles={(f) => upload(f, '손풀이')} label="손풀이 이미지 올리기" />
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {handFiles.map((f: any) => (
+                  <div key={f.id} className="rounded-lg border p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {f.url && <a href={f.url} target="_blank" rel="noreferrer"><img src={f.url} alt={f.file_name} className="h-36 w-full rounded object-contain bg-gray-50" /></a>}
+                    <div className="mt-1.5 flex items-center gap-1 text-xs">
+                      <span className="font-semibold" style={{ color: GREEN }}>{f.question_label ?? '번호 없음'}</span>
+                      {!f.name_ok && <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">파일명 확인</span>}
+                      <span className="truncate text-gray-400">{f.uploaded_by}</span>
+                      <button onClick={() => removeFile(f)} className="ml-auto text-gray-400 hover:text-red-600"><i className="ti ti-trash" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!handFiles.length && <p className="mt-3 text-center text-xs text-gray-400">아직 올린 손풀이가 없습니다.</p>}
+              {discNos.filter((n) => !handFiles.some((f: any) => normNo(f.question_label ?? '') === normNo(n))).length > 0 && handFiles.length > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  손풀이가 아직 없는 변별문항: {discNos.filter((n) => !handFiles.some((f: any) => normNo(f.question_label ?? '') === normNo(n))).map(noLabel).join(', ')}
+                </p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ───────── 총평 ───────── */}
+      {tab === 2 && (
+        <Card title="시험 총평">
+          <div className="grid gap-3 lg:grid-cols-2 text-sm">
+            <Field label="전체 난이도">
+              <select className={INPUT} value={paper.review_difficulty ?? ''} onChange={(e) => saveNow({ review_difficulty: e.target.value || null })}>
+                <option value="">고르기</option>
+                {REVIEW_DIFFICULTIES.map((x) => <option key={x}>{x}</option>)}
+              </select>
+            </Field>
+            <Field label="변별문항 번호"><div className="py-2">{discNos.length ? discNos.map(noLabel).join(', ') : <span className="text-gray-400">「정답 · 변별 · 손풀이」 탭에서 고릅니다</span>}</div></Field>
+            <Field label="주요 출제 단원"><textarea className={INPUT} rows={3} value={val('review_units')} onChange={(e) => set('review_units', e.target.value)} /></Field>
+            <Field label="까다로웠던 유형"><textarea className={INPUT} rows={3} value={val('review_hard_types')} onChange={(e) => set('review_hard_types', e.target.value)} /></Field>
+            <Field label="학생들이 실수하기 쉬운 부분"><textarea className={INPUT} rows={3} value={val('review_mistakes')} onChange={(e) => set('review_mistakes', e.target.value)} /></Field>
+            <Field label="다음 시험 대비 포인트"><textarea className={INPUT} rows={3} value={val('review_next_points')} onChange={(e) => set('review_next_points', e.target.value)} /></Field>
+            <Field label="블로그용 요약문" wide><textarea className={INPUT} rows={5} value={val('review_blog_summary')} onChange={(e) => set('review_blog_summary', e.target.value)} /></Field>
+          </div>
+          <div className="mt-3 text-right"><SaveBtn keys={['review_units', 'review_hard_types', 'review_mistakes', 'review_next_points', 'review_blog_summary']} /></div>
+        </Card>
+      )}
+
+      {/* ───────── 기출문제 → 문제은행 ───────── */}
+      {tab === 3 && <QuestionsTab paper={paper} questions={data.questions} isAdmin={isAdmin} reload={load} />}
+
+      {/* ───────── 이너프원 매칭 ───────── */}
+      {tab === 4 && (
+        <MatchTab paper={paper} data={data} isAdmin={isAdmin} reload={load} onStatus={(s) => saveNow({ match_status: s })} />
+      )}
+
+      {/* ───────── 블로그 ───────── */}
+      {tab === 5 && (
+        <Card title="블로그 업로드">
+          {!isAdmin && <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">블로그 상태는 원장님(윤T)만 바꿀 수 있습니다.</p>}
+          <div className="grid gap-3 lg:grid-cols-2 text-sm">
+            <Field label="상태">
+              <select className={INPUT} disabled={!isAdmin} value={paper.blog_status} onChange={(e) => saveNow({ blog_status: e.target.value })}>
+                {['대기', '작성중', '업로드완료'].map((x) => <option key={x}>{x}</option>)}
+              </select>
+            </Field>
+            <Field label="업로드 시작 예정"><input type="date" className={INPUT} disabled={!isAdmin} value={val('blog_from_date')} onChange={(e) => set('blog_from_date', e.target.value)} /></Field>
+            <Field label="블로그 주소"><input className={INPUT} disabled={!isAdmin} value={val('blog_url')} onChange={(e) => set('blog_url', e.target.value)} placeholder="https://blog.naver.com/…" /></Field>
+            <Field label="올린 날"><input type="date" className={INPUT} disabled={!isAdmin} value={val('blog_uploaded_on')} onChange={(e) => set('blog_uploaded_on', e.target.value)} /></Field>
+            <Field label="메모" wide><textarea className={INPUT} rows={3} disabled={!isAdmin} value={val('blog_note')} onChange={(e) => set('blog_note', e.target.value)} /></Field>
+          </div>
+          {isAdmin && <div className="mt-3 text-right"><SaveBtn keys={['blog_from_date', 'blog_url', 'blog_uploaded_on', 'blog_note']} /></div>}
+
+          <div className="mt-5 border-t pt-4 text-sm">
+            <p className="mb-2 text-xs font-bold" style={{ color: GREEN }}>블로그에 쓸 자료</p>
+            <ul className="space-y-1 text-gray-600">
+              <li>총평 요약문: {paper.review_blog_summary ? '작성됨' : <span className="text-gray-400">없음</span>}</li>
+              <li>손풀이 이미지: {handFiles.length}장</li>
+              <li>블로그에 쓰기로 한 이너프원 매칭: {data.matches.filter((m: any) => m.use_in_blog).length}건</li>
+            </ul>
+          </div>
+        </Card>
+      )}
+    </Shell>
+  )
+}
+
+// ───────────────────────── 이너프원 매칭 ─────────────────────────
+function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data: any; isAdmin: boolean; reload: () => void; onStatus: (s: string) => void }) {
+  const blank = { question_no: '', enough_book: '', enough_unit: '', enough_problem_no: '', match_level: '유형 유사', memo: '' }
+  const [m, setM] = useState<any>(blank)
+  // 이너프원 진도표에 있는 이 학교·학년 교재의 단원 이름
+  const units = useMemo(
+    () => Array.from(new Set((data.enough ?? []).map((e: any) => [e.unit_name, e.sub_unit_name].filter(Boolean).join(' > ')))).filter(Boolean) as string[],
+    [data.enough]
+  )
+  const books = useMemo(
+    () => Array.from(new Set((data.enough ?? []).map((e: any) => `이너프원 ${paper.school_name} ${paper.grade} (${e.level})`))) as string[],
+    [data.enough, paper]
+  )
+  const add = async () => {
+    if (!m.question_no) { alert('기출 문항번호를 적어 주세요.'); return }
+    const q = data.questions.find((x: any) => normNo(x.question_no) === normNo(m.question_no))
+    const r = await post({ action: 'saveMatch', paperId: paper.id, match: { ...m, question_no: normNo(m.question_no), question_id: q?.id ?? null } })
+    if (!r.ok) { alert(r.error); return }
+    setM({ ...blank, enough_book: m.enough_book })
+    reload()
+  }
+  const toggleBlog = async (row: any) => {
+    const r = await post({ action: 'saveMatch', paperId: paper.id, match: { id: row.id, use_in_blog: !row.use_in_blog } })
+    if (!r.ok) alert(r.error)
+    reload()
+  }
+  const remove = async (row: any) => {
+    if (!confirm('이 매칭 기록을 지울까요?')) return
+    const r = await post({ action: 'deleteMatch', id: row.id })
+    if (!r.ok) alert(r.error)
+    reload()
+  }
+  return (
+    <Card title="이너프원 교재 매칭"
+      right={
+        <select className="rounded-lg border px-2 py-1 text-xs" value={paper.match_status} onChange={(e) => onStatus(e.target.value)}>
+          {['대기', '진행중', '완료'].map((x) => <option key={x}>{x}</option>)}
+        </select>
+      }>
+      <div className="mb-4 grid gap-2 text-sm lg:grid-cols-[90px_1fr_1fr_110px_120px_1fr_auto] items-end">
+        <Field label="기출 문항"><input className={INPUT} value={m.question_no} onChange={(e) => setM({ ...m, question_no: e.target.value })} placeholder="18" /></Field>
+        <Field label="이너프원 교재명">
+          <input className={INPUT} list="ea-books" value={m.enough_book} onChange={(e) => setM({ ...m, enough_book: e.target.value })} />
+          <datalist id="ea-books">{books.map((b) => <option key={b} value={b} />)}</datalist>
+        </Field>
+        <Field label="이너프원 단원명">
+          <input className={INPUT} list="ea-units" value={m.enough_unit} onChange={(e) => setM({ ...m, enough_unit: e.target.value })} />
+          <datalist id="ea-units">{units.map((u) => <option key={u} value={u} />)}</datalist>
+        </Field>
+        <Field label="이너프원 문항번호"><input className={INPUT} value={m.enough_problem_no} onChange={(e) => setM({ ...m, enough_problem_no: e.target.value })} /></Field>
+        <Field label="매칭 정도">
+          <select className={INPUT} value={m.match_level} onChange={(e) => setM({ ...m, match_level: e.target.value })}>
+            {MATCH_LEVELS.map((x) => <option key={x}>{x}</option>)}
+          </select>
+        </Field>
+        <Field label="분석 메모"><input className={INPUT} value={m.memo} onChange={(e) => setM({ ...m, memo: e.target.value })} /></Field>
+        <button onClick={add} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ background: GREEN }}>추가</button>
+      </div>
+
+      {!data.matches.length ? <p className="py-6 text-center text-xs text-gray-400">아직 매칭 기록이 없습니다.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-[11px] text-gray-500">
+              {['기출 문항', '이너프원 교재', '단원', '문항번호', '매칭 정도', '분석 메모', '블로그 사용', '입력', ''].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {data.matches.map((row: any) => (
+                <tr key={row.id} className="border-t">
+                  <td className="px-2 py-2 font-semibold" style={{ color: GREEN }}>{noLabel(row.question_no ?? '')}{!row.question_id && <span className="ml-1 text-[10px] font-normal text-gray-400">(미입력 문항)</span>}</td>
+                  <td className="px-2 py-2">{row.enough_book}</td>
+                  <td className="px-2 py-2">{row.enough_unit}</td>
+                  <td className="px-2 py-2">{row.enough_problem_no}</td>
+                  <td className="px-2 py-2">{row.match_level}</td>
+                  <td className="px-2 py-2 text-gray-600">{row.memo}</td>
+                  <td className="px-2 py-2">
+                    <input type="checkbox" checked={!!row.use_in_blog} disabled={!isAdmin} onChange={() => toggleBlog(row)} title={isAdmin ? '' : '원장님만 정할 수 있습니다'} />
+                  </td>
+                  <td className="px-2 py-2 text-xs text-gray-400">{row.created_by}</td>
+                  <td className="px-2 py-2"><button onClick={() => remove(row)} className="text-gray-400 hover:text-red-600"><i className="ti ti-trash" /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ───────────────────────── 작은 부품 ─────────────────────────
+function DiscEditor({ nos, onChange }: { nos: string[]; onChange: (nos: string[]) => void }) {
+  const [v, setV] = useState('')
+  const add = () => {
+    const n = normNo(v)
+    if (!n || nos.includes(n)) { setV(''); return }
+    onChange([...nos, n])
+    setV('')
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      {nos.map((n) => (
+        <span key={n} className="flex items-center gap-1 rounded-full px-3 py-1 font-semibold" style={{ background: '#E1F5EE', color: GREEN }}>
+          {noLabel(n)}
+          <button onClick={() => onChange(nos.filter((x) => x !== n))} className="text-xs opacity-60 hover:opacity-100">✕</button>
+        </span>
+      ))}
+      <input className="w-28 rounded-lg border px-2 py-1 text-sm" value={v} onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') add() }} placeholder="18 / 서술형2" />
+      <button onClick={add} className="rounded-lg border px-3 py-1 text-xs font-semibold" style={{ borderColor: GREEN, color: GREEN }}>추가</button>
+    </div>
+  )
+}
+
+function FileDrop({ accept, onFiles, label }: { accept: string; onFiles: (f: FileList | null) => void; label: string }) {
+  const ref = useRef<HTMLInputElement | null>(null)
+  return (
+    <>
+      <input ref={ref} type="file" multiple accept={accept} className="hidden"
+        onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
+      <button onClick={() => ref.current?.click()}
+        onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onFiles(e.dataTransfer.files) }}
+        className="w-full rounded-xl border-2 border-dashed px-4 py-5 text-sm font-semibold transition hover:bg-gray-50"
+        style={{ borderColor: '#9FE1CB', color: GREEN }}>
+        <i className="ti ti-upload mr-1.5" />{label} <span className="font-normal text-gray-400">(끌어다 놓아도 됩니다)</span>
+      </button>
+    </>
+  )
+}
+
+function FileList({ files, onRemove, empty }: { files: any[]; onRemove: (f: any) => void; empty: string }) {
+  if (!files.length) return <p className="mt-3 text-center text-xs text-gray-400">{empty}</p>
+  return (
+    <ul className="mt-3 divide-y text-sm">
+      {FILE_KINDS.flatMap((k) => files.filter((f) => f.kind === k)).map((f) => (
+        <li key={f.id} className="flex items-center gap-2 py-2">
+          <span className="rounded px-1.5 py-0.5 text-[11px] font-bold" style={{ background: '#E1F5EE', color: GREEN }}>{f.kind}</span>
+          <a href={f.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:underline">{f.file_name}</a>
+          {!f.name_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">파일명 확인</span>}
+          <span className="text-xs text-gray-400">{f.uploaded_by}</span>
+          <button onClick={() => onRemove(f)} className="text-gray-400 hover:text-red-600"><i className="ti ti-trash" /></button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children?: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header title={title} subtitle={subtitle} showBack />
+      <div className="max-w-[1400px] mx-auto px-4 py-5">{children}</div>
+    </div>
+  )
+}

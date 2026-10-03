@@ -80,6 +80,7 @@ app/
   teacher/              선생님 화면 — layout.tsx가 사이드바를 붙인다
     dashboard students learning-notes assignments exams curriculum
     reports work-status exam-prep announcements settings
+    exam-analysis/      시험지 분석 (학교별 수합·정답·총평·이너프원 매칭) + 기출문제 → 문제은행 반영
     worksheets/         학습지 출제 첫 화면 (교재연계/문제은행/목적별)  ※원장 전용
       books/            시중교재 고르기
       textbooks/        교과서 (아직 문항 없음)
@@ -100,6 +101,7 @@ app/
 ## 더 읽을 것
 
 - `docs/문제은행.md` — 교재 구조, 유형 코드, 쌍둥이 문제, 이미지 경로, 새 교재 넣는 법
+- `docs/시험지분석.md` — 학교 시험지 수합·총평·이너프원 매칭, 타이핑한 기출을 그림으로 구워 문제은행에 넣는 법
 - `docs/채점플로우.md` — 출제 → 인쇄 → QR → 채점 → 재출제
 - `docs/초등레벨학습지.md` — 70점 미만 재도전 규칙, 단원 통과 판정, 처리 기록
 - `docs/보안.md` — RLS 모델, 인증 규칙, 키 교체 절차
