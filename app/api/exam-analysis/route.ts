@@ -106,7 +106,13 @@ export async function GET(req: Request) {
       ])
       const stat: Record<string, any> = {}
       const of = (id: string) => (stat[id] ??= { files: 0, handsolve: 0, questions: 0, reflected: 0, matches: 0 })
-      for (const f of files) f.kind === '손풀이' ? of(f.paper_id).handsolve++ : of(f.paper_id).files++
+      for (const f of files) {
+        const s = of(f.paper_id)
+        if (f.kind === '손풀이') s.handsolve++
+        else if (f.kind === '원본') s.originals = (s.originals ?? 0) + 1     // 개수만 — 파일은 원장만 연다
+        else s.files++
+        if (f.kind === '문제' || f.kind === '문제정답해설') s.printable = true
+      }
       for (const x of questions) {
         of(x.paper_id).questions++
         if (x.bank_status === '반영완료') of(x.paper_id).reflected++
@@ -149,7 +155,7 @@ export async function GET(req: Request) {
 
     // 파일·문항 그림을 볼 임시 주소 (2시간)
     const paths = [
-      ...(files ?? []).map((f: any) => f.storage_path),
+      ...(files ?? []).filter((f: any) => f.kind !== '원본' || me.role === 'admin').map((f: any) => f.storage_path),
       ...(questions ?? []).map((x: any) => x.figure_path),
     ].filter(Boolean) as string[]
     const signed: Record<string, string> = {}
@@ -160,7 +166,11 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       paper,
-      files: (files ?? []).map((f: any) => ({ ...f, url: signed[f.storage_path] ?? null })),
+      // 원본은 원장에게만 내준다. 선생님에게는 「몇 개 올라와 있다」만 알려 준다
+      files: (files ?? [])
+        .filter((f: any) => f.kind !== '원본' || me.role === 'admin')
+        .map((f: any) => ({ ...f, url: signed[f.storage_path] ?? null })),
+      originalCount: (files ?? []).filter((f: any) => f.kind === '원본').length,
       questions: (questions ?? []).map((x: any) => ({ ...x, figure_url: x.figure_path ? signed[x.figure_path] ?? null : null })),
       matches: matches ?? [],
       enough: enoughNow,
@@ -224,13 +234,26 @@ export async function POST(req: Request) {
       case 'uploadUrl': {
         const paper = await getPaper(b.paperId)
         if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
-        const ext = String(b.fileName ?? '').toLowerCase().match(/\.(pdf|png|jpe?g)$/)?.[1]
-        if (!ext) return bad('PDF · PNG · JPG 파일만 올릴 수 있어요.')
+        // 원본만 한글(HWP) 파일도 받는다
+        const allow = b.kind === '원본' ? /\.(pdf|png|jpe?g|hwp|hwpx)$/ : /\.(pdf|png|jpe?g)$/
+        const ext = String(b.fileName ?? '').toLowerCase().match(allow)?.[1]
+        if (!ext) return bad(b.kind === '원본' ? 'PDF · 한글(HWP) · PNG · JPG 파일만 올릴 수 있어요.' : 'PDF · PNG · JPG 파일만 올릴 수 있어요.')
         // 보관함 경로는 영문·숫자만 된다. 한글 파일명은 표(file_name)에 따로 적는다
         const path = `${paper.id}/${randomUUID()}.${ext === 'jpeg' ? 'jpg' : ext}`
         const { data, error } = await supabase.storage.from(FILE_BUCKET).createSignedUploadUrl(path)
         if (error || !data) return bad(error?.message ?? '올릴 주소를 만들지 못했습니다.', 500)
         return NextResponse.json({ path, token: data.token })
+      }
+
+      // ── 시험지를 통째로 인쇄할 주소 (작업한 「문제」 PDF. 없으면 「문제정답해설」)
+      case 'printUrl': {
+        const { data: fs } = await supabase.from('exam_paper_files').select('kind, storage_path, file_name, created_at')
+          .eq('paper_id', b.paperId).in('kind', ['문제', '문제정답해설']).order('created_at', { ascending: false })
+        const f = (fs ?? []).find((x: any) => x.kind === '문제') ?? (fs ?? [])[0]
+        if (!f) return bad('아직 올린 문제 PDF가 없습니다.', 404)
+        const { data, error } = await supabase.storage.from(FILE_BUCKET).createSignedUrl(f.storage_path, 3600)
+        if (error || !data) return bad(error?.message ?? '주소를 만들지 못했습니다.', 500)
+        return NextResponse.json({ url: data.signedUrl, fileName: f.file_name, kind: f.kind })
       }
 
       // ── 올린 파일을 목록에 적기
@@ -247,6 +270,8 @@ export async function POST(req: Request) {
           name_ok: !checkFileName(paper, b.kind, fileName),
           uploaded_by: me.name,
         })
+        if (error?.message?.includes('kind_check'))
+          return bad('원본 보관 준비(docs/sql/시험지분석_2_원본보관.sql)가 아직 실행되지 않았습니다. 원장님께 알려 주세요.', 500)
         if (error) return bad(error.message, 500)
         return NextResponse.json({ ok: true })
       }
@@ -255,6 +280,7 @@ export async function POST(req: Request) {
       case 'deleteFile': {
         const { data: f } = await supabase.from('exam_paper_files').select('*').eq('id', b.id).maybeSingle()
         if (!f) return bad('파일을 찾을 수 없습니다.', 404)
+        if (f.kind === '원본' && !isAdmin) return bad('원본은 원장님만 지울 수 있어요.', 403)
         if (!isAdmin && f.uploaded_by !== me.name) return bad('올린 선생님이나 원장님만 지울 수 있어요.', 403)
         await supabase.storage.from(FILE_BUCKET).remove([f.storage_path])
         const { error } = await supabase.from('exam_paper_files').delete().eq('id', f.id)

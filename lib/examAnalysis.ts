@@ -4,7 +4,9 @@
 export const SCHOOLS = ['도래울중', '지축중', '고양제일중', '원흥중', '신원중']
 export const GRADES = ['중1', '중2', '중3']
 export const EXAM_TYPES = ['중간고사', '기말고사']
-export const FILE_KINDS = ['문제', '정답', '해설', '문제정답해설', '손풀이', '기타']
+// '원본' = 학교에서 받은 시험지 원본·한글(HWP) 작업 원본. 원장만 열어 볼 수 있다 (서버가 걸러 준다)
+export const FILE_KINDS = ['문제', '정답', '해설', '문제정답해설', '손풀이', '원본', '기타']
+export const ORIGINAL_EXT = /\.(pdf|hwp|hwpx|png|jpe?g)$/i
 export const Q_TYPES = ['객관식', '단답형', '서술형']
 export const MATCH_LEVELS = ['쌍둥이', '매우 유사', '유형 유사', '참고']
 export const REVIEW_DIFFICULTIES = ['쉬움', '보통', '어려움', '매우 어려움']
@@ -66,6 +68,13 @@ export function expectedPaperFileName(p: PaperKey, kind: string) {
 export function checkFileName(p: PaperKey, kind: string, fileName: string): string | null {
   const name = fileName.normalize('NFC')
   if (kind === '기타') return null
+  if (kind === '원본') {
+    // 2026_2학기중간_도래울중_중3_원본.hwp  (뒤에 _2 같은 꼬리는 괜찮다)
+    const head = `${examPrefix(p)}_${p.school_name}_${p.grade}_원본`
+    return name.startsWith(head) && ORIGINAL_EXT.test(name)
+      ? null
+      : `원본 파일명은 「${head}.hwp」 (또는 .pdf · .jpg) 모양이어야 해요.`
+  }
   if (kind === '손풀이') {
     // 학교명_학년_문항번호_손풀이_담당자명.png|jpg
     const m = name.match(/^(.+?)_(중[1-3])_(.+?)_손풀이_(.+)\.(png|jpe?g)$/i)
@@ -76,6 +85,27 @@ export function checkFileName(p: PaperKey, kind: string, fileName: string): stri
   }
   const want = expectedPaperFileName(p, kind)
   return name === want ? null : `파일명이 규칙과 달라요. 「${want}」 로 맞춰 주세요.`
+}
+
+// 파일명 끝으로 구분을 알아낸다: …_문제.pdf → 문제, …_원본.hwp → 원본, …_손풀이_김T.png → 손풀이
+export function kindOfFile(fileName: string) {
+  const n = fileName.normalize('NFC')
+  if (n.includes('_손풀이_')) return '손풀이'
+  if (/_원본[^_]*\.[a-z]+$/i.test(n) || /_원본_/.test(n)) return '원본'
+  const m = n.match(/_(문제정답해설|문제|정답|해설)\.pdf$/i)
+  return m ? m[1] : '기타'
+}
+
+// 규칙대로 지은 파일명에서 어느 시험인지 읽는다 (지난 기출을 한꺼번에 올릴 때 쓴다)
+//   2025_1학기기말_신원중_중2_문제.pdf → { 2025, 1, 기말고사, 신원중, 중2 }
+export function parseExamFileName(fileName: string): PaperKey | null {
+  const m = fileName.normalize('NFC').match(/^(\d{4})_([12])학기(중간|기말)_(.+?)_(중[1-3]|고[1-3])_/)
+  if (!m) return null
+  return {
+    exam_year: Number(m[1]), term: Number(m[2]),
+    exam_type: m[3] === '기말' ? '기말고사' : '중간고사',
+    school_name: m[4], grade: m[5],
+  }
 }
 
 // 손풀이 파일명에서 문항번호 뽑기: 도래울중_중3_18번_손풀이_김T.png → '18번'

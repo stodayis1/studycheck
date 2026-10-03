@@ -13,6 +13,20 @@ export async function post(body: any) {
   return { ok: r.ok, status: r.status, ...j }
 }
 
+// 시험지를 통째로 인쇄한다 — 작업한 「문제」 PDF 를 새 창으로 연다 (거기서 Ctrl+P).
+// 주소를 받아 온 뒤에 창을 열면 팝업 차단에 걸리므로, 빈 창을 먼저 열고 주소를 넣는다
+export async function openPrint(paperId: string) {
+  const w = window.open('', '_blank')
+  const r = await post({ action: 'printUrl', paperId })
+  if (!r.ok || !r.url) {
+    w?.close()
+    alert(r.error ?? '인쇄할 파일을 찾지 못했습니다.')
+    return
+  }
+  if (w) w.location.href = r.url
+  else window.location.href = r.url
+}
+
 export function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="rounded-xl border bg-white p-4">

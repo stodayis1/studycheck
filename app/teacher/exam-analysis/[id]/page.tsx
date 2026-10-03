@@ -11,20 +11,13 @@ import { apiFetch } from '@/lib/apiFetch'
 import { supabase } from '@/lib/supabase'
 import {
   FILE_KINDS, MATCH_LEVELS, REVIEW_DIFFICULTIES, TASKS,
-  HIT_LEVELS, checkFileName, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
+  HIT_LEVELS, checkFileName, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
-import { Card, Field, GREEN, INPUT, post } from '@/components/exam-analysis/ui'
+import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
 const TABS = ['기본 · 파일', '정답 · 변별 · 손풀이', '총평', '기출문제', '이너프원 매칭', '블로그']
 
-// 파일명으로 구분을 알아낸다: …_문제.pdf → 문제, …_손풀이_김T.png → 손풀이
-function kindOf(name: string) {
-  const n = name.normalize('NFC')
-  if (n.includes('_손풀이_')) return '손풀이'
-  const m = n.match(/_(문제정답해설|문제|정답|해설)\.pdf$/i)
-  return m ? m[1] : '기타'
-}
 
 export default function ExamPaperPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -81,17 +74,19 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   const upload = async (fileList: FileList | null, forced?: string) => {
     if (!fileList?.length) return
     for (const file of Array.from(fileList)) {
-      const kind = forced ?? kindOf(file.name)
+      const kind = forced ?? kindOfFile(file.name)
       const warn = checkFileName(paper, kind, file.name)
       if (warn && !confirm(`${file.name}\n\n${warn}\n\n그래도 「${kind}」(으)로 올릴까요?`)) continue
       setBusy(`올리는 중: ${file.name}`)
-      const u = await post({ action: 'uploadUrl', paperId: id, fileName: file.name })
+      const u = await post({ action: 'uploadUrl', paperId: id, fileName: file.name, kind })
       if (!u.ok) { alert(u.error); continue }
-      const { error } = await supabase.storage.from('exam-analysis').uploadToSignedUrl(u.path, u.token, file, { contentType: file.type })
+      // 한글(HWP) 파일은 브라우저가 종류를 모른다 → 일반 파일로 올린다
+      const type = ['application/pdf', 'image/png', 'image/jpeg'].includes(file.type) ? file.type : 'application/octet-stream'
+      const { error } = await supabase.storage.from('exam-analysis').uploadToSignedUrl(u.path, u.token, file, { contentType: type })
       if (error) { alert(`올리지 못했습니다: ${error.message}`); continue }
       const a = await post({
         action: 'addFile', paperId: id, kind, path: u.path, fileName: file.name,
-        mimeType: file.type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
+        mimeType: type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
       })
       if (!a.ok) alert(a.error)
     }
@@ -106,7 +101,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   }
 
   const tasks = paper.tasks ?? {}
-  const paperFiles = data.files.filter((f: any) => f.kind !== '손풀이')
+  const paperFiles = data.files.filter((f: any) => f.kind !== '손풀이' && f.kind !== '원본')
+  const originals = data.files.filter((f: any) => f.kind === '원본')      // 원장에게만 내려온다
   const handFiles = data.files.filter((f: any) => f.kind === '손풀이')
   const discNos: string[] = paper.discriminating_nos ?? []
 
@@ -163,8 +159,24 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               파일명 규칙: <b>{expectedPaperFileName(paper, '문제')}</b> (구분은 문제 · 정답 · 해설 · 문제정답해설).
               파일명 끝의 구분을 보고 자동으로 나눠 담습니다.
             </p>
-            <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="시험지 PDF 올리기" />
+            <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
             <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
+            {paperFiles.some((f: any) => f.kind === '문제' || f.kind === '문제정답해설') && (
+              <button onClick={() => openPrint(id)} className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ background: GREEN }}>
+                <i className="ti ti-printer mr-1.5" />시험지 통째로 인쇄 (학생 풀이용)
+              </button>
+            )}
+          </Card>
+
+          <Card title="원본 보관 (원장님만 열람)">
+            <p className="mb-2 text-xs text-gray-500">
+              학교에서 받은 시험지 원본, 한글(HWP) 작업 원본을 따로 보관합니다. 올리는 것은 누구나 할 수 있지만
+              <b> 올린 뒤에는 원장님만 열어 보고 지울 수 있습니다.</b> 파일명: <b>{expectedPaperFileName(paper, '원본').replace('.pdf', '.hwp')}</b> (PDF·JPG도 가능)
+            </p>
+            <FileDrop accept=".pdf,.hwp,.hwpx,.png,.jpg,.jpeg" onFiles={(f) => upload(f, '원본')} label="원본 파일 올리기" />
+            {isAdmin
+              ? <FileList files={originals} onRemove={removeFile} empty="아직 보관된 원본이 없습니다." />
+              : <p className="mt-3 text-center text-xs text-gray-500">보관된 원본 {data.originalCount ?? 0}개 · 원장님만 열어 볼 수 있습니다.</p>}
           </Card>
         </div>
       )}
