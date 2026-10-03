@@ -23,16 +23,43 @@ function newCode() {
   return s
 }
 
-// 1000행 제한을 피해 전부 읽어온다
+// 1000행 제한을 피해 전부 읽어온다.
+//
+// 예전에는 1000행씩 **차례대로** 읽었다. 문항이 27,000개라 28번을 줄줄이 기다려
+// 학습지 출제 화면이 6초씩 걸렸다. 이제 8쪽씩 **한꺼번에** 읽어 4번이면 끝난다.
+//
+// ★ make 안에서 반드시 .order(...) 로 순서를 못박아야 한다. 순서가 없으면 쪽마다
+//   줄 순서가 달라져 같은 줄이 두 번 오거나 빠질 수 있다.
+const BATCH = 8
 async function all<T>(make: (from: number, to: number) => any): Promise<T[]> {
   const out: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await make(from, from + 999)
-    if (error) throw new Error(error.message)
-    out.push(...((data ?? []) as T[]))
-    if (!data || data.length < 1000) break
+  for (let base = 0; ; base += 1000 * BATCH) {
+    const res = await Promise.all(
+      Array.from({ length: BATCH }, (_, k) => make(base + k * 1000, base + k * 1000 + 999))
+    )
+    let last = false
+    for (const { data, error } of res) {
+      if (error) throw new Error(error.message)
+      const d = (data ?? []) as T[]
+      out.push(...d)
+      if (d.length < 1000) last = true
+    }
+    if (last) return out
   }
-  return out
+}
+
+// 교재 목록·과정 목록은 교재를 새로 올릴 때나 바뀐다. 짧게 들고 있다가 그대로 돌려준다.
+// (Vercel 은 요청마다 새 인스턴스일 수 있어 항상 맞는 건 아니지만, 연달아 들어오는
+//  요청은 확실히 건너뛴다)
+const CACHE_MS = 5 * 60 * 1000
+const cache = new Map<string, { at: number; body: any }>()
+function cached(key: string) {
+  const c = cache.get(key)
+  return c && Date.now() - c.at < CACHE_MS ? c.body : null
+}
+function keep(key: string, body: any) {
+  cache.set(key, { at: Date.now(), body })
+  return body
 }
 
 // 교과서는 레벨을 매기지 않는다 (별도 탭에서 뽑는다)
@@ -50,11 +77,11 @@ export async function GET(req: Request) {
 
   // ?courses=1 → 과정 목록 (유형표 기준). 고등이 늘어나도 코드를 고칠 필요가 없게 DB에서 읽는다
   if (q.get('courses')) {
+    const hit = cached('courses')
+    if (hit) return NextResponse.json(hit)
+
     const types = await all<any>((f, t) =>
-      supabase.from('standard_types').select('grade, semester').range(f, t)
-    )
-    const probs = await all<any>((f, t) =>
-      supabase.from('problems').select('grade, semester').range(f, t)
+      supabase.from('standard_types').select('grade, semester').order('code').range(f, t)
     )
     const m = new Map<string, any>()
     const key = (g: string, s: number) => `${g}-${s}`
@@ -64,18 +91,28 @@ export async function GET(req: Request) {
       c.types++
       m.set(k, c)
     }
-    for (const r of probs) {
-      const k = key(r.grade, r.semester)
-      const c = m.get(k)
-      if (c) c.problems++
-    }
-    return NextResponse.json({ courses: [...m.values()] })
+    // 문항 수는 **세기만** 한다. 예전에는 과정을 알아내려고 문항 27,000개를 통째로
+    // 읽어 왔는데(6초), 과정은 20개뿐이라 과정마다 개수만 물어보면 된다.
+    const list = [...m.values()]
+    await Promise.all(list.map(async (c) => {
+      const { count } = await supabase
+        .from('problems')
+        .select('id', { count: 'exact', head: true })
+        .eq('grade', c.grade)
+        .eq('semester', c.semester)
+      c.problems = count ?? 0
+    }))
+    return NextResponse.json(keep('courses', { courses: list }))
   }
 
   // ?books=1 → 교재 목록 (+ 학년·학기별 문항 수)
   if (q.get('books')) {
+    const hit = cached('books')
+    if (hit) return NextResponse.json(hit)
+
     const rows = await all<any>((f, t) =>
-      supabase.from('problems').select('book, grade, semester, type_code, level').range(f, t)
+      supabase.from('problems').select('book, grade, semester, type_code, level')
+        .order('id').range(f, t)
     )
     const m = new Map<string, any>()
     for (const r of rows) {
@@ -90,7 +127,8 @@ export async function GET(req: Request) {
       b.courses[key] = (b.courses[key] ?? 0) + 1
       m.set(r.book, b)
     }
-    return NextResponse.json({ books: [...m.values()].sort((a, b) => b.total - a.total) })
+    return NextResponse.json(
+      keep('books', { books: [...m.values()].sort((a, b) => b.total - a.total) }))
   }
 
   const grade = q.get('grade')
@@ -104,7 +142,7 @@ export async function GET(req: Request) {
       .select('code, chapter_no, chapter_title, sub_chapter_no, sub_chapter_title, type_no, type_title, is_focus')
       .eq('grade', grade)
       .eq('semester', Number(semester))
-      .order('chapter_no').order('sub_chapter_no').order('type_no')
+      .order('chapter_no').order('sub_chapter_no').order('type_no').order('code')
       .range(f, t)
   )
 
@@ -115,6 +153,7 @@ export async function GET(req: Request) {
       .eq('grade', grade)
       .eq('semester', Number(semester))
       .not('type_code', 'is', null)
+      .order('id')
       .range(f, t)
   )
 
@@ -190,6 +229,7 @@ export async function POST(req: Request) {
       .eq('grade', grade)
       .eq('semester', Number(semester))
       .in('type_code', typeCodes)
+      .order('id')
       .range(f, t)
   )
 
@@ -201,7 +241,9 @@ export async function POST(req: Request) {
   // 중복출제 방지 — 지금까지 만든 시험지에 들어간 문항 빼기
   if (noRepeat && rows.length) {
     const used = await all<any>((f, t) =>
-      supabase.from('exam_sheet_problems').select('problem_id').range(f, t)
+      // 이 표에는 id 칸이 없다 — sheet_id + no 가 순서다
+      supabase.from('exam_sheet_problems').select('problem_id')
+        .order('sheet_id').order('no').range(f, t)
     )
     const seen = new Set(used.map((u) => u.problem_id))
     const left = rows.filter((p) => !seen.has(p.id))
