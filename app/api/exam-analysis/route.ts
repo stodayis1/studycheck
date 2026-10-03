@@ -126,9 +126,16 @@ export async function GET(req: Request) {
       supabase.from('exam_questions').select('*').eq('paper_id', id).order('sort_order').order('question_no'),
       supabase.from('exam_enough_matches').select('*').eq('paper_id', id).order('created_at'),
       // 이너프원 진도표 — 이 학교·학년 교재의 단원 이름을 고르기 쉽게
-      supabase.from('inner_enough').select('level, unit_no, unit_name, sub_unit_name')
+      supabase.from('inner_enough').select('level, unit_no, unit_name, sub_unit_name, created_at')
         .eq('school_name', paper.school_name).eq('grade', String(paper.grade).replace('중', '')).limit(1000),
     ])
+
+    // 이너프원은 시험 때마다 새로 올린다. 이 시험에 쓴 것만 보이게 —
+    // 시험 종료일 이전에 올린 것 중 「가장 최근에 올린 날」 묶음만 남긴다 (지난 학기 교재가 섞이지 않게)
+    const kstDay = (ts: string) => new Date(new Date(ts).getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10)
+    const inTime = (enough ?? []).filter((e: any) => !paper.exam_end_date || kstDay(e.created_at) <= paper.exam_end_date)
+    const lastDay = inTime.map((e: any) => kstDay(e.created_at)).sort().pop()
+    const enoughNow = inTime.filter((e: any) => kstDay(e.created_at) === lastDay)
 
     // 파일·문항 그림을 볼 임시 주소 (2시간)
     const paths = [
@@ -146,7 +153,7 @@ export async function GET(req: Request) {
       files: (files ?? []).map((f: any) => ({ ...f, url: signed[f.storage_path] ?? null })),
       questions: (questions ?? []).map((x: any) => ({ ...x, figure_url: x.figure_path ? signed[x.figure_path] ?? null : null })),
       matches: matches ?? [],
-      enough: enough ?? [],
+      enough: enoughNow,
       me: { name: me.name, isAdmin: me.role === 'admin' },
     })
   } catch (e: any) {
