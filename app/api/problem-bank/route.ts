@@ -201,9 +201,12 @@ export async function POST(req: Request) {
   // 중복출제 방지 — 지금까지 만든 시험지에 들어간 문항 빼기
   if (noRepeat && rows.length) {
     const used = await all<any>((f, t) =>
-      supabase.from('exam_sheet_problems').select('problem_id').range(f, t)
+      supabase.from('exam_sheet_problems').select('problem_id, sheet_id').range(f, t)
     )
-    const seen = new Set(used.map((u) => u.problem_id))
+    // 기출 시험을 통째로 담아 둔 학습지(note 가 exam_paper:…)는 「낸 적 있다」로 치지 않는다
+    const { data: paperSheets } = await supabase.from('exam_sheets').select('id').like('note', 'exam_paper:%')
+    const skip = new Set((paperSheets ?? []).map((s: any) => s.id))
+    const seen = new Set(used.filter((u) => !skip.has(u.sheet_id)).map((u) => u.problem_id))
     const left = rows.filter((p) => !seen.has(p.id))
     if (left.length >= Math.min(count, 5)) rows = left   // 너무 적게 남으면 무시
   }

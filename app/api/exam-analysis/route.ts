@@ -35,6 +35,35 @@ function db() {
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
+// 기출 PDF 를 문항별로 잘라 넣으면 그 시험 전체를 담은 학습지(exam_sheets)를 하나 만들어 둔다.
+// 그 학습지의 note 가 이 표시다 → 인쇄 화면(/teacher/gradings/print)에서 학원 시험지 양식으로 통째 인쇄된다.
+const sheetNote = (paperId: string) => `exam_paper:${paperId}`
+
+// 정답표(한 줄에 「번호 정답」)를 문항과 문제은행에 맞춰 넣는다. 정답을 나중에 넣어도 QR 채점이 되게.
+async function syncAnswers(supabase: any, paperId: string, answersText: string | null) {
+  const map = new Map<string, string>()
+  for (const line of String(answersText ?? '').split(/\r?\n/)) {
+    const m = line.trim().match(/^(\S+)\s+(.+)$/)
+    if (m) map.set(normNo(m[1]), m[2].trim())
+  }
+  if (!map.size) return 0
+  const { data: qs } = await supabase.from('exam_questions').select('id, question_no, q_type, problem_id').eq('paper_id', paperId)
+  let n = 0
+  for (const x of qs ?? []) {
+    const a = map.get(normNo(x.question_no))
+    if (a == null) continue
+    // 동그라미 숫자면 객관식, 숫자 하나면 단답형으로 본다 (서술형으로 적어 둔 문항은 그대로)
+    const qType = /[①②③④⑤]/.test(a) ? '객관식' : x.q_type === '서술형' ? '서술형' : '단답형'
+    await supabase.from('exam_questions').update({ answer: a, q_type: qType }).eq('id', x.id)
+    if (x.problem_id) {
+      const ans = bankAnswer(qType, a)
+      await supabase.from('problems').update({ answer_kind: ans.kind, answer_text: ans.text }).eq('id', x.problem_id)
+    }
+    n++
+  }
+  return n
+}
+
 // 요청 보낸 직원의 이름·역할 (denyIfNotStaff 를 통과한 뒤에만 부른다)
 async function whoAmI(supabase: any, req: Request): Promise<{ name: string; role: string }> {
   const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
@@ -118,6 +147,11 @@ export async function GET(req: Request) {
         if (x.bank_status === '반영완료') of(x.paper_id).reflected++
       }
       for (const m of matches) of(m.paper_id).matches++
+      const { data: sheets } = await supabase.from('exam_sheets').select('code, note').like('note', 'exam_paper:%')
+      for (const sh of sheets ?? []) {
+        const s = stat[String(sh.note).slice('exam_paper:'.length)]
+        if (s) { s.printable = true; s.sheetCode = sh.code }
+      }
       // 적중률 (이너프원에 유형 유사 이상이 있는 문항 ÷ 전체 문항)
       return NextResponse.json({
         papers: (papers ?? []).map((p: any) => {
@@ -164,14 +198,31 @@ export async function GET(req: Request) {
       ;(urls ?? []).forEach((u: any) => { if (u.signedUrl && !u.error) signed[u.path] = u.signedUrl })
     }
 
+    // PDF 에서 잘라 넣은 문항은 그림이 문제은행 보관함에 있다 → 그 그림을 미리보기로 쓴다
+    const bankIds = (questions ?? []).filter((x: any) => x.problem_id && !x.figure_path).map((x: any) => x.problem_id)
+    const bankImg: Record<number, string> = {}
+    if (bankIds.length) {
+      const { data: ps } = await supabase.from('problems').select('id, image_path').in('id', bankIds)
+      const pths = (ps ?? []).map((p: any) => p.image_path).filter(Boolean)
+      const { data: urls } = pths.length ? await supabase.storage.from(PROBLEM_BUCKET).createSignedUrls(pths, 7200) : { data: [] as any[] }
+      const byPath = new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
+      ;(ps ?? []).forEach((p: any) => { if (byPath.has(p.image_path)) bankImg[p.id] = byPath.get(p.image_path)! })
+    }
+    const { data: sheet } = await supabase.from('exam_sheets').select('code').eq('note', sheetNote(id)).maybeSingle()
+
     return NextResponse.json({
       paper,
+      sheetCode: sheet?.code ?? null,
       // 원본은 원장에게만 내준다. 선생님에게는 「몇 개 올라와 있다」만 알려 준다
       files: (files ?? [])
         .filter((f: any) => f.kind !== '원본' || me.role === 'admin')
         .map((f: any) => ({ ...f, url: signed[f.storage_path] ?? null })),
       originalCount: (files ?? []).filter((f: any) => f.kind === '원본').length,
-      questions: (questions ?? []).map((x: any) => ({ ...x, figure_url: x.figure_path ? signed[x.figure_path] ?? null : null })),
+      questions: (questions ?? []).map((x: any) => ({
+        ...x,
+        figure_url: x.figure_path ? signed[x.figure_path] ?? null : bankImg[x.problem_id] ?? null,
+        from_pdf: !x.figure_path && !!bankImg[x.problem_id],      // PDF 에서 잘라 넣은 문항
+      })),
       matches: matches ?? [],
       enough: enoughNow,
       me: { name: me.name, isAdmin: me.role === 'admin' },
@@ -227,7 +278,8 @@ export async function POST(req: Request) {
         const { error } = await supabase.from('exam_papers')
           .update({ ...patch, ...adminPatch, updated_at: now }).eq('id', b.id)
         if (error) return bad(error.message, 500)
-        return NextResponse.json({ ok: true })
+        const synced = 'answers_text' in patch ? await syncAnswers(supabase, b.id, patch.answers_text) : 0
+        return NextResponse.json({ ok: true, answersSynced: synced })
       }
 
       // ── 파일 올릴 임시 주소 받기 (브라우저가 이 주소로 직접 올린다 — PDF 가 커서 서버를 거치지 않는다)
@@ -247,6 +299,10 @@ export async function POST(req: Request) {
 
       // ── 시험지를 통째로 인쇄할 주소 (작업한 「문제」 PDF. 없으면 「문제정답해설」)
       case 'printUrl': {
+        if (!b.raw) {
+          const { data: sh } = await supabase.from('exam_sheets').select('code').eq('note', sheetNote(b.paperId)).maybeSingle()
+          if (sh?.code) return NextResponse.json({ sheetCode: sh.code })
+        }
         const { data: fs } = await supabase.from('exam_paper_files').select('kind, storage_path, file_name, created_at')
           .eq('paper_id', b.paperId).in('kind', ['문제', '문제정답해설']).order('created_at', { ascending: false })
         const f = (fs ?? []).find((x: any) => x.kind === '문제') ?? (fs ?? [])[0]
