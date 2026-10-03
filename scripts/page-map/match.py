@@ -94,11 +94,16 @@ def api(path, params=None, method='GET', data=None):
 
 
 def fetch_all(path, params):
-    """Supabase는 한 번에 1000행까지만 준다 — 끝까지 가져온다."""
+    """Supabase는 한 번에 1000행까지만 준다 — 끝까지 가져온다.
+
+    ★ 순서를 못박지 않으면 쪽마다 줄 순서가 달라져 **같은 줄이 두 번 오거나 빠진다.**
+      (라이트쎈 중2-1이 898문항인데 1253으로 세어졌다 — 2026-10-03)
+    """
     STEP = 1000
     out, off = [], 0
     while True:
         q = dict(params)
+        q.setdefault('order', 'id')
         q['limit'] = STEP
         q['offset'] = off
         got = api(path, q) or []
