@@ -266,7 +266,10 @@ function Inner() {
         .aval { font-size: 13pt; line-height: 1.15; color: #1d4ed8; white-space: nowrap; }
         .aval b { color: #1d4ed8; font-weight: 700; }
         .aval .circ { font-size: 14pt; }
-        .aval img { max-height: 26px; max-width: 220px; vertical-align: middle; }
+        /* 글자 정답이 없는 문항은 해설집에서 잘라 둔 그림을 쓴다. 예제처럼 '풀이 전체가 정답'인
+           문항은 그림이 커서, 26px로 줄이면 아무것도 안 보였다 → 읽을 수 있는 크기까지 허용하고
+           그 칸만 커지게 둔다(칸 너비가 유동적이라 배치가 깨지지 않는다) */
+        .aval img { max-height: 110px; max-width: 320px; vertical-align: middle; }
         .aval .none { color: #cbd5e1; }
         /* 분수는 세로로 쌓는다 */
         .frac { display: inline-flex; flex-direction: column; align-items: center;
