@@ -14,13 +14,16 @@ export async function post(body: any) {
 }
 
 // 시험지를 통째로 인쇄한다.
-//  · 문항별로 잘라 넣은 시험은 학원 시험지 양식(로고·QR·이름칸)의 인쇄 화면으로 간다
-//  · 아직 안 잘라 넣었거나 raw=true 면 올린 「문제」 PDF 를 그대로 연다 (거기서 Ctrl+P)
+//  · 문항별로 잘라 넣은 시험은 「수학의지혜 시험지 양식」 인쇄 화면으로 간다 (mode 'qr' 이면 QR 채점 학습지 양식)
+//  · 아직 안 잘라 넣었거나 mode 'raw' 면 올린 「문제」 PDF 를 그대로 연다 (거기서 Ctrl+P)
 // 주소를 받아 온 뒤에 창을 열면 팝업 차단에 걸리므로, 빈 창을 먼저 열고 주소를 넣는다
-export async function openPrint(paperId: string, raw = false) {
+export async function openPrint(paperId: string, mode: 'paper' | 'qr' | 'raw' = 'paper') {
   const w = window.open('', '_blank')
-  const r = await post({ action: 'printUrl', paperId, raw })
-  const url = r.sheetCode ? `/teacher/gradings/print?code=${r.sheetCode}` : r.url
+  const r = await post({ action: 'printUrl', paperId, raw: mode === 'raw' })
+  // 문항별로 잘라 넣은 시험: 수학의지혜 시험지 양식(기본) 또는 QR 채점 학습지 양식
+  const url = !r.sheetCode ? r.url
+    : mode === 'qr' ? `/teacher/gradings/print?code=${r.sheetCode}`
+    : `/teacher/exam-analysis/print?paper=${paperId}`
   if (!r.ok || !url) {
     w?.close()
     alert(r.error ?? '인쇄할 파일을 찾지 못했습니다.')

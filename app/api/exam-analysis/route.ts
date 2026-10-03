@@ -165,6 +165,28 @@ export async function GET(req: Request) {
       })
     }
 
+    // ?print=<paperId> → 수학의지혜 시험지 양식 인쇄 화면이 쓸 문항 그림 (번호 순서)
+    const printId = q.get('print')
+    if (printId) {
+      const { data: paper } = await supabase.from('exam_papers')
+        .select('id, exam_year, term, exam_type, school_name, grade, exam_name').eq('id', printId).maybeSingle()
+      if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
+      const { data: qs } = await supabase.from('exam_questions')
+        .select('question_no, sort_order, problem_id').eq('paper_id', printId).not('problem_id', 'is', null)
+        .order('sort_order').order('question_no')
+      const ids = (qs ?? []).map((x: any) => x.problem_id)
+      if (!ids.length) return bad('아직 문항별로 잘라 넣지 않은 시험지입니다.', 404)
+      const { data: ps } = await supabase.from('problems').select('id, image_path').in('id', ids)
+      const pathOf = new Map<number, string>((ps ?? []).map((p: any) => [p.id, p.image_path]))
+      const { data: urls } = await supabase.storage.from(PROBLEM_BUCKET)
+        .createSignedUrls((ps ?? []).map((p: any) => p.image_path).filter(Boolean), 7200)
+      const signedOf = new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
+      return NextResponse.json({
+        paper,
+        problems: (qs ?? []).map((x: any) => ({ no: x.question_no, url: signedOf.get(pathOf.get(x.problem_id) ?? '') ?? '' })),
+      })
+    }
+
     const id = q.get('id')
     if (!id) return bad('무엇을 볼지 알 수 없습니다.')
     const me = await whoAmI(supabase, req)

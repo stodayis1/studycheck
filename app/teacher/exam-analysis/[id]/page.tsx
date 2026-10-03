@@ -163,16 +163,21 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
             {data.sheetCode && (
               <button onClick={() => openPrint(id)} className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ background: GREEN }}>
-                <i className="ti ti-printer mr-1.5" />수학의지혜 시험지 양식으로 통째 인쇄 (QR 채점)
+                <i className="ti ti-printer mr-1.5" />수학의지혜 시험지 양식으로 통째 인쇄
+              </button>
+            )}
+            {data.sheetCode && (
+              <button onClick={() => openPrint(id, 'qr')} className="mt-2 w-full rounded-lg border px-4 py-2 text-sm font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
+                <i className="ti ti-qrcode mr-1.5" />QR 채점 학습지 양식으로 인쇄
               </button>
             )}
             {paperFiles.some((f: any) => f.kind === '문제' || f.kind === '문제정답해설') && (
-              <button onClick={() => openPrint(id, true)} className="mt-2 w-full rounded-lg border px-4 py-2 text-sm font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
+              <button onClick={() => openPrint(id, 'raw')} className="mt-2 w-full rounded-lg border px-4 py-2 text-sm font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
                 <i className="ti ti-file-type-pdf mr-1.5" />올린 PDF 그대로 인쇄
               </button>
             )}
             {!data.sheetCode && paperFiles.some((f: any) => f.kind === '문제' || f.kind === '문제정답해설') && (
-              <p className="mt-2 text-xs text-gray-500">학원 시험지 양식 인쇄는 올린 PDF를 문항별로 잘라 넣은 뒤에 생깁니다.</p>
+              <p className="mt-2 text-xs text-gray-500">수학의지혜 시험지 양식 인쇄는 올린 PDF를 문항별로 잘라 넣은 뒤에 생깁니다.</p>
             )}
           </Card>
 
