@@ -156,8 +156,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
 
           <Card title="시험지 파일">
             <p className="mb-2 text-xs text-gray-500">
-              파일명 규칙: <b>{expectedPaperFileName(paper, '문제')}</b> (구분은 문제 · 정답 · 해설 · 문제정답해설).
-              파일명 끝의 구분을 보고 자동으로 나눠 담습니다.
+              시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 파일명 규칙: <b>{expectedPaperFileName(paper, '문제')}</b>
+              (구분은 문제 · 정답 · 해설 · 문제정답해설). 파일명 끝의 구분을 보고 자동으로 나눠 담습니다.
             </p>
             <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
             <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
