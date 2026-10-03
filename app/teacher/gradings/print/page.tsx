@@ -58,6 +58,10 @@ function PrintInner() {
   const [showBadge, setShowBadge] = useState(true)
   const [solveMm, setSolveMm] = useState(10)
   const [scale, setScale] = useState(1) // 그림 배율 — 전 문항에 똑같이 먹는다
+  // 2단이 기본이지만, 개념+유형 예제처럼 **폭이 넓은 문항**은 87mm 칸에 욱여넣느라
+  // 64%까지 줄어 글씨가 작아진다. 그런 교재는 1단으로 뽑으면 원래 크기로 나온다.
+  const [sheetCols, setSheetCols] = useState(2)
+  const colMm = sheetCols === 1 ? 190 : COL_MM
   const [perCol, setPerCol] = useState(3) // 한 단에 넣을 문항 수 (2 또는 3)
 
   // 문항마다 실제로 몇 mm 를 먹는지 미리 재 둔다 (안 보이는 곳에 한 번 그려서 잰다)
@@ -113,7 +117,8 @@ function PrintInner() {
     return () => {
       dead = true
     }
-  }, [data, solveMm, showSource, showBadge, scale])
+    // 단 수를 바꾸면 칸 너비가 달라져 문항 높이도 달라진다 → 다시 재야 한다
+  }, [data, solveMm, showSource, showBadge, scale, sheetCols])
 
   // 잰 높이로 쪽을 짠다.
   //  · 왼쪽 단을 위에서부터 채우고, 꽉 차면 오른쪽 단으로 (세로 순서)
@@ -194,6 +199,17 @@ function PrintInner() {
           출처·유형
         </label>
         <label className="flex items-center gap-1.5">
+          단 수
+          <select
+            value={sheetCols}
+            onChange={(e) => setSheetCols(Number(e.target.value))}
+            className="rounded border px-1.5 py-0.5"
+          >
+            <option value={2}>2단</option>
+            <option value={1}>1단 (글씨 큼)</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
           한 단에
           <select
             value={perCol}
@@ -211,6 +227,8 @@ function PrintInner() {
             onChange={(e) => setScale(Number(e.target.value))}
             className="rounded border px-1.5 py-0.5"
           >
+            <option value={1.3}>130%</option>
+            <option value={1.15}>115%</option>
             <option value={1}>원본</option>
             <option value={0.9}>90%</option>
             <option value={0.8}>80%</option>
@@ -436,7 +454,7 @@ function PrintInner() {
           position: absolute;
           left: -9999px;
           top: 0;
-          width: ${COL_MM}mm;
+          width: ${colMm}mm;
           visibility: hidden;
           pointer-events: none;
         }
@@ -448,7 +466,7 @@ function PrintInner() {
         .pagegrid {
           position: relative;
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(${sheetCols}, 1fr);
           column-gap: 16mm;
           height: ${PAGEN_MM}mm;
           overflow: hidden;

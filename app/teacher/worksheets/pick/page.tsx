@@ -75,6 +75,34 @@ export default function PickPage() {
   const toggle = (id: number) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
 
+  // 교재를 펴듯 **여러 쪽을 한 번에** 담는다.
+  // 예전에는 쪽을 하나 누르고 '전체 고르기'를 반복해야 해서, 36~38쪽을 담으려면 여섯 번을 눌러야 했다.
+  const [range, setRange] = useState('')
+  const [rangeBusy, setRangeBusy] = useState(false)
+  const addRange = async () => {
+    const m = range.trim().match(/^(\d+)\s*(?:[-~]\s*(\d+))?$/)
+    if (!m || !target) { setErr('쪽 번호를 36 또는 36-38 처럼 적어 주세요.'); return }
+    const from = Number(m[1])
+    const to = Number(m[2] ?? m[1])
+    const keys = groups
+      .filter((g) => {
+        const n = Number((g.label.match(/\d+/) ?? [])[0])
+        return Number.isFinite(n) && n >= Math.min(from, to) && n <= Math.max(from, to)
+      })
+      .map((g) => g.key)
+    if (!keys.length) { setErr(`${range} 쪽을 찾지 못했습니다.`); return }
+    setRangeBusy(true); setErr('')
+    try {
+      const got: number[] = []
+      for (const k of keys) {
+        const r = await apiFetch(`/api/book-pick?book=${encodeURIComponent(target.book)}&grade=${encodeURIComponent(target.grade)}&semester=${target.semester}&group=${k}`)
+        const d = await r.json()
+        for (const q of d.problems ?? []) got.push(q.id)
+      }
+      setPicked((prev) => [...prev, ...got.filter((id) => !prev.includes(id))])
+    } finally { setRangeBusy(false) }
+  }
+
   const allOnPage = problems.length > 0 && problems.every((p) => picked.includes(p.id))
   const toggleAll = () =>
     setPicked((p) =>
@@ -146,6 +174,22 @@ export default function PickPage() {
           ))}
           {!groups.length && <div className="p-4 text-sm text-gray-400">문항이 없습니다.</div>}
         </aside>
+
+        {/* 쪽 범위로 한 번에 담기 — 왼쪽 목록 아래에 붙인다 */}
+        <div className="lg:col-start-1 lg:col-end-2 flex items-center gap-1.5">
+          <input
+            value={range}
+            onChange={(e) => setRange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addRange() }}
+            placeholder={hasPage ? '쪽 범위 (예: 36-38)' : '단원 번호'}
+            className="border rounded-lg px-2 py-1 text-sm w-full"
+          />
+          <button onClick={addRange} disabled={rangeBusy}
+            className="shrink-0 rounded-lg px-2.5 py-1 text-sm text-white disabled:opacity-50"
+            style={{ background: NAVY }}>
+            {rangeBusy ? '담는 중' : '담기'}
+          </button>
+        </div>
 
         {/* 가운데 — 문항 고르기 */}
         <main className="border rounded-xl bg-white p-3 max-h-[72vh] overflow-y-auto">
