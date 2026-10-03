@@ -150,16 +150,42 @@ def strip(buf, book):
     m = a < 175
     bands = row_bands(m)
     if not bands: return None, '글자 없음'
-    y0, y1 = bands[0]
-    if y1 - y0 < 12 or y1 - y0 > 60: return None, '첫 줄 높이가 번호답지 않음'
-    tok = leading_token(m, y0, y1)
-    if not tok: return None, '왼쪽 덩어리 없음'
-    x0, x1, after = tok
-    w = x1 - x0 + 1
-    if not (14 <= w <= 150): return None, f'번호 폭 {w}'
-    if after < 16: return None, '번호 뒤에 빈칸이 좁음'
-    if book in COLOR_BOOKS and not is_colored(im, (x0, x1, y0, y1)):
-        return None, '이미 지웠음(색 글자가 아님)'
+
+    # 번호가 선 줄의 후보들. 보통은 맨 윗줄 하나면 되지만, 오른쪽 그림이 번호 줄 위아래까지
+    # 걸치면 첫 줄이 그림과 한 덩어리로 잡혀 높이가 수백 픽셀이 된다(베이직쎈 d 시리즈·중3 교재).
+    # 그럴 때를 대비해 두 가지로 더 좁혀 보고, **검사를 모두 통과하는 첫 후보**를 쓴다.
+    cands = [bands[0]]
+    if bands[0][1] - bands[0][0] > 60 and book in MASK_BOOKS:
+        b0, b1 = bands[0]
+        lb = row_bands(m[:, :60])          # ① 번호는 왼쪽 끝에 붙어 있다 — 왼쪽 띠만 본다
+        if lb: cands.append(lb[0])
+        tok0 = leading_token(m, b0, min(b1, b0 + 60))
+        if tok0:                            # ② 맨 왼쪽 덩어리가 선 세로 범위만 잰다
+            tx0, tx1, _ = tok0
+            col = m[b0:b1, tx0:tx1 + 1].any(1)
+            on = np.where(col)[0]
+            if len(on):
+                s = int(on[0]); e = s
+                while e < len(col) and col[e]: e += 1
+                cands.append((b0 + s, b0 + e))
+
+    why = '첫 줄 높이가 번호답지 않음'
+    hit = None
+    for cy0, cy1 in cands:
+        if cy1 - cy0 < 12 or cy1 - cy0 > 60:
+            continue
+        tok = leading_token(m, cy0, cy1)
+        if not tok: why = '왼쪽 덩어리 없음'; continue
+        x0, x1, after = tok
+        w = x1 - x0 + 1
+        if not (14 <= w <= 150): why = f'번호 폭 {w}'; continue
+        if after < 16: why = '번호 뒤에 빈칸이 좁음'; continue
+        if book in COLOR_BOOKS and not is_colored(im, (x0, x1, cy0, cy1)):
+            why = '이미 지웠음(색 글자가 아님)'; continue
+        hit = (x0, x1, cy0, cy1)
+        break
+    if not hit: return None, why
+    x0, x1, y0, y1 = hit
 
     rgb = im.convert('RGB')
     if book in CUT_BOOKS:

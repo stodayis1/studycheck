@@ -31,6 +31,7 @@ import json
 import os
 import re
 import urllib.parse
+import sys
 import urllib.request
 
 import numpy as np
@@ -45,6 +46,16 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 DPI = 200
 SHRINK = 6          # 이 배수로 줄여서 비교한다 (작을수록 정확하고 느리다)
 BUCKET = 'problem-images'
+
+
+def utf8_console():
+    """윈도우 기본 콘솔은 cp949라 '✓' 같은 글자에서 죽는다. 다 끝내 놓고 마지막 줄에서
+    죽으면 결과를 못 보므로 출력만 UTF-8로 바꿔 둔다."""
+    for st in (sys.stdout, sys.stderr):
+        try:
+            st.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
 
 
 def load_env():
@@ -171,6 +182,7 @@ def main():
     ap.add_argument('--write', action='store_true')
     a = ap.parse_args()
     globals()['SHRINK'] = a.shrink
+    utf8_console()
     load_env()
 
     rows = fetch_all('/rest/v1/problems', {
