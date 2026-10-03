@@ -210,6 +210,11 @@ export function QuestionsTab({ paper, questions, isAdmin, reload }: { paper: any
 
   return (
     <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+      {/* 기출문제는 한글로 작업한 PDF 를 「기본 · 파일」에 올리면 된다. 여기서 다시 타이핑하지 않는다 */}
+      <p className="col-span-full rounded-xl border px-4 py-3 text-sm" style={{ background: '#F0FBF7', borderColor: '#9FE1CB', color: GREEN }}>
+        <b>기출문제는 여기서 다시 타이핑하지 않아도 됩니다.</b> 한글로 작업해 PDF로 바꾼 파일을 「기본 · 파일」 탭에 올려 주시면,
+        문항별로 잘라 문제은행에 넣은 뒤 이 목록에 채워 드립니다. 아래 입력 칸은 PDF가 없는 문항을 따로 넣을 때만 씁니다.
+      </p>
       {/* 문항 목록 */}
       <Card title={`기출문항 ${questions.length}개`}>
         <div className="mb-3 flex gap-2">
