@@ -63,7 +63,9 @@ const key = (r, kind) =>
 // ── 원본 이미지 찾기 ────────────────────────────────────────────
 // 폴더를 어떤 식으로 풀었든(중간에 폴더가 하나 더 있어도) 찾도록 전체를 훑어서 색인을 만든다.
 const INDEX = new Map();               // "학기/교재/소단원/파일명" → 실제 경로
-const IMG = /^[ac]?\d+(S\d+)?\)?\.(png|jpg)$/i;   // 01S03 처럼 번호에 S(연습문제)가 들어가는 교재도 있다
+// 번호 앞의 글자는 교재마다 다르다 — 베이직쎈은 a·b·c·d 네 단계를 쓴다.
+// 예전에는 [ac] 만 받아서 b·d 시리즈 898장이 색인에 안 들어가 조용히 안 올라갔다(2026-09-15).
+const IMG = /^[a-z]?\d+(S\d+)?\)?\.(png|jpg)$/i;   // 01S03 처럼 번호에 S(연습문제)가 들어가는 교재도 있다
 
 function scan(dir, depth = 0) {
   if (depth > 6) return;
@@ -120,6 +122,7 @@ async function insertMeta() {
 // ── 2단계: 이미지 ────────────────────────────────────────────────
 async function uploadImages() {
   let ok = 0, skip = 0, fail = 0, i = 0;
+  const missing = [];        // 못 올린 것은 하나도 빼놓지 않고 끝에 다시 보여 준다
   const jobs = [];
   for (const r of DATA) for (const kind of ['q', 'a']) jobs.push([r, kind]);
 
@@ -128,20 +131,30 @@ async function uploadImages() {
     while (i < jobs.length) {
       const [r, kind] = jobs[i++];
       const src = srcPath(r, kind);
-      if (!src) { fail++; if (fail <= 3) console.error(`\n  ✗ 파일 못 찾음: ${r.dir}/${r.l}${kind === 'a' ? ')' : ''}.${r.x}`); continue; }
+      if (!src) { fail++; missing.push(`파일 못 찾음 ${r.dir}/${r.l}${kind === 'a' ? ')' : ''}.${r.x}`); continue; }
       const body = fs.readFileSync(src);
       const { error } = await db.storage.from(BUCKET).upload(key(r, kind), body, {
         contentType: r.x === 'jpg' ? 'image/jpeg' : 'image/png', upsert: OVERWRITE,
       });
       if (error) {
         if (/exists/i.test(error.message)) skip++;
-        else { fail++; if (fail < 5) console.error('\n  ✗', key(r, kind), error.message); }
+        else { fail++; missing.push(`${key(r, kind)} — ${error.message}`); }
       } else ok++;
       if ((ok + skip + fail) % 100 === 0) process.stdout.write(`\r  이미지 ${ok + skip + fail}/${jobs.length}  (올림 ${ok} · 있음 ${skip} · 실패 ${fail})`);
     }
   }
   await Promise.all(Array.from({ length: CONC }, worker));
   console.log(`\n  ✓ 이미지 완료 — 올림 ${ok} · 이미 있음 ${skip} · 실패 ${fail}`);
+  // ★ 실패를 조용히 넘기지 않는다.
+  //   예전에는 앞의 3개만 찍고 지나갔다. 그래서 베이직쎈 b·d 시리즈 898장이
+  //   안 올라간 걸 모른 채, 표에는 문항이 있는데 학습지에는 빈칸으로 나오는
+  //   상태가 2주 넘게 이어졌다(2026-09-15 → 10-03).
+  if (fail) {
+    console.error(`\n✗ 이미지 ${fail}장이 안 올라갔습니다. 아래를 고치고 다시 실행하세요.`);
+    for (const m of missing.slice(0, 40)) console.error('   ', m);
+    if (missing.length > 40) console.error(`    … 그리고 ${missing.length - 40}개 더`);
+    process.exitCode = 1;
+  }
 }
 
 console.log(`문제은행 업로드 시작 — ${DATA.length}문항, 이미지 ${DATA.length * 2}장`);
