@@ -51,8 +51,8 @@ export default function ExamAnalysisPage() {
   useEffect(() => { if (!loading && currentUser) load() }, [loading, currentUser])
 
   const exams = useMemo(() => Array.from(new Set((papers ?? []).map((p) => examPrefix(p)))), [papers])
-  useEffect(() => { if (!exam && exams.length) setExam(exams[0]) }, [exams, exam])
-  const rows = (papers ?? []).filter((p) => !exam || examPrefix(p) === exam)
+  const curExam = exam || exams[0] || ''
+  const rows = (papers ?? []).filter((p) => !curExam || examPrefix(p) === curExam)
 
   const create = async () => {
     const r = await apiFetch('/api/exam-analysis', {
@@ -112,7 +112,7 @@ export default function ExamAnalysisPage() {
           <div className="mb-3 flex gap-2">
             {exams.map((x) => (
               <button key={x} onClick={() => setExam(x)} className="rounded-full px-3 py-1.5 text-xs font-semibold"
-                style={exam === x ? { background: GREEN, color: '#fff' } : { background: '#fff', color: '#4b5563', border: '1px solid #e5e7eb' }}>
+                style={curExam === x ? { background: GREEN, color: '#fff' } : { background: '#fff', color: '#4b5563', border: '1px solid #e5e7eb' }}>
                 {x.replace('_', ' ')}
               </button>
             ))}

@@ -70,7 +70,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
     setData((d: any) => ({ ...d, paper: { ...d.paper, ...patch } }))
     setDraft((d: any) => { const n = { ...d }; keys.forEach((k) => delete n[k]); return n })
   }
-  const SaveBtn = ({ keys }: { keys: string[] }) => (
+  const saveBtn = (keys: string[]) => (
     <button onClick={() => saveDraft(keys)} disabled={!dirty(keys) || busy === 'save'}
       className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>
       {dirty(keys) ? '저장' : '저장됨'}
@@ -155,7 +155,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               </Field>
               <Field label="비고" wide><textarea className={INPUT} rows={2} value={val('note')} onChange={(e) => set('note', e.target.value)} /></Field>
             </div>
-            <div className="mt-3 text-right"><SaveBtn keys={['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note']} /></div>
+            <div className="mt-3 text-right">{saveBtn(['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note'])}</div>
           </Card>
 
           <Card title="시험지 파일">
@@ -176,7 +176,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <p className="mb-2 text-xs text-gray-500">한 줄에 「번호 정답」 을 적어 주세요. 예) <code>1 ③</code> · <code>서술형2 x=3</code></p>
             <textarea className={INPUT + ' font-mono'} rows={14} value={val('answers_text')} onChange={(e) => set('answers_text', e.target.value)}
               placeholder={'1 ③\n2 ①\n…\n서술형1 12'} />
-            <div className="mt-3 text-right"><SaveBtn keys={['answers_text']} /></div>
+            <div className="mt-3 text-right">{saveBtn(['answers_text'])}</div>
           </Card>
 
           <div className="space-y-4">
@@ -231,7 +231,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <Field label="다음 시험 대비 포인트"><textarea className={INPUT} rows={3} value={val('review_next_points')} onChange={(e) => set('review_next_points', e.target.value)} /></Field>
             <Field label="블로그용 요약문" wide><textarea className={INPUT} rows={5} value={val('review_blog_summary')} onChange={(e) => set('review_blog_summary', e.target.value)} /></Field>
           </div>
-          <div className="mt-3 text-right"><SaveBtn keys={['review_units', 'review_hard_types', 'review_mistakes', 'review_next_points', 'review_blog_summary']} /></div>
+          <div className="mt-3 text-right">{saveBtn(['review_units', 'review_hard_types', 'review_mistakes', 'review_next_points', 'review_blog_summary'])}</div>
         </Card>
       )}
 
@@ -258,7 +258,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <Field label="올린 날"><input type="date" className={INPUT} disabled={!isAdmin} value={val('blog_uploaded_on')} onChange={(e) => set('blog_uploaded_on', e.target.value)} /></Field>
             <Field label="메모" wide><textarea className={INPUT} rows={3} disabled={!isAdmin} value={val('blog_note')} onChange={(e) => set('blog_note', e.target.value)} /></Field>
           </div>
-          {isAdmin && <div className="mt-3 text-right"><SaveBtn keys={['blog_from_date', 'blog_url', 'blog_uploaded_on', 'blog_note']} /></div>}
+          {isAdmin && <div className="mt-3 text-right">{saveBtn(['blog_from_date', 'blog_url', 'blog_uploaded_on', 'blog_note'])}</div>}
 
           <div className="mt-5 border-t pt-4 text-sm">
             <p className="mb-2 text-xs font-bold" style={{ color: GREEN }}>블로그에 쓸 자료</p>

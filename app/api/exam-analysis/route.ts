@@ -281,6 +281,9 @@ export async function POST(req: Request) {
             : await supabase.from('exam_questions').insert({ ...row, paper_id: paper.id, created_by: me.name }).select('id').single()
           if (error) return bad(`문항 ${it.question_no}: ${error.message}`, 500)
           ids.push(saved?.id ?? targetId)
+          // 문항을 타이핑하기 전에 번호만으로 적어 둔 이너프원 매칭이 있으면 이 문항에 이어 준다
+          await supabase.from('exam_enough_matches').update({ question_id: saved?.id ?? targetId })
+            .eq('paper_id', paper.id).eq('question_no', it.question_no).is('question_id', null)
         }
         return NextResponse.json({ ok: true, count: items.length, ids })
       }
