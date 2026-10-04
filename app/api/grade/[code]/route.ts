@@ -109,6 +109,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       no: r.no,
       problemId: p?.id ?? r.problem_id,
       source: sourceLabel(p),
+      // 교재를 펴 놓고 푸는 학습지를 위해 **교재에 인쇄된 그대로**를 같이 내려 준다.
+      // 학생은 책의 0231 을 보고 있는데 화면이 1번이면 어디에 넣어야 할지 헷갈린다.
+      book: p?.book ?? null,
+      pageNo: p?.page_no ?? null,
+      localNo: p?.local_no != null ? String(p.local_no) : null,
       difficulty: p?.difficulty ?? null,
       typeCode: p?.type_code ?? null,
       typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,

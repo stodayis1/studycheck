@@ -14,6 +14,10 @@ type Problem = {
   no: number
   problemId: number | null
   source: string | null
+  // 교재에 인쇄된 그대로 (교재를 펴 놓고 푸는 학습지에서 쓴다)
+  book: string | null
+  pageNo: number | null
+  localNo: string | null
   difficulty: string | null
   typeCode: string | null
   typeTitle: string | null
@@ -116,6 +120,25 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       (s) => s.name.includes(k) || (s.teacher_name ?? '').includes(k) || (s.grade ?? '').includes(k)
     )
   }, [data, q])
+
+  // 「교재를 펴 놓고 푸는 학습지」인가.
+  //   한 교재에서만 나왔고, 쪽 번호가 거의 다 붙어 있고, 쪽이 순서대로면 그렇게 본다.
+  //   그럴 때는 화면도 교재와 똑같이 — 쪽으로 묶고, 교재에 인쇄된 번호를 크게 — 보여 준다.
+  const fromBook = useMemo(() => {
+    const ps = data?.problems ?? []
+    if (ps.length < 2) return null
+    const books = new Set(ps.map((p) => p.book).filter(Boolean))
+    if (books.size !== 1) return null
+    const pages = ps.map((p) => p.pageNo)
+    if (pages.filter(Boolean).length < ps.length * 0.8) return null
+    for (let i = 1; i < pages.length; i++) {
+      if (pages[i] && pages[i - 1] && (pages[i] as number) < (pages[i - 1] as number)) return null
+    }
+    return [...books][0] as string
+  }, [data])
+
+  // 화면에 보여 줄 문항 이름 — 교재 학습지면 교재에 인쇄된 번호, 아니면 1번·2번
+  const nameOf = (p: Problem) => (fromBook && p.localNo ? p.localNo : `${p.no}번`)
 
   // 서술형은 선생님이 사진을 보고 채점 → 여기서는 null(채점 대기)
   const judge = (p: Problem): boolean | null => {
@@ -260,11 +283,11 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
     const wrong = data.problems.filter((p) => judge(p) === false)
     const pending = data.problems.filter((p) => judge(p) === null)
     const score = data.problems.filter((p) => judge(p) === true).length
-    const byType = new Map<string, { title: string; nos: number[] }>()
+    const byType = new Map<string, { title: string; nos: string[] }>()
     wrong.forEach((p) => {
       const key = p.typeCode ?? '미분류'
       const cur = byType.get(key) ?? { title: p.typeTitle ?? '유형 미지정', nos: [] }
-      cur.nos.push(p.no)
+      cur.nos.push(nameOf(p))
       byType.set(key, cur)
     })
 
@@ -281,7 +304,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
           </p>
           {pending.length > 0 && (
             <p className="mt-2 text-xs opacity-80">
-              서술형 {pending.map((p) => `${p.no}번`).join(', ')}은 선생님이 풀이 사진을 보고 채점합니다
+              서술형 {pending.map(nameOf).join(', ')}은 선생님이 풀이 사진을 보고 채점합니다
             </p>
           )}
         </div>
@@ -295,8 +318,11 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
               <div key={p.no} className="px-4 py-3 text-sm">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="font-semibold" style={{ color: NAVY }}>
-                    {p.no}번
+                    {nameOf(p)}
                   </span>
+                  {fromBook && p.pageNo && (
+                    <span className="text-xs text-slate-400">{p.pageNo}쪽</span>
+                  )}
                   <span className="text-slate-500">내 답 {myAnswerLabel(p)}</span>
                   {p.answerKind !== 'image' && (
                     <span className="ml-auto font-medium" style={{ color: GOLD }}>
@@ -339,7 +365,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{v.title}</p>
-                    <p className="text-xs text-slate-400">{v.nos.join(', ')}번</p>
+                    <p className="text-xs text-slate-400">{v.nos.join(', ')}</p>
                   </div>
                 </div>
               ))}
@@ -365,12 +391,28 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       </div>
 
       <div className="space-y-3 pb-28">
-        {data.problems.map((p) => (
-          <div key={p.no} className="rounded-xl border border-slate-200 p-4">
+        {data.problems.map((p, i) => {
+          // 교재를 펴 놓고 푸는 학습지면 **교재에 인쇄된 번호**를 크게 보여 준다.
+          // 책의 0231 을 보고 있는데 화면이 1번이면 어디에 넣는지 헷갈린다.
+          const prev = i > 0 ? data.problems[i - 1] : null
+          const newPage = !!fromBook && !!p.pageNo && p.pageNo !== prev?.pageNo
+          return (
+          <div key={p.no}>
+            {newPage && (
+              <div className="mb-2 mt-5 flex items-baseline gap-2 border-b-2 pb-1 first:mt-0"
+                   style={{ borderColor: NAVY }}>
+                <span className="text-lg font-bold" style={{ color: NAVY }}>{p.pageNo}쪽</span>
+                <span className="text-xs text-slate-400">{fromBook}</span>
+              </div>
+            )}
+          <div className="rounded-xl border border-slate-200 p-4">
             <div className="mb-3 flex items-center gap-2">
               <span className="font-bold" style={{ color: NAVY }}>
-                {p.no}번
+                {fromBook && p.localNo ? p.localNo : `${p.no}번`}
               </span>
+              {fromBook && p.localNo && (
+                <span className="text-[11px] text-slate-400">{i + 1}번째</span>
+              )}
               {p.difficulty && (
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
                   {p.difficulty}
@@ -506,7 +548,9 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
               </div>
             )}
           </div>
-        ))}
+          </div>
+          )
+        })}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 py-3">
