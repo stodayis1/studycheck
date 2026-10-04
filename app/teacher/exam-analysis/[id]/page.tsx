@@ -16,6 +16,20 @@ import {
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
+// 손풀이 그림의 긴 쪽이 이보다 작으면 블로그에서 글씨가 흐리다 (태블릿 원본 내보내기는 보통 2000px 을 넘는다)
+const HANDSOLVE_MIN_PX = 2000
+
+// 그림 파일의 가로·세로 px (못 읽으면 null)
+function imageSize(file: File): Promise<{ w: number; h: number } | null> {
+  return new Promise((ok) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => { URL.revokeObjectURL(url); ok({ w: img.naturalWidth, h: img.naturalHeight }) }
+    img.onerror = () => { URL.revokeObjectURL(url); ok(null) }
+    img.src = url
+  })
+}
+
 const TABS = ['기본 · 파일', '정답 · 변별 · 손풀이', '총평', '기출문제', '이너프원 매칭', '블로그']
 
 
@@ -77,6 +91,12 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       const kind = forced ?? kindOfFile(file.name)
       const warn = checkFileName(paper, kind, file.name)
       if (warn && !confirm(`${file.name}\n\n${warn}\n\n그래도 「${kind}」(으)로 올릴까요?`)) continue
+      // 손풀이는 블로그에 그대로 실린다 → 해상도가 낮으면 글씨가 안 보인다. 올리기 전에 알려 준다
+      if (kind === '손풀이') {
+        const size = await imageSize(file)
+        if (size && Math.max(size.w, size.h) < HANDSOLVE_MIN_PX &&
+          !confirm(`${file.name}\n\n해상도가 낮습니다 (${size.w}×${size.h}).\n블로그에 올리면 글씨가 잘 안 보여요.\n\n태블릿에서 「원본 크기」로 내보낸 파일(긴 쪽 ${HANDSOLVE_MIN_PX}px 이상)로 다시 올려 주세요.\n그래도 이 파일을 올릴까요?`)) continue
+      }
       setBusy(`올리는 중: ${file.name}`)
       const u = await post({ action: 'uploadUrl', paperId: id, fileName: file.name, kind })
       if (!u.ok) { alert(u.error); continue }
@@ -212,6 +232,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <Card title="손풀이 이미지">
               <p className="mb-2 text-xs text-gray-500">
                 파일명 규칙: <b>{paper.school_name}_{paper.grade}_18번_손풀이_김T.png</b> (JPG·PNG). 여러 장을 한 번에 올릴 수 있습니다.
+                <br /><b>태블릿으로 써서 원본 크기로 내보내 주세요.</b> 블로그에 그대로 실리므로 긴 쪽이 {HANDSOLVE_MIN_PX}px보다 작으면 글씨가 잘 안 보입니다.
+                종이에 써서 찍은 사진, 카톡으로 받은 사진(자동으로 줄어듦)은 피해 주세요.
               </p>
               <FileDrop accept=".png,.jpg,.jpeg" onFiles={(f) => upload(f, '손풀이')} label="손풀이 이미지 올리기" />
               <div className="mt-3 grid grid-cols-2 gap-3">
