@@ -8,6 +8,7 @@
 //   · 채점결과 화면으로 건너간다.
 
 import { useEffect, useMemo, useState } from 'react'
+import { SendSheetModal } from '@/components/teacher/SendSheetModal'
 import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
@@ -58,6 +59,7 @@ export default function WorksheetListPage() {
   const [q, setQ] = useState('')
   const [gradeF, setGradeF] = useState('')
   const [open, setOpen] = useState<string | null>(null)
+  const [sendCode, setSendCode] = useState<string | null>(null)
   const [detail, setDetail] = useState<Record<string, Grading[]>>({})
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -199,6 +201,15 @@ export default function WorksheetListPage() {
               </div>
 
               <div className="flex items-center gap-1.5">
+                {/* 교재로 푸는 학습지는 종이가 필요 없다 — 학생 앱에 바로 띄운다 */}
+                <button
+                  onClick={() => setSendCode(s.code)}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold text-white"
+                  style={{ background: NAVY }}
+                  title="학생 앱에 띄워서 폰으로 답을 넣게 합니다 (종이 없이)"
+                >
+                  <i className="ti ti-send mr-1" />학생에게 보내기
+                </button>
                 <a
                   href={`/teacher/gradings/print?code=${s.code}`}
                   target="_blank"
@@ -286,6 +297,7 @@ export default function WorksheetListPage() {
           </div>
         ))}
       </div>
+      {sendCode && <SendSheetModal code={sendCode} onClose={() => setSendCode(null)} />}
     </Wrap>
   )
 }

@@ -52,6 +52,8 @@ export default function StudentAssignmentsPage() {
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
+  // 교재를 펴 놓고 푸는 학습지 — 종이 없이 여기서 바로 들어간다
+  const [sheets, setSheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [monthOffset, setMonthOffset] = useState(0)
   const [savingItem, setSavingItem] = useState<string | null>(null)
@@ -86,6 +88,23 @@ export default function StudentAssignmentsPage() {
       supabase.from('student_textbooks').select('*').eq('student_id', sid),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).order('assigned_at'),
     ])
+    // 선생님이 보낸 학습지 (교재로 풀고 폰으로 답만 넣는 것). 이미 푼 것은 빼고 보여 준다
+    const [{ data: tgt }, { data: done }] = await Promise.all([
+      supabase.from('exam_sheet_targets')
+        .select('assigned_at, due_date, exam_sheets(id, code, title, grade, semester)')
+        .eq('student_id', sid).order('assigned_at', { ascending: false }),
+      supabase.from('gradings').select('sheet_id, score, total').eq('student_id', sid),
+    ])
+    const solved = new Set((done ?? []).map((g: any) => g.sheet_id))
+    setSheets((tgt ?? [])
+      .filter((t: any) => t.exam_sheets?.code)
+      .map((t: any) => ({
+        code: t.exam_sheets.code,
+        title: t.exam_sheets.title,
+        assignedAt: t.assigned_at,
+        dueDate: t.due_date,
+        done: solved.has(t.exam_sheets.id),
+      })))
     if (ssData) {
       setSessions(ssData)
       const ids = ssData.map(s => s.id)
@@ -222,6 +241,27 @@ export default function StudentAssignmentsPage() {
       <Header title="할일목록" subtitle="오늘 할 일을 직접 체크해요" />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
+
+        {/* 선생님이 보낸 학습지 — 교재로 풀고 여기서 답만 넣는다 (종이 없음) */}
+        {sheets.filter((x) => !x.done).length > 0 && (
+          <div className="mb-4 rounded-2xl bg-white p-4" style={{ border: '1px solid #f0f0f0' }}>
+            <h3 className="mb-3 text-sm font-bold" style={{ color: '#712B13' }}>풀 학습지</h3>
+            <div className="space-y-2">
+              {sheets.filter((x) => !x.done).map((x) => (
+                <a key={x.code} href={`/grade/${x.code}`}
+                  className="flex items-center gap-3 rounded-xl px-3 py-3"
+                  style={{ background: '#f9fafb', border: '1px solid #f0f0f0' }}>
+                  <span className="flex-1 text-sm font-semibold text-gray-700">{x.title}</span>
+                  {x.dueDate && (
+                    <span className="text-[10px] text-gray-400">{x.dueDate.slice(5)}까지</span>
+                  )}
+                  <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>답 넣기 ›</span>
+                </a>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-gray-400">교재를 펴서 풀고, 답만 여기에 넣으면 바로 채점돼요.</p>
+          </div>
+        )}
 
         {/* 오늘 할 일 체크리스트 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
