@@ -117,7 +117,7 @@ async function withImages(supabase: any, rows: any[]) {
 
 // ───────────────────────── GET ─────────────────────────
 export async function GET(req: Request) {
-  const deny = await denyIfNotStaff(req)
+  const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
   const supabase = db()
   const q = new URL(req.url).searchParams
@@ -152,7 +152,7 @@ export async function GET(req: Request) {
 // ───────────────────────── POST ─────────────────────────
 // 고른 문항 + 쌍둥이/유사 문제를 붙여 시험지를 만든다
 export async function POST(req: Request) {
-  const deny = await denyIfNotStaff(req)
+  const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
   const supabase = db()
   const b = await req.json().catch(() => null)

@@ -44,7 +44,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 // ───────────────────── 재출제 시험지 만들기 ─────────────────────
 export async function POST(req: Request) {
-  const deny = await denyIfNotStaff(req)
+  const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
   const supabase = db()
   const { gradingId, mode } = (await req.json()) as {
@@ -223,7 +223,7 @@ export async function POST(req: Request) {
 
 // ───────────────────── 인쇄용 데이터 ─────────────────────
 export async function GET(req: Request) {
-  const deny = await denyIfNotStaff(req)
+  const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
   const supabase = db()
   const code = new URL(req.url).searchParams.get('code')

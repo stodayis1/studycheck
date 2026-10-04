@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sourceLabel } from '@/lib/problemSource'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { pilotStudentIds } from '@/lib/pilot'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -50,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   const full = sp.get('full') === '1'
   const wantImages = full && sp.get('images') === '1'
   if (full) {
-    const deny = await denyIfNotStaff(_req)
+    const deny = await denyIfNotStaff(_req, { adminOnly: true })
     if (deny) return deny
   }
 
@@ -129,10 +130,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     }
   })
 
+  // ★ 아직 시험 삼아 돌리는 기능이다 — 이름 목록을 **시험 대상 학생만** 내려 준다.
+  //   QR 은 로그인이 없어서, 목록에 있는 이름이면 누구든 고를 수 있기 때문이다.
+  const pilot = await pilotStudentIds(supabase)
+  const allowed = (students ?? [])
+    .filter((s: any) => !!s.name)
+    .filter((s: any) => pilot === null || pilot.includes(s.id))
+
   return NextResponse.json({
     sheet,
     problems,
-    students: (students ?? []).filter((s: any) => !!s.name),
+    students: allowed,
   })
 }
 
@@ -149,6 +157,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     .maybeSingle()
 
   if (!sheet) return NextResponse.json({ error: '시험지를 찾을 수 없습니다.' }, { status: 404 })
+
+  // 목록을 걸러도 요청은 직접 보낼 수 있다 — 저장할 때 한 번 더 막는다
+  const pilot = await pilotStudentIds(supabase)
+  if (pilot !== null && body.studentId && !pilot.includes(body.studentId))
+    return NextResponse.json({ error: '아직 열리지 않은 기능입니다.' }, { status: 403 })
 
   const answers: {
     no: number

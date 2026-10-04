@@ -21,7 +21,7 @@ function db() {
 }
 
 export async function GET(req: Request) {
-  const deny = await denyIfNotStaff(req)
+  const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
 
   const url = new URL(req.url)

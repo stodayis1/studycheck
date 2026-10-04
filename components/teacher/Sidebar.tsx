@@ -47,10 +47,10 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : [])] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.consultations] },
-    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis, ITEM.scan] },
+    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.importRecords] },
   ]
-  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.settings] })
+  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.settings] })
   return groups
 }
 

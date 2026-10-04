@@ -40,8 +40,9 @@ type Mark = 'o' | 'x' | null
 export default function TeacherGradePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params)
   const { currentUser, loading: authLoading } = useAuth()
-  // 교사·직원·원장이면 쓸 수 있다
-  const staff = ['admin', 'teacher', 'staff'].includes(currentUser?.role ?? '')
+  // 아직 시험 삼아 돌리는 기능이라 **원장만** 쓴다 (lib/pilot.ts 참고).
+  // 전체에 열 때 ['admin','teacher','staff'] 로 되돌리면 된다.
+  const staff = currentUser?.role === 'admin'
   const router = useRouter()
 
   const [data, setData] = useState<Data | null>(null)
