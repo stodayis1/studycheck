@@ -104,6 +104,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     if (u.signedUrl && !u.error) signed.set(u.path, u.signedUrl)
   })
 
+  // 유형에 걸린 대표개념·개념영상 (「대표개념 연결」 화면에서 원장이 걸어 둔 것).
+  // 유형코드로 묶여 있어 한 번 걸면 그 유형의 문항이 전부 따라온다.
+  const typeCodes = [...new Set((rows ?? []).map((r: any) => r.problems?.type_code).filter(Boolean))] as string[]
+  const concept = new Map<string, any>()
+  if (typeCodes.length) {
+    const { data: tla } = await supabase
+      .from('type_learning_assets')
+      .select('type_code, video_url, start_seconds, concepts(concept_name)')
+      .eq('asset_type', 'concept').eq('is_active', true).in('type_code', typeCodes)
+    for (const a of (tla ?? []) as any[]) {
+      // supabase-js 는 조인 결과를 배열로도 객체로도 준다 — 둘 다 받는다
+      const c = Array.isArray(a.concepts) ? a.concepts[0] : a.concepts
+      if (!c?.concept_name && !a.video_url) continue
+      concept.set(a.type_code, {
+        name: c?.concept_name ?? null,
+        videoUrl: a.video_url ?? null,
+        startSeconds: a.start_seconds ?? null,
+      })
+    }
+  }
+
   const problems = (rows ?? []).map((r: any) => {
     const p = r.problems
     return {
@@ -127,6 +148,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       // 해설집에서 잘라 낸 풀이 (증명 서술형 채점용). 없는 문항도 많다
       solution: wantImages && p?.solution_image_path ? signed.get(p.solution_image_path) ?? null : null,
       hasSolution: !!p?.solution_image_path,
+      // 모르겠을 때 볼 것 — 없으면 버튼도 안 뜬다
+      concept: p?.type_code ? concept.get(p.type_code) ?? null : null,
     }
   })
 

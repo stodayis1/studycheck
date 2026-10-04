@@ -119,6 +119,9 @@ export async function POST(req: Request) {
     problem_id: b.problemId ?? null,
     title: (b.title || '').trim() || null,
     is_active: true,
+    // 학생 쪽 정책(tla_read_active)이 is_active + review_status='approved' 를 본다.
+    // 원장이 직접 거는 것이므로 바로 승인으로 둔다 — 안 그러면 걸어도 학생에게 안 보인다
+    review_status: 'approved',
     updated_at: new Date().toISOString(),
   }
   const { error } = await supabase.from('type_learning_assets')

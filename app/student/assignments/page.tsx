@@ -88,23 +88,36 @@ export default function StudentAssignmentsPage() {
       supabase.from('student_textbooks').select('*').eq('student_id', sid),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).order('assigned_at'),
     ])
-    // 선생님이 보낸 학습지 (교재로 풀고 폰으로 답만 넣는 것). 이미 푼 것은 빼고 보여 준다
+    // 선생님이 보낸 학습지 (교재로 풀고 폰으로 답만 넣는 것)
     const [{ data: tgt }, { data: done }] = await Promise.all([
       supabase.from('exam_sheet_targets')
         .select('assigned_at, due_date, exam_sheets(id, code, title, grade, semester)')
         .eq('student_id', sid).order('assigned_at', { ascending: false }),
       supabase.from('gradings').select('sheet_id, score, total').eq('student_id', sid),
     ])
-    const solved = new Set((done ?? []).map((g: any) => g.sheet_id))
-    setSheets((tgt ?? [])
-      .filter((t: any) => t.exam_sheets?.code)
-      .map((t: any) => ({
+    const got = (tgt ?? []).filter((t: any) => t.exam_sheets?.code)
+    const byId = new Map((done ?? []).map((g: any) => [g.sheet_id, g]))
+    // 몇 문항인지 — 받은 학습지만 읽을 수 있다 (RLS: own_assigned_read)
+    const ids = got.map((t: any) => t.exam_sheets.id)
+    const counts = new Map<string, number>()
+    if (ids.length) {
+      const { data: rows } = await supabase
+        .from('exam_sheet_problems').select('sheet_id').in('sheet_id', ids)
+      for (const r of rows ?? []) counts.set(r.sheet_id, (counts.get(r.sheet_id) ?? 0) + 1)
+    }
+    setSheets(got.map((t: any) => {
+      const g = byId.get(t.exam_sheets.id)
+      return {
         code: t.exam_sheets.code,
         title: t.exam_sheets.title,
         assignedAt: t.assigned_at,
         dueDate: t.due_date,
-        done: solved.has(t.exam_sheets.id),
-      })))
+        count: counts.get(t.exam_sheets.id) ?? 0,
+        done: !!g,
+        score: g?.score ?? null,
+        total: g?.total ?? null,
+      }
+    }))
     if (ssData) {
       setSessions(ssData)
       const ids = ssData.map(s => s.id)
@@ -251,7 +264,10 @@ export default function StudentAssignmentsPage() {
                 <a key={x.code} href={`/grade/${x.code}`}
                   className="flex items-center gap-3 rounded-xl px-3 py-3"
                   style={{ background: '#f9fafb', border: '1px solid #f0f0f0' }}>
-                  <span className="flex-1 text-sm font-semibold text-gray-700">{x.title}</span>
+                  <span className="flex-1 text-sm font-semibold text-gray-700">
+                    {x.title}
+                    {x.count > 0 && <span className="ml-1.5 text-[11px] font-normal text-gray-400">{x.count}문항</span>}
+                  </span>
                   {x.dueDate && (
                     <span className="text-[10px] text-gray-400">{x.dueDate.slice(5)}까지</span>
                   )}
@@ -260,6 +276,29 @@ export default function StudentAssignmentsPage() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-gray-400">교재를 펴서 풀고, 답만 여기에 넣으면 바로 채점돼요.</p>
+
+            {/* 지난 것은 접어 둔다 — 쌓여도 오늘 할 일이 묻히지 않게 */}
+            {sheets.some((x) => x.done) && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-[11px] text-gray-400">
+                  다 푼 학습지 {sheets.filter((x) => x.done).length}개 보기
+                </summary>
+                <div className="mt-2 space-y-1.5">
+                  {sheets.filter((x) => x.done).map((x) => (
+                    <a key={x.code} href={`/grade/${x.code}`}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2"
+                      style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                      <span className="flex-1 text-xs text-gray-500">{x.title}</span>
+                      {x.total ? (
+                        <span className="text-xs font-bold" style={{ color: '#0F6E56' }}>
+                          {x.score}/{x.total}
+                        </span>
+                      ) : null}
+                    </a>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
         )}
 

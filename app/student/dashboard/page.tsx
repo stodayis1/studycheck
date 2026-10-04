@@ -114,6 +114,8 @@ export default function StudentDashboardPage() {
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
   const [loading, setLoading] = useState(true)
   const [studentId, setStudentId] = useState<string | null>(null)
+  // 아직 안 푼 학습지 수 — 로그인하면 여기부터 보이게 (할일목록으로 보내는 이정표)
+  const [todoSheets, setTodoSheets] = useState(0)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [examPreps, setExamPreps] = useState<any[]>([])
   const [unitExams, setUnitExams] = useState<any[]>([])
@@ -140,12 +142,23 @@ export default function StudentDashboardPage() {
           .from('students').select('*').eq('id', session.id).single()
         if (!studentData) { router.push('/auth/login'); return }
         setStudent(studentData)
+        fetchTodoSheets(session.id)
         await fetchData(session.id)
       } catch { router.push('/auth/login') }
       setLoading(false)
     }
     init()
   }, [])
+
+  // 선생님이 보낸 학습지 중 아직 안 푼 것. 숫자만 세면 되므로 가볍게 따로 읽는다
+  async function fetchTodoSheets(sid: string) {
+    const [{ data: tgt }, { data: done }] = await Promise.all([
+      supabase.from('exam_sheet_targets').select('exam_sheets(id)').eq('student_id', sid),
+      supabase.from('gradings').select('sheet_id').eq('student_id', sid),
+    ])
+    const solved = new Set((done ?? []).map((g: any) => g.sheet_id))
+    setTodoSheets((tgt ?? []).filter((t: any) => t.exam_sheets?.id && !solved.has(t.exam_sheets.id)).length)
+  }
 
   async function fetchData(sid: string) {
     // 최근 14일치 날짜 범위
@@ -421,6 +434,17 @@ export default function StudentDashboardPage() {
         } />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
+
+        {/* 풀 학습지가 있으면 맨 위에 — 로그인하자마자 보이게 (할일목록으로 보낸다) */}
+        {todoSheets > 0 && (
+          <Link href="/student/assignments"
+            className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-white"
+            style={{ background: '#993C1D' }}>
+            <span className="text-lg">📝</span>
+            <span className="flex-1 text-sm font-bold">풀 학습지 {todoSheets}개</span>
+            <span className="text-xs opacity-90">답 넣으러 가기 ›</span>
+          </Link>
+        )}
 
         {/* 데이터 업로드 안내 - 2026년 7월부터 순차 등록 중이라 그 이전 기록은 일부 누락될 수 있음을 고지 */}
         <div className="rounded-2xl px-4 py-3 flex items-start gap-2" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>

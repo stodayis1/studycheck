@@ -26,6 +26,8 @@ type Problem = {
   answerText: string | null
   answerChoices: string[]
   answerImage: string | null
+  // 유형에 걸린 대표개념 — 없으면 버튼도 안 뜬다
+  concept: { name: string | null; videoUrl: string | null; startSeconds: number | null } | null
 }
 
 type Student = {
@@ -81,6 +83,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
   const [latex, setLatex] = useState<Record<number, string>>({})
   const [photos, setPhotos] = useState<Record<number, Photo>>({})
   const [selfMark, setSelfMark] = useState<Record<number, boolean>>({})
+  const [conceptOpen, setConceptOpen] = useState<Record<number, boolean>>({})
   const [shown, setShown] = useState<Record<number, boolean>>({})
 
   const [done, setDone] = useState(false)
@@ -418,12 +421,36 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
                   {p.difficulty}
                 </span>
               )}
+              {p.concept && (
+                <button
+                  onClick={() => setConceptOpen((c) => ({ ...c, [p.no]: !c[p.no] }))}
+                  className="ml-auto rounded-full border px-2 py-0.5 text-[11px]"
+                  style={{ borderColor: '#cbd5e1', color: '#475569' }}>
+                  💡 개념
+                </button>
+              )}
               {answered(p) && (
-                <span className="ml-auto text-xs" style={{ color: GOLD }}>
+                <span className={p.concept ? 'text-xs' : 'ml-auto text-xs'} style={{ color: GOLD }}>
                   ✓
                 </span>
               )}
             </div>
+
+            {p.concept && conceptOpen[p.no] && (
+              <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+                {p.concept.name && (
+                  <p className="font-semibold" style={{ color: NAVY }}>{p.concept.name}</p>
+                )}
+                {p.concept.videoUrl ? (
+                  <a href={p.concept.videoUrl} target="_blank" rel="noreferrer"
+                    className="mt-1 inline-block text-xs underline" style={{ color: NAVY }}>
+                    개념 영상 보기 ›
+                  </a>
+                ) : (
+                  <p className="mt-0.5 text-xs text-slate-400">개념 영상은 아직 준비 중이에요.</p>
+                )}
+              </div>
+            )}
 
             {!p.isEssay && p.answerKind === 'choice' && (
               <div className="flex gap-2">
