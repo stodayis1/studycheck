@@ -43,10 +43,16 @@ export default function WorksheetsPage() {
       note: '',
       cards: [
         {
-          title: '시중교재',
+          title: '교재 쪽으로 출제',
           badge: bookCount ? `+${bookCount}종` : undefined,
-          desc: '시중교재 쌍둥이·유사 문제 출제',
+          desc: '쎈B 36~38쪽처럼 교재 쪽을 그대로 — 학생은 교재로 풀고 답만 넣어요',
           color: '#ec4899',
+          href: '/teacher/worksheets/books?pick=1',
+        },
+        {
+          title: '시중교재 유형별',
+          desc: '시중교재 쌍둥이·유사 문제 출제',
+          color: '#f472b6',
           href: '/teacher/worksheets/books',
         },
         {

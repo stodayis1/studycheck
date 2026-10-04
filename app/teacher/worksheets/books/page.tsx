@@ -10,6 +10,8 @@ import { apiFetch } from '@/lib/apiFetch'
 import { courseLabel } from '@/lib/course'
 
 const NAVY = '#0f3460'
+// 아직 쪽 번호가 없는 과정이 섞여 있는 교재 (PDF 가 없어서 못 붙였다)
+const NO_PAGE = new Set(['쎈B', '베이직쎈', '교과서-NE능률'])
 
 type Book = { book: string; kind?: string; total: number; typed: number; courses: Record<string, number> }
 
@@ -29,6 +31,10 @@ const INFO: Record<string, { color: string; desc: string }> = {
 
 export default function BooksPage() {
   const { isAdmin, loading: authLoading } = useAuth()
+  // ?pick=1 — 「교재 쪽으로 출제」로 들어온 경우. 과정 칸을 누르면 바로 쪽 고르기로 간다.
+  // (예전에는 작은 아래 버튼을 눌러야만 쪽 화면으로 갈 수 있어서 못 찾는 분이 많았다)
+  const pickMode = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('pick') === '1'
   const router = useRouter()
   const [books, setBooks] = useState<Book[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,13 +85,18 @@ export default function BooksPage() {
                   )}
                 </div>
                 <div className="text-xs text-gray-600 mb-3">{info.desc}</div>
+                {pickMode && NO_PAGE.has(b.book) && (
+                  <div className="mb-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+                    이 교재는 쪽 번호가 아직 없는 과정이 있어요 — 그런 과정은 단원·번호 구간으로 나옵니다
+                  </div>
+                )}
 
                 <div className="grid grid-cols-3 gap-1.5">
                   {Object.entries(b.courses).sort(([a], [c]) => a.localeCompare(c)).map(([k, n]) => {
                     const [g, sem] = k.split('-')
                     return (
                       <div key={k} className={`rounded-lg border overflow-hidden ${n ? '' : 'opacity-35'}`}>
-                        <button disabled={!n} onClick={() => go(b, k)}
+                        <button disabled={!n} onClick={() => (pickMode ? pick(b, k) : go(b, k))}
                           className={`w-full py-2 text-xs ${n ? 'hover:bg-gray-50 text-gray-700' : 'cursor-not-allowed text-gray-400'}`}>
                           <div className="font-medium">{courseLabel(g, sem)}</div>
                           <div className="text-[10px] text-gray-400">{n ? `${n}문항` : '없음'}</div>
@@ -95,7 +106,7 @@ export default function BooksPage() {
                             n ? 'text-white' : 'cursor-not-allowed text-gray-400 bg-gray-100'
                           }`}
                           style={n ? { background: info.color } : undefined}>
-                          문항 직접 고르기
+                          <i className="ti ti-book-2 mr-1" />쪽에서 고르기
                         </button>
                       </div>
                     )
