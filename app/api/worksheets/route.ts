@@ -2,11 +2,12 @@
 //  GET  /api/worksheets?limit=200            -> 학습지 목록 + 문항 수 + 응시 학생 수 · 평균
 //  GET  /api/worksheets?sheet=<id>           -> 그 학습지를 푼 학생별 점수
 //
-// exam_sheet_problems 는 한 번에 1000행만 오므로 .range() 로 돌려 가며 다 읽는다.
+// exam_sheet_problems 는 한 번에 1000행만 오므로 lib/fetchAll 로 끝까지 읽는다.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { fetchAll } from '@/lib/fetchAll'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,19 +18,6 @@ function db() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   )
-}
-
-async function all<T = any>(q: () => any, size = 1000): Promise<T[]> {
-  let from = 0
-  const out: T[] = []
-  for (;;) {
-    const { data, error } = await q().range(from, from + size - 1)
-    if (error || !data?.length) break
-    out.push(...(data as T[]))
-    if (data.length < size) break
-    from += size
-  }
-  return out
 }
 
 export async function GET(req: Request) {
@@ -63,8 +51,13 @@ export async function GET(req: Request) {
 
   const ids = list.map((x) => x.id)
   const [items, gradings] = await Promise.all([
-    all(() => s.from('exam_sheet_problems').select('sheet_id').in('sheet_id', ids)),
-    all(() => s.from('gradings').select('sheet_id, student_name, score, total').in('sheet_id', ids)),
+    // 쪽을 나눠 읽으므로 순서를 못박는다 (exam_sheet_problems 에는 id 칸이 없다)
+    fetchAll((f, t) =>
+      s.from('exam_sheet_problems').select('sheet_id').in('sheet_id', ids)
+        .order('sheet_id').order('no').range(f, t)),
+    fetchAll((f, t) =>
+      s.from('gradings').select('sheet_id, student_name, score, total').in('sheet_id', ids)
+        .order('id').range(f, t)),
   ])
 
   const nProblems: Record<string, number> = {}

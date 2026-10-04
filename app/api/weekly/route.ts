@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { fetchAll } from '@/lib/fetchAll'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,17 +18,6 @@ function db() {
 }
 
 // 1000행 제한을 넘기지 않게 나눠서 전부 읽는다
-async function all<T>(make: (from: number, to: number) => any): Promise<T[]> {
-  const out: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await make(from, from + 999)
-    if (error) throw new Error(error.message)
-    out.push(...((data ?? []) as T[]))
-    if (!data || data.length < 1000) break
-  }
-  return out
-}
-
 export async function GET(req: Request) {
   const deny = await denyIfNotStaff(req)
   if (deny) return deny
@@ -40,48 +30,56 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: '기간을 지정해 주세요.' }, { status: 400 })
 
   // 1) 학생 — 화면에서 담당/학년으로 다시 거른다
-  const students = await all<any>((f, t) =>
+  const students = await fetchAll<any>((f, t) =>
     supabase
       .from('students')
       .select('id, name, grade, school, teacher_name, class_time, is_active, on_leave')
       .eq('is_active', true)
       .order('grade')
       .order('name')
+      .order('id')          // 쪽을 나눠 읽으므로 순서를 못박는다
       .range(f, t)
   )
 
   // 2) 그 기간의 수업 기록
-  const sessions = await all<any>((f, t) =>
+  const sessions = await fetchAll<any>((f, t) =>
     supabase
       .from('class_sessions')
       .select('id, student_id, session_date, session_type, today_textbook_name, daily_test_unit, daily_test_score')
       .gte('session_date', from)
       .lte('session_date', to)
+      .order('id')
       .range(f, t)
   )
 
   // 3) 그 수업들의 학습노트
-  const noteRows: any[] = []
+  // 200개씩 나눠 묻되 **한꺼번에** 묻는다 (차례대로 기다리면 묶음 수만큼 느려진다)
   const ids = sessions.map((s) => s.id)
-  for (let i = 0; i < ids.length; i += 200) {
-    const chunk = ids.slice(i, i + 200)
-    if (!chunk.length) break
-    const { data, error } = await supabase
-      .from('learning_notes')
-      .select('session_id, student_id, attendance, worksheet_submitted, worksheet_score, worksheet_unit, textbook_submitted, achievement_pct, memo')
-      .in('session_id', chunk)
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200))
+  const noteRes = await Promise.all(
+    chunks.map((chunk) =>
+      supabase
+        .from('learning_notes')
+        .select('session_id, student_id, attendance, worksheet_submitted, worksheet_score, worksheet_unit, textbook_submitted, achievement_pct, memo')
+        .in('session_id', chunk)
+    )
+  )
+  const noteRows: any[] = []
+  for (const { data, error } of noteRes) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     noteRows.push(...(data ?? []))
   }
   const noteBySession = new Map(noteRows.map((n) => [n.session_id, n]))
 
   // 4) 같은 기간의 QR 채점 기록 (문제은행 시험지) — 여기서만 오답/유사 재출제가 가능하다
-  const gradings = await all<any>((f, t) =>
+  const gradings = await fetchAll<any>((f, t) =>
     supabase
       .from('gradings')
       .select('id, student_id, student_name, score, total, submitted_at, sheet_id, exam_sheets(title, code)')
       .gte('submitted_at', from)
       .lte('submitted_at', to + 'T23:59:59')
+      .order('id')
       .range(f, t)
   )
 

@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { fetchAll } from '@/lib/fetchAll'
 import { sourceLabel } from '@/lib/problemSource'
 
 export const dynamic = 'force-dynamic'
@@ -32,17 +33,6 @@ function db() {
   )
 }
 
-// 1000행 제한을 피해 전부 읽어온다
-async function all<T>(make: (from: number, to: number) => any): Promise<T[]> {
-  const out: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await make(from, from + 999)
-    if (error) throw new Error(error.message)
-    out.push(...((data ?? []) as T[]))
-    if (!data || data.length < 1000) break
-  }
-  return out
-}
 
 const COLS =
   'id, book, grade, semester, sub_chapter_no, sub_chapter_title, page_no, local_no, ' +
@@ -137,9 +127,10 @@ export async function GET(req: Request) {
   if (!book || !grade || !semester)
     return NextResponse.json({ error: '교재와 학기를 골라 주세요.' }, { status: 400 })
 
-  const rows = await all<any>((f, t) =>
+  const rows = await fetchAll<any>((f, t) =>
     supabase.from('problems').select(COLS)
-      .eq('book', book).eq('grade', grade).eq('semester', Number(semester)).range(f, t)
+      .eq('book', book).eq('grade', grade).eq('semester', Number(semester))
+      .order('id').range(f, t)   // 쪽을 나눠 읽으므로 순서를 못박는다
   )
   if (!rows.length) return NextResponse.json({ groups: [], hasPage: false, problems: [] })
 
@@ -191,9 +182,10 @@ export async function POST(req: Request) {
   // 유사 문제 후보 — 같은 유형, 같은 학기
   const codes = Array.from(new Set(order.map((r: any) => r.type_code).filter(Boolean))) as string[]
   const cand = codes.length
-    ? await all<any>((f, t) =>
+    ? await fetchAll<any>((f, t) =>
         supabase.from('problems').select(COLS)
-          .in('type_code', codes).eq('grade', grade).eq('semester', semester).range(f, t)
+          .in('type_code', codes).eq('grade', grade).eq('semester', semester)
+          .order('id').range(f, t)
       )
     : []
 
@@ -237,8 +229,8 @@ export async function POST(req: Request) {
   }
 
   if (preview) {
-    const rows = await all<any>((f, t) =>
-      supabase.from('problems').select(COLS).in('id', out.map((o) => o.id)).range(f, t)
+    const rows = await fetchAll<any>((f, t) =>
+      supabase.from('problems').select(COLS).in('id', out.map((o) => o.id)).order('id').range(f, t)
     )
     const m = new Map<number, any>(rows.map((r: any) => [r.id, r]))
     const withUrl = await withImages(supabase, out.map((o) => m.get(o.id)).filter(Boolean))
