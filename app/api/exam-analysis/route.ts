@@ -178,6 +178,44 @@ export async function GET(req: Request) {
       })
     }
 
+    // ?todo=1 → 대시보드 알림용. 중등 선생님(과 원장)에게 「이번 시험 기출분석에서 남은 일」을 준다
+    if (q.get('todo')) {
+      const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
+      const { data: au } = await supabase.auth.getUser(token)
+      const { data: u } = await supabase.from('users').select('name, role, supervisor_grades').eq('id', au?.user?.id).single()
+      // 중등 선생님 = 중등 학년 주임이거나, 맡은 재원생 중에 중학생이 있는 선생님
+      let middle = u?.role === 'admin' || (u?.supervisor_grades ?? []).some((g: string) => String(g).startsWith('중'))
+      if (!middle && u?.name) {
+        const { data: st } = await supabase.from('students').select('id')
+          .eq('is_active', true).like('grade', '중%').ilike('teacher_name', `%${u.name}%`).limit(1)
+        middle = !!st?.length
+      }
+      if (!middle) return NextResponse.json({ show: false, papers: [] })
+
+      const { data: all0 } = await supabase.from('exam_papers').select('*')
+        .order('exam_year', { ascending: false }).order('term', { ascending: false }).order('created_at', { ascending: false })
+      // 가장 최근 시험(연도 · 학기 · 구분) 한 묶음만, 아직 「완료」가 아닌 것
+      const first = (all0 ?? [])[0]
+      const cur = (all0 ?? []).filter((p: any) => first && p.exam_year === first.exam_year && p.term === first.term && p.exam_type === first.exam_type && !p.tasks?.done)
+      if (!cur.length) return NextResponse.json({ show: true, papers: [] })
+      const ids = cur.map((p: any) => p.id)
+      const [{ data: fs }, { data: qs }] = await Promise.all([
+        supabase.from('exam_paper_files').select('paper_id, kind').in('paper_id', ids),
+        supabase.from('exam_questions').select('paper_id, problem_id').in('paper_id', ids).not('problem_id', 'is', null),
+      ])
+      const papers = cur.map((p: any) => ({
+        id: p.id, school_name: p.school_name, grade: p.grade, assignee: p.assignee,
+        uploaded: (qs ?? []).some((x: any) => x.paper_id === p.id) || (fs ?? []).some((f: any) => f.paper_id === p.id && (f.kind === '문제' || f.kind === '문제정답해설')),
+        answers: !!String(p.answers_text ?? '').trim(),
+        disc: (p.discriminating_nos ?? []).length,
+        handsolve: (fs ?? []).filter((f: any) => f.paper_id === p.id && f.kind === '손풀이').length,
+        review: !!(p.review_difficulty && String(p.review_units ?? p.review_hard_types ?? '').trim()),
+        next: !!String(p.review_next_points ?? '').trim(),
+      })).sort((a: any, b: any) => Number(b.uploaded) - Number(a.uploaded) || a.school_name.localeCompare(b.school_name))
+      const due = cur.map((p: any) => p.work_due_date).filter(Boolean).sort()[0] ?? null
+      return NextResponse.json({ show: true, due, papers })
+    }
+
     // ?print=<paperId> → 수학의지혜 시험지 양식 인쇄 화면이 쓸 문항 그림 (번호 순서)
     const printId = q.get('print')
     if (printId) {

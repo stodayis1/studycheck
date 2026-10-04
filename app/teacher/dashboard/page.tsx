@@ -9,6 +9,7 @@ import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { fetchAllRows } from '@/lib/utils'
+import { ExamAnalysisNotice } from '@/components/exam-analysis/ExamAnalysisNotice'
 
 const DAYS = ['일','월','화','수','목','금','토']
 // 배정만 하고 며칠째 안 걷히면 '미제출'로 볼지 (업무현황 화면의 '장기 미제출' 기준과 같게 유지)
@@ -391,6 +392,9 @@ export default function TeacherDashboardPage() {
         ) : undefined} />
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
+
+        {/* 기출분석 알림 — 중등 선생님에게만, 남은 일이 있을 때만 뜬다 */}
+        <ExamAnalysisNotice />
 
         {/* 공지사항 - 원장님이 올린 학원 공지 (강사는 읽기 전용, 관리는 공지사항 메뉴에서) */}
         {announcements.length > 0 && (
