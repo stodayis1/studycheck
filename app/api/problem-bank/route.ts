@@ -218,11 +218,16 @@ export async function POST(req: Request) {
   // 중복출제 방지 — 지금까지 만든 시험지에 들어간 문항 빼기
   if (noRepeat && rows.length) {
     const used = await fetchAll<any>((f, t) =>
-      // 이 표에는 id 칸이 없다 — sheet_id + no 가 순서다
-      supabase.from('exam_sheet_problems').select('problem_id')
+      // sheet_id 도 같이 읽는다 — 아래에서 기출 시험지를 빼는 데 쓴다.
+      // 이 표에는 id 칸이 없어서 sheet_id + no 로 순서를 못박는다
+      // (쪽을 나눠 읽으면서 순서가 없으면 같은 줄이 두 번 오거나 빠진다)
+      supabase.from('exam_sheet_problems').select('problem_id, sheet_id')
         .order('sheet_id').order('no').range(f, t)
     )
-    const seen = new Set(used.map((u) => u.problem_id))
+    // 기출 시험을 통째로 담아 둔 학습지(note 가 exam_paper:…)는 「낸 적 있다」로 치지 않는다
+    const { data: paperSheets } = await supabase.from('exam_sheets').select('id').like('note', 'exam_paper:%')
+    const skip = new Set((paperSheets ?? []).map((s: any) => s.id))
+    const seen = new Set(used.filter((u) => !skip.has(u.sheet_id)).map((u) => u.problem_id))
     const left = rows.filter((p) => !seen.has(p.id))
     if (left.length >= Math.min(count, 5)) rows = left   // 너무 적게 남으면 무시
   }
