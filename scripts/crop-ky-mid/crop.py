@@ -52,7 +52,7 @@ def collect(doc):
     for g in gs:
         for k, e in enumerate(g['items'], 1):
             out.append(dict(e, sub=g['sub'], typeNo=g['typeNo'], title=g['title'],
-                            local='%02d%02d%02d' % (g['sub'], g['typeNo'], k)))
+                            local='%02d%02d%02d' % (g['sub'], g['idx'], k)))
     # 기출·마무리는 소단원을 알 수 없으므로, 바로 앞 유형의 소단원을 물려받는다
     sub = 1
     seq = {}

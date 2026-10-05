@@ -86,7 +86,7 @@ def main():
         # 소단원 안에서 찾은 게 너무 약하면 과정 전체에서 고른 것을 쓴다
         pick = best if best and score(best) >= 0.55 else bestAll
         rows.append({
-            '책소단원': g['sub'], '책유형': g['typeNo'], '책유형이름': name,
+            '책소단원': g['sub'], '책유형': g['idx'], '책유형이름': name,
             '문항수': len(g['items']),
             '학원유형코드': pick['code'] if pick else '',
             '학원유형이름': pick['type_title'] if pick else '',
