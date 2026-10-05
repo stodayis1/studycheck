@@ -13,26 +13,38 @@ export async function denyIfNotStaff(
   req: Request,
   opts: { adminOnly?: boolean } = {}
 ): Promise<NextResponse | null> {
+  return (await staffOrDeny(req, opts)).deny
+}
+
+// denyIfNotStaff 와 같은 검사를 하고, 통과하면 그 직원이 누구인지도 같이 돌려준다.
+// 「누가 했는지」가 필요한 API 는 이걸 쓴다 — 신원을 두 번 물으면 그만큼 느려진다.
+//   const who = await staffOrDeny(req)
+//   if (who.deny) return who.deny
+//   who.name · who.role · who.supervisorGrades
+export type StaffCheck = { deny: NextResponse | null; id: string; name: string; role: string; supervisorGrades: string[] }
+export async function staffOrDeny(req: Request, opts: { adminOnly?: boolean } = {}): Promise<StaffCheck> {
+  const out = (deny: NextResponse | null, u: any = {}): StaffCheck =>
+    ({ deny, id: u.id ?? '', name: u.name ?? '', role: u.role ?? '', supervisorGrades: u.supervisor_grades ?? [] })
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key)
-    return NextResponse.json({ error: '서버 설정이 올바르지 않아요.' }, { status: 500 })
+    return out(NextResponse.json({ error: '서버 설정이 올바르지 않아요.' }, { status: 500 }))
 
   const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
   if (!token)
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
+    return out(NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 }))
 
   const admin = createClient(url, key, { auth: { persistSession: false } })
   const { data: authResult, error } = await admin.auth.getUser(token)
   if (error || !authResult?.user)
-    return NextResponse.json({ error: '인증에 실패했어요. 다시 로그인해주세요.' }, { status: 401 })
+    return out(NextResponse.json({ error: '인증에 실패했어요. 다시 로그인해주세요.' }, { status: 401 }))
 
-  const { data: profile } = await admin.from('users').select('role').eq('id', authResult.user.id).single()
+  const { data: profile } = await admin.from('users').select('id, name, role, supervisor_grades').eq('id', authResult.user.id).single()
   const role = profile?.role as string | undefined
   if (!role || !['admin', 'teacher', 'staff'].includes(role))
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 })
+    return out(NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 }))
   if (opts.adminOnly && role !== 'admin')
-    return NextResponse.json({ error: '원장님만 사용할 수 있습니다.' }, { status: 403 })
+    return out(NextResponse.json({ error: '원장님만 사용할 수 있습니다.' }, { status: 403 }))
 
-  return null   // 통과
+  return out(null, profile)   // 통과
 }

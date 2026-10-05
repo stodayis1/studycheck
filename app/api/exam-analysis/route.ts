@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { staffOrDeny } from '@/lib/apiAuth'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
   bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, sortOrderOf, sourceKey, standardFileName,
@@ -77,14 +77,6 @@ async function findEnoughProblem(supabase: any, book: any, unit: any, no: any): 
   return error ? null : data?.[0]?.id ?? null
 }
 
-// 요청 보낸 직원의 이름·역할 (denyIfNotStaff 를 통과한 뒤에만 부른다)
-async function whoAmI(supabase: any, req: Request): Promise<{ name: string; role: string }> {
-  const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
-  const { data } = await supabase.auth.getUser(token)
-  const { data: u } = await supabase.from('users').select('name, role').eq('id', data?.user?.id).single()
-  return { name: u?.name ?? '', role: u?.role ?? '' }
-}
-
 async function all<T = any>(make: (from: number, to: number) => any): Promise<T[]> {
   const out: T[] = []
   for (let from = 0; ; from += 1000) {
@@ -117,8 +109,9 @@ const QUESTION_FIELDS = [
 
 // ───────────────────────── GET ─────────────────────────
 export async function GET(req: Request) {
-  const deny = await denyIfNotStaff(req)
-  if (deny) return deny
+  // 직원만 (denyIfNotStaff 와 같은 검사). 신원은 여기서 한 번만 확인해 아래에서 그대로 쓴다
+  const me = await staffOrDeny(req)
+  if (me.deny) return me.deny
   const supabase = db()
   const q = new URL(req.url).searchParams
 
@@ -180,9 +173,7 @@ export async function GET(req: Request) {
 
     // ?todo=1 → 대시보드 알림용. 중등 선생님(과 원장)에게 「이번 시험 기출분석에서 남은 일」을 준다
     if (q.get('todo')) {
-      const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
-      const { data: au } = await supabase.auth.getUser(token)
-      const { data: u } = await supabase.from('users').select('name, role, supervisor_grades').eq('id', au?.user?.id).single()
+      const u = { name: me.name, role: me.role, supervisor_grades: me.supervisorGrades }
       // 중등 선생님 = 중등 학년 주임이거나, 맡은 재원생 중에 중학생이 있는 선생님
       let middle = u?.role === 'admin' || (u?.supervisor_grades ?? []).some((g: string) => String(g).startsWith('중'))
       if (!middle && u?.name) {
@@ -240,17 +231,50 @@ export async function GET(req: Request) {
 
     const id = q.get('id')
     if (!id) return bad('무엇을 볼지 알 수 없습니다.')
-    const me = await whoAmI(supabase, req)
-    const { data: paper } = await supabase.from('exam_papers').select('*').eq('id', id).maybeSingle()
-    if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
-
-    const [{ data: files }, { data: questions }, { data: matches }, { data: enough }] = await Promise.all([
+    // 서로 상관없는 조회는 한꺼번에 보낸다 (차례로 보내면 그만큼 느려진다)
+    const [{ data: paper }, { data: files }, { data: questions }, { data: matches }, { data: sheet }] = await Promise.all([
+      supabase.from('exam_papers').select('*').eq('id', id).maybeSingle(),
       supabase.from('exam_paper_files').select('*').eq('paper_id', id).order('created_at'),
       supabase.from('exam_questions').select('*').eq('paper_id', id).order('sort_order').order('question_no'),
       supabase.from('exam_enough_matches').select('*').eq('paper_id', id).order('created_at'),
+      supabase.from('exam_sheets').select('code').eq('note', sheetNote(id)).maybeSingle(),
+    ])
+    if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
+
+    // 둘째 묶음도 한꺼번에: 이너프원 단원 목록 · 파일 임시 주소 · 문제은행 그림 · 이너프원 문항 그림
+    const paths = [
+      ...(files ?? []).filter((f: any) => f.kind !== '원본' || me.role === 'admin').map((f: any) => f.storage_path),
+      ...(questions ?? []).map((x: any) => x.figure_path),
+    ].filter(Boolean) as string[]
+    const bankIds = (questions ?? []).filter((x: any) => x.problem_id && !x.figure_path).map((x: any) => x.problem_id)
+    const enoughIds = Array.from(new Set((matches ?? []).map((m: any) => m.enough_problem_id).filter(Boolean)))
+    const signedMap = async (bucket: string, pths: string[]) => {
+      const { data: urls } = pths.length ? await supabase.storage.from(bucket).createSignedUrls(pths, 7200) : { data: [] as any[] }
+      return new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
+    }
+    const signed: Record<string, string> = {}
+    const bankImg: Record<number, string> = {}
+    const enoughImg: Record<string, { url: string | null; twin: string | null; page: number | null }> = {}
+    const [{ data: enough }] = await Promise.all([
       // 이너프원 진도표 — 이 학교·학년 교재의 단원 이름을 고르기 쉽게
       supabase.from('inner_enough').select('level, unit_no, unit_name, sub_unit_name, created_at')
         .eq('school_name', paper.school_name).eq('grade', String(paper.grade).replace('중', '')).limit(1000),
+      // 파일·문항 그림을 볼 임시 주소 (2시간)
+      signedMap(FILE_BUCKET, paths).then((m) => m.forEach((v, k) => { signed[k] = v })),
+      // PDF 에서 잘라 넣은 문항은 그림이 문제은행 보관함에 있다 → 그 그림을 미리보기로 쓴다
+      (async () => {
+        if (!bankIds.length) return
+        const { data: ps } = await supabase.from('problems').select('id, image_path').in('id', bankIds)
+        const byPath = await signedMap(PROBLEM_BUCKET, (ps ?? []).map((p: any) => p.image_path).filter(Boolean))
+        ;(ps ?? []).forEach((p: any) => { if (byPath.has(p.image_path)) bankImg[p.id] = byPath.get(p.image_path)! })
+      })(),
+      // 매칭된 이너프원 문항의 그림 (기출과 나란히 보여 준다)
+      (async () => {
+        if (!enoughIds.length) return
+        const { data: eps } = await supabase.from('enough_problems').select('id, image_path, twin_of, page_no').in('id', enoughIds)
+        const byPath = await signedMap(FILE_BUCKET, (eps ?? []).map((e: any) => e.image_path))
+        ;(eps ?? []).forEach((e: any) => { enoughImg[e.id] = { url: byPath.get(e.image_path) ?? null, twin: e.twin_of, page: e.page_no } })
+      })(),
     ])
 
     // 이너프원은 시험 때마다 새로 올린다. 이 시험에 쓴 것만 보이게 —
@@ -259,40 +283,6 @@ export async function GET(req: Request) {
     const inTime = (enough ?? []).filter((e: any) => !paper.exam_end_date || kstDay(e.created_at) <= paper.exam_end_date)
     const lastDay = inTime.map((e: any) => kstDay(e.created_at)).sort().pop()
     const enoughNow = inTime.filter((e: any) => kstDay(e.created_at) === lastDay)
-
-    // 파일·문항 그림을 볼 임시 주소 (2시간)
-    const paths = [
-      ...(files ?? []).filter((f: any) => f.kind !== '원본' || me.role === 'admin').map((f: any) => f.storage_path),
-      ...(questions ?? []).map((x: any) => x.figure_path),
-    ].filter(Boolean) as string[]
-    const signed: Record<string, string> = {}
-    if (paths.length) {
-      const { data: urls } = await supabase.storage.from(FILE_BUCKET).createSignedUrls(paths, 7200)
-      ;(urls ?? []).forEach((u: any) => { if (u.signedUrl && !u.error) signed[u.path] = u.signedUrl })
-    }
-
-    // PDF 에서 잘라 넣은 문항은 그림이 문제은행 보관함에 있다 → 그 그림을 미리보기로 쓴다
-    const bankIds = (questions ?? []).filter((x: any) => x.problem_id && !x.figure_path).map((x: any) => x.problem_id)
-    const bankImg: Record<number, string> = {}
-    if (bankIds.length) {
-      const { data: ps } = await supabase.from('problems').select('id, image_path').in('id', bankIds)
-      const pths = (ps ?? []).map((p: any) => p.image_path).filter(Boolean)
-      const { data: urls } = pths.length ? await supabase.storage.from(PROBLEM_BUCKET).createSignedUrls(pths, 7200) : { data: [] as any[] }
-      const byPath = new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
-      ;(ps ?? []).forEach((p: any) => { if (byPath.has(p.image_path)) bankImg[p.id] = byPath.get(p.image_path)! })
-    }
-    const { data: sheet } = await supabase.from('exam_sheets').select('code').eq('note', sheetNote(id)).maybeSingle()
-
-    // 매칭된 이너프원 문항의 그림 (기출과 나란히 보여 준다)
-    const enoughIds = Array.from(new Set((matches ?? []).map((m: any) => m.enough_problem_id).filter(Boolean)))
-    const enoughImg: Record<string, { url: string | null; twin: string | null; page: number | null }> = {}
-    if (enoughIds.length) {
-      const { data: eps } = await supabase.from('enough_problems').select('id, image_path, twin_of, page_no').in('id', enoughIds)
-      const pths = (eps ?? []).map((e: any) => e.image_path)
-      const { data: urls } = pths.length ? await supabase.storage.from(FILE_BUCKET).createSignedUrls(pths, 7200) : { data: [] as any[] }
-      const byPath = new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
-      ;(eps ?? []).forEach((e: any) => { enoughImg[e.id] = { url: byPath.get(e.image_path) ?? null, twin: e.twin_of, page: e.page_no } })
-    }
 
     return NextResponse.json({
       paper,
@@ -323,12 +313,12 @@ export async function GET(req: Request) {
 
 // ───────────────────────── POST ─────────────────────────
 export async function POST(req: Request) {
-  const deny = await denyIfNotStaff(req)
-  if (deny) return deny
+  // 직원만 (denyIfNotStaff 와 같은 검사)
+  const me = await staffOrDeny(req)
+  if (me.deny) return me.deny
   const supabase = db()
   const b = await req.json().catch(() => null)
   if (!b?.action) return bad('잘못된 요청입니다.')
-  const me = await whoAmI(supabase, req)
   const isAdmin = me.role === 'admin'
   const adminOnly = () => bad('원장님만 할 수 있습니다.', 403)
   const now = new Date().toISOString()
