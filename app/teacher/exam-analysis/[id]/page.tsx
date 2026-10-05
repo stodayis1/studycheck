@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { supabase } from '@/lib/supabase'
 import {
   FILE_KINDS, MATCH_LEVELS, REVIEW_DIFFICULTIES, TASKS,
-  HIT_LEVELS, checkFileName, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
+  HIT_LEVELS, checkFileName, guessExamFile, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
@@ -88,8 +88,10 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   const upload = async (fileList: FileList | null, forced?: string) => {
     if (!fileList?.length) return
     for (const file of Array.from(fileList)) {
-      const kind = forced ?? kindOfFile(file.name)
-      const warn = checkFileName(paper, kind, file.name)
+      // 시험지 칸에 올린 파일은 이름이 어떻든 받는다 (종류만 이름에서 짐작: 문제 · 정답 · 해설 · 원본)
+      const named = kindOfFile(file.name)
+      const kind = forced ?? (named === '기타' || named === '손풀이' ? guessExamFile(file.name).kind : named)
+      const warn = kind === '손풀이' ? checkFileName(paper, kind, file.name) : null
       if (warn && !confirm(`${file.name}\n\n${warn}\n\n그래도 「${kind}」(으)로 올릴까요?`)) continue
       // 손풀이는 블로그에 그대로 실린다 → 해상도가 낮으면 글씨가 안 보인다. 올리기 전에 알려 준다
       if (kind === '손풀이') {
@@ -105,7 +107,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       const { error } = await supabase.storage.from('exam-analysis').uploadToSignedUrl(u.path, u.token, file, { contentType: type })
       if (error) { alert(`올리지 못했습니다: ${error.message}`); continue }
       const a = await post({
-        action: 'addFile', paperId: id, kind, path: u.path, fileName: file.name,
+        action: 'addFile', paperId: id, kind, path: u.path, fileName: file.name, autoName: true,
         mimeType: type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
       })
       if (!a.ok) alert(a.error)
@@ -176,8 +178,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
 
           <Card title="시험지 파일">
             <p className="mb-2 text-xs text-gray-500">
-              시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 파일명 규칙: <b>{expectedPaperFileName(paper, '문제')}</b>
-              (구분은 문제 · 정답 · 해설 · 문제정답해설). 파일명 끝의 구분을 보고 자동으로 나눠 담습니다.
+              시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 파일명은 맞추지 않아도 됩니다 —
+              올리면 <b>{expectedPaperFileName(paper, '문제')}</b> 처럼 규칙대로 자동으로 붙습니다.
             </p>
             <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
             <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
@@ -204,7 +206,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
           <Card title="원본 보관 (원장님만 열람)">
             <p className="mb-2 text-xs text-gray-500">
               학교에서 받은 시험지 원본, 한글(HWP) 작업 원본을 따로 보관합니다. 올리는 것은 누구나 할 수 있지만
-              <b> 올린 뒤에는 원장님만 열어 보고 지울 수 있습니다.</b> 파일명: <b>{expectedPaperFileName(paper, '원본').replace('.pdf', '.hwp')}</b> (PDF·JPG도 가능)
+              <b> 올린 뒤에는 원장님만 열어 보고 지울 수 있습니다.</b> 파일명은 자동으로 붙습니다 (HWP · PDF · JPG).
             </p>
             <FileDrop accept=".pdf,.hwp,.hwpx,.png,.jpg,.jpeg" onFiles={(f) => upload(f, '원본')} label="원본 파일 올리기" />
             {isAdmin

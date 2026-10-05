@@ -108,6 +108,48 @@ export function parseExamFileName(fileName: string): PaperKey | null {
   }
 }
 
+// 아무렇게나 지은 파일명에서 어느 시험인지 **짐작**한다 (지난 기출을 올릴 때 칸을 미리 채워 주려고).
+// 못 알아낸 칸은 비워 둔다 — 화면에서 사람이 고른다.
+//   2026_1학기기말_신원중_중2_(답안입력완료).pdf · 26년 도래울중3-1 중간.pdf · 2026년 1학기 기말_원흥중2_원본.pdf
+export type ExamGuess = { exam_year: number | null; term: number | null; exam_type: string; school_name: string; grade: string; kind: string }
+export function guessExamFile(fileName: string): ExamGuess {
+  const n = fileName.normalize('NFC').replace(/\.[a-z0-9]+$/i, '')
+  const ext = (fileName.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase()
+  const y4 = n.match(/(20\d{2})/)
+  const y2 = n.match(/(?:^|[^\d])(\d{2})년/)
+  const exam_year = y4 ? Number(y4[1]) : y2 ? 2000 + Number(y2[1]) : null
+  // 학기: 「1학기」 또는 「중3-1」「2-1」의 뒤 숫자
+  const t1 = n.match(/([12])\s?학기/)
+  const t2 = n.match(/[1-3]\s?-\s?([12])(?!\d)/)
+  const term = t1 ? Number(t1[1]) : t2 ? Number(t2[1]) : null
+  const exam_type = /기말/.test(n) ? '기말고사' : /중간/.test(n) ? '중간고사' : ''
+  // 학교: 「…중」「…고」로 끝나는 낱말. 「도래울_중3」처럼 중·고가 빠진 것도 받는다
+  let school_name = ''
+  let level = ''
+  const s1 = Array.from(n.matchAll(/([가-힣]{2,6}(중|고))(?=\s?[1-3]|[_\s(.-]|$)/g)).find((m) => !/학기중|기중$/.test(m[1]))
+  const s2 = n.match(/([가-힣]{2,6})_(중|고)[1-3]/)
+  if (s1) { school_name = s1[1]; level = s1[2] }
+  else if (s2) { school_name = s2[1] + s2[2]; level = s2[2] }
+  // 학년: 「중3」「원흥중2」「도래울중 2-1」「_중2」
+  let grade = ''
+  const g1 = n.match(/(중|고)\s?([1-3])(?!\s?학기)(?!\d)/)
+  const g2 = school_name ? n.slice(n.indexOf(school_name) + school_name.length).match(/^[\s_]*(?:(중|고))?\s?([1-3])(?!\s?학기)/) : null
+  if (g2) grade = `${g2[1] ?? level ?? '중'}${g2[2]}`
+  else if (g1) grade = `${g1[1]}${g1[2]}`
+  // 종류: 한글 파일 · 「원본」 · 「필기삭제」(스캔본) 은 원본 보관, 나머지 PDF 는 작업한 문제지
+  const kind = /원본|필기삭제|스캔/.test(n) || ext === 'hwp' || ext === 'hwpx' || ext === 'png' || ext === 'jpg' || ext === 'jpeg'
+    ? '원본'
+    : /문제정답해설/.test(n) ? '문제정답해설' : /해설/.test(n) ? '해설' : /정답(?!입력)/.test(n) && !/답안입력/.test(n) ? '정답' : '문제'
+  return { exam_year, term, exam_type, school_name, grade, kind }
+}
+
+// 보관할 때 붙이는 표준 파일명. 올리는 사람이 이름을 맞출 필요가 없게 앱이 붙인다.
+//   2026_1학기기말_신원중_중2_문제.pdf  ·  같은 종류가 또 있으면 …_원본2.hwp
+export function standardFileName(p: PaperKey, kind: string, originalName: string, nth = 1) {
+  const ext = (originalName.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'pdf').toLowerCase().replace('jpeg', 'jpg')
+  return `${examPrefix(p)}_${p.school_name}_${p.grade}_${kind}${nth > 1 ? nth : ''}.${ext}`
+}
+
 // 손풀이 파일명에서 문항번호 뽑기: 도래울중_중3_18번_손풀이_김T.png → '18번'
 export function handsolveLabel(fileName: string): string | null {
   const m = fileName.normalize('NFC').match(/^.+?_중[1-3]_(.+?)_손풀이_/)

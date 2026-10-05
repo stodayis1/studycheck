@@ -8,9 +8,9 @@ import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
-import { supabase } from '@/lib/supabase'
 import { openPrint } from '@/components/exam-analysis/ui'
-import { EXAM_TYPES, GRADES, SCHOOLS, checkFileName, examPrefix, handsolveLabel, kindOfFile, parseExamFileName } from '@/lib/examAnalysis'
+import { BulkUploadDialog } from '@/components/exam-analysis/BulkUploadDialog'
+import { EXAM_TYPES, GRADES, SCHOOLS, examPrefix } from '@/lib/examAnalysis'
 
 const GREEN = '#085041'
 
@@ -37,7 +37,7 @@ export default function ExamAnalysisPage() {
   const [exam, setExam] = useState('')            // 2026_2학기중간 ('all' = 전체)
   const [fSchool, setFSchool] = useState('')
   const [fGrade, setFGrade] = useState('')
-  const [busy, setBusy] = useState('')
+  const [bulkFiles, setBulkFiles] = useState<File[] | null>(null)
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState<any>({
     exam_year: new Date().getFullYear(), term: 2, exam_type: '중간고사',
@@ -61,40 +61,6 @@ export default function ExamAnalysisPage() {
     (curExam === 'all' || !curExam || examPrefix(p) === curExam) &&
     (!fSchool || p.school_name === fSchool) && (!fGrade || p.grade === fGrade))
   const schools = useMemo(() => Array.from(new Set((papers ?? []).map((p) => p.school_name))).sort(), [papers])
-
-  const call = async (body: any) => {
-    const r = await apiFetch('/api/exam-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    return { ok: r.ok, status: r.status, ...(await r.json().catch(() => ({}))) }
-  }
-
-  // 지난 기출을 한꺼번에 올린다. 파일명(2025_1학기기말_신원중_중2_문제.pdf)을 읽어
-  // 그 시험 칸을 찾아(없으면 만들어) 넣는다
-  const bulkUpload = async (list: FileList | null) => {
-    if (!list?.length) return
-    const skipped: string[] = []
-    let done = 0
-    for (const file of Array.from(list)) {
-      const key = parseExamFileName(file.name)
-      const kind = kindOfFile(file.name)
-      if (!key || kind === '기타' || checkFileName(key, kind, file.name)) { skipped.push(file.name); continue }
-      setBusy(`올리는 중 (${done + skipped.length + 1}/${list.length}): ${file.name}`)
-      const made = await call({ action: 'createPaper', paper: key })        // 이미 있으면 409 와 함께 id 를 준다
-      const paperId = made.id
-      if (!paperId) { skipped.push(file.name); continue }
-      const u = await call({ action: 'uploadUrl', paperId, fileName: file.name, kind })
-      if (!u.ok) { skipped.push(file.name); continue }
-      const type = ['application/pdf', 'image/png', 'image/jpeg'].includes(file.type) ? file.type : 'application/octet-stream'
-      const { error } = await supabase.storage.from('exam-analysis').uploadToSignedUrl(u.path, u.token, file, { contentType: type })
-      if (error) { skipped.push(file.name); continue }
-      const a = await call({ action: 'addFile', paperId, kind, path: u.path, fileName: file.name, mimeType: type, fileSize: file.size, questionLabel: handsolveLabel(file.name) })
-      if (a.ok) done++
-      else skipped.push(file.name)
-    }
-    setBusy('')
-    setExam('all')
-    await load()
-    alert(`${done}개 올렸습니다.` + (skipped.length ? `\n\n올리지 못한 파일 ${skipped.length}개 (파일명 규칙을 확인해 주세요):\n` + skipped.join('\n') : ''))
-  }
 
   const create = async () => {
     const r = await apiFetch('/api/exam-analysis', {
@@ -166,12 +132,16 @@ export default function ExamAnalysisPage() {
           </select>
           <span className="text-xs text-gray-400">{rows.length}건</span>
           <label className="ml-auto cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: GREEN, color: GREEN }}
-            title="파일명(2025_1학기기말_신원중_중2_문제.pdf)을 읽어 알맞은 시험 칸에 넣습니다. 없는 시험은 자동으로 만듭니다.">
-            <i className="ti ti-upload mr-1" />기출 파일 한꺼번에 올리기
-            <input type="file" multiple accept=".pdf,.hwp,.hwpx,.png,.jpg,.jpeg" className="hidden" onChange={(e) => { bulkUpload(e.target.files); e.target.value = '' }} />
+            title="지난 기출 파일을 여러 개 골라 올립니다. 파일명은 맞추지 않아도 됩니다 — 고른 뒤 연도 · 학교 · 학년을 확인하는 창이 뜹니다.">
+            <i className="ti ti-upload mr-1" />기출 파일 올리기 (파일명 안 맞춰도 됨)
+            <input type="file" multiple accept=".pdf,.hwp,.hwpx,.png,.jpg,.jpeg" className="hidden"
+              onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) setBulkFiles(fs) }} />
           </label>
         </div>
-        {busy && <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{busy}</p>}
+        {bulkFiles && (
+          <BulkUploadDialog files={bulkFiles} schools={schools}
+            onClose={() => setBulkFiles(null)} onDone={() => { setExam('all'); load() }} />
+        )}
 
         {err && <p className="p-10 text-center text-sm text-red-600">{err}</p>}
         {!err && !papers && <p className="p-10 text-center text-gray-400">불러오는 중…</p>}

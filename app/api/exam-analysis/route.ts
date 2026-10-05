@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
-  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, sortOrderOf, sourceKey,
+  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, sortOrderOf, sourceKey, standardFileName,
 } from '@/lib/examAnalysis'
 
 export const dynamic = 'force-dynamic'
@@ -407,12 +407,18 @@ export async function POST(req: Request) {
         if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
         if (!FILE_KINDS.includes(b.kind)) return bad('파일 구분을 골라 주세요.')
         if (!String(b.path ?? '').startsWith(`${paper.id}/`)) return bad('잘못된 파일 경로입니다.')
-        const fileName = String(b.fileName ?? '').normalize('NFC')
+        let fileName = String(b.fileName ?? '').normalize('NFC')
+        // 올리는 사람이 파일명을 맞출 필요가 없게, 규칙대로 된 이름을 서버가 붙인다
+        if (b.autoName && b.kind !== '손풀이' && b.kind !== '기타') {
+          const { count } = await supabase.from('exam_paper_files').select('id', { count: 'exact', head: true })
+            .eq('paper_id', paper.id).eq('kind', b.kind)
+          fileName = standardFileName(paper, b.kind, fileName, (count ?? 0) + 1)
+        }
         const { error } = await supabase.from('exam_paper_files').insert({
           paper_id: paper.id, kind: b.kind, file_name: fileName, storage_path: b.path,
           mime_type: b.mimeType ?? null, file_size: b.fileSize ?? null,
           question_label: b.kind === '손풀이' ? (b.questionLabel || handsolveLabel(fileName)) : null,
-          name_ok: !checkFileName(paper, b.kind, fileName),
+          name_ok: !!b.autoName || !checkFileName(paper, b.kind, fileName),
           uploaded_by: me.name,
         })
         if (error?.message?.includes('kind_check'))
