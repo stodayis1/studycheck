@@ -129,10 +129,13 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   }
 
   // 원장: 잘못 만든 빈 시험 줄 지우기 (파일 · 문항 · 매칭이 하나도 없을 때만)
-  const isEmptyPaper = !data.files.length && !(data.originalCount ?? 0) && !data.questions.length && !data.matches.length
+  // 문항 · 매칭이 없으면 지울 수 있다. 올라간 파일이 있으면 같이 지운다 (한 번에)
+  const isEmptyPaper = !data.questions.length && !data.matches.length && !data.sheetCode
+  const nFiles = data.files.length
   const deletePaper = async () => {
-    if (!confirm(`「${paper.school_name} ${paper.grade} · ${paper.exam_name ?? ''}」 줄을 지울까요? 되돌릴 수 없습니다.`)) return
-    const r = await post({ action: 'deletePaper', id })
+    if (!confirm(`「${paper.school_name} ${paper.grade} · ${paper.exam_name ?? ''}」 줄을 지울까요?` +
+      (nFiles ? `\n\n이 줄에 올라간 파일 ${nFiles}개도 같이 지워집니다.` : '') + '\n되돌릴 수 없습니다.')) return
+    const r = await post({ action: 'deletePaper', id, withFiles: true })
     if (!r.ok) { alert(r.error); return }
     window.location.href = '/teacher/exam-analysis'
   }
@@ -190,7 +193,9 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             </div>
             <div className="mt-3 flex items-center">
               {isAdmin && isEmptyPaper && (
-                <button onClick={deletePaper} className="text-xs text-gray-400 underline hover:text-red-600">잘못 만든 줄이면 지우기</button>
+                <button onClick={deletePaper} className="rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+                  <i className="ti ti-trash mr-1" />이 시험 줄 지우기{nFiles ? ` (파일 ${nFiles}개 포함)` : ''}
+                </button>
               )}
               <span className="ml-auto">{saveBtn(['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note'])}</span>
             </div>

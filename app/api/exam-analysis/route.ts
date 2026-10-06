@@ -435,9 +435,25 @@ export async function POST(req: Request) {
         return NextResponse.json({ files: out })
       }
 
-      // ── 빈 시험 줄 지우기 (원장만). 파일 · 문항 · 매칭이 하나도 없을 때만 된다 — 잘못 만든 줄 정리용
+      // ── 잘못 만든 시험 줄 지우기 (원장만). 문항 · 매칭이 하나도 없을 때만 된다.
+      //    withFiles 면 그 줄에 올라간 파일도 같이 지운다 (이름이 달라 중복으로 생긴 줄 정리용)
       case 'deletePaper': {
         if (!isAdmin) return adminOnly()
+        if (b.withFiles) {
+          const [q0, m0, s0] = await Promise.all([
+            supabase.from('exam_questions').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
+            supabase.from('exam_enough_matches').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
+            supabase.from('exam_sheets').select('id', { count: 'exact', head: true }).eq('note', sheetNote(b.id)),
+          ])
+          if ((q0.count ?? 0) + (m0.count ?? 0) + (s0.count ?? 0) > 0)
+            return bad('문항이나 매칭이 들어 있는 시험은 지울 수 없어요.')
+          const { data: fl } = await supabase.from('exam_paper_files').select('id, storage_path').eq('paper_id', b.id)
+          if (fl?.length) {
+            await supabase.storage.from(FILE_BUCKET).remove(fl.map((x: any) => x.storage_path))
+            const { error: fe } = await supabase.from('exam_paper_files').delete().eq('paper_id', b.id)
+            if (fe) return bad(fe.message, 500)
+          }
+        }
         const [f, q2, m, sh] = await Promise.all([
           supabase.from('exam_paper_files').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
           supabase.from('exam_questions').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
