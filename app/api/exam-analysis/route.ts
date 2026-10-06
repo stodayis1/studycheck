@@ -160,6 +160,7 @@ export async function GET(req: Request) {
       }
       // 적중률 (이너프원에 유형 유사 이상이 있는 문항 ÷ 전체 문항)
       return NextResponse.json({
+        isAdmin: me.role === 'admin',
         papers: (papers ?? []).map((p: any) => {
           const h = hitSummary(
             p.answers_text,
@@ -416,6 +417,36 @@ export async function POST(req: Request) {
         })
         if (error?.message?.includes('kind_check'))
           return bad('원본 보관 준비(docs/sql/시험지분석_2_원본보관.sql)가 아직 실행되지 않았습니다. 원장님께 알려 주세요.', 500)
+        if (error) return bad(error.message, 500)
+        return NextResponse.json({ ok: true })
+      }
+
+      // ── 원본 파일 내려받을 주소 (원장만). 현황판에서 바로 받을 때 쓴다
+      case 'originalUrls': {
+        if (!isAdmin) return adminOnly()
+        const { data: fs } = await supabase.from('exam_paper_files').select('file_name, storage_path')
+          .eq('paper_id', b.paperId).eq('kind', '원본').order('created_at')
+        const out: { url: string; fileName: string }[] = []
+        for (const f of fs ?? []) {
+          const { data } = await supabase.storage.from(FILE_BUCKET).createSignedUrl(f.storage_path, 600, { download: f.file_name })
+          if (data?.signedUrl) out.push({ url: data.signedUrl, fileName: f.file_name })
+        }
+        if (!out.length) return bad('보관된 원본이 없습니다.', 404)
+        return NextResponse.json({ files: out })
+      }
+
+      // ── 빈 시험 줄 지우기 (원장만). 파일 · 문항 · 매칭이 하나도 없을 때만 된다 — 잘못 만든 줄 정리용
+      case 'deletePaper': {
+        if (!isAdmin) return adminOnly()
+        const [f, q2, m, sh] = await Promise.all([
+          supabase.from('exam_paper_files').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
+          supabase.from('exam_questions').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
+          supabase.from('exam_enough_matches').select('id', { count: 'exact', head: true }).eq('paper_id', b.id),
+          supabase.from('exam_sheets').select('id', { count: 'exact', head: true }).eq('note', sheetNote(b.id)),
+        ])
+        if ((f.count ?? 0) + (q2.count ?? 0) + (m.count ?? 0) + (sh.count ?? 0) > 0)
+          return bad('파일이나 문항이 남아 있는 시험은 지울 수 없어요. 먼저 파일을 지워 주세요.')
+        const { error } = await supabase.from('exam_papers').delete().eq('id', b.id)
         if (error) return bad(error.message, 500)
         return NextResponse.json({ ok: true })
       }

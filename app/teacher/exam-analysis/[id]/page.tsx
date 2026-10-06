@@ -128,6 +128,15 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
     load()
   }
 
+  // 원장: 잘못 만든 빈 시험 줄 지우기 (파일 · 문항 · 매칭이 하나도 없을 때만)
+  const isEmptyPaper = !data.files.length && !(data.originalCount ?? 0) && !data.questions.length && !data.matches.length
+  const deletePaper = async () => {
+    if (!confirm(`「${paper.school_name} ${paper.grade} · ${paper.exam_name ?? ''}」 줄을 지울까요? 되돌릴 수 없습니다.`)) return
+    const r = await post({ action: 'deletePaper', id })
+    if (!r.ok) { alert(r.error); return }
+    window.location.href = '/teacher/exam-analysis'
+  }
+
   const tasks = paper.tasks ?? {}
   const paperFiles = data.files.filter((f: any) => f.kind !== '손풀이' && f.kind !== '원본')
   const originals = data.files.filter((f: any) => f.kind === '원본')      // 원장에게만 내려온다
@@ -179,7 +188,12 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               </Field>
               <Field label="비고" wide><textarea className={INPUT} rows={2} value={val('note')} onChange={(e) => set('note', e.target.value)} /></Field>
             </div>
-            <div className="mt-3 text-right">{saveBtn(['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note'])}</div>
+            <div className="mt-3 flex items-center">
+              {isAdmin && isEmptyPaper && (
+                <button onClick={deletePaper} className="text-xs text-gray-400 underline hover:text-red-600">잘못 만든 줄이면 지우기</button>
+              )}
+              <span className="ml-auto">{saveBtn(['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note'])}</span>
+            </div>
           </Card>
 
           <Card title="시험지 파일">

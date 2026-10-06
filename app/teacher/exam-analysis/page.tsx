@@ -38,6 +38,25 @@ export default function ExamAnalysisPage() {
   const [fSchool, setFSchool] = useState('')
   const [fGrade, setFGrade] = useState('')
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  // 원장: 현황판에서 원본 파일을 바로 내려받는다
+  const downloadOriginals = async (paperId: string) => {
+    const r = await apiFetch('/api/exam-analysis', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'originalUrls', paperId }),
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { alert(j.error ?? '내려받지 못했습니다.'); return }
+    for (const f of j.files ?? []) {
+      const a = document.createElement('a')
+      a.href = f.url
+      a.download = f.fileName
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      await new Promise((ok) => setTimeout(ok, 600))      // 여러 개면 조금씩 띄워서 (한꺼번에 누르면 브라우저가 막는다)
+    }
+  }
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState<any>({
     exam_year: new Date().getFullYear(), term: 2, exam_type: '중간고사',
@@ -50,6 +69,7 @@ export default function ExamAnalysisPage() {
         const j = await r.json()
         if (!r.ok) throw new Error(j.error ?? '불러오지 못했습니다.')
         setPapers(j.papers)
+        setIsAdmin(!!j.isAdmin)
       })
       .catch((e) => setErr(e.message))
 
@@ -181,7 +201,12 @@ export default function ExamAnalysisPage() {
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <Chip ok={s.files > 0}>{s.files > 0 ? `${s.files}개` : '없음'}</Chip>
-                        {s.originals > 0 && <span className="ml-1 text-[10px] text-gray-400" title="원본 보관 (원장님만 열람)">원본 {s.originals}</span>}
+                        {s.originals > 0 && (isAdmin
+                          ? <button onClick={(e) => { e.stopPropagation(); downloadOriginals(p.id) }} title="원본 파일 내려받기 (원장님만)"
+                              className="ml-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
+                              <i className="ti ti-download" /> 원본 {s.originals}
+                            </button>
+                          : <span className="ml-1 text-[10px] text-gray-400" title="원본 보관 (원장님만 열람)">원본 {s.originals}</span>)}
                       </td>
                       <td className="px-3 py-2.5"><Chip ok={!!t.answers} warn={!t.answers && !!p.answers_text}>{t.answers ? '완료' : p.answers_text ? '작업중' : '대기'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={nDisc >= 2} warn={nDisc === 1}>{nDisc ? `${nDisc}문항` : '대기'}</Chip></td>
