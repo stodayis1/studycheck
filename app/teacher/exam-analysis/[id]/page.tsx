@@ -115,6 +115,12 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
     setBusy('')
     load()
   }
+  // 원장: 잘못 분류된 파일의 종류를 바꾼다 (스캔 원본이 「문제」로 들어간 것 등)
+  const changeKind = async (f: any, kind: string) => {
+    const r = await post({ action: 'setFileKind', id: f.id, kind })
+    if (!r.ok) alert(r.error)
+    load()
+  }
   const removeFile = async (f: any) => {
     if (!confirm(`「${f.file_name}」 파일을 지울까요? 되돌릴 수 없습니다.`)) return
     const r = await post({ action: 'deleteFile', id: f.id })
@@ -178,11 +184,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
 
           <Card title="시험지 파일">
             <p className="mb-2 text-xs text-gray-500">
-              시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 파일명은 맞추지 않아도 됩니다 —
+              작업한 시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 선생님이 올린 시험지는 <b>원본</b>으로 보관됩니다. 파일명은 맞추지 않아도 됩니다 —
               올리면 <b>{expectedPaperFileName(paper, '문제')}</b> 처럼 규칙대로 자동으로 붙습니다.
             </p>
             <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
-            <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
+            <FileList files={paperFiles} onRemove={removeFile} onKind={isAdmin ? changeKind : undefined} empty="아직 올린 시험지가 없습니다." />
             {data.sheetCode && (
               <button onClick={() => openPrint(id)} className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ background: GREEN }}>
                 <i className="ti ti-printer mr-1.5" />수학의지혜 시험지 양식으로 통째 인쇄
@@ -210,7 +216,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             </p>
             <FileDrop accept=".pdf,.hwp,.hwpx,.png,.jpg,.jpeg" onFiles={(f) => upload(f, '원본')} label="원본 파일 올리기" />
             {isAdmin
-              ? <FileList files={originals} onRemove={removeFile} empty="아직 보관된 원본이 없습니다." />
+              ? <FileList files={originals} onRemove={removeFile} onKind={changeKind} empty="아직 보관된 원본이 없습니다." />
               : <p className="mt-3 text-center text-xs text-gray-500">보관된 원본 {data.originalCount ?? 0}개 · 원장님만 열어 볼 수 있습니다.</p>}
           </Card>
         </div>
@@ -544,7 +550,10 @@ function FileDrop({ accept, onFiles, label }: { accept: string; onFiles: (f: Fil
   )
 }
 
-function FileList({ files, onRemove, empty }: { files: any[]; onRemove: (f: any) => void; empty: string }) {
+// 내려받는 주소: 임시 주소 뒤에 download= 를 붙이면 화면에 보이는 한글 파일명 그대로 저장된다
+const downloadUrl = (f: any) => (f.url ? `${f.url}&download=${encodeURIComponent(f.file_name)}` : '#')
+
+function FileList({ files, onRemove, onKind, empty }: { files: any[]; onRemove: (f: any) => void; onKind?: (f: any, kind: string) => void; empty: string }) {
   if (!files.length) return <p className="mt-3 text-center text-xs text-gray-400">{empty}</p>
   return (
     <ul className="mt-3 divide-y text-sm">
@@ -554,6 +563,16 @@ function FileList({ files, onRemove, empty }: { files: any[]; onRemove: (f: any)
           <a href={f.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:underline">{f.file_name}</a>
           {!f.name_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">파일명 확인</span>}
           <span className="text-xs text-gray-400">{f.uploaded_by}</span>
+          {onKind && (
+            <select value={f.kind} onChange={(e) => onKind(f, e.target.value)} title="종류 바꾸기 (원장님만)"
+              className="rounded border px-1 py-0.5 text-[11px] text-gray-600">
+              {['문제', '정답', '해설', '문제정답해설', '원본'].filter((k) => k === '원본' || /\.pdf$/i.test(f.file_name)).map((k) => <option key={k}>{k}</option>)}
+            </select>
+          )}
+          <a href={downloadUrl(f)} title="내려받기" className="flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
+            style={{ borderColor: GREEN, color: GREEN }}>
+            <i className="ti ti-download" />다운로드
+          </a>
           <button onClick={() => onRemove(f)} className="text-gray-400 hover:text-red-600"><i className="ti ti-trash" /></button>
         </li>
       ))}

@@ -333,7 +333,7 @@ export async function POST(req: Request) {
         const p = b.paper ?? {}
         const row = {
           exam_year: Number(p.exam_year), term: Number(p.term), exam_type: p.exam_type,
-          school_name: String(p.school_name ?? '').trim(), grade: p.grade,
+          school_name: String(p.school_name ?? '').trim().replace(/\s+/g, '').replace(/중학교$/, '중').replace(/고등학교$/, '고'), grade: p.grade,
         }
         if (!row.exam_year || ![1, 2].includes(row.term) || !EXAM_TYPES.includes(row.exam_type) || !row.school_name || !row.grade)
           return bad('연도·학기·시험구분·학교·학년을 모두 골라 주세요.')
@@ -398,6 +398,9 @@ export async function POST(req: Request) {
         if (!FILE_KINDS.includes(b.kind)) return bad('파일 구분을 골라 주세요.')
         if (!String(b.path ?? '').startsWith(`${paper.id}/`)) return bad('잘못된 파일 경로입니다.')
         let fileName = String(b.fileName ?? '').normalize('NFC')
+        // 작업한 시험지(문제 · 정답 · 해설)는 원장만 올린다. 선생님 · 직원이 올린 시험지는 학교에서 받은 원본이므로
+        // 「원본」으로 보관한다 (원본이 「문제」로 들어가면 인쇄 버튼이 스캔본을 열고, 선생님 모두에게 보인다)
+        if (!isAdmin && ['문제', '정답', '해설', '문제정답해설'].includes(b.kind)) b.kind = '원본'
         // 올리는 사람이 파일명을 맞출 필요가 없게, 규칙대로 된 이름을 서버가 붙인다
         if (b.autoName && b.kind !== '손풀이' && b.kind !== '기타') {
           const { count } = await supabase.from('exam_paper_files').select('id', { count: 'exact', head: true })
@@ -413,6 +416,24 @@ export async function POST(req: Request) {
         })
         if (error?.message?.includes('kind_check'))
           return bad('원본 보관 준비(docs/sql/시험지분석_2_원본보관.sql)가 아직 실행되지 않았습니다. 원장님께 알려 주세요.', 500)
+        if (error) return bad(error.message, 500)
+        return NextResponse.json({ ok: true })
+      }
+
+      // ── 파일 종류 바꾸기 (원장만). 잘못 분류된 파일을 옮긴다 — 예: 스캔 원본이 「문제」로 들어간 것
+      case 'setFileKind': {
+        if (!isAdmin) return adminOnly()
+        if (!['문제', '정답', '해설', '문제정답해설', '원본'].includes(b.kind)) return bad('바꿀 종류를 골라 주세요.')
+        const { data: f } = await supabase.from('exam_paper_files').select('*').eq('id', b.id).maybeSingle()
+        if (!f) return bad('파일을 찾을 수 없습니다.', 404)
+        if (f.kind === '손풀이') return bad('손풀이는 종류를 바꿀 수 없어요.')
+        if (f.kind === b.kind) return NextResponse.json({ ok: true })
+        if (b.kind !== '원본' && !/\.pdf$/i.test(f.file_name)) return bad('PDF가 아닌 파일은 원본으로만 둘 수 있어요.')
+        const paper = await getPaper(f.paper_id)
+        const { count } = await supabase.from('exam_paper_files').select('id', { count: 'exact', head: true })
+          .eq('paper_id', f.paper_id).eq('kind', b.kind)
+        const { error } = await supabase.from('exam_paper_files')
+          .update({ kind: b.kind, file_name: standardFileName(paper, b.kind, f.file_name, (count ?? 0) + 1), name_ok: true }).eq('id', f.id)
         if (error) return bad(error.message, 500)
         return NextResponse.json({ ok: true })
       }
