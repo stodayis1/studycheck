@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto'
 import { staffOrDeny } from '@/lib/apiAuth'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
-  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, sortOrderOf, sourceKey, standardFileName,
+  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
 } from '@/lib/examAnalysis'
 
 export const dynamic = 'force-dynamic'
@@ -41,24 +41,21 @@ const sheetNote = (paperId: string) => `exam_paper:${paperId}`
 
 // 정답표(한 줄에 「번호 정답」)를 문항과 문제은행에 맞춰 넣는다. 정답을 나중에 넣어도 QR 채점이 되게.
 async function syncAnswers(supabase: any, paperId: string, answersText: string | null) {
-  const map = new Map<string, string>()
-  for (const line of String(answersText ?? '').split(/\r?\n/)) {
-    const m = line.trim().match(/^(\S+)\s+(.+)$/)
-    if (m) map.set(normNo(m[1]), m[2].trim())
-  }
-  if (!map.size) return 0
+  const rows = parseAnswerTable(answersText)
+  if (!rows.length) return 0
+  const byNo = new Map(rows.map((r) => [r.no, r]))
   const { data: qs } = await supabase.from('exam_questions').select('id, question_no, q_type, problem_id').eq('paper_id', paperId)
   let n = 0
   for (const x of qs ?? []) {
-    const a = map.get(normNo(x.question_no))
-    if (a == null) continue
-    // 동그라미 숫자면 객관식, 숫자 하나면 단답형으로 본다 (서술형으로 적어 둔 문항은 그대로)
-    const qType = /[①②③④⑤]/.test(a) ? '객관식' : x.q_type === '서술형' ? '서술형' : '단답형'
-    await supabase.from('exam_questions').update({ answer: a, q_type: qType }).eq('id', x.id)
-    if (x.problem_id) {
-      const ans = bankAnswer(qType, a)
-      await supabase.from('problems').update({ answer_kind: ans.kind, answer_text: ans.text }).eq('id', x.problem_id)
-    }
+    const r = byNo.get(normNo(x.question_no))
+    if (!r || !r.answer) continue
+    // 서술형으로 적었으면 서술형, ①~⑤ 나 1~5 만 있으면 객관식, 그 밖은 단답형
+    const qType = r.essay || x.q_type === '서술형' ? '서술형'
+      : /^[①②③④⑤1-5](\s*[,·]\s*[①②③④⑤1-5])*$/.test(r.answer) ? '객관식' : '단답형'
+    const ans = bankAnswer(qType, r.answer)
+    await supabase.from('exam_questions').update({ answer: ans.kind === 'choice' ? ans.text : r.answer, q_type: qType }).eq('id', x.id)
+    if (x.problem_id)
+      await supabase.from('problems').update({ answer_kind: ans.kind, answer_text: ans.text, is_essay: qType === '서술형' }).eq('id', x.problem_id)
     n++
   }
   return n

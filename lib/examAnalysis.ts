@@ -44,7 +44,7 @@ export function noLabel(no: string) {
 
 // 문항번호를 한 가지 모양으로: '18번' ' 18 ' → '18'
 export function normNo(no: string) {
-  return String(no ?? '').trim().replace(/\s+/g, '').replace(/번$/, '')
+  return String(no ?? '').trim().replace(/\s+/g, '').replace(/[.)]+$/, '').replace(/번$/, '').replace(/^(객관식|선택형|문항)(?=\d)/, '')
 }
 
 // 2026_2학기중간_도래울중_중3_18번
@@ -161,11 +161,31 @@ export function handsolveLabel(fileName: string): string | null {
 // (원장님 결정 2026-10-03)
 export const HIT_LEVELS = ['쌍둥이', '매우 유사', '유형 유사']
 
-// 정답표(한 줄에 「번호 정답」)에서 문항번호만 뽑는다
+// 정답표 읽기. 선생님마다 적는 모양이 달라 여러 가지를 받는다:
+//   「1 ③」「1. 3」「1) 3」「18번 ④」 · 「서술형1 12」「논술형2. 4(루트3-3)」
+// 서술형·논술형 k번은 객관식 마지막 번호 뒤에 이어 붙인다 (객관식이 21번까지면 논술형1 = 22번).
+// 번호로 시작하지 않는 줄(풀이가 이어지는 줄, 「1-1) …」 같은 소문항)은 바로 앞 문항의 정답에 붙인다.
+export type AnswerRow = { no: string; answer: string; essay: boolean; label: string }
+export function parseAnswerTable(text: string | null | undefined): AnswerRow[] {
+  const raw: { n: number; essay: boolean; answer: string; label: string }[] = []
+  for (const line of String(text ?? '').split(/\r?\n/)) {
+    const t = line.trim()
+    if (!t) continue
+    const e = t.match(/^(서술형|논술형|서답형|주관식|단답형)\s*(\d+)\s*(?:번)?[.):]?\s*(.*)$/)
+    const o = !e && t.match(/^(?:객관식|선택형|문항)?\s*(\d+)\s*(?:번)?(?:[.):]\s*|\s+)(.*)$/)
+    const bare = !e && !o && t.match(/^(\d+)\s*(?:번)?[.)]?$/)
+    if (e) raw.push({ n: Number(e[2]), essay: true, answer: e[3].trim(), label: `${e[1]}${e[2]}` })
+    else if (o) raw.push({ n: Number(o[1]), essay: false, answer: o[2].trim(), label: o[1] })
+    else if (bare) raw.push({ n: Number(bare[1]), essay: false, answer: '', label: bare[1] })
+    else if (raw.length) raw[raw.length - 1].answer = (raw[raw.length - 1].answer + ' ' + t).trim()
+  }
+  const lastObjective = Math.max(0, ...raw.filter((r) => !r.essay).map((r) => r.n))
+  return raw.map((r) => ({ no: String(r.essay ? lastObjective + r.n : r.n), answer: r.answer, essay: r.essay, label: r.label }))
+}
+
+// 정답표에서 문항번호만
 export function answerNos(text: string | null | undefined): string[] {
-  return String(text ?? '').split(/\r?\n/)
-    .map((l) => normNo(l.trim().split(/\s+/)[0] ?? ''))
-    .filter(Boolean)
+  return parseAnswerTable(text).map((r) => r.no)
 }
 
 // 전체 문항 = 정답표의 번호 + 타이핑한 문항 번호 (둘 다 없으면 적중률을 낼 수 없다)

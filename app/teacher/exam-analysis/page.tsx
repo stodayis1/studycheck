@@ -214,7 +214,7 @@ export default function ExamAnalysisPage() {
                       <td className="px-3 py-2.5"><Chip ok={!!t.review} warn={!t.review && reviewed}>{t.review ? '완료' : reviewed ? '작성중' : '대기'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={p.match_status === '완료'} warn={p.match_status === '진행중'}>{p.match_status}{s.matches ? ` ${s.matches}` : ''}</Chip></td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        {s.hitRate == null ? <Chip>-</Chip> : <Chip ok={p.match_status === '완료'} warn={p.match_status !== '완료'}>{s.hitRate}% ({s.hit}/{s.total})</Chip>}
+                        {s.hitRate == null || !s.matches ? <Chip>-</Chip> : <Chip ok={p.match_status === '완료'} warn={p.match_status !== '완료'}>{s.hitRate}% ({s.hit}/{s.total})</Chip>}
                       </td>
                       <td className="px-3 py-2.5"><Chip ok={s.questions > 0 && s.reflected === s.questions} warn={s.questions > 0 && s.reflected < s.questions}>{s.questions ? `${s.reflected}/${s.questions}` : '대기'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={p.blog_status === '업로드완료'} warn={p.blog_status === '작성중'}>{p.blog_status}</Chip></td>
