@@ -4,6 +4,7 @@
  *   node scripts/exam-blog/build.mjs "<시험 폴더>/blog/analysis.json"
  *
  * analysis.json 하나로 카드 그림을 만든다 (1080×1350, 네이버 블로그 본문용):
+ *   00_thumb.png          대표 썸네일 (1080×1080) — 크림 바탕 · 주황 포인트 · 큰 제목 두 줄 · 수지. 기존 대표썸네일과 같은 모양
  *   01_summary.png        시험분석 요약 — 문항 수 · 난이도 · 변별문항 · 적중률 / 단원 비중 / 출제 경향 / 다음 시험 전략
  *   02_killers.png        변별력 문항 카드
  *   03_deep_<번호>.png    변별문항 심층분석 (문제 · 풀이 4단계 · 왜 어려웠나 · 선생님 한마디)
@@ -170,9 +171,33 @@ ${[1, 5, 10, 15, 20, n].map((v) => `<text x="${xs(v - 1).toFixed(1)}" y="180" fo
 <div style="color:#fff;font-size:27px;font-weight:800;line-height:1.4;margin-top:4px">${esc(A.message)}</div></div></div>`
 }
 
+// ── 00 대표 썸네일 (기존 「○○중3_대표썸네일.jpg」 와 같은 모양)
+function thumb() {
+  const T = A.thumb
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}html,body{width:1080px;height:1080px;overflow:hidden}
+body{background:#fff8ec;font-family:'Pretendard','Malgun Gothic',sans-serif;word-break:keep-all;position:relative}
+.k{position:absolute;left:72px;top:82px;font-size:35px;font-weight:800;color:#ff7a00;letter-spacing:1px}
+.logo{position:absolute;right:70px;top:78px;width:110px;height:74px;object-fit:cover;border-radius:2px}
+h1{position:absolute;left:70px;top:222px;font-size:${T.headline.some((l) => l.length > 11) ? 84 : 96}px;line-height:1.24;font-weight:900;color:#1c1c33;letter-spacing:-1px}
+.bar{position:absolute;left:70px;top:${222 + T.headline.length * (T.headline.some((l) => l.length > 11) ? 104 : 119) + 16}px;width:140px;height:14px;border-radius:7px;background:#ff7a00}
+.s{position:absolute;left:70px;top:${222 + T.headline.length * (T.headline.some((l) => l.length > 11) ? 104 : 119) + 62}px;font-size:36px;font-weight:700;color:#4a4a4a}
+.ch{position:absolute;right:40px;bottom:60px;width:420px;height:420px;object-fit:cover}
+</style></head><body><div class="k">${esc(T.kicker)}</div><img class="logo" src="${asset('logo_gold_on_navy.png')}">
+<h1>${T.headline.map(esc).join('<br>')}</h1><div class="bar"></div><div class="s">${esc(T.sub)}</div>
+<img class="ch" src="${asset('suji_uniform_fighting.jpg')}"></body></html>`
+}
+
 const cards = [['01_summary', summary(), 1350], ['02_killers', killers(), 1080], ...A.killers.map((k) => [`03_deep_${String(k.no).padStart(2, '0')}`, deep(k), 1350]), ['04_review', review(), 1240]]
 const tmp = path.join(dir, '_html')
 fs.mkdirSync(tmp, { recursive: true })
+if (A.thumb) {
+  const html = path.join(tmp, '00_thumb.html')
+  fs.writeFileSync(html, thumb())
+  const out = path.join(dir, '00_thumb.png')
+  execFileSync(EDGE, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1', '--window-size=1080,1080', `--screenshot=${out}`, pathToFileURL(html).href], { stdio: 'ignore' })
+  console.log('만듦:', out)
+}
 cards.forEach(([name, body, h], i) => {
   const html = path.join(tmp, `${name}.html`)
   fs.writeFileSync(html, shell(i + 1, cards.length, body, h))
