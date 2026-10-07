@@ -321,6 +321,26 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {tab === 5 && (
         <Card title="블로그 업로드">
           {!isAdmin && <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">블로그 상태는 원장님(윤T)만 바꿀 수 있습니다.</p>}
+          {/* 원장: 블로그 글 요청. 누르면 「작성중」이 되고 요청 시각이 남는다 → Claude 가 이 표시를 보고
+              시험분석 카드(scripts/exam-blog)와 글을 만들어 네이버 블로그에 임시저장한다 */}
+          {isAdmin && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3" style={{ borderColor: '#9FE1CB', background: '#F0FBF7' }}>
+              <button
+                onClick={() => {
+                  if (!confirm('이 시험의 블로그 글 작성을 요청할까요?\n시험분석 카드와 글을 만들어 네이버 블로그에 임시저장합니다 (발행은 원장님이 직접).')) return
+                  saveNow({ blog_status: '작성중', tasks: { ...tasks, blog_requested_at: new Date().toISOString() } })
+                }}
+                disabled={paper.blog_status === '업로드완료'}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>
+                <i className="ti ti-pencil mr-1.5" />블로그 글 작성 요청
+              </button>
+              <span className="text-xs text-gray-600">
+                {tasks.blog_requested_at
+                  ? `요청함: ${new Date(tasks.blog_requested_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · 임시저장되면 「블로그 주소」에 표시됩니다`
+                  : '정답 · 변별문항 손풀이 · 총평이 채워진 뒤에 눌러 주세요.'}
+              </span>
+            </div>
+          )}
           <div className="grid gap-3 lg:grid-cols-2 text-sm">
             <Field label="상태">
               <select className={INPUT} disabled={!isAdmin} value={paper.blog_status} onChange={(e) => saveNow({ blog_status: e.target.value })}>
