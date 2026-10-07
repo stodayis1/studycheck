@@ -86,7 +86,22 @@ def read_answers(doc, pages=None):
                 num = ''.join(z['text'].strip() for z in row if HEAD_NO in z['font'])
                 if num.isdigit():
                     ev.append(dict(k='t', no=int(num), pg=i + 1, col=col, y=y))
-    ev.sort(key=lambda e: (e['pg'], e['col'], e['y']))
+    # ★ 유형 칸 안에서 답이 **2열로** 놓인 데가 있다(중2-2 해설 82쪽 「유형 2」).
+    #   쪽을 좌·우 단으로만 나눠 읽으면 1 → 3 → 2 → 4 순이 되어, 3 다음 2 에서
+    #   "번호가 되돌아갔다"고 보고 묶음을 엉뚱한 데서 끊는다(본문 4개 : 해설 3개).
+    #   그래서 **같은 높이끼리 한 줄로 묶고 줄 안에서는 왼→오른쪽**으로 읽는다.
+    ev.sort(key=lambda e: (e['pg'], e['col'], e['y'], e.get('x1', 0)))
+    rowed, i = [], 0
+    while i < len(ev):
+        j = i
+        while (j + 1 < len(ev) and ev[j + 1]['pg'] == ev[i]['pg']
+               and ev[j + 1]['col'] == ev[i]['col']
+               and abs(ev[j + 1]['y'] - ev[i]['y']) < 6):
+            j += 1
+        row = sorted(ev[i:j + 1], key=lambda e: e.get('x1', 0))
+        rowed.extend(row)
+        i = j + 1
+    ev = rowed
     return ev
 
 

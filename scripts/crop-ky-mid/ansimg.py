@@ -71,19 +71,28 @@ def main():
     aruns = runs(keep)
 
     print('%s-%d · 본문 묶음 %d · 해설 묶음 %d' % (a.grade, a.semester, len(bruns), len(aruns)))
-    if len(bruns) != len(aruns):
-        print('  ✗ 묶음 수가 다릅니다 — 붙이지 않습니다')
+
+    # ★ 책 자체가 다른 자리가 있다(중2-2 소4 유형5 — 본문 4문항인데 해설은 3개).
+    #   전부-아니면-전무로 막으면 한 곳 때문에 책 한 권이 통째로 막힌다.
+    #   두 줄(묶음별 문항 수)을 맞춰 보고 **같은 구간만** 붙인다. 어긋난 유형은 비워 둔다.
+    import difflib
+    bl = [len(g['items']) for g in bruns]
+    al = [len(r) for r in aruns]
+    sm = difflib.SequenceMatcher(None, bl, al, autojunk=False)
+    pairs = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == 'equal':
+            pairs += [(bruns[i1 + k], aruns[j1 + k]) for k in range(i2 - i1)]
+    skipped = len(bruns) - len(pairs)
+    print('  짝이 맞는 유형 %d · 건너뛴 유형 %d' % (len(pairs), skipped), flush=True)
+    if not pairs:
+        print('  ✗ 맞는 것이 없습니다')
         return
-    diff = [i for i in range(len(bruns)) if len(bruns[i]['items']) != len(aruns[i])]
-    if diff:
-        print('  ✗ 문항 수가 다른 묶음 %d곳 — 붙이지 않습니다 %s' % (len(diff), diff[:6]))
-        return
-    print('  묶음·문항 수가 모두 같습니다 — 정답을 자릅니다', flush=True)
 
     course = '%s-%d' % (a.grade, a.semester)
     made = 0
     seq = {}
-    for g, ar in zip(bruns, aruns):
+    for g, ar in pairs:
         for k, (bi, ai) in enumerate(zip(g['items'], ar), 1):
             page = doc[ai['pg'] - 1]
             W = page.rect.width
