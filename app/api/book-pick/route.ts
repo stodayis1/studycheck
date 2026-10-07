@@ -155,7 +155,7 @@ export async function POST(req: Request) {
   const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
   const supabase = db()
-  const b = await req.json().catch(() => null)
+  const b = await req.json().catch((): any => null)
   if (!b) return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
 
   const {
