@@ -48,6 +48,7 @@ interface LearningNote {
   textbook_submitted: boolean
   workbook_done: boolean
   memo: string | null
+  achievement_pct: number | null   // 그날 과제 달성률 (선생님이 알림장에 적는다)
   makeup_note: string | null   // 결석한 날의 보강 진행 상황 (OPS가 채운다)
   video_started_at: string | null
   video_completed_at: string | null
@@ -228,6 +229,15 @@ export default function ParentDashboardPage() {
   const periodNotes = notes.filter(n => periodSessions.some(s => s.id === n.session_id))
 
   // 통계
+  // 날짜별 기록 — 비율만 보여 주면 "그날 과제를 해왔는지"를 알 수 없다는 말씀이 있었다.
+  // 수업한 날마다 출결·과제·달성률·선생님 메모를 그대로 늘어놓는다.
+  // ★ 기간(이번 주)에 묶지 않는다. 그 주에 수업이 없으면 화면이 통째로 비어
+  //   "그날그날이 안 보인다"는 말이 나온다. 지난 수업부터 최근 것 위주로 그냥 보여 준다.
+  const dayRows = sessions
+    .filter((ses) => ses.session_date <= todayStr)
+    .map((ses) => ({ ses, note: notes.find((n) => n.session_id === ses.id) }))
+    .sort((a, b) => (a.ses.session_date < b.ses.session_date ? 1 : -1))
+
   const totalSessions = periodNotes.length
   const attendRate = totalSessions > 0
     ? Math.round(periodNotes.filter(n => n.attendance === '정시').length / totalSessions * 100) : 0
@@ -435,6 +445,73 @@ export default function ParentDashboardPage() {
             </div>
           )}
         </div>
+
+        {/* 날짜별 기록 — 그날 과제를 해왔는지, 지각했는지를 바로 보이게 */}
+        {dayRows.length > 0 && (
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#f0f0f0' }}>
+            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#FAFAFA', borderBottom: '1px solid #f0f0f0' }}>
+              <i className="ti ti-calendar-check" style={{ fontSize: 15, color: '#993C1D' }} />
+              <h3 className="text-sm font-bold" style={{ color: '#712B13' }}>날짜별 기록</h3>
+              <Link href="/parent/learning-notes" className="ml-auto text-[11px]" style={{ color: '#993C1D' }}>
+                전체 보기 ›
+              </Link>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#f5f5f5' }}>
+              {dayRows.slice(0, 8).map(({ ses, note }) => {
+                const d = new Date(ses.session_date + 'T00:00:00')
+                const day = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()]
+                const att = note?.attendance ?? null
+                const pct = note?.achievement_pct ?? (note?.workbook_done ? 100 : note?.worksheet_submitted ? 70 : null)
+                return (
+                  <div key={ses.id} className="px-4 py-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-bold text-gray-700 w-[52px] shrink-0">
+                        {ses.session_date.slice(5).replace('-', '/')}<span className="text-gray-400 font-normal"> {day}</span>
+                      </span>
+                      {!note ? (
+                        <span className="text-[11px] text-gray-400">아직 기록 전이에요</span>
+                      ) : (
+                        <>
+                          <Tag ok={att === '정시'} warn={att === '지각'}>
+                            {att === '정시' ? '정시' : att === '지각' ? '지각' : att === '결석' ? '결석' : '출결 미기록'}
+                          </Tag>
+                          <Tag ok={!!note.worksheet_submitted}>
+                            학습지 {note.worksheet_submitted
+                              ? (note.worksheet_score != null ? `${note.worksheet_score}점` : '제출')
+                              : '안 해옴'}
+                          </Tag>
+                          <Tag ok={!!note.textbook_submitted}>
+                            교재 {note.textbook_submitted ? '제출' : '안 해옴'}
+                          </Tag>
+                          {pct != null && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                              style={{
+                                background: pct >= 90 ? '#EAF3DE' : pct >= 70 ? '#FAEEDA' : '#fee2e2',
+                                color: pct >= 90 ? '#27500A' : pct >= 70 ? '#633806' : '#991b1b',
+                              }}>
+                              달성률 {pct}%
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {note?.memo && (
+                      <p className="mt-1.5 text-[11px] text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5">
+                        선생님 메모 · {note.memo}
+                      </p>
+                    )}
+                    {(note as any)?.makeup_note && (
+                      <p className="mt-1.5 text-[11px] font-semibold rounded-lg px-2.5 py-1.5"
+                        style={{ background: '#FFF5F2', color: '#712B13' }}>
+                        보강 · {(note as any).makeup_note}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 알림장(피드백) — 미리보기만, 전체 기록은 '보고서' 탭(월별)에서 */}
         {feedbacks.length > 0 && (() => {
@@ -947,5 +1024,19 @@ export default function ParentDashboardPage() {
 
       </div>
     </div>
+  )
+}
+
+// 날짜별 기록의 작은 꼬리표 — 했으면 초록, 지각 같은 주의는 노랑, 안 했으면 빨강
+function Tag({ ok, warn, children }: { ok?: boolean; warn?: boolean; children: React.ReactNode }) {
+  const c = warn
+    ? { background: '#FAEEDA', color: '#633806' }
+    : ok
+      ? { background: '#EAF3DE', color: '#27500A' }
+      : { background: '#fee2e2', color: '#991b1b' }
+  return (
+    <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={c}>
+      {children}
+    </span>
   )
 }

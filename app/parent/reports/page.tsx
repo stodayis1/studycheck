@@ -18,6 +18,7 @@ interface LearningNote {
   session_id: string
   attendance: string
   worksheet_submitted: boolean
+  achievement_pct: number | null
   worksheet_score: number | null
   textbook_submitted: boolean
   workbook_done: boolean
@@ -167,6 +168,9 @@ export default function ParentReportsPage() {
   const total = monthNotes.length
   const attendRate = total > 0 ? Math.round(monthNotes.filter(n => n.attendance === '정시').length / total * 100) : 0
   const wsSubmitRate = total > 0 ? Math.round(monthNotes.filter(n => n.worksheet_submitted).length / total * 100) : 0
+  // 그날그날 적힌 과제달성률의 평균 (적힌 날만 센다)
+  const achieved = monthNotes.map(n => n.achievement_pct).filter((v): v is number => v != null)
+  const avgAchieve = achieved.length ? Math.round(achieved.reduce((a, b) => a + b, 0) / achieved.length) : null
   const tbRate = total > 0 ? Math.round(monthNotes.filter(n => n.textbook_submitted).length / total * 100) : 0
   const passedWS = monthWS.filter(w => w.status === 'passed')
   const wsCompleteRate = monthWS.length > 0 ? Math.round(passedWS.length / monthWS.length * 100) : null
@@ -385,6 +389,7 @@ export default function ParentReportsPage() {
                 {[
                   { label: '출석률', value: `${attendRate}%`, sub: `정시 ${monthNotes.filter(n=>n.attendance==='정시').length}회` },
                   { label: '과제 달성', value: `${wsSubmitRate}%`, sub: `${monthNotes.filter(n=>n.worksheet_submitted).length}/${total}회` },
+                  ...(avgAchieve != null ? [{ label: '평균 달성률', value: `${avgAchieve}%`, sub: '선생님이 매긴 그날 달성도' }] : []),
                   { label: '성취도', value: avgScore != null ? `${avgScore}점` : '-', sub: avgScore != null ? `${scoredNotes.length}회 기록` : '기록없음' },
                 ].map(item => (
                   <div key={item.label} className="rounded-xl px-3 py-3 text-center"
@@ -562,16 +567,22 @@ export default function ParentReportsPage() {
                           </span>
                         )}
                         {/* 과제 달성 */}
-                        {note && (
-                          <span className="text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
-                            style={{
-                              background: note.worksheet_submitted ? '#EAF3DE' : '#fee2e2',
-                              color: note.worksheet_submitted ? '#27500A' : '#991b1b'
-                            }}>
-                            <i className="ti ti-file-text" style={{ fontSize: 11 }} />
-                            과제 {note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
-                          </span>
-                        )}
+                        {note && (() => {
+                          // 선생님이 알림장에 적은 달성률을 그대로 쓴다.
+                          // 안 적힌 예전 기록만 제출 여부로 근사한다(100%/70%/0%).
+                          const pct = note.achievement_pct
+                            ?? (note.workbook_done ? 100 : note.worksheet_submitted ? 70 : 0)
+                          return (
+                            <span className="text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
+                              style={{
+                                background: pct >= 90 ? '#EAF3DE' : pct >= 70 ? '#FAEEDA' : '#fee2e2',
+                                color: pct >= 90 ? '#27500A' : pct >= 70 ? '#633806' : '#991b1b',
+                              }}>
+                              <i className="ti ti-file-text" style={{ fontSize: 11 }} />
+                              과제 {pct}%
+                            </span>
+                          )
+                        })()}
                         {/* 학습지 점수 */}
                         {note?.worksheet_score != null && (
                           <span className="text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"

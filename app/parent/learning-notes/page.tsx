@@ -25,6 +25,7 @@ interface LearningNote {
   textbook_page: string | null
   workbook_done: boolean
   memo: string | null
+  achievement_pct: number | null
   video_started_at: string | null
   video_completed_at: string | null
 }
@@ -249,6 +250,17 @@ export default function ParentLearningNotesPage() {
                               🔢 연산서 {note.workbook_done ? '완료' : '미완료'}
                             </span>
                           )}
+                          {(() => {
+                            // 과제달성률 — 선생님이 알림장에 적는 값. 없으면 예전 기록에서 근사
+                            const pct = note.achievement_pct ?? (note.workbook_done ? 100 : note.worksheet_submitted ? 70 : null)
+                            if (pct == null) return null
+                            return (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{
+                                background: pct >= 90 ? '#EAF3DE' : pct >= 70 ? '#FAEEDA' : '#fee2e2',
+                                color: pct >= 90 ? '#27500A' : pct >= 70 ? '#633806' : '#991b1b',
+                              }}>📊 달성률 {pct}%</span>
+                            )
+                          })()}
                           {session.video_url && (
                             <span className={cx('text-[10px] font-bold px-2 py-1 rounded-lg',
                               note.video_completed_at ? 'bg-green-50 text-green-700' :
