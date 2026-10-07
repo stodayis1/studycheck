@@ -29,7 +29,9 @@ interface Schedule {
 interface ClassSession {
   id: string
   session_date: string
+  session_type: string | null
   today_textbook_name: string | null
+  today_chapter: string | null
   progress_content: string | null
   hw_textbook_name: string | null
   hw_textbook_page: string | null
@@ -151,7 +153,7 @@ export default function ParentDashboardPage() {
           supabase.from('student_textbooks').select('*').eq('student_id', session.id).order('assigned_at', { ascending: false }),
           supabase.from('concepts').select('*').order('concept_order'),
           supabase.from('progress_checks').select('*').eq('student_id', session.id),
-          supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(20),
+          supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(80),
           // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
           supabase.from('announcements').select('id, title, content, created_at, is_important').eq('is_active', true)
             .or(`ends_at.is.null,ends_at.gte.${nowIso}`).order('created_at', { ascending: false }),
@@ -229,14 +231,31 @@ export default function ParentDashboardPage() {
   const periodNotes = notes.filter(n => periodSessions.some(s => s.id === n.session_id))
 
   // 통계
-  // 날짜별 기록 — 비율만 보여 주면 "그날 과제를 해왔는지"를 알 수 없다는 말씀이 있었다.
-  // 수업한 날마다 출결·과제·달성률·선생님 메모를 그대로 늘어놓는다.
+  // 날짜별 기록 — "하루에 있었던 일이 그 날짜 한 칸에 다 보이게" 가 원장님 요구다.
+  //   출결 · 과제를 해왔는지 · 달성률 · 그날 나간 진도 · 다음 과제 배부 · 그날의 알림장.
   // ★ 기간(이번 주)에 묶지 않는다. 그 주에 수업이 없으면 화면이 통째로 비어
   //   "그날그날이 안 보인다"는 말이 나온다. 지난 수업부터 최근 것 위주로 그냥 보여 준다.
-  const dayRows = sessions
-    .filter((ses) => ses.session_date <= todayStr)
-    .map((ses) => ({ ses, note: notes.find((n) => n.session_id === ses.id) }))
-    .sort((a, b) => (a.ses.session_date < b.ses.session_date ? 1 : -1))
+  // ★ 알림장은 session_id 가 없고 created_at 밖에 없다(수업과 따로 쓰인다).
+  //   그래서 **날짜로** 붙인다. 실제 데이터에서 1477건 중 1454건이 수업 날짜와 맞는다.
+  //   나머지(수업 없는 날에 쓴 알림장)도 안 숨기려고 날짜 목록을 합집합으로 만든다.
+  const fbDate = (fb: any) => {
+    const d = new Date(fb.created_at)   // 기기(한국) 시각 기준 — DB는 UTC로 저장된다
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const dayRows = Array.from(new Set([
+    ...sessions.filter((ses) => ses.session_date <= todayStr).map((ses) => ses.session_date),
+    ...feedbacks.map(fbDate).filter((d: string) => d <= todayStr),
+  ]))
+    .sort((a, b) => (a < b ? 1 : -1))
+    .map((date) => {
+      const ses = sessions.find((x) => x.session_date === date) ?? null
+      return {
+        date,
+        ses,
+        note: ses ? notes.find((n) => n.session_id === ses.id) : undefined,
+        fbs: feedbacks.filter((f) => fbDate(f) === date),
+      }
+    })
 
   const totalSessions = periodNotes.length
   const attendRate = totalSessions > 0
@@ -457,31 +476,40 @@ export default function ParentDashboardPage() {
               </Link>
             </div>
             <div className="divide-y" style={{ borderColor: '#f5f5f5' }}>
-              {dayRows.slice(0, 8).map(({ ses, note }) => {
-                const d = new Date(ses.session_date + 'T00:00:00')
+              {dayRows.slice(0, 8).map(({ date, ses, note, fbs }) => {
+                const d = new Date(date + 'T00:00:00')
                 const day = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()]
                 const att = note?.attendance ?? null
                 const pct = note?.achievement_pct ?? (note?.workbook_done ? 100 : note?.worksheet_submitted ? 70 : null)
+                // 진도 — today_textbook_name 과 progress_content 가 거의 늘 같은 글이다(실데이터로 확인).
+                //   같으면 한 번만 보여 준다. today_chapter 는 거의 비어 있어 있을 때만 덧붙는다.
+                const prog = [ses?.progress_content, ses?.today_textbook_name, ses?.today_chapter]
+                  .map((t) => (t ?? '').trim())
+                  .filter((t, i, arr) => t && arr.indexOf(t) === i)
+                const hw = ses ? hwOf(ses) : null
                 return (
-                  <div key={ses.id} className="px-4 py-2.5">
+                  <div key={date} className="px-4 py-3">
+                    {/* 머리줄 — 날짜 · 출결 · 과제를 해왔는지 · 달성률 */}
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs font-bold text-gray-700 w-[52px] shrink-0">
-                        {ses.session_date.slice(5).replace('-', '/')}<span className="text-gray-400 font-normal"> {day}</span>
+                        {date.slice(5).replace('-', '/')}<span className="text-gray-400 font-normal"> {day}</span>
                       </span>
-                      {!note ? (
+                      {!ses ? (
+                        <span className="text-[11px] text-gray-400">수업이 없던 날이에요</span>
+                      ) : !note ? (
                         <span className="text-[11px] text-gray-400">아직 기록 전이에요</span>
                       ) : (
                         <>
                           <Tag ok={att === '정시'} warn={att === '지각'}>
-                            {att === '정시' ? '정시' : att === '지각' ? '지각' : att === '결석' ? '결석' : '출결 미기록'}
+                            {att === '정시' ? '정시 출석' : att === '지각' ? '지각' : att === '결석' ? '결석' : '출결 미기록'}
                           </Tag>
                           <Tag ok={!!note.worksheet_submitted}>
                             학습지 {note.worksheet_submitted
-                              ? (note.worksheet_score != null ? `${note.worksheet_score}점` : '제출')
+                              ? (note.worksheet_score != null ? `${note.worksheet_score}점` : '해옴')
                               : '안 해옴'}
                           </Tag>
                           <Tag ok={!!note.textbook_submitted}>
-                            교재 {note.textbook_submitted ? '제출' : '안 해옴'}
+                            교재 {note.textbook_submitted ? '해옴' : '안 해옴'}
                           </Tag>
                           {pct != null && (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-lg"
@@ -495,13 +523,83 @@ export default function ParentDashboardPage() {
                         </>
                       )}
                     </div>
+
+                    {/* 그날 나간 진도 */}
+                    {prog.length > 0 && (
+                      <DayLine label="진도">
+                        {prog.map((t, i) => <div key={i}>{t}</div>)}
+                      </DayLine>
+                    )}
+
+                    {/* 데일리 테스트 */}
+                    {ses?.daily_test_unit && (
+                      <DayLine label="테스트">
+                        {ses.daily_test_unit}
+                        {ses.daily_test_score != null && (
+                          <span className="font-bold ml-1" style={{
+                            color: ses.daily_test_score >= 90 ? '#27500A' : ses.daily_test_score >= 70 ? '#633806' : '#991b1b',
+                          }}>· {ses.daily_test_score}점</span>
+                        )}
+                      </DayLine>
+                    )}
+
+                    {/* 과제 배부 — 그날 집에서 해올 몫 */}
+                    {hw && (hw.books.length > 0 || hw.worksheet || hw.memo) && (
+                      <DayLine label="과제 배부">
+                        {hw.books.map((b, i) => (
+                          <div key={i} className="flex items-baseline gap-1.5">
+                            <i className="ti ti-book" style={{ fontSize: 11, color: '#993C1D' }} />
+                            <span className="font-semibold text-gray-800">{b.name}</span>
+                            {b.page && <span className="text-gray-400">{b.page}</span>}
+                          </div>
+                        ))}
+                        {hw.worksheet && (
+                          <div className="flex items-baseline gap-1.5">
+                            <i className="ti ti-file-text" style={{ fontSize: 11, color: '#993C1D' }} />
+                            <span className="font-semibold text-gray-800">{hw.worksheet}</span>
+                          </div>
+                        )}
+                        {hw.memo && (
+                          <div className="flex items-baseline gap-1.5">
+                            <i className="ti ti-note" style={{ fontSize: 11, color: '#993C1D' }} />
+                            <span className="whitespace-pre-wrap">{hw.memo}</span>
+                          </div>
+                        )}
+                      </DayLine>
+                    )}
+
+                    {/* 그날의 알림장 */}
+                    {fbs.map((fb: any) => {
+                      const imgs = fbImages(fb.ai_message)
+                      return (
+                        <div key={fb.id} className="mt-2 rounded-xl px-2.5 py-2"
+                          style={{ background: '#FFF5F2', border: '1px solid #f5d6cc' }}>
+                          <p className="text-[10px] font-bold mb-1" style={{ color: '#993C1D' }}>
+                            <i className="ti ti-message-circle" style={{ fontSize: 11, marginRight: 3 }} />
+                            알림장 · {fb.teacher_name ?? '선생님'}
+                          </p>
+                          <p className="text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap">{fb.content}</p>
+                          {imgs.length > 0 && (
+                            <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                              {imgs.map((u, i) => (
+                                <a key={i} href={u} target="_blank" rel="noreferrer">
+                                  <img src={u} alt="" className="w-14 h-14 rounded-lg object-cover border"
+                                    style={{ borderColor: '#f5d6cc' }} />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+
                     {note?.memo && (
-                      <p className="mt-1.5 text-[11px] text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5">
+                      <p className="mt-2 text-[11px] text-gray-600 bg-gray-50 rounded-xl px-2.5 py-1.5 whitespace-pre-wrap">
                         선생님 메모 · {note.memo}
                       </p>
                     )}
                     {(note as any)?.makeup_note && (
-                      <p className="mt-1.5 text-[11px] font-semibold rounded-lg px-2.5 py-1.5"
+                      <p className="mt-1.5 text-[11px] font-semibold rounded-xl px-2.5 py-1.5"
                         style={{ background: '#FFF5F2', color: '#712B13' }}>
                         보강 · {(note as any).makeup_note}
                       </p>
@@ -532,18 +630,16 @@ export default function ParentDashboardPage() {
                   특이사항이 있을 때만 남겨요 · 매 수업마다 작성하는 건 아니에요
                 </p>
               </div>
-              <div className="px-4 py-3">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-[11px] font-semibold" style={{ color: '#993C1D' }}>
-                    <i className="ti ti-user" style={{ fontSize: 11, marginRight: 4 }} />
-                    {latest.teacher_name ?? '선생님'}
-                  </p>
-                  <p className="text-[10px] text-gray-400">{dateStr}</p>
-                </div>
-                <p className="text-sm text-gray-700 line-clamp-2 leading-relaxed">{latest.content}</p>
-                {feedbacks.length > 1 && (
-                  <p className="text-[10px] text-gray-400 mt-1.5">외 {feedbacks.length - 1}개 더 · 보고서 탭에서 전체보기</p>
-                )}
+              {/* ★ 본문은 위 「날짜별 기록」이 그날 자리에서 보여 준다.
+                  여기서 또 쓰면 같은 글이 한 화면에 두 번 나온다 — 길목만 남긴다. */}
+              <div className="px-4 py-3 flex items-center gap-2">
+                <p className="text-[11px] font-semibold" style={{ color: '#993C1D' }}>
+                  <i className="ti ti-user" style={{ fontSize: 11, marginRight: 4 }} />
+                  가장 최근 {dateStr} · {latest.teacher_name ?? '선생님'}
+                </p>
+                <p className="text-[10px] text-gray-400 ml-auto">
+                  모두 {feedbacks.length}개 · 달별로 모아 보기 ›
+                </p>
               </div>
             </Link>
           )
@@ -1025,6 +1121,49 @@ export default function ParentDashboardPage() {
       </div>
     </div>
   )
+}
+
+// 날짜별 기록의 한 줄 — 왼쪽에 회색 이름표, 오른쪽에 내용
+function DayLine({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2 mt-1.5">
+      <span className="text-[10px] text-gray-400 w-[46px] shrink-0 pt-[2px]">{label}</span>
+      <div className="flex-1 min-w-0 text-[11px] text-gray-700 leading-relaxed">{children}</div>
+    </div>
+  )
+}
+
+// 과제 배부 — 교재 이름은 hw_textbook_name 에 쉼표로, 페이지는 hw_textbook_page 에
+//   "교재명 · 페이지" 조각이 " / " 로 이어져 들어온다.
+//   ★ 같은 페이지가 두 번 적힌 자리가 있다("디딤돌 연산 · 94-97 · 94-97").
+//     그래서 조각의 **마지막 칸**만 페이지로 쓴다.
+//   ★ 교재를 안 고르고 메모만 남긴 과제는 그 안에 "📝 ..." 조각으로 들어 있다.
+//     이걸 안 읽으면 "오늘 과제 없음"처럼 보인다.
+function hwOf(ses: ClassSession) {
+  const pageParts = (ses.hw_textbook_page ?? '').split(' / ')
+  const memo = pageParts.find((p) => p.trim().startsWith('📝 '))
+  const books = (ses.hw_textbook_name ?? '')
+    .split(',')
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((name) => {
+      const entry = pageParts.find((p) => p.includes(name))
+      const page = entry ? entry.split('·').slice(-1)[0]?.trim() : null
+      return { name, page: page && page !== name ? page : null }
+    })
+  return { books, worksheet: (ses.hw_worksheet_range ?? '').trim() || null, memo: memo ? memo.slice(2).trim() : null }
+}
+
+// ★ 알림장의 ai_message 칸은 **글이 아니라 사진 URL을 담은 JSON**이다({"images":[...]}).
+//   글처럼 그리면 학부모 화면에 {"images":["https://..."]} 가 그대로 보인다(실제로 79건).
+//   알림장 본문은 언제나 content 쪽이다.
+function fbImages(aiMessage: string | null): string[] {
+  if (!aiMessage) return []
+  try {
+    const parsed = JSON.parse(aiMessage)
+    if (parsed && Array.isArray(parsed.images)) return parsed.images
+  } catch {}
+  return []
 }
 
 // 날짜별 기록의 작은 꼬리표 — 했으면 초록, 지각 같은 주의는 노랑, 안 했으면 빨강

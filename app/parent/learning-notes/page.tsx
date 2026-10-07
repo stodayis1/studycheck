@@ -6,6 +6,16 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 
+// ★ 알림장의 ai_message 칸은 글이 아니라 사진 URL을 담은 JSON이다({"images":[...]}).
+function fbImages(aiMessage: string | null): string[] {
+  if (!aiMessage) return []
+  try {
+    const parsed = JSON.parse(aiMessage)
+    if (parsed && Array.isArray(parsed.images)) return parsed.images
+  } catch {}
+  return []
+}
+
 interface ClassSession {
   id: string
   session_date: string
@@ -295,10 +305,18 @@ export default function ParentLearningNotesPage() {
                     <p className="text-[10px] font-bold text-purple-600 mb-2">
                       ✨ {fb.teacher_name} 선생님 알림장
                     </p>
-                    {fb.ai_message ? (
-                      <p className="text-xs text-gray-700 leading-relaxed">{fb.ai_message}</p>
-                    ) : (
-                      <p className="text-xs text-gray-500 leading-relaxed">{fb.content}</p>
+                    {/* ★ ai_message 는 글이 아니라 사진 URL을 담은 JSON({"images":[...]})이다.
+                        글로 그리면 학부모 화면에 {"images":["https://..."]} 가 그대로 보인다.
+                        알림장 본문은 언제나 content 쪽이다. */}
+                    <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{fb.content}</p>
+                    {fbImages(fb.ai_message).length > 0 && (
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        {fbImages(fb.ai_message).map((u: string, i: number) => (
+                          <a key={i} href={u} target="_blank" rel="noreferrer">
+                            <img src={u} alt="" className="w-16 h-16 rounded-lg object-cover border border-purple-100" />
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -307,7 +325,7 @@ export default function ParentLearningNotesPage() {
                 {daySessions.length === 0 && dayFeedbacks.map((fb) => (
                   <div key={fb.id} className="bg-purple-50 rounded-xl px-3 py-2.5">
                     <p className="text-[10px] font-bold text-purple-500 mb-1">💬 {fb.teacher_name} 선생님</p>
-                    <p className="text-xs text-gray-700">{fb.ai_message ?? fb.content}</p>
+                    <p className="text-xs text-gray-700 whitespace-pre-wrap">{fb.content}</p>
                   </div>
                 ))}
               </div>
