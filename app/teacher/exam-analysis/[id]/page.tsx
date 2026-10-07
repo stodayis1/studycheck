@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { supabase } from '@/lib/supabase'
 import {
   FILE_KINDS, MATCH_LEVELS, REVIEW_DIFFICULTIES, TASKS,
-  HIT_LEVELS, checkFileName, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
+  HIT_LEVELS, checkFileName, guessExamFile, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
@@ -88,8 +88,10 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   const upload = async (fileList: FileList | null, forced?: string) => {
     if (!fileList?.length) return
     for (const file of Array.from(fileList)) {
-      const kind = forced ?? kindOfFile(file.name)
-      const warn = checkFileName(paper, kind, file.name)
+      // 시험지 칸에 올린 파일은 이름이 어떻든 받는다 (종류만 이름에서 짐작: 문제 · 정답 · 해설 · 원본)
+      const named = kindOfFile(file.name)
+      const kind = forced ?? (named === '기타' || named === '손풀이' ? guessExamFile(file.name).kind : named)
+      const warn = kind === '손풀이' ? checkFileName(paper, kind, file.name) : null
       if (warn && !confirm(`${file.name}\n\n${warn}\n\n그래도 「${kind}」(으)로 올릴까요?`)) continue
       // 손풀이는 블로그에 그대로 실린다 → 해상도가 낮으면 글씨가 안 보인다. 올리기 전에 알려 준다
       if (kind === '손풀이') {
@@ -105,7 +107,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       const { error } = await supabase.storage.from('exam-analysis').uploadToSignedUrl(u.path, u.token, file, { contentType: type })
       if (error) { alert(`올리지 못했습니다: ${error.message}`); continue }
       const a = await post({
-        action: 'addFile', paperId: id, kind, path: u.path, fileName: file.name,
+        action: 'addFile', paperId: id, kind, path: u.path, fileName: file.name, autoName: true,
         mimeType: type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
       })
       if (!a.ok) alert(a.error)
@@ -113,11 +115,29 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
     setBusy('')
     load()
   }
+  // 원장: 잘못 분류된 파일의 종류를 바꾼다 (스캔 원본이 「문제」로 들어간 것 등)
+  const changeKind = async (f: any, kind: string) => {
+    const r = await post({ action: 'setFileKind', id: f.id, kind })
+    if (!r.ok) alert(r.error)
+    load()
+  }
   const removeFile = async (f: any) => {
     if (!confirm(`「${f.file_name}」 파일을 지울까요? 되돌릴 수 없습니다.`)) return
     const r = await post({ action: 'deleteFile', id: f.id })
     if (!r.ok) alert(r.error)
     load()
+  }
+
+  // 원장: 잘못 만든 빈 시험 줄 지우기 (파일 · 문항 · 매칭이 하나도 없을 때만)
+  // 문항 · 매칭이 없으면 지울 수 있다. 올라간 파일이 있으면 같이 지운다 (한 번에)
+  const isEmptyPaper = !data.questions.length && !data.matches.length && !data.sheetCode
+  const nFiles = data.files.length
+  const deletePaper = async () => {
+    if (!confirm(`「${paper.school_name} ${paper.grade} · ${paper.exam_name ?? ''}」 줄을 지울까요?` +
+      (nFiles ? `\n\n이 줄에 올라간 파일 ${nFiles}개도 같이 지워집니다.` : '') + '\n되돌릴 수 없습니다.')) return
+    const r = await post({ action: 'deletePaper', id, withFiles: true })
+    if (!r.ok) { alert(r.error); return }
+    window.location.href = '/teacher/exam-analysis'
   }
 
   const tasks = paper.tasks ?? {}
@@ -171,16 +191,23 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               </Field>
               <Field label="비고" wide><textarea className={INPUT} rows={2} value={val('note')} onChange={(e) => set('note', e.target.value)} /></Field>
             </div>
-            <div className="mt-3 text-right">{saveBtn(['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note'])}</div>
+            <div className="mt-3 flex items-center">
+              {isAdmin && isEmptyPaper && (
+                <button onClick={deletePaper} className="rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+                  <i className="ti ti-trash mr-1" />이 시험 줄 지우기{nFiles ? ` (파일 ${nFiles}개 포함)` : ''}
+                </button>
+              )}
+              <span className="ml-auto">{saveBtn(['exam_name', 'exam_end_date', 'exam_scope', 'assignee', 'work_due_date', 'note'])}</span>
+            </div>
           </Card>
 
           <Card title="시험지 파일">
             <p className="mb-2 text-xs text-gray-500">
-              시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 파일명 규칙: <b>{expectedPaperFileName(paper, '문제')}</b>
-              (구분은 문제 · 정답 · 해설 · 문제정답해설). 파일명 끝의 구분을 보고 자동으로 나눠 담습니다.
+              작업한 시험지 PDF는 <b>원장님(윤T)이 올립니다.</b> 선생님이 올린 시험지는 <b>원본</b>으로 보관됩니다. 파일명은 맞추지 않아도 됩니다 —
+              올리면 <b>{expectedPaperFileName(paper, '문제')}</b> 처럼 규칙대로 자동으로 붙습니다.
             </p>
             <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
-            <FileList files={paperFiles} onRemove={removeFile} empty="아직 올린 시험지가 없습니다." />
+            <FileList files={paperFiles} onRemove={removeFile} onKind={isAdmin ? changeKind : undefined} empty="아직 올린 시험지가 없습니다." />
             {data.sheetCode && (
               <button onClick={() => openPrint(id)} className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ background: GREEN }}>
                 <i className="ti ti-printer mr-1.5" />수학의지혜 시험지 양식으로 통째 인쇄
@@ -204,11 +231,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
           <Card title="원본 보관 (원장님만 열람)">
             <p className="mb-2 text-xs text-gray-500">
               학교에서 받은 시험지 원본, 한글(HWP) 작업 원본을 따로 보관합니다. 올리는 것은 누구나 할 수 있지만
-              <b> 올린 뒤에는 원장님만 열어 보고 지울 수 있습니다.</b> 파일명: <b>{expectedPaperFileName(paper, '원본').replace('.pdf', '.hwp')}</b> (PDF·JPG도 가능)
+              <b> 올린 뒤에는 원장님만 열어 보고 지울 수 있습니다.</b> 파일명은 자동으로 붙습니다 (HWP · PDF · JPG).
             </p>
             <FileDrop accept=".pdf,.hwp,.hwpx,.png,.jpg,.jpeg" onFiles={(f) => upload(f, '원본')} label="원본 파일 올리기" />
             {isAdmin
-              ? <FileList files={originals} onRemove={removeFile} empty="아직 보관된 원본이 없습니다." />
+              ? <FileList files={originals} onRemove={removeFile} onKind={changeKind} empty="아직 보관된 원본이 없습니다." />
               : <p className="mt-3 text-center text-xs text-gray-500">보관된 원본 {data.originalCount ?? 0}개 · 원장님만 열어 볼 수 있습니다.</p>}
           </Card>
         </div>
@@ -294,6 +321,26 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {tab === 5 && (
         <Card title="블로그 업로드">
           {!isAdmin && <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">블로그 상태는 원장님(윤T)만 바꿀 수 있습니다.</p>}
+          {/* 원장: 블로그 글 요청. 누르면 「작성중」이 되고 요청 시각이 남는다 → Claude 가 이 표시를 보고
+              시험분석 카드(scripts/exam-blog)와 글을 만들어 네이버 블로그에 임시저장한다 */}
+          {isAdmin && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3" style={{ borderColor: '#9FE1CB', background: '#F0FBF7' }}>
+              <button
+                onClick={() => {
+                  if (!confirm('이 시험의 블로그 글 작성을 요청할까요?\n시험분석 카드와 글을 만들어 네이버 블로그에 임시저장합니다 (발행은 원장님이 직접).')) return
+                  saveNow({ blog_status: '작성중', tasks: { ...tasks, blog_requested_at: new Date().toISOString() } })
+                }}
+                disabled={paper.blog_status === '업로드완료'}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>
+                <i className="ti ti-pencil mr-1.5" />블로그 글 작성 요청
+              </button>
+              <span className="text-xs text-gray-600">
+                {tasks.blog_requested_at
+                  ? `요청함: ${new Date(tasks.blog_requested_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · 임시저장되면 「블로그 주소」에 표시됩니다`
+                  : '정답 · 변별문항 손풀이 · 총평이 채워진 뒤에 눌러 주세요.'}
+              </span>
+            </div>
+          )}
           <div className="grid gap-3 lg:grid-cols-2 text-sm">
             <Field label="상태">
               <select className={INPUT} disabled={!isAdmin} value={paper.blog_status} onChange={(e) => saveNow({ blog_status: e.target.value })}>
@@ -542,7 +589,10 @@ function FileDrop({ accept, onFiles, label }: { accept: string; onFiles: (f: Fil
   )
 }
 
-function FileList({ files, onRemove, empty }: { files: any[]; onRemove: (f: any) => void; empty: string }) {
+// 내려받는 주소: 임시 주소 뒤에 download= 를 붙이면 화면에 보이는 한글 파일명 그대로 저장된다
+const downloadUrl = (f: any) => (f.url ? `${f.url}&download=${encodeURIComponent(f.file_name)}` : '#')
+
+function FileList({ files, onRemove, onKind, empty }: { files: any[]; onRemove: (f: any) => void; onKind?: (f: any, kind: string) => void; empty: string }) {
   if (!files.length) return <p className="mt-3 text-center text-xs text-gray-400">{empty}</p>
   return (
     <ul className="mt-3 divide-y text-sm">
@@ -552,6 +602,16 @@ function FileList({ files, onRemove, empty }: { files: any[]; onRemove: (f: any)
           <a href={f.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:underline">{f.file_name}</a>
           {!f.name_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">파일명 확인</span>}
           <span className="text-xs text-gray-400">{f.uploaded_by}</span>
+          {onKind && (
+            <select value={f.kind} onChange={(e) => onKind(f, e.target.value)} title="종류 바꾸기 (원장님만)"
+              className="rounded border px-1 py-0.5 text-[11px] text-gray-600">
+              {['문제', '정답', '해설', '문제정답해설', '원본'].filter((k) => k === '원본' || /\.pdf$/i.test(f.file_name)).map((k) => <option key={k}>{k}</option>)}
+            </select>
+          )}
+          <a href={downloadUrl(f)} title="내려받기" className="flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
+            style={{ borderColor: GREEN, color: GREEN }}>
+            <i className="ti ti-download" />다운로드
+          </a>
           <button onClick={() => onRemove(f)} className="text-gray-400 hover:text-red-600"><i className="ti ti-trash" /></button>
         </li>
       ))}
