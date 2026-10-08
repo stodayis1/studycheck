@@ -282,6 +282,8 @@ export default function TeacherLearningNotesPage() {
   const [briefPreview, setBriefPreview] = useState<any>(null)
   const [briefResult, setBriefResult] = useState<any>(null)
   const [tplCheck, setTplCheck] = useState<any>(null)
+  // 학습일지 미작성자 — 원장님이 발송 전에 바로 볼 수 있어야 한다(브리핑에서 빠지는 학생들이다).
+  const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
 
   async function runBriefing(dryRun: boolean) {
     setBriefBusy(true)
@@ -301,6 +303,41 @@ export default function TeacherLearningNotesPage() {
     } finally {
       setBriefBusy(false)
     }
+  }
+
+  /**
+   * 그 날짜에 수업은 있는데 **학습일지가 아직 안 끝난** 학생을 찾는다.
+   * 이 학생들은 브리핑에서 조용히 빠지므로, 원장님이 발송 전에 보고 선생님께 말할 수 있어야 한다.
+   * 판정 기준은 발송 라우트와 같다 — 출결이 적혀 있어야 '끝난 것'으로 본다.
+   */
+  async function loadMissing(date: string) {
+    setMissing(null)
+    const { data: ses } = await supabase.from('class_sessions')
+      .select('id, student_id, progress_content, today_textbook_name, hw_textbook_name, hw_textbook_page, hw_worksheet_range')
+      .eq('session_date', date)
+    if (!ses?.length) { setMissing([]); return }
+    const [{ data: notes }, { data: stus }] = await Promise.all([
+      supabase.from('learning_notes').select('session_id, attendance').in('session_id', ses.map((x) => x.id)),
+      supabase.from('students').select('id, name, grade, teacher_name').in('id', ses.map((x) => x.student_id)),
+    ])
+    const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
+    const stuBy = new Map((stus ?? []).map((x: any) => [x.id, x]))
+    const out: { name: string; grade: string; teacher: string | null; why: string }[] = []
+    for (const x of ses) {
+      const n: any = noteBy.get(x.id)
+      const st: any = stuBy.get(x.student_id)
+      if (!st) continue
+      if (!n) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '수업일지 없음' }); continue }
+      if (!n.attendance) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '출결 미입력' }); continue }
+      if (n.attendance === '결석') continue   // 결석은 진도·과제를 안 쓰는 것이 정상
+      const hasContent = !!(x.progress_content || x.today_textbook_name)
+      const hasHw = !!(x.hw_textbook_name || x.hw_worksheet_range || x.hw_textbook_page)
+      if (!hasContent && !hasHw) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '진도·과제 비었음' })
+      else if (!hasContent) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '진도 비었음' })
+      else if (!hasHw) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '과제 비었음' })
+    }
+    out.sort((a, b) => (a.teacher ?? '').localeCompare(b.teacher ?? '') || a.name.localeCompare(b.name))
+    setMissing(out)
   }
 
   // ★ 알리고는 변수를 채워 주지 않는다. 우리가 만든 본문이 **승인된 템플릿과 글자 단위로
@@ -1838,15 +1875,22 @@ ${e?.message ?? '연결 실패'}
             <div className="flex items-center gap-2 flex-wrap">
               <i className="ti ti-messages" style={{ fontSize: 16, color: '#3C1E1E' }} />
               <span className="text-sm font-bold" style={{ color: '#3C1E1E' }}>카톡 수업 브리핑</span>
-              <span className="text-[11px] text-gray-500 ml-auto">매일 오전 11시 자동 발송 · 아래는 직접 돌릴 때</span>
+              <span className="text-[11px] text-gray-500 ml-auto">
+                자동 발송 — 초등 당일 저녁 8시 · 중고등(+못 나간 초등) 다음 날 오전 11시
+              </span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
               기록이 끝난 학생만 보냅니다. 같은 날은 두 번 가지 않아요.
+              저녁 8시에 못 나간 초등부는 다음 날 오전 11시에 함께 나갑니다.
             </p>
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               <input type="date" value={briefDate} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}
-                onChange={(e) => { setBriefDate(e.target.value); setBriefPreview(null); setBriefResult(null) }}
+                onChange={(e) => { setBriefDate(e.target.value); setBriefPreview(null); setBriefResult(null); setTplCheck(null); loadMissing(e.target.value) }}
                 className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg" />
+              <button onClick={() => loadMissing(briefDate)} disabled={briefBusy}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                학습일지 미작성 보기
+              </button>
               <button onClick={checkTemplate} disabled={briefBusy}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 템플릿 맞는지 확인
@@ -1863,6 +1907,30 @@ ${e?.message ?? '연결 실패'}
                 </button>
               )}
             </div>
+
+            {missing && (
+              <div className="mt-3 text-[11px]">
+                {missing.length === 0 ? (
+                  <div style={{ color: '#27500A', fontWeight: 700 }}>✓ {briefDate} 수업은 모두 작성됐어요.</div>
+                ) : (
+                  <div className="rounded-lg border p-2.5" style={{ borderColor: '#F5C4B3', background: '#FFF5F2' }}>
+                    <div className="font-bold mb-1.5" style={{ color: '#991b1b' }}>
+                      학습일지 미작성 {missing.length}명 — 이 학생들은 브리핑이 안 나갑니다
+                    </div>
+                    <div className="space-y-0.5">
+                      {missing.map((m, i) => (
+                        <div key={i} className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-gray-800 w-[52px]">{m.name}</span>
+                          <span className="text-gray-400 w-[28px]">{m.grade}</span>
+                          <span className="text-gray-500 w-[52px]">{m.teacher ?? '담당 없음'}</span>
+                          <span style={{ color: '#991b1b' }}>{m.why}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {tplCheck && (
               <div className="mt-3 text-[11px] space-y-1">

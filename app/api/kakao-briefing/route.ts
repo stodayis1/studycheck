@@ -1,9 +1,17 @@
-// 카톡 수업 브리핑 — 어제 수업을 다음 날 오전 11시에 학부모에게 일괄 발송.
+// 카톡 수업 브리핑 — 두 번에 나눠 보낸다(원장님 결정 2026-10-08).
 //
-// 왜 "다음 날 오전"인가
-//   선생님들이 학습현황을 저장하는 시각을 재 보면 당일 21시까지 55%, 22시까지 72%,
-//   23시까지 95%, 나머지는 새벽이다. 그날 밤에 보내면 **절반이 빈 브리핑**으로 간다.
-//   다음 날 오전이면 최근 30일 1,809건이 **전부** 기록 완료 상태였다.
+//   1차  수업 당일 저녁 8시 — **초등부**
+//   2차  다음 날 오전 11시 — **중고등부 + 1차에 못 나간 초등부**
+//
+// 왜 이렇게 나누나 — 선생님들이 학습일지를 저장하는 시각이 학년별로 전혀 다르다
+// (최근 30일 1,865건):
+//     초등   당일 20시까지 85% · 당일 안에 100%
+//     중고등 당일 20시까지 19% · 당일 안에  94%
+//   초등은 저녁 8시면 거의 다 차 있어 그날 바로 보낼 수 있다.
+//   중고등을 같이 보내면 열에 여덟이 빈 브리핑으로 나간다.
+//
+// 1차에 기록이 안 끝나 못 나간 초등부는 2차에서 함께 나간다 —
+// briefing_sends 의 (학생, 날짜) 유일 제약이 "이미 보낸 사람"을 자동으로 걸러 준다.
 //
 // 중복 발송은 DB 가 막는다
 //   briefing_sends 의 (student_id, session_date) 유일 제약. 코드에서 "이미 보냈나?" 를
@@ -39,6 +47,8 @@ function admin(): SupabaseClient {
 
 export interface BriefingSummary {
   date: string
+  /** 1 = 당일 저녁 8시(초등) · 2 = 다음 날 오전 11시(전원) */
+  phase?: number
   dryRun: boolean
   /** 알리고 testMode — 켜져 있으면 요금도 안 나가고 학부모에게도 안 간다 */
   testMode?: boolean
@@ -55,7 +65,11 @@ export interface BriefingSummary {
   unitCost?: number
 }
 
-async function run(opts: { date: string; dryRun: boolean; studentIds?: string[]; testPhone?: string }): Promise<BriefingSummary> {
+async function run(opts: {
+  date: string; dryRun: boolean; studentIds?: string[]; testPhone?: string
+  /** 'elementary' 면 초등부만, 'secondary' 면 중·고등부만. 안 주면 전원. */
+  only?: 'elementary' | 'secondary'
+}): Promise<BriefingSummary> {
   const db = admin()
   const { date, dryRun } = opts
   const out: BriefingSummary = {
@@ -103,6 +117,12 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
     const note: any = noteBy.get(ses.id)
 
     // 기록이 안 끝난 학생은 보내지 않는다 — 빈 브리핑이 가는 것이 안 가는 것보다 나쁘다.
+    // 1차(초등)·2차(전원) 를 학년으로 가른다. 학년은 '초3' '중2' '고1' 꼴이다.
+    if (opts.only) {
+      const 초등 = String(student.grade ?? '').startsWith('초')
+      if (opts.only === 'elementary' && !초등) continue
+      if (opts.only === 'secondary' && 초등) continue
+    }
     if (!note || !note.attendance) { out.skippedNoRecord.push({ name: student.name }); continue }
     if (!student.parent_phone) { out.skippedNoPhone.push({ name: student.name }); continue }
     if (!opts.testPhone && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
@@ -202,8 +222,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '권한이 없어요.' }, { status: 401 })
   }
   try {
-    const date = new URL(req.url).searchParams.get('date') ?? kstDate(-1)
-    const summary = await run({ date, dryRun: false })
+    const q = new URL(req.url).searchParams
+    // 1차 = 당일 저녁 8시, 초등부 / 2차 = 다음 날 오전 11시, 전원(초등 못 나간 것 포함)
+    const phase = q.get('phase') === '1' ? 1 : 2
+    const date = q.get('date') ?? (phase === 1 ? kstDate(0) : kstDate(-1))
+    const summary = await run({ date, dryRun: false, only: phase === 1 ? 'elementary' : undefined })
+    summary.phase = phase
     // 만료된 링크를 치운다 — 쌓이면 표가 무거워지고, 만료된 링크를 남길 이유도 없다.
     const { count } = await admin().from('report_links').delete({ count: 'exact' })
       .lt('expires_at', new Date().toISOString())
@@ -222,12 +246,14 @@ export async function POST(req: NextRequest) {
   if (deny) return deny
   try {
     const body = (await req.json().catch(() => ({}))) as
-      { date?: string; dryRun?: boolean; studentIds?: string[]; testPhone?: string }
+      { date?: string; dryRun?: boolean; studentIds?: string[]; testPhone?: string
+        only?: 'elementary' | 'secondary' }
     const date = body.date ?? kstDate(-1)
     const summary = await run({
       date, dryRun: body.dryRun !== false, studentIds: body.studentIds,
       // 테스트 번호를 주면 그 번호로만 가고 발송 기록도 남기지 않는다(진짜 발송을 막지 않게).
       testPhone: body.testPhone?.trim() || undefined,
+      only: body.only,
     })
     return NextResponse.json(summary)
   } catch (e: any) {
