@@ -549,7 +549,9 @@ export default function TeacherReportsPage() {
       }
     }
 
-    const hwNotes = notes.filter((n: any) => n.attendance !== '결석')
+    // ★ 시험기간 결석은 「안 와도 봐주는 날」이다. 분모에 남겨 두면 그날 과제를 안 낸 것이
+    //   숙제를 빼먹은 것으로 잡혀서, 학교 시험 때마다 과제달성률이 멀쩡한 학생도 떨어진다.
+    const hwNotes = notes.filter((n: any) => n.attendance !== '결석' && !isExamAbsence(n.attendance))
     const hwDone = hwNotes.filter((n: any) => n.workbook_done || n.worksheet_submitted).length
     const hwRate = hwNotes.length > 0 ? Math.round(hwDone / hwNotes.length * 100) : 0
 

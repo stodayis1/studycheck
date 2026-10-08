@@ -108,7 +108,9 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
   //   결석으로 세면 성실한 학생의 정시 출석률이 시험 때마다 떨어진다.
   const counted = attRows.filter((r) => r.attendance && !isExamAbsence(r.attendance))
   const tally = (k: string) => counted.filter((r) => r.attendance === k).length
-  const pcts = attRows.map((r) => r.pct).filter((p): p is number => p != null)
+  // ★ 시험기간 결석은 「안 와도 봐주는 날」이다. 분모에 남겨 두면 그날 과제를 안 낸 것이
+  //   숙제를 빼먹은 것으로 잡혀서, 학교 시험 때마다 과제달성률이 멀쩡한 학생도 떨어진다.
+  const pcts = counted.map((r) => r.pct).filter((p): p is number => p != null)
 
   // ★ "언제 결석했고 그 보강은 어떻게 됐나" 를 따로 뽑는다 —
   //   결석이 잦은 것을 학부모가 스스로 알아보실 수 있어야 한다는 것이 원장님 요구.

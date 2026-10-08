@@ -258,13 +258,16 @@ export default function ParentDashboardPage() {
       }
     })
 
-  const totalSessions = periodNotes.length
+  // ★ 시험기간 결석은 「안 와도 봐주는 날」이라 분모에서 뺀다 — 안 빼면 학교 시험 때마다
+  //   출석률과 과제 제출률이 함께 떨어져, 성실한 학생이 손해를 본다.
+  const ratedNotes = periodNotes.filter(n => !isExamAbsence(n.attendance))
+  const totalSessions = ratedNotes.length
   const attendRate = totalSessions > 0
-    ? Math.round(periodNotes.filter(n => n.attendance === '정시').length / totalSessions * 100) : 0
+    ? Math.round(ratedNotes.filter(n => n.attendance === '정시').length / totalSessions * 100) : 0
   const wsSubmitRate = totalSessions > 0
-    ? Math.round(periodNotes.filter(n => n.worksheet_submitted).length / totalSessions * 100) : 0
+    ? Math.round(ratedNotes.filter(n => n.worksheet_submitted).length / totalSessions * 100) : 0
   const tbSubmitRate = totalSessions > 0
-    ? Math.round(periodNotes.filter(n => n.textbook_submitted).length / totalSessions * 100) : 0
+    ? Math.round(ratedNotes.filter(n => n.textbook_submitted).length / totalSessions * 100) : 0
   const videoSessions = periodSessions.filter(s => s.video_url)
   const videoCompleteRate = videoSessions.length > 0
     ? Math.round(notes.filter(n => videoSessions.some(s => s.id === n.session_id) && n.video_completed_at).length / videoSessions.length * 100) : 0

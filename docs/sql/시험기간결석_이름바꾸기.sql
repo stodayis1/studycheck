@@ -15,6 +15,13 @@ update public.learning_notes
    set attendance = '시험기간 결석'
  where attendance = '시험기간';
 
+-- 과제 달성률이 0% 로 저장돼 있던 7건을 비운다.
+-- 칸은 흐리게 막아 뒀지만 state 는 그대로 남아서 0 이 들어갔고, 그 0 이 과제달성률 분모에
+-- 섞여 들어가 학교 시험 때마다 멀쩡한 학생의 달성률을 끌어내렸다(코드도 같이 고쳤다).
+update public.learning_notes
+   set achievement_pct = null
+ where attendance = '시험기간 결석' and achievement_pct is not null;
+
 -- 확인 — '시험기간' 0건, '시험기간 결석' 7건이어야 한다
 select attendance, count(*) as 건수
   from public.learning_notes
