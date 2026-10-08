@@ -305,51 +305,78 @@ export default function TeacherLearningNotesPage() {
   function confirmSendBriefing() {
     const n = briefPreview?.sent ?? 0
     if (n === 0) { alert('보낼 대상이 없어요.'); return }
-    if (!confirm(`${briefDate} 수업 브리핑을 학부모 ${n}명에게 실제로 발송합니다.\n\n보내면 되돌릴 수 없고 건당 요금이 나갑니다. 진행할까요?`)) return
+    if (!confirm(`${briefDate} 수업 브리핑을 학부모 ${n}명에게 발송합니다.\n\n` +
+      `보내면 되돌릴 수 없고 건당 요금이 나갑니다.\n` +
+      `(알리고가 테스트 모드면 실제로는 가지 않습니다 — 결과에 표시돼요)\n\n진행할까요?`)) return
     runBriefing(false)
   }
 
-  async function handleSendKakao(sessionId: string, studentName: string, parentPhone?: string | null, studentId?: string) {
+  const digitsOnly = (v: string) => String(v ?? '').replace(/[^0-9]/g, '')
+  const studentDate = (d?: string) => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d)
+
+  async function handleSendKakao(
+    sessionId: string, studentName: string, parentPhone?: string | null,
+    studentId?: string, sessionDate?: string,
+  ) {
     // 카톡 발송은 원장님만 - 강사/직원에게는 버튼 자체를 안 보여주고, 혹시 몰라 여기서도 한 번 더 막음
     if (!isAdmin()) { alert('카톡 발송은 원장님만 하실 수 있어요.'); return }
+    if (!studentDate(sessionDate)) { alert('수업 날짜를 알 수 없어요.'); return }
     // 받는 번호를 보여주고, 필요하면 다른 번호(예: 테스트용 본인 번호)로 바꿔서 보낼 수 있게 함
     const target = prompt(
-      `${studentName} 학생 학부모님께 오늘 학습 안내 카톡을 보낼 번호를 확인해주세요.\n(테스트로 다른 번호에 보내려면 여기서 바꿔주세요)`,
+      `${studentName} 학생 학부모님께 ${sessionDate} 수업 브리핑을 보낼 번호를 확인해주세요.\n` +
+      `(테스트로 다른 번호에 보내려면 여기서 바꿔주세요 — 그 경우 발송 기록은 남지 않아요)`,
       parentPhone ?? ''
     )
     if (target == null) return // 취소
     if (!target.trim()) { alert('보낼 번호를 입력해주세요.'); return }
+    const isTest = digitsOnly(target) !== digitsOnly(parentPhone ?? '')
     setSendingKakao(sessionId)
     try {
-      const res = await apiFetch('/api/send-kakao', {
+      // ★ 예전에는 /api/send-kakao(솔라피)를 썼다. 업체를 알리고로 옮기면서
+      //   한 사람짜리 발송도 브리핑과 **같은 경로**를 쓴다 — 템플릿도 요금도 하나로.
+      const res = await apiFetch('/api/kakao-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, testPhone: target.trim() }),
+        body: JSON.stringify({
+          date: sessionDate, dryRun: false,
+          studentIds: studentId ? [studentId] : undefined,
+          testPhone: isTest ? target.trim() : undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
         alert('카톡 발송 실패: ' + (data.error ?? '알 수 없는 오류'))
         return
       }
-      alert('카톡을 보냈어요!')
+      if ((data.sent ?? 0) === 0) {
+        const why = data.skippedAlreadySent > 0 ? '이미 보낸 날이에요.'
+          : data.skippedNoRecord?.length ? '수업일지가 아직 다 안 채워졌어요.'
+            : data.skippedNoPhone?.length ? '보호자 번호가 없어요.'
+              : (data.errors?.[0]?.error ?? '보낼 대상이 없어요.')
+        alert('보내지 않았어요 — ' + why)
+        return
+      }
+      alert(data.testMode
+        ? '테스트 모드로 보냈어요. (실제로는 가지 않고 요금도 안 나갑니다)\n\n실제 발송은 Vercel 에서 ALIGO_TEST_MODE 를 N 으로 바꾸면 됩니다.'
+        : '카톡을 보냈어요!')
       // 카톡과 별도로, 앱 알림을 켜둔 학부모/학생에게도 푸시 발송 (실패해도 카톡 발송 자체는 이미 성공했으므로 조용히 무시)
-      if (studentId) {
+      if (studentId && !isTest) {
         apiFetch('/api/push/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             target: { studentIds: [studentId] },
             payload: {
-              title: `${studentName} 학생 오늘 학습 안내`,
+              title: `${studentName} 학생 수업 브리핑`,
               body: '오늘의 학습 리포트가 도착했어요. 눌러서 확인해보세요.',
               tag: 'daily-report',
             },
           }),
         })
-        .then((r) => reportPushResult(r, '오늘 학습 안내'))
-        .catch((e) => reportSendError(e, '오늘 학습 안내'))
+          .then((r) => reportPushResult(r, '수업 브리핑'))
+          .catch((e) => reportSendError(e, '수업 브리핑'))
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('카톡 발송 오류:', err)
       alert('카톡 발송 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
     } finally {
@@ -1817,7 +1844,19 @@ ${e?.message ?? '연결 실패'}
 
             {briefResult && (
               <div className="mt-3 text-[11px] space-y-1">
-                <div className="font-bold" style={{ color: '#27500A' }}>발송 완료 {briefResult.sent}명</div>
+                {briefResult.testMode && (
+                  <div className="font-bold px-2 py-1 rounded-lg inline-block" style={{ background: '#FAEEDA', color: '#633806' }}>
+                    테스트 모드 — 실제로는 가지 않았고 요금도 안 나갔어요.
+                    Vercel 에서 ALIGO_TEST_MODE 를 N 으로 바꾸면 진짜로 나갑니다.
+                  </div>
+                )}
+                <div className="font-bold" style={{ color: '#27500A' }}>
+                  {briefResult.testMode ? '보낸 것으로 처리' : '발송 완료'} {briefResult.sent}명
+                  {briefResult.pointLeft != null && (
+                    <span className="font-normal text-gray-500"> · 남은 포인트 {briefResult.pointLeft.toLocaleString()}
+                      {briefResult.unitCost != null && ` (건당 ${briefResult.unitCost}원)`}</span>
+                  )}
+                </div>
                 {briefResult.failed > 0 && (
                   <div style={{ color: '#991b1b' }}>
                     실패 {briefResult.failed}명 — {(briefResult.errors ?? []).map((e: any) => `${e.name}(${e.error})`).join(', ')}
@@ -2026,7 +2065,7 @@ ${e?.message ?? '연결 실패'}
                                   return (
                                     <>
                                       {isComplete && isAdmin() && (
-                                        <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id)}
+                                        <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id, session.session_date)}
                                           disabled={sendingKakao === session.id}
                                           className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
                                           style={{ background: '#FEE500' }}>

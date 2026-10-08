@@ -13,7 +13,7 @@
 //   링크를 주워도 살아 있는 DB 로 넘어갈 수 없고, 남의 자녀 자료도 볼 수 없다.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { SolapiMessageService } from 'solapi'
+import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/aligo'
 import { randomBytes } from 'crypto'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import { buildBriefing } from '@/lib/briefing'
@@ -39,6 +39,8 @@ function admin(): SupabaseClient {
 export interface BriefingSummary {
   date: string
   dryRun: boolean
+  /** 알리고 testMode — 켜져 있으면 요금도 안 나가고 학부모에게도 안 간다 */
+  testMode?: boolean
   sent: number
   failed: number
   skippedAlreadySent: number
@@ -47,9 +49,12 @@ export interface BriefingSummary {
   errors: { name: string; error: string }[]
   previews?: { name: string; phone: string; bodyLen: number; body: string }[]
   cleanedExpiredLinks?: number
+  /** 알리고가 돌려준 남은 포인트 · 건당 단가 */
+  pointLeft?: number
+  unitCost?: number
 }
 
-async function run(opts: { date: string; dryRun: boolean; studentIds?: string[] }): Promise<BriefingSummary> {
+async function run(opts: { date: string; dryRun: boolean; studentIds?: string[]; testPhone?: string }): Promise<BriefingSummary> {
   const db = admin()
   const { date, dryRun } = opts
   const out: BriefingSummary = {
@@ -78,15 +83,9 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[] 
   const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
   const sentAlready = new Set((already ?? []).map((r: any) => r.student_id))
 
-  const key = process.env.SOLAPI_API_KEY
-  const secret = process.env.SOLAPI_API_SECRET
-  const pfId = process.env.SOLAPI_PF_ID
-  const templateId = process.env.SOLAPI_BRIEFING_TEMPLATE_ID ?? process.env.SOLAPI_TEMPLATE_ID
-  const senderPhone = process.env.SOLAPI_SENDER_PHONE
-  if (!dryRun && (!key || !secret || !pfId || !templateId || !senderPhone)) {
-    throw new Error('Solapi 설정값(SOLAPI_API_KEY · SOLAPI_PF_ID · SOLAPI_BRIEFING_TEMPLATE_ID 등)이 Vercel 에 없어요.')
-  }
-  const solapi = dryRun ? null : new SolapiMessageService(key!, secret!)
+  // 설정이 빠졌으면 **여기서** 멈춘다. 반쯤 보내 놓고 멈추는 것이 제일 나쁘다.
+  const cfg: AligoConfig | null = dryRun ? null : aligoConfig()
+  if (cfg) out.testMode = cfg.testMode
 
   for (const ses of sessions) {
     const student: any = studentBy.get(ses.student_id)
@@ -96,7 +95,7 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[] 
     // 기록이 안 끝난 학생은 보내지 않는다 — 빈 브리핑이 가는 것이 안 가는 것보다 나쁘다.
     if (!note || !note.attendance) { out.skippedNoRecord.push({ name: student.name }); continue }
     if (!student.parent_phone) { out.skippedNoPhone.push({ name: student.name }); continue }
-    if (sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
+    if (!opts.testPhone && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
 
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({ studentName: student.name, session: ses, note, feedbacks: dayFbs })
@@ -130,34 +129,48 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[] 
         mk('daily_notice', snaps.noticeSnapshot),
       ])
 
-      await solapi!.send({
-        to: String(student.parent_phone).replace(/-/g, ''),
-        from: senderPhone!.replace(/-/g, ''),
-        kakaoOptions: {
-          pfId: pfId!,
-          templateId: templateId!,
-          variables: {
-            ...brief.vars,
-            '#{점수토큰}': tScore,
-            '#{출결토큰}': tAtt,
-            '#{알림장토큰}': tNotice,
-          },
-        },
+      // ★ 알리고는 변수 치환을 해 주지 않는다. 완성된 본문을 그대로 보내고,
+      //   그 본문이 승인된 템플릿 서식과 일치해야 한다(lib/briefing.ts 가 그 틀을 지킨다).
+      //   버튼 링크도 토큰 변수가 아니라 진짜 주소를 넣는다.
+      const to = opts.testPhone ?? String(student.parent_phone)
+      const r = await sendAlimtalk(cfg!, {
+        to,
+        name: student.name,
+        subject: `${student.name} 학생 수업 브리핑`,
+        message: brief.body,
+        buttons: [
+          { name: '레벨학습지 점수 현황', linkType: 'WL', linkMo: `${APP_URL}/report/${tScore}`, linkPc: `${APP_URL}/report/${tScore}` },
+          { name: '출결·과제달성률 현황', linkType: 'WL', linkMo: `${APP_URL}/report/${tAtt}`, linkPc: `${APP_URL}/report/${tAtt}` },
+          { name: '알림장·사진 보기', linkType: 'WL', linkMo: `${APP_URL}/report/${tNotice}`, linkPc: `${APP_URL}/report/${tNotice}` },
+        ],
+        failoverMessage: brief.body,
       })
+      if (r.point != null) out.pointLeft = r.point
+      if (r.unit != null) out.unitCost = r.unit
 
       // 성공을 적는다. 유일 제약에 걸리면(동시에 두 번 돌았다) 발송은 이미 됐으므로 조용히 넘긴다.
-      await db.from('briefing_sends').insert({
-        student_id: student.id, session_date: date, session_id: ses.id,
-        to_phone: String(student.parent_phone), status: 'sent', body_len: brief.bodyLen,
-      })
+      // ★ 테스트 번호로 보낸 것은 기록하지 않는다 — 기록하면 그 학생의 진짜 발송이 막힌다.
+      if (!opts.testPhone) {
+        await db.from('briefing_sends').insert({
+          student_id: student.id, session_date: date, session_id: ses.id,
+          to_phone: String(student.parent_phone), status: 'sent', body_len: brief.bodyLen,
+        })
+      }
       out.sent++
     } catch (e: any) {
       out.failed++
       out.errors.push({ name: student.name, error: e?.message ?? '알 수 없는 오류' })
-      await db.from('briefing_sends').insert({
-        student_id: student.id, session_date: date, session_id: ses.id,
-        status: 'failed', error: String(e?.message ?? e).slice(0, 500), body_len: brief.bodyLen,
-      })
+      if (!opts.testPhone) {
+        await db.from('briefing_sends').insert({
+          student_id: student.id, session_date: date, session_id: ses.id,
+          status: 'failed', error: String(e?.message ?? e).slice(0, 500), body_len: brief.bodyLen,
+        })
+      }
+      // 설정이 틀렸거나 포인트가 없으면 남은 사람도 전부 같은 이유로 실패한다. 거기서 멈춘다.
+      if (e instanceof AligoError && (e.code === -99 || /포인트|인증|설정/.test(e.message ?? ''))) {
+        out.errors.push({ name: '—', error: '같은 오류가 반복될 것 같아 여기서 멈췄어요.' })
+        break
+      }
     }
   }
 
@@ -192,9 +205,14 @@ export async function POST(req: NextRequest) {
   const deny = await denyIfNotStaff(req, { adminOnly: true })
   if (deny) return deny
   try {
-    const body = (await req.json().catch(() => ({}))) as { date?: string; dryRun?: boolean; studentIds?: string[] }
+    const body = (await req.json().catch(() => ({}))) as
+      { date?: string; dryRun?: boolean; studentIds?: string[]; testPhone?: string }
     const date = body.date ?? kstDate(-1)
-    const summary = await run({ date, dryRun: body.dryRun !== false, studentIds: body.studentIds })
+    const summary = await run({
+      date, dryRun: body.dryRun !== false, studentIds: body.studentIds,
+      // 테스트 번호를 주면 그 번호로만 가고 발송 기록도 남기지 않는다(진짜 발송을 막지 않게).
+      testPhone: body.testPhone?.trim() || undefined,
+    })
     return NextResponse.json(summary)
   } catch (e: any) {
     console.error('카톡 브리핑 발송 오류:', e)
