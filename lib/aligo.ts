@@ -148,7 +148,19 @@ export async function sendAlimtalk(cfg: AligoConfig, msg: {
 
   // ★ 여기가 핵심 — 알리고는 실패해도 HTTP 200 이다. code 로만 성패를 안다.
   if (Number(json.code) !== 0) {
-    throw new AligoError(json.message || `알리고 오류 (code ${json.code})`, Number(json.code))
+    const msg = String(json.message ?? '')
+    // ★ 알리고는 **등록된 IP 에서만** API 를 받는다(2026-10-08 확인).
+    //   Vercel 서버리스는 나가는 IP 가 매번 바뀌어서 등록이 불가능하다.
+    //   이 오류가 뜨면 코드 문제가 아니므로, 무엇을 해야 하는지 바로 알려 준다.
+    if (/IP/.test(msg)) {
+      throw new AligoError(
+        '알리고가 이 서버의 IP 를 막았습니다. 알리고는 등록된 IP 에서만 발송을 받는데, '
+        + 'Vercel 은 나가는 IP 가 매번 바뀌어 등록할 수 없습니다. '
+        + '알리고 고객센터에 「클라우드 환경이라 고정 IP가 없다 — IP 제한 해제 가능한지」 문의가 필요합니다. '
+        + `(알리고 원문: ${msg})`,
+        Number(json.code))
+    }
+    throw new AligoError(msg || `알리고 오류 (code ${json.code})`, Number(json.code))
   }
 
   return {
