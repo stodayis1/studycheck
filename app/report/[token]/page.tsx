@@ -728,15 +728,20 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
         <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
           이 달 {counted.length}회 · 정시 {n('정시')} · 지각 <b style={{ color: n('지각') ? ORANGE : TEXT_MUTED }}>{n('지각')}</b>
           {' · '}결석 <b style={{ color: n('결석') ? RED : TEXT_MUTED }}>{n('결석')}</b>
+          {mine.some((r) => r.attendance === '시험기간') &&
+            <> · 시험기간 <b style={{ color: '#7C3AED' }}>{mine.filter((r) => r.attendance === '시험기간').length}</b></>}
           {avg != null && <> · 평균 달성률 <b style={{ color: tierColor(avg, 90, 70) }}>{avg}%</b></>}
         </div>
         <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
           {mine.map((r, i) => {
-            const attColor = r.attendance === '정시' ? NAVY : r.attendance === '지각' ? ORANGE : r.attendance === '결석' ? RED : TEXT_MUTED
+            // 시험기간은 빨갛게 하지 않는다 — 봐주는 날이지 결석이 아니다
+            const attColor = r.attendance === '정시' ? NAVY : r.attendance === '지각' ? ORANGE
+              : r.attendance === '결석' ? RED : r.attendance === '시험기간' ? '#7C3AED' : TEXT_MUTED
             return (
               <div key={i} style={{
                 borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
-                background: r.attendance === '결석' ? '#fff7f7' : i % 2 === 0 ? 'white' : '#fcfcfd',
+                background: r.attendance === '결석' ? '#fff7f7'
+                  : r.attendance === '시험기간' ? '#FAF5FF' : i % 2 === 0 ? 'white' : '#fcfcfd',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px' }}>
                   <span style={{ fontSize: 11, color: TEXT_BODY, width: 58, flexShrink: 0 }}>
@@ -863,7 +868,8 @@ function DailyNotice({ d, link }: { d: any; link: ReportLink }) {
     <Shell title={dateLabel} name={d.studentName} grade={d.studentGrade} period={d.sessionDate}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
         <Stat label="출결" value={d.attendance ?? '미기록'}
-          color={d.attendance === '정시' ? NAVY : d.attendance === '지각' ? ORANGE : d.attendance === '결석' ? RED : TEXT_MUTED} />
+          color={d.attendance === '정시' ? NAVY : d.attendance === '지각' ? ORANGE
+            : d.attendance === '결석' ? RED : d.attendance === '시험기간' ? '#7C3AED' : TEXT_MUTED} />
         <Stat label="과제 달성률" value={d.achievementPct != null ? `${d.achievementPct}%` : '-'}
           color={tierColor(d.achievementPct, 90, 70)} />
       </div>

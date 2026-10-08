@@ -335,7 +335,8 @@ export default function TeacherLearningNotesPage() {
       if (!st) continue
       if (!n) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '수업일지 없음' }); continue }
       if (!n.attendance) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '출결 미입력' }); continue }
-      if (n.attendance === '결석') continue   // 결석은 진도·과제를 안 쓰는 것이 정상
+      // 결석·시험기간은 진도·과제를 안 쓰는 것이 정상이다
+      if (n.attendance === '결석' || n.attendance === '시험기간') continue
       const hasContent = !!(x.progress_content || x.today_textbook_name)
       const hasHw = !!(x.hw_textbook_name || x.hw_worksheet_range || x.hw_textbook_page)
       if (!hasContent && !hasHw) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '진도·과제 비었음' })
@@ -731,7 +732,7 @@ export default function TeacherLearningNotesPage() {
     const session = getTodaySession(studentId)
     const note = getTodayNote(studentId)
     if (!session || !note) return false
-    if (note.attendance === '결석') return true
+    if (note.attendance === '결석' || note.attendance === '시험기간') return true
     const hasContent = !!(session.progress_content || session.today_textbook_name)
     // 교재/학습지를 고르지 않고 메모("📝 ...")로만 과제를 적는 경우 hw_textbook_page에만 값이 들어가는데
     // 여기 빠져있어서 분명히 과제를 입력했는데도 "미완료"로 잘못 표시되던 문제 (고등부 메모 위주 입력에서 특히 발생)
@@ -1274,7 +1275,8 @@ ${e?.message ?? '연결 실패'}
       alert(`${noteStudent.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 학습일지를 작성할 수 없어요 (복귀 후 다시 확인해주세요).`)
       return
     }
-    if (noteAttendance !== '결석' && (noteAchievement == null || noteScorePct == null)) {
+    if (noteAttendance !== '결석' && noteAttendance !== '시험기간'
+        && (noteAchievement == null || noteScorePct == null)) {
       alert('「과제 달성률」과 「과제 성취도」를 직접 골라주세요.\n(수업내용 탭 아래쪽 — 100%여도 100을 눌러야 저장돼요)')
       return
     }
@@ -1494,6 +1496,8 @@ ${e?.message ?? '연결 실패'}
 
     // 결석이면 화면에 남아있던 과제 달성률/성취도 기본값(100% 등)이 그대로 저장되지 않도록
     // UI 비활성화와 별개로 저장 시점에도 한 번 더 강제로 "기록 없음" 처리
+    // ★ 시험기간은 OPS 에 결석으로 넘기지 않는다 — 넘기면 보강이 잡히고
+    //   원장님이 매번 「보강 안함」을 손으로 눌러야 한다.
     const isAbsent = noteAttendance === '결석'
     const noteData = {
       student_id: noteStudent.id,
@@ -3034,6 +3038,10 @@ ${e?.message ?? '연결 실패'}
                       { key: '정시', icon: 'ti-circle-check' },
                       { key: '지각', icon: 'ti-clock-exclamation' },
                       { key: '결석', icon: 'ti-x' },
+                      // ★ 중·고등 시험기간엔 학원을 안 나와도 봐주신다(원장님). 그걸 일반 결석으로
+                      //   적으면 보강이 잡히고 학부모 카톡에도 「결석」으로 나간다.
+                      //   시험기간은 **카톡을 아예 안 보내고** 보강도 안 잡는다.
+                      { key: '시험기간', icon: 'ti-notebook' },
                     ].map((att) => (
                       <button key={att.key} onClick={() => setNoteAttendance(att.key)}
                         className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5"
@@ -3048,7 +3056,7 @@ ${e?.message ?? '연결 실패'}
                 </div>
 
                 {/* 과제 달성률 - 결석이면 과제 자체가 없는 것이므로 비활성화 */}
-                <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
+                <div className={(noteAttendance === '결석' || noteAttendance === '시험기간') ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700"><i className="ti ti-chart-bar align-[-0.125em]" /> 과제 달성률</label>
                     {noteAchievement == null ? (
@@ -3059,14 +3067,14 @@ ${e?.message ?? '연결 실패'}
                       </span>
                     )}
                   </div>
-                  <PctPicker value={noteAchievement} onChange={setNoteAchievement} disabled={noteAttendance === '결석'} />
+                  <PctPicker value={noteAchievement} onChange={setNoteAchievement} disabled={noteAttendance === '결석' || noteAttendance === '시험기간'} />
                   {noteAttendance === '결석' && (
                     <p className="text-[11px] text-gray-400 mt-1.5">결석 처리 시 과제 항목은 기록되지 않아요.</p>
                   )}
                 </div>
 
                 {/* 과제 성취도 % - 결석이면 비활성화 */}
-                <div className={noteAttendance === '결석' ? 'opacity-40 pointer-events-none select-none' : ''}>
+                <div className={(noteAttendance === '결석' || noteAttendance === '시험기간') ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700"><i className="ti ti-target align-[-0.125em]" /> 과제 성취도</label>
                     {noteScorePct == null ? (
@@ -3077,15 +3085,15 @@ ${e?.message ?? '연결 실패'}
                       </span>
                     )}
                   </div>
-                  <PctPicker value={noteScorePct} onChange={setNoteScorePct} disabled={noteAttendance === '결석'} />
+                  <PctPicker value={noteScorePct} onChange={setNoteScorePct} disabled={noteAttendance === '결석' || noteAttendance === '시험기간'} />
                   {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
                   <div className="flex gap-2 mt-2">
                     <input type="text" value={noteWorksheetUnit} onChange={(e) => setNoteWorksheetUnit(e.target.value)}
-                      disabled={noteAttendance === '결석'}
+                      disabled={noteAttendance === '결석' || noteAttendance === '시험기간'}
                       placeholder="단원 (예: 3단원 분수의 덧셈)"
                       className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                     <input type="text" value={noteWorksheetLevel} onChange={(e) => setNoteWorksheetLevel(e.target.value)}
-                      disabled={noteAttendance === '결석'}
+                      disabled={noteAttendance === '결석' || noteAttendance === '시험기간'}
                       placeholder="레벨 (예: 2레벨)"
                       className="w-28 shrink-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                   </div>

@@ -500,9 +500,15 @@ export default function ParentDashboardPage() {
                         <span className="text-[11px] text-gray-400">아직 기록 전이에요</span>
                       ) : (
                         <>
-                          <Tag ok={att === '정시'} warn={att === '지각'}>
-                            {att === '정시' ? '정시 출석' : att === '지각' ? '지각' : att === '결석' ? '결석' : '출결 미기록'}
-                          </Tag>
+                          {/* 시험기간은 봐주는 날이라 빨갛게 하지 않는다 */}
+                          {att === '시험기간' ? (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                              style={{ background: '#F3E8FF', color: '#6B21A8' }}>시험기간</span>
+                          ) : (
+                            <Tag ok={att === '정시'} warn={att === '지각'}>
+                              {att === '정시' ? '정시 출석' : att === '지각' ? '지각' : att === '결석' ? '결석' : '출결 미기록'}
+                            </Tag>
+                          )}
                           <Tag ok={!!note.worksheet_submitted}>
                             학습지 {note.worksheet_submitted
                               ? (note.worksheet_score != null ? `${note.worksheet_score}점` : '해옴')

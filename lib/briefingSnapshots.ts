@@ -103,7 +103,9 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       makeup: makeupBy.get(s.session_date) ?? null,
     }
   })
-  const counted = attRows.filter((r) => r.attendance)
+  // ★ 시험기간은 「안 와도 봐주는 날」이라 출석률 계산에서 빼야 한다.
+  //   결석으로 세면 성실한 학생의 정시 출석률이 시험 때마다 떨어진다.
+  const counted = attRows.filter((r) => r.attendance && r.attendance !== '시험기간')
   const tally = (k: string) => counted.filter((r) => r.attendance === k).length
   const pcts = attRows.map((r) => r.pct).filter((p): p is number => p != null)
 
@@ -112,6 +114,7 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
   //   전체 529건 결석 중 보강 기록이 있는 것은 57건뿐이라, 없는 것은 **없다고** 적는다.
   // ★ 보강 상태는 **OPS 기록을 먼저** 믿는다. OPS 에 없을 때만 예전 글(makeup_note)로 보조한다.
   //   OPS 에는 결석일 → 보강일 → 완료 여부 → (이제는) 누가 봤고 무엇을 했는지까지 있다.
+  // 보강 안내도 진짜 결석만. 시험기간은 보강 대상이 아니다.
   const absences = attRows
     .filter((r) => r.attendance === '결석')
     .map((r) => {
@@ -152,6 +155,7 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     periodLabel: `${attendFrom} ~ ${date}`,
     rows: attRows,
     total: counted.length,
+    examDays: attRows.filter((r) => r.attendance === '시험기간').length,
     onTime: tally('정시'),
     late: tally('지각'),
     absent: tally('결석'),

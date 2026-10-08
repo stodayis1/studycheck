@@ -124,6 +124,7 @@ export default function ParentLearningNotesPage() {
     정시: allNotes.filter((n) => n.attendance === '정시').length,
     지각: allNotes.filter((n) => n.attendance === '지각').length,
     결석: allNotes.filter((n) => n.attendance === '결석').length,
+    시험기간: allNotes.filter((n) => n.attendance === '시험기간').length,
   }
 
   if (loading) return (
@@ -239,6 +240,7 @@ export default function ParentLearningNotesPage() {
                       {note ? (
                         <div className="flex flex-wrap gap-1.5">
                           <span className={cx('text-[10px] font-bold px-2 py-1 rounded-lg',
+                            note.attendance === '시험기간' ? 'bg-purple-100 text-purple-700' :
                             note.attendance === '결석' ? 'bg-red-100 text-red-600' :
                             note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
                             'bg-green-100 text-green-600')}>
