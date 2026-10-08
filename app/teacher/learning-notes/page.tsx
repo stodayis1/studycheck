@@ -317,6 +317,37 @@ export default function TeacherLearningNotesPage() {
     }
   }
 
+  // 한 학생만 보낸다.
+  // ★ 수업일지 목록은 **시간표상 오늘 수업이 있는 학생**만 보여 준다. 그래서 보강·추가 수업으로
+  //   그날 기록이 생긴 학생(예: 화·금 시간표인데 목요일에 수업한 윤수지)은 목록에 없고
+  //   학생 줄의 「카톡 발송」 버튼도 없다. 그런 경우 여기서 골라 보낸다.
+  async function sendOne(p: { studentId: string; name: string; phone: string }) {
+    if (!confirm(`${p.name} 학생 학부모님(${p.phone})께 ${briefDate} 수업 브리핑을 보냅니다.\n\n보내면 되돌릴 수 없습니다. 진행할까요?`)) return
+    setBriefBusy(true)
+    try {
+      const res = await apiFetch('/api/kakao-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, dryRun: false, studentIds: [p.studentId] }),
+      })
+      const d = await res.json()
+      if (!res.ok) { alert('발송 실패: ' + (d.error ?? '알 수 없는 오류')); return }
+      if ((d.sent ?? 0) === 0) {
+        alert('보내지 않았어요 — ' + (d.skippedAlreadySent ? '이미 보낸 날이에요.'
+          : d.errors?.[0]?.error ?? '보낼 대상이 없어요.'))
+        return
+      }
+      alert(d.testMode
+        ? `테스트 모드로 처리했어요. 실제로는 가지 않았습니다.\n(Vercel 의 ALIGO_TEST_MODE 를 N 으로 바꾸면 진짜로 나갑니다)`
+        : `${p.name} 학생 학부모님께 보냈어요.` + (d.pointLeft != null ? `\n남은 포인트 ${d.pointLeft.toLocaleString()}` : ''))
+      runBriefing(true)   // 보낸 뒤 목록을 새로 고쳐 「이미 보냄」이 보이게
+    } catch (e: any) {
+      alert('발송 중 오류: ' + (e?.message ?? '연결 실패'))
+    } finally {
+      setBriefBusy(false)
+    }
+  }
+
   function confirmSendBriefing() {
     const n = briefPreview?.sent ?? 0
     if (n === 0) { alert('보낼 대상이 없어요.'); return }
@@ -1878,15 +1909,29 @@ ${e?.message ?? '연결 실패'}
                     보호자 번호 없음 {briefPreview.skippedNoPhone.length}명 — {briefPreview.skippedNoPhone.map((x: any) => x.name).join(', ')}
                   </div>
                 )}
-                {briefPreview.previews?.[0] && (
-                  <details className="mt-1">
-                    <summary className="cursor-pointer text-gray-500">
-                      실제로 갈 글 보기 ({briefPreview.previews[0].name} · {briefPreview.previews[0].bodyLen}자 / 1000자)
-                    </summary>
-                    <pre className="mt-1.5 p-2.5 bg-white border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
-                      {briefPreview.previews[0].body}
-                    </pre>
-                  </details>
+                {/* 한 사람씩 — 어떤 글이 어디로 가는지 보고, 원하면 그 사람만 보낸다 */}
+                {(briefPreview.previews ?? []).length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {briefPreview.previews.map((p: any) => (
+                      <details key={p.studentId} className="bg-white border border-gray-200 rounded-lg">
+                        <summary className="cursor-pointer px-2.5 py-1.5 flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-gray-800">{p.name}</span>
+                          <span className="text-gray-500">{p.phone}</span>
+                          <span className="text-gray-400">{p.bodyLen}자</span>
+                          <button
+                            onClick={(e) => { e.preventDefault(); sendOne(p) }}
+                            disabled={briefBusy}
+                            className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
+                            style={{ background: '#FEE500' }}>
+                            이 학생만 보내기
+                          </button>
+                        </summary>
+                        <pre className="mx-2.5 mb-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
+                          {p.body}
+                        </pre>
+                      </details>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

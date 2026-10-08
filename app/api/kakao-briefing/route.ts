@@ -47,7 +47,7 @@ export interface BriefingSummary {
   skippedNoPhone: { name: string }[]
   skippedNoRecord: { name: string }[]
   errors: { name: string; error: string }[]
-  previews?: { name: string; phone: string; bodyLen: number; body: string }[]
+  previews?: { studentId: string; name: string; phone: string; bodyLen: number; body: string }[]
   cleanedExpiredLinks?: number
   /** 알리고가 돌려준 남은 포인트 · 건당 단가 */
   pointLeft?: number
@@ -102,6 +102,7 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
 
     if (dryRun) {
       out.previews!.push({
+        studentId: student.id,
         name: student.name,
         phone: String(student.parent_phone).replace(/^(\d{3})\d+(\d{4})$/, '$1****$2'),
         bodyLen: brief.bodyLen,
