@@ -148,18 +148,17 @@ export default function TeacherDashboardPage() {
     setOverdueConsultNames(overdue)
   }
 
-  // 강사가 올린 원장 상담 요청 — 처리 완료 전(open)인 것만
+  // 원장님이 보낸 학부모 상담 요청 — 처리 완료 전(open)인 것만.
+  // 강사에게는 본인 담당 학생 것만 보이고, 원장/직원에게는 전부 보인다.
   async function fetchConsultRequests() {
-    if (!isAdmin() && currentUser?.role !== 'staff') return
     const { data } = await supabase.from('consultation_requests')
-      .select('id, reason, requested_by_name, student:students(name)')
+      .select('id, reason, requested_by_name, student:students(name, grade, teacher_name)')
       .eq('status', 'open').order('created_at', { ascending: false })
-    setConsultRequests((data ?? []).map((r: any) => ({
-      id: r.id,
-      name: Array.isArray(r.student) ? r.student[0]?.name : r.student?.name,
-      reason: r.reason,
-      by: r.requested_by_name,
-    })))
+    const seeAll = isAdmin() || currentUser?.role === 'staff'
+    setConsultRequests((data ?? [])
+      .map((r: any) => ({ ...r, student: Array.isArray(r.student) ? r.student[0] : r.student }))
+      .filter((r: any) => r.student && (seeAll || canViewStudent(r.student)))
+      .map((r: any) => ({ id: r.id, name: r.student?.name, reason: r.reason, by: r.requested_by_name })))
   }
 
   // 마지막으로 확인한 시각 이후에 새로 작성된 상담기록을 가져온다(원장 전용).
@@ -690,7 +689,7 @@ export default function TeacherDashboardPage() {
               <Link href="/teacher/consultations" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#EEF2FF' }}>
                 <i className="ti ti-user-exclamation" style={{ fontSize: 13, color: '#3730a3' }} />
                 <p style={{ color: '#3730a3' }}>
-                  원장 상담 요청 {consultRequests.length}건 · {consultRequests.slice(0, 3).map((r) => r.name).join(', ')}{consultRequests.length > 3 ? ' 외' : ''}
+                  원장님 상담 요청 {consultRequests.length}건 · 학부모 상담 부탁드려요 ({consultRequests.slice(0, 3).map((r) => r.name).join(', ')}{consultRequests.length > 3 ? ' 외' : ''})
                 </p>
               </Link>
             )}

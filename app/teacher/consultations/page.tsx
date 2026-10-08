@@ -122,12 +122,20 @@ export default function ConsultationsPage() {
 
   const overdueStudents = myStudents.filter((s) => isOverdue(s.id))
 
-  // 원장님 상담 요청 — 이미 요청해 둔 학생은 버튼 대신 '요청됨'으로 표시
+  // 원장님이 담당 강사에게 보내는 '학부모 상담 요청' — 이미 요청해 둔 학생은 버튼 대신 '요청됨'으로 표시.
+  // 요청을 거는 쪽은 원장/직원, 받는 쪽(대시보드에 뜨는 쪽)은 그 학생의 담당 강사다.
   const requestedStudentIds = useMemo(() => new Set(requests.map((r) => r.student_id)), [requests])
   const studentById = useMemo(() => new Map(students.map((s) => [s.id, s])), [students])
+  // 강사는 자기 담당 학생 요청만, 원장/직원은 전체
+  const myStudentIds = useMemo(() => new Set(myStudents.map((s) => s.id)), [myStudents])
+  const myRequests = useMemo(
+    () => (canManageAllStudents() ? requests : requests.filter((r) => myStudentIds.has(r.student_id))),
+    [requests, myStudentIds, currentUser, adminMode])
 
   async function requestConsult(student: Student) {
-    const reason = window.prompt(`${student.name} 학생을 원장님이 상담하도록 요청해요.\n사유를 적어주세요 (예: 학부모님이 원장님 상담 요청)`, '')
+    const who = student.teacher_name || '담당 선생님'
+    const reason = window.prompt(
+      `${student.name} 학생의 학부모 상담을 ${who}께 요청해요.\n사유를 적어주세요 (예: 성적 하락, 결석이 잦음)`, '')
     if (reason === null) return
     const { error } = await supabase.from('consultation_requests').insert({
       student_id: student.id,
@@ -136,7 +144,7 @@ export default function ConsultationsPage() {
       requested_by_name: currentUser?.name ?? null,
     })
     if (error) { alert('요청에 실패했어요: ' + error.message); return }
-    alert('원장님께 상담 요청을 보냈어요. 원장님 대시보드에 떠요.')
+    alert(`${who}께 상담 요청을 보냈어요. 선생님 대시보드에 떠요.`)
     fetchData()
   }
 
@@ -191,6 +199,12 @@ export default function ConsultationsPage() {
     })
     setSaving(false)
     if (error) { alert('저장에 실패했어요: ' + error.message); return }
+    // 원장님이 걸어둔 상담 요청이 있으면, 상담기록을 남긴 시점에 자동으로 처리 완료로 바꾼다
+    if (requestedStudentIds.has(openStudent.id)) {
+      await supabase.from('consultation_requests')
+        .update({ status: 'done', resolved_by: currentUser?.id ?? null, resolved_at: new Date().toISOString() })
+        .eq('student_id', openStudent.id).eq('status', 'open')
+    }
     setNewContent('')
     fetchData()
   }
@@ -226,15 +240,21 @@ export default function ConsultationsPage() {
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
 
-        {requests.length > 0 && canManageAllStudents() && (
+        {/* 원장님이 보낸 상담 요청 — 강사에게는 '내 담당 학생' 것만, 원장/직원에게는 전부 보인다 */}
+        {myRequests.length > 0 && (
           <div className="rounded-2xl px-4 py-3 space-y-2" style={{ background: '#EEF2FF', border: '1.5px solid #A5B4FC' }}>
-            <p className="text-sm font-bold" style={{ color: '#3730a3' }}>원장 상담 요청 {requests.length}건</p>
-            {requests.map((r) => (
+            <p className="text-sm font-bold" style={{ color: '#3730a3' }}>
+              {canManageAllStudents() ? '내가 보낸 상담 요청' : '원장님이 보낸 상담 요청'} {myRequests.length}건
+            </p>
+            {myRequests.map((r) => (
               <div key={r.id} className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs font-bold" style={{ color: '#3730a3' }}>
                     {studentById.get(r.student_id)?.name ?? '(알 수 없는 학생)'}
-                    <span className="font-normal" style={{ color: '#6366f1' }}> · {r.requested_by_name ?? '요청자 미상'}</span>
+                    <span className="font-normal" style={{ color: '#6366f1' }}>
+                      {' · 담당 '}{studentById.get(r.student_id)?.teacher_name ?? '미지정'}
+                      {r.requested_by_name ? ` · 요청 ${r.requested_by_name}` : ''}
+                    </span>
                   </p>
                   {r.reason && <p className="text-[11px]" style={{ color: '#4f46e5' }}>{r.reason}</p>}
                 </div>
@@ -305,7 +325,7 @@ export default function ConsultationsPage() {
                     <span className="flex items-center gap-1 shrink-0">
                       {requestedStudentIds.has(s.id) && (
                         <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: '#EEF2FF', color: '#3730a3' }}>
-                          원장님 요청됨
+                          상담 요청
                         </span>
                       )}
                       {overdue && (
@@ -334,19 +354,20 @@ export default function ConsultationsPage() {
                 <button onClick={() => setOpenStudent(null)} className="text-gray-400 text-sm">닫기</button>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">{openStudent.school} · {openStudent.grade}</p>
-              {/* 내가 상담하기 어려운 학생은 원장님이 상담하도록 요청 — 원장님 대시보드에 뜬다 */}
+              {/* 원장님이 담당 강사에게 "이 학생 학부모와 상담해 주세요"라고 요청 — 강사 대시보드에 뜬다 */}
               {requestedStudentIds.has(openStudent.id) ? (
                 <p className="text-[11px] font-bold mt-2" style={{ color: '#3730a3' }}>
-                  원장님 상담 요청됨 {requests.find((r) => r.student_id === openStudent.id)?.reason
+                  상담 요청됨 {requests.find((r) => r.student_id === openStudent.id)?.reason
                     ? `· ${requests.find((r) => r.student_id === openStudent.id)?.reason}` : ''}
+                  {' · 상담기록을 남기면 자동으로 처리돼요'}
                 </p>
-              ) : (
+              ) : canManageAllStudents() ? (
                 <button onClick={() => requestConsult(openStudent)}
                   className="text-[11px] font-bold px-2.5 py-1 rounded-lg mt-2"
                   style={{ background: '#EEF2FF', color: '#3730a3', border: '1px solid #A5B4FC' }}>
-                  원장님 상담 요청
+                  담당 강사에게 상담 요청
                 </button>
-              )}
+              ) : null}
             </div>
 
             <div className="px-5 py-4 space-y-3" style={{ borderBottom: '1px solid #f3f4f6' }}>
