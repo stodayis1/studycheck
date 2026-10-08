@@ -331,7 +331,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3" style={{ borderColor: '#9FE1CB', background: '#F0FBF7' }}>
               <button
                 onClick={() => {
-                  if (!confirm('이 시험의 블로그 글 작성을 요청할까요?\n30분 안에 시험분석 카드와 글을 만들어 네이버 블로그에 임시저장합니다.\n(원장님 컴퓨터의 Claude 가 켜져 있어야 합니다. 발행은 원장님이 직접)')) return
+                  if (!confirm('이 시험의 블로그 글 작성을 요청할까요?\n누른 뒤 Claude 에게 「블로그 요청 처리해줘」라고 하면\n시험분석 카드와 글을 만들어 네이버 블로그에 임시저장합니다. (발행은 원장님이 직접)')) return
                   saveNow({ blog_status: '작성중', tasks: { ...tasks, blog_requested_at: new Date().toISOString() } })
                 }}
                 disabled={paper.blog_status === '업로드완료'}
@@ -341,10 +341,10 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               {(() => {
                 const at = (ts: string) => new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                 const req = tasks.blog_requested_at, ok = tasks.blog_drafted_at, ng = tasks.blog_failed_at
-                if (!req) return <span className="text-xs text-gray-600">변별문항 손풀이 · 총평이 채워진 뒤에 누르면, 30분 안에 네이버에 임시저장됩니다.</span>
+                if (!req) return <span className="text-xs text-gray-600">변별문항 손풀이 · 총평이 채워진 뒤에 누르고, Claude 에게 「블로그 요청 처리해줘」라고 하세요.</span>
                 if (ok && ok > req) return <span className="text-xs font-semibold" style={{ color: GREEN }}><i className="ti ti-circle-check mr-1" />{at(ok)} · {tasks.blog_auto_note || '네이버에 임시저장했습니다. 확인하고 발행해 주세요.'}</span>
                 if (ng && ng > req) return <span className="text-xs font-semibold text-red-600"><i className="ti ti-alert-triangle mr-1" />{at(ng)} 못 썼습니다 — {tasks.blog_auto_note} (채운 뒤 다시 눌러 주세요)</span>
-                return <span className="text-xs text-gray-600">요청함: {at(req)} · 30분 안에 임시저장됩니다 (원장님 컴퓨터의 Claude 가 켜져 있어야 합니다)</span>
+                return <span className="text-xs text-gray-600">요청함: {at(req)} · Claude 에게 「블로그 요청 처리해줘」라고 하면 임시저장까지 합니다</span>
               })()}
             </div>
           )}
