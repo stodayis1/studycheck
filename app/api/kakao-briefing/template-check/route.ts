@@ -11,7 +11,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { denyIfNotStaff } from '@/lib/apiAuth'
-import { BRIEFING_TEMPLATE } from '@/lib/briefing'
+import { BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE } from '@/lib/briefing'
 import { aligoPost } from '@/lib/aligo'
 
 export const runtime = 'nodejs'
@@ -55,6 +55,41 @@ export async function GET(req: NextRequest) {
     }
 
     const list: any[] = json.list ?? []
+
+    /** 한 판을 보고, 등록된 본문·버튼이 코드와 같은지 알려 준다. */
+    const inspect = (code: string | undefined, ours: string, wantBtn: [string, string][]) => {
+      if (!code) return { 등록여부: '아직 Vercel 에 코드가 없습니다' }
+      const t = list.find((x) => x.templtCode === code)
+      if (!t) return { 등록여부: `알리고에서 ${code} 를 못 찾았습니다` }
+      const registered = String(t.templtContent ?? '').replace(/\r\n/g, '\n')
+      const same = registered === ours
+      const at = same ? -1 : firstDiff(ours, registered)
+      const got = (t.buttons ?? []).map((b: any) => [b.name, b.linkMo] as [string, string])
+      const btnOk = got.length === wantBtn.length
+        && wantBtn.every(([n, l], i) => got[i]?.[0] === n && got[i]?.[1] === l)
+      return {
+        이름: t.templtName, 코드: code,
+        승인상태: t.inspStatus === 'APR' ? 'APR (승인됨)' : `${t.inspStatus} (아직 승인 전)`,
+        본문일치: same,
+        버튼일치: btnOk,
+        버튼: { 등록됨: got, 기대: wantBtn },
+        보내도되나: t.inspStatus === 'APR' && same && btnOk,
+        ...(same ? {} : {
+          처음_다른_자리: at,
+          우리쪽: visible(ours.slice(Math.max(0, at - 20), at + 20)),
+          알리고쪽: visible(registered.slice(Math.max(0, at - 20), at + 20)),
+          길이: { 우리: ours.length, 알리고: registered.length },
+        }),
+      }
+    }
+
+    const BTN3: [string, string][] = [
+      ['레벨학습지 점수 현황', `${APP_URL}/report/#{점수토큰}`],
+      ['출결·과제달성률 현황', `${APP_URL}/report/#{출결토큰}`],
+      ['알림장·사진 보기', `${APP_URL}/report/#{알림장토큰}`],
+    ]
+    const BTN2: [string, string][] = BTN3.slice(0, 2)
+
     const tpl = list.find((t) => t.templtCode === tplCode)
     if (!tpl) {
       return NextResponse.json({
@@ -92,6 +127,11 @@ export async function GET(req: NextRequest) {
         길이: { 우리: ours.length, 알리고: registered.length },
       }),
       버튼: { 등록됨: gotButtons, 코드가_기대하는것: wantButtons },
+      // 두 판을 나란히 — 알림장 있는 날 / 없는 날
+      판: {
+        '알림장 있는 날': inspect(tplCode, BRIEFING_TEMPLATE, BTN3),
+        '알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE, BRIEFING_TEMPLATE_NONOTE, BTN2),
+      },
       // 본문에 쓰인 변수 이름이 우리와 같은지(치환이 안 되면 #{...} 가 그대로 나간다)
       변수: {
         등록된_본문의_변수: [...new Set(registered.match(/#\{[^}]+\}/g) ?? [])],

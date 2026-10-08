@@ -1974,6 +1974,23 @@ ${e?.message ?? '연결 실패'}
               <div className="mt-3 text-[11px] space-y-1">
                 {!tplCheck.ok ? (
                   <div style={{ color: '#991b1b' }}>✗ {tplCheck.error}</div>
+                ) : tplCheck.판 ? (
+                  <div className="space-y-1">
+                    {Object.entries(tplCheck.판).map(([label, v]: any) => (
+                      <div key={label} style={{ color: v.보내도되나 ? '#27500A' : '#991b1b' }}>
+                        {v.보내도되나 ? '✓' : '✗'} <b>{label}</b> —{' '}
+                        {v.등록여부 ? v.등록여부
+                          : v.보내도되나 ? `${v.승인상태} · 본문·버튼 모두 일치`
+                            : [v.승인상태,
+                               v.본문일치 === false && `본문이 ${v.처음_다른_자리}번째 글자부터 다름`,
+                               v.버튼일치 === false && `버튼이 다름(등록 ${v.버튼?.등록됨?.length ?? 0}개 / 기대 ${v.버튼?.기대?.length ?? 0}개)`,
+                              ].filter(Boolean).join(' · ')}
+                      </div>
+                    ))}
+                    <div className="text-gray-500">
+                      「알림장 없는 날」이 아직이면 그날은 원래 판으로 나갑니다(빈 한 줄 포함).
+                    </div>
+                  </div>
                 ) : tplCheck.본문일치 && tplCheck.승인상태 === 'APR' ? (
                   <div style={{ color: '#27500A', fontWeight: 700 }}>
                     ✓ 승인된 템플릿과 본문이 똑같습니다. 보내도 됩니다.
