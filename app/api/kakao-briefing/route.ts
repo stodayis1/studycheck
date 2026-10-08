@@ -71,7 +71,7 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
   const studentIds = [...new Set(sessions.map((s: any) => s.student_id))]
   const sessionIds = sessions.map((s: any) => s.id)
   const [{ data: students }, { data: notes }, { data: fbs }, { data: already }] = await Promise.all([
-    db.from('students').select('id, name, grade, parent_phone, is_active').in('id', studentIds),
+    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id').in('id', studentIds),
     db.from('learning_notes').select('*').in('session_id', sessionIds),
     // 알림장은 session_id 가 없어 작성 시각으로 묶는다. 한국 날짜 하루치를 UTC 범위로 받는다.
     db.from('feedbacks').select('*').in('student_id', studentIds)

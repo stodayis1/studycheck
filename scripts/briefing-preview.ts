@@ -40,7 +40,7 @@ if (!sessions?.length) {
   console.error(`✗ ${date} 에 수업 기록이 없습니다.`)
   process.exit(1)
 }
-const { data: students } = await db.from('students').select('id, name, grade, parent_phone')
+const { data: students } = await db.from('students').select('id, name, grade, parent_phone, ops_student_id')
   .in('id', [...new Set(sessions.map((s: any) => s.student_id))])
 const { data: notes } = await db.from('learning_notes').select('*').in('session_id', sessions.map((s: any) => s.id))
 const { data: fbs } = await db.from('feedbacks').select('*')

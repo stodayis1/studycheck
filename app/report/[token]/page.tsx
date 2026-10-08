@@ -701,14 +701,21 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
   const absences: any[] = d.absences ?? []
   const months = [...new Set(rows.map((r) => monthOf(r.date)).filter(Boolean) as string[])].sort()
 
-  // 보강이 어떻게 됐는지를 한 단어로. 기록이 없으면 **없다고** 적는다 —
-  // 실제로 결석 529건 중 보강 기록이 있는 것은 57건뿐이다. 있는 척하면 안 된다.
-  const makeup = (a: any): { text: string; color: string } =>
-    a.state === 'done' ? { text: a.note ?? '보강 완료', color: NAVY }
-      : a.state === 'planned' ? { text: a.note ?? '보강 예정', color: ORANGE }
-        : a.state === 'waiting' ? { text: a.note ?? '보강 안내 보냄', color: ORANGE_MID }
-          : a.state === 'none' ? { text: a.note ?? '보강 기록 없음', color: RED }
-            : { text: a.note ?? '-', color: TEXT_BODY }
+  // 보강 상태 한 줄. 날짜·시각은 OPS 보강 기록(makeups)에서 온다.
+  // 기록이 없으면 **없다고** 적는다 — 있는 척하면 안 된다.
+  const day = (d?: string | null, t?: string | null) =>
+    d ? `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일${t ? ` ${t}` : ''}` : null
+  const makeup = (a: any): { text: string; color: string } => {
+    const when = day(a.makeupDate, a.makeupTime)
+    switch (a.state) {
+      case 'done': return { text: when ? `${when} 보강 완료` : (a.note ?? '보강 완료'), color: NAVY }
+      case 'planned': return { text: when ? `${when} 보강 예정` : (a.note ?? '보강 예정'), color: ORANGE }
+      case 'noshow': return { text: when ? `${when} 보강에 오지 못함` : '보강에 오지 못함', color: RED }
+      case 'waiting': return { text: a.note ?? '보강 날짜를 잡는 중', color: ORANGE_MID }
+      case 'none': return { text: a.note ?? '보강 기록 없음', color: RED }
+      default: return { text: a.note ?? '-', color: TEXT_BODY }
+    }
+  }
 
   const panel = (m: string) => {
     const mine = rows.filter((r) => monthOf(r.date) === m)
@@ -748,11 +755,21 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
                   </span>
                 </div>
                 {/* 결석한 날은 그 자리에서 보강이 어떻게 됐는지 바로 보이게 */}
-                {r.attendance === '결석' && (
-                  <div style={{ padding: '0 12px 9px 70px', fontSize: 10, color: r.makeupNote ? ORANGE_MID : RED }}>
-                    보강 · {r.makeupNote ?? '기록 없음'}
-                  </div>
-                )}
+                {r.attendance === '결석' && (() => {
+                  const mk = r.makeup
+                  const when = mk ? day(mk.makeupDate, mk.makeupTime) : null
+                  const txt = mk
+                    ? (mk.state === 'done' ? `${when ?? ''} 보강 완료`
+                      : mk.state === 'planned' ? `${when ?? ''} 보강 예정`
+                        : mk.state === 'noshow' ? '보강에 오지 못함' : '보강 날짜를 잡는 중')
+                      + (mk.teacherName ? ` · ${mk.teacherName} 선생님` : '')
+                    : (r.makeupNote ?? '기록 없음')
+                  return (
+                    <div style={{ padding: '0 12px 9px 70px', fontSize: 10, color: mk?.state === 'done' ? NAVY : (mk || r.makeupNote) ? ORANGE_MID : RED }}>
+                      보강 · {txt.trim()}
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
@@ -784,10 +801,13 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
               결석 {absences.length}회 · 보강 내역
             </div>
             <div style={{ fontSize: 10, color: ORANGE_MID, marginTop: 3 }}>
-              {d.makeupDone > 0 && `완료 ${d.makeupDone}회 · `}
-              {d.makeupPlanned > 0 && `예정 ${d.makeupPlanned}회 · `}
-              {d.makeupNone > 0 && `기록 없음 ${d.makeupNone}회`}
-              {!d.makeupDone && !d.makeupPlanned && !d.makeupNone && '최근 6개월 기준'}
+              {[
+                d.makeupDone > 0 && `완료 ${d.makeupDone}회`,
+                d.makeupPlanned > 0 && `예정 ${d.makeupPlanned}회`,
+                d.makeupWaiting > 0 && `날짜 잡는 중 ${d.makeupWaiting}회`,
+                d.makeupNoshow > 0 && `보강 결석 ${d.makeupNoshow}회`,
+                d.makeupNone > 0 && `기록 없음 ${d.makeupNone}회`,
+              ].filter(Boolean).join(' · ') || '최근 6개월 기준'}
             </div>
           </div>
           {absences.map((a, i) => {
@@ -800,7 +820,18 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
                 <span style={{ fontSize: 11, fontWeight: 600, color: RED, width: 62, flexShrink: 0 }}>
                   {(a.date ?? '').slice(5)} <span style={{ fontWeight: 400, color: TEXT_MUTED }}>{a.dow}</span>
                 </span>
-                <span style={{ fontSize: 11, color: m.color, flex: 1, lineHeight: 1.5 }}>{m.text}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: m.color, lineHeight: 1.5 }}>
+                    {m.text}
+                    {a.teacherName && <span style={{ color: TEXT_MUTED }}> · {a.teacherName} 선생님</span>}
+                  </div>
+                  {/* 그날 보강에서 무엇을 했는지 — OPS 「보강완료」에서 적은 것 */}
+                  {(a.lesson ?? []).length > 0 && (
+                    <div style={{ fontSize: 10, color: TEXT_BODY, lineHeight: 1.6, marginTop: 3 }}>
+                      {(a.lesson as string[]).join(' · ')}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })}

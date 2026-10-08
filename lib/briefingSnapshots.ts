@@ -5,14 +5,20 @@
 //   따로 두면 "미리보기에선 멀쩡했는데 실제로 간 건 달랐다" 가 된다.
 import { SupabaseClient } from '@supabase/supabase-js'
 import { fbImages, hwLines } from './briefing.ts'
+import { fetchOpsMakeups, type OpsMakeup } from './opsMakeups.ts'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
 /** 버튼 뒤에서 보여 줄 세 가지를 그때 값으로 떠 둔다. */
+/** 이 날짜 앞의 기록은 학부모 화면에 내보내지 않는다 (원장님 지시 2026-10-08). */
+export const DATA_FROM = '2026-08-01'
+
 export async function snapshots(db: SupabaseClient, student: any, date: string, ses: any, note: any, fbs: any[]) {
   const sixMonthsAgo = new Date(Date.parse(date) - 183 * 86400_000).toISOString().slice(0, 10)
   // 월별 탭으로 넘겨 보므로 출결도 학습지와 같은 6개월치를 담는다.
-  const attendFrom = sixMonthsAgo
+  // ★ 다만 2026-08-01 보다 앞은 보여 주지 않는다(원장님 지시 2026-10-08).
+  //   그 전 보강 기록은 정리가 안 돼 있어서 학부모가 보면 오해한다.
+  const attendFrom = sixMonthsAgo > DATA_FROM ? sixMonthsAgo : DATA_FROM
 
   const [{ data: ws }, { data: pastSessions }] = await Promise.all([
     db.from('student_worksheets')
@@ -24,6 +30,13 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       .eq('student_id', student.id).gte('session_date', attendFrom).lte('session_date', date)
       .order('session_date', { ascending: false }).limit(200),
   ])
+
+  // 보강은 OPS 가 들고 있다. 결석일로 짝지어 붙인다.
+  const opsMakeups = student.ops_student_id
+    ? (await fetchOpsMakeups([student.ops_student_id], attendFrom)).get(student.ops_student_id) ?? []
+    : []
+  const makeupBy = new Map<string, OpsMakeup>()
+  for (const mk of opsMakeups) if (mk.absentDate && !makeupBy.has(mk.absentDate)) makeupBy.set(mk.absentDate, mk)
 
   const sessionIds = (pastSessions ?? []).map((s: any) => s.id)
   const { data: pastNotes } = sessionIds.length
@@ -84,9 +97,10 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       attendance: n?.attendance ?? null,
       pct,
       worksheetScore: n?.worksheet_score ?? null,
-      // 보강은 따로 수업으로 잡히지 않는다(session_type 이 전부 '정규'다).
-      // OPS 가 결석한 날의 learning_notes.makeup_note 에 글로 적어 두는 것이 전부다.
+      // 보강은 OPS 가 들고 있다(makeups). 예전처럼 learning_notes.makeup_note 글만 보면
+      // 실제로 받은 보강이 「기록 없음」으로 나간다 — 2026-10-08 에 실제로 그랬다.
       makeupNote: (n?.makeup_note ?? '').trim() || null,
+      makeup: makeupBy.get(s.session_date) ?? null,
     }
   })
   const counted = attRows.filter((r) => r.attendance)
@@ -96,18 +110,39 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
   // ★ "언제 결석했고 그 보강은 어떻게 됐나" 를 따로 뽑는다 —
   //   결석이 잦은 것을 학부모가 스스로 알아보실 수 있어야 한다는 것이 원장님 요구.
   //   전체 529건 결석 중 보강 기록이 있는 것은 57건뿐이라, 없는 것은 **없다고** 적는다.
+  // ★ 보강 상태는 **OPS 기록을 먼저** 믿는다. OPS 에 없을 때만 예전 글(makeup_note)로 보조한다.
+  //   OPS 에는 결석일 → 보강일 → 완료 여부 → (이제는) 누가 봤고 무엇을 했는지까지 있다.
   const absences = attRows
     .filter((r) => r.attendance === '결석')
     .map((r) => {
+      const mk = r.makeup
+      if (mk) {
+        return {
+          date: r.date, dow: r.dow, state: mk.state,
+          makeupDate: mk.makeupDate, makeupTime: mk.makeupTime,
+          teacherName: mk.teacherName,
+          lesson: [
+            mk.lessonTextbook,
+            [mk.lessonWorksheet, mk.lessonScore != null ? `${mk.lessonScore}점` : null].filter(Boolean).join(' '),
+            mk.lessonNote,
+          ].map((t) => (t ?? '').trim()).filter(Boolean),
+          note: null as string | null,
+        }
+      }
+      // OPS 에 아무것도 없을 때만 예전 글을 본다.
       const m = r.makeupNote ?? ''
-      const state: 'done' | 'planned' | 'waiting' | 'none' | 'unknown' =
+      const state: 'done' | 'planned' | 'waiting' | 'none' =
         !m ? 'none'
           : /안 ?함|안함/.test(m) ? 'none'
             : /완료|했음|함$/.test(m) ? 'done'
               : /예정/.test(m) ? 'planned'
                 : /안내|대기|선택/.test(m) ? 'waiting'
-                  : 'unknown'
-      return { date: r.date, dow: r.dow, note: r.makeupNote, state }
+                  : 'waiting'
+      return {
+        date: r.date, dow: r.dow, state,
+        makeupDate: null, makeupTime: null, teacherName: null,
+        lesson: [] as string[], note: r.makeupNote,
+      }
     })
 
   const attendanceSnapshot = {
@@ -125,6 +160,8 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     makeupPlanned: absences.filter((a) => a.state === 'planned').length,
     makeupDone: absences.filter((a) => a.state === 'done').length,
     makeupNone: absences.filter((a) => a.state === 'none').length,
+    makeupNoshow: absences.filter((a) => a.state === 'noshow').length,
+    makeupWaiting: absences.filter((a) => a.state === 'waiting').length,
   }
 
   // ── 그날의 알림장·사진 ──────────────────────────────────────────────────
