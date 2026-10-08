@@ -245,7 +245,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {tab === 1 && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="정답">
-            <p className="mb-2 text-xs text-gray-500">한 줄에 「번호 정답」 을 적어 주세요. 예) <code>1 ③</code> · <code>서술형2 x=3</code></p>
+            <p className="mb-2 rounded-lg px-3 py-2 text-xs" style={{ background: '#F0FBF7', color: GREEN }}>
+              <b>정답은 여기에 적지 않아도 됩니다.</b> 원장님이 한글 파일에 정답을 넣어 올리면 문항과 QR 채점에 자동으로 들어갑니다.
+              (루트 · 분수가 든 답은 여기에 칠 수 없어서 방식을 바꿨습니다)
+            </p>
+            <p className="mb-2 text-xs text-gray-400">꼭 필요할 때만: 한 줄에 「번호 정답」. 예) <code>1 ③</code> · <code>서술형2 12</code></p>
             <textarea className={INPUT + ' font-mono'} rows={14} value={val('answers_text')} onChange={(e) => set('answers_text', e.target.value)}
               placeholder={'1 ③\n2 ①\n…\n서술형1 12'} />
             <div className="mt-3 text-right">{saveBtn(['answers_text'])}</div>

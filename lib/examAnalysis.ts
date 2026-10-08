@@ -15,7 +15,6 @@ export const CIRCLES = ['①', '②', '③', '④', '⑤']
 // 선생님 체크리스트 (exam_papers.tasks 의 열쇠)
 export const TASKS: { key: string; label: string }[] = [
   { key: 'upload', label: '시험지 업로드' },
-  { key: 'answers', label: '정답 작업' },
   { key: 'discriminating', label: '변별문항 2~3개 선정' },
   { key: 'handsolve', label: '손풀이 이미지 업로드' },
   { key: 'review', label: '시험 총평 작성' },
