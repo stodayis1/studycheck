@@ -352,6 +352,20 @@ export async function POST(req: Request) {
         const patch = pick(b.patch, PAPER_FIELDS)
         const adminPatch = pick(b.patch, PAPER_ADMIN_FIELDS)
         if (Object.keys(adminPatch).length && !isAdmin) return adminOnly()
+        // 「할 일」 체크는 tasks 를 통째로 보낸다. 그 사이 Claude 가 남긴 블로그 자동 작성 표시(blog_*)가
+        // 옛 화면의 값으로 덮이면 같은 글을 또 쓰게 된다 → blog_* 는 「작성 요청」을 새로 눌렀을 때만 바뀐다
+        if (patch.tasks) {
+          const { data: cur } = await supabase.from('exam_papers').select('tasks').eq('id', b.id).maybeSingle()
+          const was: any = cur?.tasks ?? {}
+          const next: any = { ...patch.tasks }
+          const asked = String(next.blog_requested_at ?? '') > String(was.blog_requested_at ?? '')
+          for (const k of ['blog_requested_at', 'blog_drafted_at', 'blog_failed_at', 'blog_auto_note']) {
+            if (asked && isAdmin) { if (k !== 'blog_requested_at') delete next[k] }
+            else if (k in was) next[k] = was[k]
+            else delete next[k]
+          }
+          patch.tasks = next
+        }
         const { error } = await supabase.from('exam_papers')
           .update({ ...patch, ...adminPatch, updated_at: now }).eq('id', b.id)
         if (error) return bad(error.message, 500)

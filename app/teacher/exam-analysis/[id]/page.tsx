@@ -245,7 +245,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {tab === 1 && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="정답">
-            <p className="mb-2 text-xs text-gray-500">한 줄에 「번호 정답」 을 적어 주세요. 예) <code>1 ③</code> · <code>서술형2 x=3</code></p>
+            <p className="mb-2 rounded-lg px-3 py-2 text-xs" style={{ background: '#F0FBF7', color: GREEN }}>
+              <b>정답은 여기에 적지 않아도 됩니다.</b> 원장님이 한글 파일에 정답을 넣어 올리면 문항과 QR 채점에 자동으로 들어갑니다.
+              (루트 · 분수가 든 답은 여기에 칠 수 없어서 방식을 바꿨습니다)
+            </p>
+            <p className="mb-2 text-xs text-gray-400">꼭 필요할 때만: 한 줄에 「번호 정답」. 예) <code>1 ③</code> · <code>서술형2 12</code></p>
             <textarea className={INPUT + ' font-mono'} rows={14} value={val('answers_text')} onChange={(e) => set('answers_text', e.target.value)}
               placeholder={'1 ③\n2 ①\n…\n서술형1 12'} />
             <div className="mt-3 text-right">{saveBtn(['answers_text'])}</div>
@@ -327,18 +331,21 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3" style={{ borderColor: '#9FE1CB', background: '#F0FBF7' }}>
               <button
                 onClick={() => {
-                  if (!confirm('이 시험의 블로그 글 작성을 요청할까요?\n시험분석 카드와 글을 만들어 네이버 블로그에 임시저장합니다 (발행은 원장님이 직접).')) return
+                  if (!confirm('이 시험의 블로그 글 작성을 요청할까요?\n누른 뒤 Claude 에게 「블로그 요청 처리해줘」라고 하면\n시험분석 카드와 글을 만들어 네이버 블로그에 임시저장합니다. (발행은 원장님이 직접)')) return
                   saveNow({ blog_status: '작성중', tasks: { ...tasks, blog_requested_at: new Date().toISOString() } })
                 }}
                 disabled={paper.blog_status === '업로드완료'}
                 className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>
                 <i className="ti ti-pencil mr-1.5" />블로그 글 작성 요청
               </button>
-              <span className="text-xs text-gray-600">
-                {tasks.blog_requested_at
-                  ? `요청함: ${new Date(tasks.blog_requested_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · 임시저장되면 「블로그 주소」에 표시됩니다`
-                  : '정답 · 변별문항 손풀이 · 총평이 채워진 뒤에 눌러 주세요.'}
-              </span>
+              {(() => {
+                const at = (ts: string) => new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                const req = tasks.blog_requested_at, ok = tasks.blog_drafted_at, ng = tasks.blog_failed_at
+                if (!req) return <span className="text-xs text-gray-600">변별문항 손풀이 · 총평이 채워진 뒤에 누르고, Claude 에게 「블로그 요청 처리해줘」라고 하세요.</span>
+                if (ok && ok > req) return <span className="text-xs font-semibold" style={{ color: GREEN }}><i className="ti ti-circle-check mr-1" />{at(ok)} · {tasks.blog_auto_note || '네이버에 임시저장했습니다. 확인하고 발행해 주세요.'}</span>
+                if (ng && ng > req) return <span className="text-xs font-semibold text-red-600"><i className="ti ti-alert-triangle mr-1" />{at(ng)} 못 썼습니다 — {tasks.blog_auto_note} (채운 뒤 다시 눌러 주세요)</span>
+                return <span className="text-xs text-gray-600">요청함: {at(req)} · Claude 에게 「블로그 요청 처리해줘」라고 하면 임시저장까지 합니다</span>
+              })()}
             </div>
           )}
           <div className="grid gap-3 lg:grid-cols-2 text-sm">

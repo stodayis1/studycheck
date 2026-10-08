@@ -1,6 +1,7 @@
 'use client'
 // 대시보드 맨 위에 뜨는 기출분석 알림. 중등 선생님(과 원장)에게만 보인다.
-// 올라온 시험지마다 무엇이 남았는지(정답 · 변별 · 손풀이 · 총평 · 다음 시험 대비) 한 줄씩 보여 준다.
+// 올라온 시험지마다 무엇이 남았는지(변별 · 손풀이 · 총평 · 다음 시험 대비) 한 줄씩 보여 준다.
+// 정답은 선생님 일이 아니다 — 원장이 한글 파일에 넣어 올린다 (루트 · 분수를 앱에 칠 수 없어서. 2026-10-08)
 // 전부 「완료」로 체크되면 사라진다.
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -41,7 +42,7 @@ export function ExamAnalysisNotice() {
       </div>
       <div className="px-4 py-3">
         <p className="text-xs text-gray-600 leading-relaxed">
-          시험지는 윤T가 올립니다. 올라온 학교는 <b>바로</b> 정답 · 변별문항 손풀이 · 총평 · 다음 시험 대비를 채워 주세요.
+          시험지는 윤T가 올립니다. 올라온 학교는 <b>바로</b> 변별문항 손풀이 · 총평 · 다음 시험 대비를 채워 주세요.
           손풀이는 <b>태블릿 원본 크기</b>로 올려 주세요 (블로그에 그대로 실립니다).
         </p>
 
@@ -53,7 +54,6 @@ export function ExamAnalysisNotice() {
                   <span className="text-sm font-bold" style={{ color: GREEN }}>{p.school_name} {p.grade}</span>
                   {p.assignee && <span className="text-[11px] text-gray-500">{p.assignee}</span>}
                   <span className="ml-auto flex flex-wrap gap-1">
-                    <Dot ok={p.answers} label="정답" />
                     <Dot ok={p.disc >= 2} label="변별" />
                     <Dot ok={p.handsolve >= Math.max(p.disc, 1)} label="손풀이" />
                     <Dot ok={p.review} label="총평" />
