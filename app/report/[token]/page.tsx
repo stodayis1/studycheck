@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { ATT_EXAM, isExamAbsence } from '@/lib/attendance'
 
 // 카카오톡 인앱 브라우저에서 클라이언트 fetch가 먹통이 되는 경우가 있어서
 // (링크는 오는데 눌러보면 빈 화면) 서버에서 미리 데이터를 읽어 HTML에 담아 보내도록 변경.
@@ -728,20 +729,20 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
         <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
           이 달 {counted.length}회 · 정시 {n('정시')} · 지각 <b style={{ color: n('지각') ? ORANGE : TEXT_MUTED }}>{n('지각')}</b>
           {' · '}결석 <b style={{ color: n('결석') ? RED : TEXT_MUTED }}>{n('결석')}</b>
-          {mine.some((r) => r.attendance === '시험기간') &&
-            <> · 시험기간 <b style={{ color: '#7C3AED' }}>{mine.filter((r) => r.attendance === '시험기간').length}</b></>}
+          {mine.some((r) => isExamAbsence(r.attendance)) &&
+            <> · {ATT_EXAM} <b style={{ color: '#7C3AED' }}>{mine.filter((r) => isExamAbsence(r.attendance)).length}</b></>}
           {avg != null && <> · 평균 달성률 <b style={{ color: tierColor(avg, 90, 70) }}>{avg}%</b></>}
         </div>
         <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
           {mine.map((r, i) => {
             // 시험기간은 빨갛게 하지 않는다 — 봐주는 날이지 결석이 아니다
             const attColor = r.attendance === '정시' ? NAVY : r.attendance === '지각' ? ORANGE
-              : r.attendance === '결석' ? RED : r.attendance === '시험기간' ? '#7C3AED' : TEXT_MUTED
+              : r.attendance === '결석' ? RED : isExamAbsence(r.attendance) ? '#7C3AED' : TEXT_MUTED
             return (
               <div key={i} style={{
                 borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
                 background: r.attendance === '결석' ? '#fff7f7'
-                  : r.attendance === '시험기간' ? '#FAF5FF' : i % 2 === 0 ? 'white' : '#fcfcfd',
+                  : isExamAbsence(r.attendance) ? '#FAF5FF' : i % 2 === 0 ? 'white' : '#fcfcfd',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px' }}>
                   <span style={{ fontSize: 11, color: TEXT_BODY, width: 58, flexShrink: 0 }}>
@@ -869,7 +870,7 @@ function DailyNotice({ d, link }: { d: any; link: ReportLink }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
         <Stat label="출결" value={d.attendance ?? '미기록'}
           color={d.attendance === '정시' ? NAVY : d.attendance === '지각' ? ORANGE
-            : d.attendance === '결석' ? RED : d.attendance === '시험기간' ? '#7C3AED' : TEXT_MUTED} />
+            : d.attendance === '결석' ? RED : isExamAbsence(d.attendance) ? '#7C3AED' : TEXT_MUTED} />
         <Stat label="과제 달성률" value={d.achievementPct != null ? `${d.achievementPct}%` : '-'}
           color={tierColor(d.achievementPct, 90, 70)} />
       </div>

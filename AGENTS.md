@@ -31,7 +31,12 @@ Next.js 16 + Supabase. Vercel 배포. 학생 ~220명. 운영 중인 실서비스
    **좁혀지지 않는다.** 헬퍼는 유니온 대신 `NextResponse | null` 같은 형태로 만들 것 (`lib/apiAuth.ts` 참고).
 4. **Supabase는 한 번에 1000행만 준다.** 전체를 읽어야 하면 `.range()`로 페이지를 돌리거나
    `fetchAllRows`(`lib/utils.ts`)를 쓸 것.
-5. **문제 이미지 자르기(crop)는 교재마다 다르다.** 쎈/쎈B는 위 37px을 잘라야 하지만
+5. **학교 이름은 반드시 `normalizeSchool()`(`lib/school.ts`)을 거쳐 저장한다.**
+   시험대비는 `students.school = exam_schedule.school_name` 문자열 비교로 대상을 찾는다.
+   「신원중학교」로 저장된 학생은 「신원중」 시험일정에 **영원히 안 걸린다** — 에러도 안 난다.
+   초등학교→초·중학교→중·고등학교→고로 모은다. OPS(`src/lib/school.ts`)에 같은 사본이 있으니
+   한쪽만 고치지 말 것.
+6. **문제 이미지 자르기(crop)는 교재마다 다르다.** 쎈/쎈B는 위 37px을 잘라야 하지만
    **베이직쎈은 자르면 문제 지문이 날아간다.** `docs/문제은행.md` 참고.
 
 ## 로그인·권한 구조 (가장 헷갈리는 부분)

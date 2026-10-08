@@ -6,6 +6,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { fbImages, hwLines } from './briefing.ts'
 import { fetchOpsMakeups, type OpsMakeup } from './opsMakeups.ts'
+import { isExamAbsence } from './attendance.ts'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -103,9 +104,9 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       makeup: makeupBy.get(s.session_date) ?? null,
     }
   })
-  // ★ 시험기간은 「안 와도 봐주는 날」이라 출석률 계산에서 빼야 한다.
+  // ★ 시험기간 결석은 「안 와도 봐주는 날」이라 출석률 계산에서 빼야 한다.
   //   결석으로 세면 성실한 학생의 정시 출석률이 시험 때마다 떨어진다.
-  const counted = attRows.filter((r) => r.attendance && r.attendance !== '시험기간')
+  const counted = attRows.filter((r) => r.attendance && !isExamAbsence(r.attendance))
   const tally = (k: string) => counted.filter((r) => r.attendance === k).length
   const pcts = attRows.map((r) => r.pct).filter((p): p is number => p != null)
 
@@ -155,7 +156,7 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     periodLabel: `${attendFrom} ~ ${date}`,
     rows: attRows,
     total: counted.length,
-    examDays: attRows.filter((r) => r.attendance === '시험기간').length,
+    examDays: attRows.filter((r) => isExamAbsence(r.attendance)).length,
     onTime: tally('정시'),
     late: tally('지각'),
     absent: tally('결석'),

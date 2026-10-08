@@ -27,6 +27,7 @@ import { denyIfNotStaff } from '@/lib/apiAuth'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
+import { isExamAbsence } from '@/lib/attendance'
 
 const APP_URL = 'https://studycheck-five.vercel.app'
 
@@ -57,7 +58,7 @@ export interface BriefingSummary {
   skippedAlreadySent: number
   skippedNoPhone: { name: string }[]
   skippedNoRecord: { name: string }[]
-  /** 시험기간이라 일부러 안 보낸 학생 */
+  /** 시험기간 결석이라 일부러 안 보낸 학생 */
   skippedExam: { name: string }[]
   errors: { name: string; error: string }[]
   previews?: { studentId: string; name: string; phone: string; bodyLen: number; body: string }[]
@@ -129,7 +130,7 @@ async function run(opts: {
     // ★ 시험기간은 **아예 보내지 않는다**(원장님 결정 2026-10-08).
     //   중·고등은 시험기간에 학원을 안 나와도 봐주시는데, 그걸 「결석」으로 통보하면
     //   학부모도 아는 상황을 굳이 들춰 보는 꼴이 된다. 보낼 내용도 없다.
-    if (note.attendance === '시험기간') { out.skippedExam.push({ name: student.name }); continue }
+    if (isExamAbsence(note.attendance)) { out.skippedExam.push({ name: student.name }); continue }
     if (!student.parent_phone) { out.skippedNoPhone.push({ name: student.name }); continue }
     if (!opts.testPhone && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
 

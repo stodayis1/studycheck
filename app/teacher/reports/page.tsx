@@ -8,6 +8,7 @@ import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
+import { isExamAbsence } from '@/lib/attendance'
 
 // 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
 function laTierColor(v: number | null, good = 85, mid = 70) {
@@ -522,8 +523,8 @@ export default function TeacherReportsPage() {
       if (n.attendance === '정시') attendance.정시++
       else if (n.attendance === '지각') attendance.지각++
       else if (n.attendance === '결석') attendance.결석++
-      // 시험기간은 「안 와도 봐주는 날」이다. 결석으로 세면 출석률이 시험 때마다 떨어진다.
-      else if (n.attendance === '시험기간') attendance.시험기간++
+      // 시험기간 결석은 「안 와도 봐주는 날」이다. 결석으로 세면 출석률이 시험 때마다 떨어진다.
+      else if (isExamAbsence(n.attendance)) attendance.시험기간++
     })
     const totalSessions = sessions.length
 
@@ -646,7 +647,7 @@ export default function TeacherReportsPage() {
     if (!mData) return
     setMGenerating(true)
     try {
-      const prompt = `다음은 수학 학원 학생의 한 달 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회/시험기간 ${mData.attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
+      const prompt = `다음은 수학 학원 학생의 한 달 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회/시험기간 결석 ${mData.attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
       const res = await apiFetch('/api/generate-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
       const data = await res.json()
       setMComment(data.message ?? '')

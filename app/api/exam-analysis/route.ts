@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
 import { staffOrDeny } from '@/lib/apiAuth'
+import { normalizeSchool } from '@/lib/school'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
   bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
@@ -331,7 +332,9 @@ export async function POST(req: Request) {
         const p = b.paper ?? {}
         const row = {
           exam_year: Number(p.exam_year), term: Number(p.term), exam_type: p.exam_type,
-          school_name: String(p.school_name ?? '').trim().replace(/\s+/g, '').replace(/중학교$/, '중').replace(/고등학교$/, '고'), grade: p.grade,
+          // 학교 이름은 한 군데서만 다듬는다 — 여기 따로 적어 뒀던 규칙엔 「초등학교」가
+          // 빠져 있었고(그래서 「고양중학교」 시험지가 그대로 들어가 있었다) 학생 쪽 규칙과도 갈렸다.
+          school_name: normalizeSchool(p.school_name), grade: p.grade,
         }
         if (!row.exam_year || ![1, 2].includes(row.term) || !EXAM_TYPES.includes(row.exam_type) || !row.school_name || !row.grade)
           return bad('연도·학기·시험구분·학교·학년을 모두 골라 주세요.')

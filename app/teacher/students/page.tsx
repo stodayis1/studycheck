@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { normalizeSchool } from '@/lib/school'
 
 interface Student {
   id?: string
@@ -151,7 +152,7 @@ export default function TeacherStudentsPage() {
           .filter((row) => String(row['재원여부'] ?? '').toUpperCase() === 'O')
           .map((row) => ({
             name:          String(row['이름'] ?? '').trim(),
-            school:        String(row['학교'] ?? '').trim(),
+            school:        normalizeSchool(String(row['학교'] ?? '')),   // 「신원중학교」→「신원중」
             grade:         String(row['학년'] ?? '').trim(),
             class_time:    String(row['수업'] ?? '').trim(),
             teacher_name:  String(row['담임강사'] ?? '').trim(),
@@ -195,10 +196,13 @@ export default function TeacherStudentsPage() {
 
   async function handleSaveEdit() {
     if (!editStudent?.id) return
+    // 학교 이름은 저장 직전에 한 가지로 모은다. 「신원중」/「신원중학교」가 섞이면
+    // 시험일정 매칭(students.school === exam_schedule.school_name)이 조용히 빗나간다.
+    const school = normalizeSchool(editStudent.school)
     const { error } = await supabase
       .from('students')
       .update({
-        name: editStudent.name, school: editStudent.school, grade: editStudent.grade,
+        name: editStudent.name, school, grade: editStudent.grade,
         class_time: editStudent.class_time, teacher_name: editStudent.teacher_name,
         parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
         textbook_grade: editStudent.textbook_grade,
@@ -236,7 +240,7 @@ export default function TeacherStudentsPage() {
     // schedule_days 배열로 요일을 표시해서, 이걸 빼먹으면 시간표 요일을 바꿔도 OPS 화면엔 예전 요일이 그대로 남는다.
     const scheduleDays = [...new Set(sortedSchedules.map(sc => sc.day))]
     const syncResult = await syncStudentToOps(editStudent.ops_student_id, {
-      name: editStudent.name, school: editStudent.school, grade: editStudent.grade,
+      name: editStudent.name, school, grade: editStudent.grade,
       parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
       class_time: classTimeText, schedule_days: scheduleDays, weekly_sessions: sortedSchedules.length,
     }, editStudent.teacher_name)
@@ -251,7 +255,7 @@ export default function TeacherStudentsPage() {
 
   async function handleAddStudent() {
     const name = newStudent.name.trim()
-    const school = newStudent.school.trim()
+    const school = normalizeSchool(newStudent.school)   // 「신원중학교」→「신원중」
     if (!name) { alert('이름을 입력해주세요.'); return }
     setAdding(true)
     try {

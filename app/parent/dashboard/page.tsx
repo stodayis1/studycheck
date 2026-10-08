@@ -9,6 +9,7 @@ import { cx } from '@/lib/utils'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
+import { ATT_EXAM, isExamAbsence } from '@/lib/attendance'
 
 interface StudentInfo {
   id: string
@@ -500,10 +501,10 @@ export default function ParentDashboardPage() {
                         <span className="text-[11px] text-gray-400">아직 기록 전이에요</span>
                       ) : (
                         <>
-                          {/* 시험기간은 봐주는 날이라 빨갛게 하지 않는다 */}
-                          {att === '시험기간' ? (
+                          {/* 시험기간 결석은 봐주는 날이라 빨갛게 하지 않는다 */}
+                          {isExamAbsence(att) ? (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-lg"
-                              style={{ background: '#F3E8FF', color: '#6B21A8' }}>시험기간</span>
+                              style={{ background: '#F3E8FF', color: '#6B21A8' }}>{ATT_EXAM}</span>
                           ) : (
                             <Tag ok={att === '정시'} warn={att === '지각'}>
                               {att === '정시' ? '정시 출석' : att === '지각' ? '지각' : att === '결석' ? '결석' : '출결 미기록'}

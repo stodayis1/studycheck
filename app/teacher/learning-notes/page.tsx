@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
+import { ATT_EXAM } from '@/lib/attendance'
 
 interface Student {
   id: string
@@ -336,7 +337,7 @@ export default function TeacherLearningNotesPage() {
       if (!n) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '수업일지 없음' }); continue }
       if (!n.attendance) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '출결 미입력' }); continue }
       // 결석·시험기간은 진도·과제를 안 쓰는 것이 정상이다
-      if (n.attendance === '결석' || n.attendance === '시험기간') continue
+      if (n.attendance === '결석' || n.attendance === ATT_EXAM) continue
       const hasContent = !!(x.progress_content || x.today_textbook_name)
       const hasHw = !!(x.hw_textbook_name || x.hw_worksheet_range || x.hw_textbook_page)
       if (!hasContent && !hasHw) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '진도·과제 비었음' })
@@ -738,7 +739,7 @@ export default function TeacherLearningNotesPage() {
     const session = getTodaySession(studentId)
     const note = getTodayNote(studentId)
     if (!session || !note) return false
-    if (note.attendance === '결석' || note.attendance === '시험기간') return true
+    if (note.attendance === '결석' || note.attendance === ATT_EXAM) return true
     const hasContent = !!(session.progress_content || session.today_textbook_name)
     // 교재/학습지를 고르지 않고 메모("📝 ...")로만 과제를 적는 경우 hw_textbook_page에만 값이 들어가는데
     // 여기 빠져있어서 분명히 과제를 입력했는데도 "미완료"로 잘못 표시되던 문제 (고등부 메모 위주 입력에서 특히 발생)
@@ -939,7 +940,15 @@ export default function TeacherLearningNotesPage() {
   // 학습일지에서 결석 체크가 저장되면 OPS(학원 행정 프로그램)에도 실시간으로 결석을 알려서
   // 행정팀이 같은 결석을 또 손으로 입력하는 이중작업을 없앤다. 실패해도 학습일지 저장 자체는
   // 이미 끝난 뒤라 화면에 영향 없음 — 실패는 콘솔에만 남기고 조용히 넘어감.
-  function syncAbsenceToOPS(student: Student, absentDate: string) {
+  //
+  // noMakeup = 시험기간 결석. 결석 기록은 남기되 보강은 잡지 않는다 — OPS 가 「취소된 보강」을
+  // 미리 붙여서 보강명단에 **「보강 안 함」**으로 뜨게 한다(원장님 결정 2026-10-08).
+  // 아예 안 보내면 결석이 행정 쪽에 안 남아 월 수업 횟수 정산이 어긋난다.
+  function syncAbsenceToOPS(student: Student, absentDate: string, opts?: { noMakeup?: boolean }) {
+    const noMakeup = !!opts?.noMakeup
+    const 못한일 = noMakeup
+      ? 'OPS 보강명단에 「보강 안 함」으로 올라가지 않습니다.'
+      : '보강 안내가 나가지 않습니다.'
     apiFetch('/api/sync-absence-to-ops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -949,7 +958,8 @@ export default function TeacherLearningNotesPage() {
         school: student.school,
         parent_phone: student.parent_phone,
         absent_date: absentDate,
-        reason: '스터디체크 학습일지 결석 체크',
+        reason: noMakeup ? '학교 시험기간 결석 (보강 안 함)' : '스터디체크 학습일지 결석 체크',
+        no_makeup: noMakeup,
       }),
     })
       .then(async (res): Promise<void> => {
@@ -962,7 +972,7 @@ export default function TeacherLearningNotesPage() {
 ` +
             `${data?.error ?? `서버 응답 ${res.status}`}
 
-보강 안내가 나가지 않습니다. 원장님께 알려주세요.`)
+${못한일} 원장님께 알려주세요.`)
         }
       })
       .catch((e: any): void => {
@@ -1281,7 +1291,7 @@ ${e?.message ?? '연결 실패'}
       alert(`${noteStudent.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 학습일지를 작성할 수 없어요 (복귀 후 다시 확인해주세요).`)
       return
     }
-    if (noteAttendance !== '결석' && noteAttendance !== '시험기간'
+    if (noteAttendance !== '결석' && noteAttendance !== ATT_EXAM
         && (noteAchievement == null || noteScorePct == null)) {
       alert('「과제 달성률」과 「과제 성취도」를 직접 골라주세요.\n(수업내용 탭 아래쪽 — 100%여도 100을 눌러야 저장돼요)')
       return
@@ -1501,21 +1511,24 @@ ${e?.message ?? '연결 실패'}
     ].filter(Boolean).join(' ') || null
 
     // 결석이면 화면에 남아있던 과제 달성률/성취도 기본값(100% 등)이 그대로 저장되지 않도록
-    // UI 비활성화와 별개로 저장 시점에도 한 번 더 강제로 "기록 없음" 처리
-    // ★ 시험기간은 OPS 에 결석으로 넘기지 않는다 — 넘기면 보강이 잡히고
-    //   원장님이 매번 「보강 안함」을 손으로 눌러야 한다.
+    // UI 비활성화와 별개로 저장 시점에도 한 번 더 강제로 "기록 없음" 처리.
+    // ★ 시험기간 결석도 똑같이 비워야 한다. 칸은 흐리게 막아 두지만 **state 는 그대로 남아서**,
+    //   「정시」로 100% 를 눌렀다가 시험기간 결석으로 바꾸면 100% 가 그대로 저장돼
+    //   과제달성률이 부풀어 오른다.
     const isAbsent = noteAttendance === '결석'
+    const isExamAbsent = noteAttendance === ATT_EXAM
+    const noRecord = isAbsent || isExamAbsent
     const noteData = {
       student_id: noteStudent.id,
       session_id: sessionId,
       attendance: noteAttendance,
-      worksheet_submitted: isAbsent ? false : noteAchievement > 0,
-      worksheet_score: isAbsent ? null : noteScorePct,
-      textbook_submitted: isAbsent ? false : noteAchievement > 0,
-      workbook_done: isAbsent ? false : noteAchievement === 100,
-      achievement_pct: isAbsent ? null : noteAchievement,
-      worksheet_unit: isAbsent ? null : (noteWorksheetUnit.trim() || null),
-      worksheet_level: isAbsent ? null : (noteWorksheetLevel.trim() || null),
+      worksheet_submitted: noRecord ? false : noteAchievement > 0,
+      worksheet_score: noRecord ? null : noteScorePct,
+      textbook_submitted: noRecord ? false : noteAchievement > 0,
+      workbook_done: noRecord ? false : noteAchievement === 100,
+      achievement_pct: noRecord ? null : noteAchievement,
+      worksheet_unit: noRecord ? null : (noteWorksheetUnit.trim() || null),
+      worksheet_level: noRecord ? null : (noteWorksheetLevel.trim() || null),
       memo: memoText,
     }
 
@@ -1528,7 +1541,9 @@ ${e?.message ?? '연결 실패'}
       return
     }
 
-    if (isAbsent) syncAbsenceToOPS(noteStudent, todayStr)
+    // ★ 날짜는 **「수업한 날」**로 보낸다. 오늘(todayStr)로 보내면 7일 수업을 8일에 적을 때
+    //   OPS 엔 8일 결석으로 들어가 보강·수업횟수 정산이 하루씩 밀린다.
+    if (noRecord) syncAbsenceToOPS(noteStudent, noteDate || todayStr, { noMakeup: isExamAbsent })
 
     fetchData()
     // 저장 후 모달 유지 - 탭 전환해서 계속 입력 가능
@@ -3044,10 +3059,6 @@ ${e?.message ?? '연결 실패'}
                       { key: '정시', icon: 'ti-circle-check' },
                       { key: '지각', icon: 'ti-clock-exclamation' },
                       { key: '결석', icon: 'ti-x' },
-                      // ★ 중·고등 시험기간엔 학원을 안 나와도 봐주신다(원장님). 그걸 일반 결석으로
-                      //   적으면 보강이 잡히고 학부모 카톡에도 「결석」으로 나간다.
-                      //   시험기간은 **카톡을 아예 안 보내고** 보강도 안 잡는다.
-                      { key: '시험기간', icon: 'ti-notebook' },
                     ].map((att) => (
                       <button key={att.key} onClick={() => setNoteAttendance(att.key)}
                         className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5"
@@ -3059,10 +3070,24 @@ ${e?.message ?? '연결 실패'}
                       </button>
                     ))}
                   </div>
+                  {/* ★ 중·고등 시험기간엔 학원을 안 나와도 봐주신다(원장님). 그걸 일반 결석으로
+                      적으면 보강이 잡히고 학부모 카톡에도 「결석」으로 나간다.
+                      시험기간 결석은 — 카톡을 아예 안 보내고, 출석률에서도 빼고,
+                      OPS 보강명단에는 「보강 안 함」으로 올라간다.
+                      글자가 길어 위 세 개와 한 줄에 못 넣고 아래로 뺐다. */}
+                  <button onClick={() => setNoteAttendance(ATT_EXAM)}
+                    className="w-full mt-2 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5"
+                    style={noteAttendance === ATT_EXAM
+                      ? { background: '#E9D5FF', color: '#6B21A8' }
+                      : { background: '#f3f4f6', color: '#9ca3af' }}>
+                    <i className="ti ti-notebook" style={{ fontSize: 15 }} />
+                    {ATT_EXAM}
+                    <span className="text-[10px] font-normal">(학교 시험이라 쉰 날 · 보강·카톡 없음)</span>
+                  </button>
                 </div>
 
                 {/* 과제 달성률 - 결석이면 과제 자체가 없는 것이므로 비활성화 */}
-                <div className={(noteAttendance === '결석' || noteAttendance === '시험기간') ? 'opacity-40 pointer-events-none select-none' : ''}>
+                <div className={(noteAttendance === '결석' || noteAttendance === ATT_EXAM) ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700"><i className="ti ti-chart-bar align-[-0.125em]" /> 과제 달성률</label>
                     {noteAchievement == null ? (
@@ -3073,14 +3098,14 @@ ${e?.message ?? '연결 실패'}
                       </span>
                     )}
                   </div>
-                  <PctPicker value={noteAchievement} onChange={setNoteAchievement} disabled={noteAttendance === '결석' || noteAttendance === '시험기간'} />
+                  <PctPicker value={noteAchievement} onChange={setNoteAchievement} disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM} />
                   {noteAttendance === '결석' && (
                     <p className="text-[11px] text-gray-400 mt-1.5">결석 처리 시 과제 항목은 기록되지 않아요.</p>
                   )}
                 </div>
 
                 {/* 과제 성취도 % - 결석이면 비활성화 */}
-                <div className={(noteAttendance === '결석' || noteAttendance === '시험기간') ? 'opacity-40 pointer-events-none select-none' : ''}>
+                <div className={(noteAttendance === '결석' || noteAttendance === ATT_EXAM) ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700"><i className="ti ti-target align-[-0.125em]" /> 과제 성취도</label>
                     {noteScorePct == null ? (
@@ -3091,15 +3116,15 @@ ${e?.message ?? '연결 실패'}
                       </span>
                     )}
                   </div>
-                  <PctPicker value={noteScorePct} onChange={setNoteScorePct} disabled={noteAttendance === '결석' || noteAttendance === '시험기간'} />
+                  <PctPicker value={noteScorePct} onChange={setNoteScorePct} disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM} />
                   {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
                   <div className="flex gap-2 mt-2">
                     <input type="text" value={noteWorksheetUnit} onChange={(e) => setNoteWorksheetUnit(e.target.value)}
-                      disabled={noteAttendance === '결석' || noteAttendance === '시험기간'}
+                      disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM}
                       placeholder="단원 (예: 3단원 분수의 덧셈)"
                       className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                     <input type="text" value={noteWorksheetLevel} onChange={(e) => setNoteWorksheetLevel(e.target.value)}
-                      disabled={noteAttendance === '결석' || noteAttendance === '시험기간'}
+                      disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM}
                       placeholder="레벨 (예: 2레벨)"
                       className="w-28 shrink-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
                   </div>

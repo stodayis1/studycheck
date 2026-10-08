@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
+import { normalizeSchool } from '@/lib/school'
 
 interface Student {
   id: string
@@ -274,9 +275,11 @@ export default function TeacherExamPrepPage() {
   async function handleSaveSchedule() {
     if (!canManageAllStudents() && !isSupervisorModeActive()) return
     if (!schSchool || !schGrade || !schDate) return
+    // 학생 쪽과 **같은 규칙**으로 모아야 매칭이 된다. 한쪽만 통일하면 의미가 없다.
+    const schoolName = normalizeSchool(schSchool)
     setSavingSchedule(true)
     await supabase.from('exam_schedule').insert({
-      school_name: schSchool, grade: schGrade,
+      school_name: schoolName, grade: schGrade,
       exam_name: schName, exam_date: schDate,
       created_by: currentUser?.name,
     })
@@ -284,7 +287,7 @@ export default function TeacherExamPrepPage() {
 
     // 해당 학교+학년 학생(및 학부모)에게 새 시험 일정 등록 푸시 알림
     const { data: targetStudents } = await supabase
-      .from('students').select('id').eq('school', schSchool).eq('grade', schGrade).eq('is_active', true)
+      .from('students').select('id').eq('school', schoolName).eq('grade', schGrade).eq('is_active', true)
     const targetIds = (targetStudents ?? []).map((s: any) => s.id)
     if (targetIds.length > 0) {
       apiFetch('/api/push/send', {
@@ -293,7 +296,7 @@ export default function TeacherExamPrepPage() {
         body: JSON.stringify({
           target: { studentIds: targetIds },
           payload: {
-            title: `${schSchool} ${schName} 일정 등록`,
+            title: `${schoolName} ${schName} 일정 등록`,
             body: `시험일: ${schDate}. 눌러서 시험대비 현황을 확인해보세요.`,
             tag: 'exam-schedule',
           },

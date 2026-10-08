@@ -5,6 +5,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes } from 'crypto'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 import { fetchAllRows } from '@/lib/utils'
+import { isExamAbsence } from '@/lib/attendance'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -81,8 +82,8 @@ export async function POST(req: NextRequest) {
       if (n.attendance === '정시') attendance.정시++
       else if (n.attendance === '지각') attendance.지각++
       else if (n.attendance === '결석') attendance.결석++
-      // 시험기간은 「안 와도 봐주는 날」이다. 결석으로 세면 출석률이 시험 때마다 떨어진다.
-      else if (n.attendance === '시험기간') attendance.시험기간++
+      // 시험기간 결석은 「안 와도 봐주는 날」이다. 결석으로 세면 출석률이 시험 때마다 떨어진다.
+      else if (isExamAbsence(n.attendance)) attendance.시험기간++
     })
     const totalSessions = sessions.length
 
@@ -217,7 +218,7 @@ export async function POST(req: NextRequest) {
     // AI 한 줄평 생성
     let aiComment = ''
     try {
-      const prompt = `다음은 수학 학원 학생의 ${type === 'monthly' ? '한 달' : '한 분기'} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${student.name}, 학년: ${student.grade}, 수업 횟수: ${totalSessions}회, 출결: 정시 ${attendance.정시}회/지각 ${attendance.지각}회/결석 ${attendance.결석}회/시험기간 ${attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${hwRate}%, 학습지 평균: ${avgScore ?? '미채점'}점, 통과율: ${passRate}%, 교재진도: ${curriculumProgress.map((g) => `${g.grade} ${g.semester}학기 ${g.round}회독 ${g.rate}%`).join(', ')}`
+      const prompt = `다음은 수학 학원 학생의 ${type === 'monthly' ? '한 달' : '한 분기'} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${student.name}, 학년: ${student.grade}, 수업 횟수: ${totalSessions}회, 출결: 정시 ${attendance.정시}회/지각 ${attendance.지각}회/결석 ${attendance.결석}회/시험기간 결석 ${attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${hwRate}%, 학습지 평균: ${avgScore ?? '미채점'}점, 통과율: ${passRate}%, 교재진도: ${curriculumProgress.map((g) => `${g.grade} ${g.semester}학기 ${g.round}회독 ${g.rate}%`).join(', ')}`
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
         max_tokens: 500,
