@@ -12,10 +12,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import { BRIEFING_TEMPLATE } from '@/lib/briefing'
+import { aligoPost } from '@/lib/aligo'
 
 export const runtime = 'nodejs'
 
-const LIST_URL = 'https://kakaoapi.aligo.in/akv10/template/list/'
+const LIST_PATH = '/akv10/template/list/'
 const APP_URL = 'https://studycheck-five.vercel.app'
 
 /** 눈에 안 보이는 차이(줄바꿈·공백)를 드러내 보여 준다. */
@@ -45,18 +46,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // ★ Vercel 에서 알리고를 직접 부르면 IP 로 막힌다. Supabase(고정 IP)를 거친다.
     const form = new URLSearchParams({ apikey: apikey!, userid: userid!, senderkey: senderkey! })
-    const res = await fetch(LIST_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: form,
-      signal: AbortSignal.timeout(20_000),
-    })
-    // strictNullChecks 가 꺼져 있어 catch 의 반환 타입을 못 좁힌다 — 명시해 준다.
-    const json: any = await res.json().catch((): any => null)
+    const json: any = await aligoPost(LIST_PATH, form.toString())
     // 알리고는 실패해도 HTTP 200 이다. code 로만 성패를 안다.
     if (!json || Number(json.code) !== 0) {
-      return NextResponse.json({ ok: false, error: json?.message ?? `알리고 응답을 읽지 못했어요 (HTTP ${res.status})` })
+      return NextResponse.json({ ok: false, error: json?.message ?? '알리고 응답을 읽지 못했어요' })
     }
 
     const list: any[] = json.list ?? []

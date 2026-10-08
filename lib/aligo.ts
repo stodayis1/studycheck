@@ -14,7 +14,14 @@
 // 묶어 보내면 응답이 scnt/fcnt(성공·실패 개수)만 줘서 **누가 실패했는지 알 수 없고**,
 // 발송 기록(briefing_sends)을 학생별로 정확히 남길 수 없다. 하루 60건쯤이라 속도는 문제가 안 된다.
 
-const SEND_URL = 'https://kakaoapi.aligo.in/akv10/alimtalk/send/'
+// ★ 알리고는 **등록된 고정 IP 에서만** API 를 받는다(고객센터 확인 2026-10-08).
+//   Vercel 서버리스는 나가는 IP 가 매번 바뀌어 등록할 수가 없다.
+//   그런데 **Supabase 는 고정이다** — 재어 보니 16.184.57.154 로 늘 같았다.
+//   그래서 알리고로 나가는 마지막 한 번만 DB 의 aligo_call 함수를 거친다.
+//   (본문 만들기·링크 찍기·기록은 그대로 Vercel 에서 한다)
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
+const SEND_PATH = '/akv10/alimtalk/send/'
 
 export interface AligoButton {
   name: string
@@ -81,6 +88,30 @@ export interface AligoSendResult {
 }
 
 /**
+ * 알리고에 요청을 보낸다 — **Supabase(고정 IP)를 거쳐서.**
+ *
+ * Vercel 에서 직접 부르면 「인증되지 않는 서버 IP」 로 거부당한다.
+ * DB 의 aligo_call 은 service_role 만 부를 수 있고, 보낼 수 있는 주소도
+ * kakaoapi.aligo.in 으로 못박혀 있다(docs/sql/알리고_고정IP_중계.sql).
+ */
+export async function aligoPost(path: string, form: string): Promise<any> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new AligoError('서버 설정이 올바르지 않아요(Supabase 키 없음).')
+  const db: SupabaseClient = createClient(url, key, { auth: { persistSession: false } })
+
+  const { data, error } = await db.rpc('aligo_call', { p_path: path, p_form: form })
+  if (error) throw new AligoError(`알리고 중계에 실패했어요: ${error.message}`)
+  const res = data as { status: number; body: string | null; error?: string }
+  if (res?.error) throw new AligoError(`알리고에 연결하지 못했어요: ${res.error}`)
+  try {
+    return JSON.parse(res.body ?? '')
+  } catch {
+    throw new AligoError(`알리고 응답을 읽지 못했어요 (HTTP ${res?.status}): ${String(res?.body).slice(0, 200)}`)
+  }
+}
+
+/**
  * 알림톡 한 건을 보낸다. 실패하면 던진다(호출하는 쪽이 학생별로 기록할 수 있게).
  *
  * @param message 승인된 템플릿 서식과 **일치해야 하는** 완성된 본문
@@ -126,25 +157,7 @@ export async function sendAlimtalk(cfg: AligoConfig, msg: {
     form.set('fmessage_1', msg.failoverMessage)
   }
 
-  let res: Response
-  try {
-    res = await fetch(SEND_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: form,
-      signal: AbortSignal.timeout(20_000),
-    })
-  } catch (e: any) {
-    throw new AligoError(`알리고에 연결하지 못했어요: ${e?.message ?? e}`)
-  }
-
-  const text = await res.text()
-  let json: any
-  try {
-    json = JSON.parse(text)
-  } catch {
-    throw new AligoError(`알리고 응답을 읽지 못했어요 (HTTP ${res.status}): ${text.slice(0, 200)}`)
-  }
+  const json = await aligoPost(SEND_PATH, form.toString())
 
   // ★ 여기가 핵심 — 알리고는 실패해도 HTTP 200 이다. code 로만 성패를 안다.
   if (Number(json.code) !== 0) {
@@ -154,9 +167,10 @@ export async function sendAlimtalk(cfg: AligoConfig, msg: {
     //   이 오류가 뜨면 코드 문제가 아니므로, 무엇을 해야 하는지 바로 알려 준다.
     if (/IP/.test(msg)) {
       throw new AligoError(
-        '알리고가 이 서버의 IP 를 막았습니다. 알리고는 등록된 IP 에서만 발송을 받는데, '
-        + 'Vercel 은 나가는 IP 가 매번 바뀌어 등록할 수 없습니다. '
-        + '알리고 고객센터에 「클라우드 환경이라 고정 IP가 없다 — IP 제한 해제 가능한지」 문의가 필요합니다. '
+        '알리고가 이 서버의 IP 를 막았습니다. 발송은 Supabase(고정 IP)를 거쳐 나가는데, '
+        + 'Supabase 가 인프라를 옮기면 그 IP 가 바뀔 수 있습니다. '
+        + '아래 SQL 로 지금 IP 를 확인해 알리고 「발송 서버 IP」 에 등록해 주세요 — '
+        + "select (extensions.http_get('https://api.ipify.org')).content "
         + `(알리고 원문: ${msg})`,
         Number(json.code))
     }
