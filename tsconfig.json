@@ -7,6 +7,9 @@
     "strict": true,
     "strictNullChecks": false,
     "noEmit": true,
+    // scripts/*.ts 는 node 가 타입만 떼고 바로 돌린다(node scripts/briefing-check.ts).
+    // 그때는 import 경로에 .ts 확장자가 **있어야** 하므로 tsc 에도 허용해 준다.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
