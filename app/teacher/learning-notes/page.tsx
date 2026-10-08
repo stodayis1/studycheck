@@ -282,6 +282,8 @@ export default function TeacherLearningNotesPage() {
   const [briefPreview, setBriefPreview] = useState<any>(null)
   const [briefResult, setBriefResult] = useState<any>(null)
   const [tplCheck, setTplCheck] = useState<any>(null)
+  // 누구에게 보낼지 — 원장님이 초등(저녁 8시)과 중·고등(다음 날 11시)을 나눠 보내신다.
+  const [briefOnly, setBriefOnly] = useState<'' | 'elementary' | 'secondary'>('')
   // 학습일지 미작성자 — 원장님이 발송 전에 바로 볼 수 있어야 한다(브리핑에서 빠지는 학생들이다).
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
 
@@ -292,7 +294,7 @@ export default function TeacherLearningNotesPage() {
       const res = await apiFetch('/api/kakao-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: briefDate, dryRun }),
+        body: JSON.stringify({ date: briefDate, dryRun, only: briefOnly || undefined }),
       })
       const data = await res.json()
       if (!res.ok) { alert('브리핑 ' + (dryRun ? '미리보기' : '발송') + ' 실패: ' + (data.error ?? '알 수 없는 오류')); return }
@@ -388,7 +390,8 @@ export default function TeacherLearningNotesPage() {
   function confirmSendBriefing() {
     const n = briefPreview?.sent ?? 0
     if (n === 0) { alert('보낼 대상이 없어요.'); return }
-    if (!confirm(`${briefDate} 수업 브리핑을 학부모 ${n}명에게 발송합니다.\n\n` +
+    const who = briefOnly === 'elementary' ? '초등부' : briefOnly === 'secondary' ? '중·고등부' : '전체'
+    if (!confirm(`${briefDate} 수업 브리핑을 ${who} 학부모 ${n}명에게 발송합니다.\n\n` +
       `보내면 되돌릴 수 없고 건당 요금이 나갑니다.\n` +
       `(알리고가 테스트 모드면 실제로는 가지 않습니다 — 결과에 표시돼요)\n\n진행할까요?`)) return
     runBriefing(false)
@@ -1889,6 +1892,13 @@ ${e?.message ?? '연결 실패'}
               <input type="date" value={briefDate} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}
                 onChange={(e) => { setBriefDate(e.target.value); setBriefPreview(null); setBriefResult(null); setTplCheck(null); loadMissing(e.target.value) }}
                 className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg" />
+              <select value={briefOnly}
+                onChange={(e) => { setBriefOnly(e.target.value as any); setBriefPreview(null); setBriefResult(null) }}
+                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700">
+                <option value="">전체</option>
+                <option value="elementary">초등부만</option>
+                <option value="secondary">중·고등부만</option>
+              </select>
               <button onClick={() => loadMissing(briefDate)} disabled={briefBusy}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 학습일지 미작성 보기
@@ -1966,7 +1976,9 @@ ${e?.message ?? '연결 실패'}
 
             {briefPreview && (
               <div className="mt-3 text-[11px] text-gray-700 space-y-1.5">
-                <div className="font-semibold">보낼 대상 {briefPreview.sent}명
+                <div className="font-semibold">
+                  {briefOnly === 'elementary' ? '초등부 ' : briefOnly === 'secondary' ? '중·고등부 ' : ''}
+                  보낼 대상 {briefPreview.sent}명
                   {briefPreview.skippedAlreadySent > 0 && <span className="text-gray-400"> · 이미 보냄 {briefPreview.skippedAlreadySent}명</span>}
                 </div>
                 {briefPreview.skippedNoRecord?.length > 0 && (
