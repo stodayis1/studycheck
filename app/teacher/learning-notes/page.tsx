@@ -270,6 +270,45 @@ export default function TeacherLearningNotesPage() {
   const [justSavedNote, setJustSavedNote] = useState(false) // 저장 성공 시 잠깐 보여줄 확인 표시 (성공해도 화면이 그대로라 "저장 안 됐나?" 하고 헷갈리는 것 방지)
   const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
 
+  // ── 카톡 수업 브리핑 일괄 발송 ───────────────────────────────────────────
+  // 학생 한 명씩 누르는 방식으로는 185명을 매일 보낼 수 없다(그래서 2026-08-04 에 멈췄다).
+  // 평소엔 매일 오전 11시 Vercel Cron 이 자동으로 보내고, 이 칸은 **직접 돌려 보거나
+  // 빠진 날을 메울 때** 쓴다. 미리보기 없이는 발송 버튼이 안 나온다.
+  const [briefDate, setBriefDate] = useState(() => {
+    const t = new Date(Date.now() + 9 * 3600_000 - 86400_000)   // 한국시간 어제
+    return t.toISOString().slice(0, 10)
+  })
+  const [briefBusy, setBriefBusy] = useState(false)
+  const [briefPreview, setBriefPreview] = useState<any>(null)
+  const [briefResult, setBriefResult] = useState<any>(null)
+
+  async function runBriefing(dryRun: boolean) {
+    setBriefBusy(true)
+    if (dryRun) { setBriefPreview(null); setBriefResult(null) }
+    try {
+      const res = await apiFetch('/api/kakao-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, dryRun }),
+      })
+      const data = await res.json()
+      if (!res.ok) { alert('브리핑 ' + (dryRun ? '미리보기' : '발송') + ' 실패: ' + (data.error ?? '알 수 없는 오류')); return }
+      if (dryRun) setBriefPreview(data)
+      else { setBriefResult(data); setBriefPreview(null) }
+    } catch (e: any) {
+      alert('브리핑 처리 중 오류가 났어요: ' + (e?.message ?? '연결 실패'))
+    } finally {
+      setBriefBusy(false)
+    }
+  }
+
+  function confirmSendBriefing() {
+    const n = briefPreview?.sent ?? 0
+    if (n === 0) { alert('보낼 대상이 없어요.'); return }
+    if (!confirm(`${briefDate} 수업 브리핑을 학부모 ${n}명에게 실제로 발송합니다.\n\n보내면 되돌릴 수 없고 건당 요금이 나갑니다. 진행할까요?`)) return
+    runBriefing(false)
+  }
+
   async function handleSendKakao(sessionId: string, studentName: string, parentPhone?: string | null, studentId?: string) {
     // 카톡 발송은 원장님만 - 강사/직원에게는 버튼 자체를 안 보여주고, 혹시 몰라 여기서도 한 번 더 막음
     if (!isAdmin()) { alert('카톡 발송은 원장님만 하실 수 있어요.'); return }
@@ -1719,6 +1758,75 @@ ${e?.message ?? '연결 실패'}
       </div>
 
       <div className="px-4 py-4 space-y-3 md:px-6">
+
+        {/* ── 카톡 수업 브리핑 (원장 전용) ── */}
+        {tab === 'today' && isAdmin() && (
+          <div className="rounded-2xl border p-4" style={{ borderColor: '#F5DF4D', background: '#FFFDF0' }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <i className="ti ti-messages" style={{ fontSize: 16, color: '#3C1E1E' }} />
+              <span className="text-sm font-bold" style={{ color: '#3C1E1E' }}>카톡 수업 브리핑</span>
+              <span className="text-[11px] text-gray-500 ml-auto">매일 오전 11시 자동 발송 · 아래는 직접 돌릴 때</span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
+              기록이 끝난 학생만 보냅니다. 같은 날은 두 번 가지 않아요.
+            </p>
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <input type="date" value={briefDate} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}
+                onChange={(e) => { setBriefDate(e.target.value); setBriefPreview(null); setBriefResult(null) }}
+                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg" />
+              <button onClick={() => runBriefing(true)} disabled={briefBusy}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                {briefBusy && !briefResult ? '확인 중...' : '미리보기'}
+              </button>
+              {briefPreview && (
+                <button onClick={confirmSendBriefing} disabled={briefBusy || (briefPreview.sent ?? 0) === 0}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg text-[#3C1E1E] disabled:opacity-50"
+                  style={{ background: '#FEE500' }}>
+                  <i className="ti ti-send align-[-0.125em]" /> {briefPreview.sent ?? 0}명에게 발송
+                </button>
+              )}
+            </div>
+
+            {briefPreview && (
+              <div className="mt-3 text-[11px] text-gray-700 space-y-1.5">
+                <div className="font-semibold">보낼 대상 {briefPreview.sent}명
+                  {briefPreview.skippedAlreadySent > 0 && <span className="text-gray-400"> · 이미 보냄 {briefPreview.skippedAlreadySent}명</span>}
+                </div>
+                {briefPreview.skippedNoRecord?.length > 0 && (
+                  <div style={{ color: '#991b1b' }}>
+                    기록 미완으로 제외 {briefPreview.skippedNoRecord.length}명 — {briefPreview.skippedNoRecord.map((x: any) => x.name).join(', ')}
+                  </div>
+                )}
+                {briefPreview.skippedNoPhone?.length > 0 && (
+                  <div style={{ color: '#991b1b' }}>
+                    보호자 번호 없음 {briefPreview.skippedNoPhone.length}명 — {briefPreview.skippedNoPhone.map((x: any) => x.name).join(', ')}
+                  </div>
+                )}
+                {briefPreview.previews?.[0] && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-gray-500">
+                      실제로 갈 글 보기 ({briefPreview.previews[0].name} · {briefPreview.previews[0].bodyLen}자 / 1000자)
+                    </summary>
+                    <pre className="mt-1.5 p-2.5 bg-white border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
+                      {briefPreview.previews[0].body}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            )}
+
+            {briefResult && (
+              <div className="mt-3 text-[11px] space-y-1">
+                <div className="font-bold" style={{ color: '#27500A' }}>발송 완료 {briefResult.sent}명</div>
+                {briefResult.failed > 0 && (
+                  <div style={{ color: '#991b1b' }}>
+                    실패 {briefResult.failed}명 — {(briefResult.errors ?? []).map((e: any) => `${e.name}(${e.error})`).join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── 수업일지 탭 ── */}
         {tab === 'today' && (

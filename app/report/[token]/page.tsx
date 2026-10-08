@@ -71,6 +71,8 @@ interface ReportLink {
   id: string
   student_id: string
   report_type: 'daily' | 'monthly' | 'quarterly'
+    // 카톡 브리핑 버튼 뒤 화면들
+    | 'worksheet_scores' | 'attendance_rate' | 'daily_notice'
   period_label: string
   period_start: string
   period_end: string
@@ -208,6 +210,15 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
       </div>
     )
   }
+
+  // ── 카톡 브리핑 버튼 뒤 세 화면 ──────────────────────────────────────────
+  //   알림톡은 본문에 가변 이미지를 못 싣고(템플릿당 고정 1장) 글자도 1,000자까지라,
+  //   누적 현황과 사진은 이렇게 버튼 뒤로 보낸다.
+  //   data 는 **발송 시점에 떠 둔 사진**이라 여기서 DB 를 더 읽지 않는다 —
+  //   링크를 주워도 살아 있는 자료나 남의 자녀로 넘어갈 수 없다.
+  if (link.report_type === 'worksheet_scores') return <WorksheetScores d={link.data as any} link={link} />
+  if (link.report_type === 'attendance_rate') return <AttendanceRate d={link.data as any} link={link} />
+  if (link.report_type === 'daily_notice') return <DailyNotice d={link.data as any} link={link} />
 
   const d = link.data as Exclude<ReportLink['data'], DailyReportData>
   const isQuarterly = link.report_type === 'quarterly'
@@ -489,5 +500,232 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
         </div>
       </div>
     </div>
+  )
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 카톡 브리핑 버튼 뒤 화면들
+// 카카오톡 인앱 브라우저에서는 클라이언트 JS 가 막히는 일이 있어서, 그래프도 CSS 로만 그린다.
+// ════════════════════════════════════════════════════════════════════════════
+
+function Shell({ title, name, grade, period, children }: {
+  title: string; name: string; grade?: string | null; period?: string | null; children: React.ReactNode
+}) {
+  return (
+    <div className="min-h-screen py-8 px-4" style={{ background: '#f5f5f5', fontFamily: 'Pretendard, sans-serif' }}>
+      <div className="max-w-md mx-auto">
+        <div style={{ background: 'white', borderRadius: 20, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <img src="/icon-192.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 10, color: ORANGE, fontWeight: 500, letterSpacing: 2, marginBottom: 4 }}>
+                수학의지혜 · STUDY CHECK
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 500, color: NAVY }}>{name}</div>
+              <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
+                {[grade, title].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+          </div>
+          <div style={{ height: 1, background: NAVY_DIM, marginBottom: 18 }} />
+          {children}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18 }}>
+            <div style={{ fontSize: 9, color: TEXT_MUTED }}>수학의지혜 학원</div>
+            <div style={{ fontSize: 9, color: TEXT_MUTED }}>{period ?? ''}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}` }}>
+      <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 500, color: color ?? NAVY }}>{value}</div>
+    </div>
+  )
+}
+
+function Empty({ text }: { text: string }) {
+  return (
+    <div style={{ background: BOX_BG, borderRadius: 12, padding: '20px 14px', textAlign: 'center' }}>
+      <div style={{ fontSize: 12, color: TEXT_MUTED }}>{text}</div>
+    </div>
+  )
+}
+
+/** 레벨학습지 점수 현황 */
+function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
+  const rows: any[] = d.rows ?? []
+  return (
+    <Shell title="레벨학습지 점수 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+        <Stat label="평균 점수" value={d.avgScore != null ? `${d.avgScore}점` : '-'} color={tierColor(d.avgScore)} />
+        <Stat label="통과율" value={d.passRate != null ? `${d.passRate}%` : '-'} color={tierColor(d.passRate, 80, 60)} />
+        <Stat label="받은 학습지" value={`${d.count ?? 0}장`} />
+      </div>
+
+      {rows.length === 0 ? (
+        <Empty text="최근 6개월 동안 받은 레벨학습지가 없어요." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {rows.map((r, i) => (
+            <div key={i} style={{ background: BOX_BG, borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, color: TEXT_MUTED, flexShrink: 0 }}>{(r.date ?? '').slice(5)}</span>
+                <span style={{ fontSize: 12, color: TEXT_BODY, flex: 1, lineHeight: 1.4 }}>{r.unit}</span>
+                {r.level != null && (
+                  <span style={{ fontSize: 10, color: NAVY, flexShrink: 0 }}>{r.level}레벨</span>
+                )}
+                <span style={{ fontSize: 14, fontWeight: 600, color: tierColor(r.score), flexShrink: 0, minWidth: 38, textAlign: 'right' }}>
+                  {r.score != null ? `${r.score}점` : '미채점'}
+                </span>
+              </div>
+              {/* 점수 막대 — CSS 폭으로만 그린다 */}
+              {r.score != null && (
+                <div style={{ height: 5, background: '#e9ecf1', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.max(0, Math.min(100, r.score))}%`, height: '100%', background: tierColor(r.score) }} />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                {r.status === 'passed' && <span style={{ fontSize: 9, color: NAVY }}>통과</span>}
+                {r.status && r.status !== 'passed' && <span style={{ fontSize: 9, color: ORANGE_MID }}>진행 중</span>}
+                {r.isRetry && <span style={{ fontSize: 9, color: ORANGE_MID }}>재도전(쌍둥이)</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
+        레벨학습지는 70점 미만이면 같은 단원을 다시 풀어 단원을 확실히 넘기고 갑니다.
+      </div>
+    </Shell>
+  )
+}
+
+/** 출결현황 및 과제달성률 현황 */
+function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
+  const rows: any[] = d.rows ?? []
+  return (
+    <Shell title="출결 · 과제 달성률 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <Stat label="정시 출석률" value={d.onTimeRate != null ? `${d.onTimeRate}%` : '-'} color={tierColor(d.onTimeRate, 90, 75)} />
+        <Stat label="평균 과제 달성률" value={d.avgPct != null ? `${d.avgPct}%` : '-'} color={tierColor(d.avgPct, 90, 70)} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+        <Stat label="정시" value={`${d.onTime ?? 0}회`} />
+        <Stat label="지각" value={`${d.late ?? 0}회`} color={(d.late ?? 0) > 0 ? ORANGE : NAVY} />
+        <Stat label="결석" value={`${d.absent ?? 0}회`} color={(d.absent ?? 0) > 0 ? RED : NAVY} />
+      </div>
+
+      {rows.length === 0 ? (
+        <Empty text="최근 3개월 동안의 수업 기록이 없어요." />
+      ) : (
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
+          {rows.map((r, i) => {
+            const attColor = r.attendance === '정시' ? NAVY : r.attendance === '지각' ? ORANGE : r.attendance === '결석' ? RED : TEXT_MUTED
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
+                borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
+                background: i % 2 === 0 ? 'white' : '#fcfcfd',
+              }}>
+                <span style={{ fontSize: 11, color: TEXT_BODY, width: 58, flexShrink: 0 }}>
+                  {(r.date ?? '').slice(5)} <span style={{ color: TEXT_MUTED }}>{r.dow}</span>
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: attColor, width: 46, flexShrink: 0 }}>
+                  {r.attendance ?? '미기록'}
+                </span>
+                <div style={{ flex: 1, height: 5, background: '#e9ecf1', borderRadius: 3, overflow: 'hidden' }}>
+                  {r.pct != null && (
+                    <div style={{ width: `${Math.max(0, Math.min(100, r.pct))}%`, height: '100%', background: tierColor(r.pct, 90, 70) }} />
+                  )}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 500, color: tierColor(r.pct, 90, 70), width: 34, textAlign: 'right', flexShrink: 0 }}>
+                  {r.pct != null ? `${r.pct}%` : '-'}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
+        과제 달성률은 그날 수업에서 선생님이 확인한 과제 수행 정도입니다.
+      </div>
+    </Shell>
+  )
+}
+
+/** 그날의 알림장 · 사진 */
+function DailyNotice({ d, link }: { d: any; link: ReportLink }) {
+  const notices: any[] = d.notices ?? []
+  const dateLabel = d.sessionDate
+    ? `${Number(String(d.sessionDate).slice(5, 7))}월 ${Number(String(d.sessionDate).slice(8, 10))}일 알림장`
+    : '알림장'
+  const progress: string[] = d.progress ?? []
+  const homework: string[] = d.homework ?? []
+  return (
+    <Shell title={dateLabel} name={d.studentName} grade={d.studentGrade} period={d.sessionDate}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        <Stat label="출결" value={d.attendance ?? '미기록'}
+          color={d.attendance === '정시' ? NAVY : d.attendance === '지각' ? ORANGE : d.attendance === '결석' ? RED : TEXT_MUTED} />
+        <Stat label="과제 달성률" value={d.achievementPct != null ? `${d.achievementPct}%` : '-'}
+          color={tierColor(d.achievementPct, 90, 70)} />
+      </div>
+
+      {progress.length > 0 && (
+        <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+          <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>오늘 나간 진도</div>
+          <div style={{ fontSize: 12, color: TEXT_BODY, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{progress.join('\n')}</div>
+        </div>
+      )}
+
+      {homework.length > 0 && (
+        <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+          <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>다음 시간까지 과제</div>
+          <div style={{ fontSize: 12, color: TEXT_BODY, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{homework.join('\n')}</div>
+        </div>
+      )}
+
+      {notices.length === 0 && !d.memo ? (
+        <Empty text="이 날은 따로 남긴 알림장이 없어요." />
+      ) : (
+        notices.map((n, i) => (
+          <div key={i} style={{ background: ORANGE_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${ORANGE}`, marginBottom: 8 }}>
+            <div style={{ fontSize: 9, color: ORANGE_MID, fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>
+              {n.teacherName ? `${n.teacherName} 선생님` : '선생님 알림장'}
+            </div>
+            <div style={{ fontSize: 12, color: ORANGE_DEEP, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{n.content}</div>
+            {/* 사진 — 알림톡 본문에는 실을 수 없어서 여기서 보여 준다 */}
+            {(n.images ?? []).length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                {n.images.map((u: string, j: number) => (
+                  <a key={j} href={u} target="_blank" rel="noreferrer">
+                    <img src={u} alt="" style={{ width: '100%', borderRadius: 10, border: `1px solid ${BORDER}`, display: 'block' }} />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+
+      {d.memo && (
+        <div style={{ background: BOX_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${NAVY}`, marginBottom: 8 }}>
+          <div style={{ fontSize: 9, color: NAVY, fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>선생님 메모</div>
+          <div style={{ fontSize: 12, color: TEXT_BODY, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{d.memo}</div>
+        </div>
+      )}
+
+      {d.makeupNote && (
+        <div style={{ background: ORANGE_BG, borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${ORANGE}` }}>
+          <div style={{ fontSize: 9, color: ORANGE_MID, fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>보강</div>
+          <div style={{ fontSize: 12, color: ORANGE_DEEP, lineHeight: 1.7 }}>{d.makeupNote}</div>
+        </div>
+      )}
+    </Shell>
   )
 }

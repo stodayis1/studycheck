@@ -1,5 +1,11 @@
 {
   "regions": [
     "icn1"
+  ],
+  "crons": [
+    {
+      "path": "/api/kakao-briefing",
+      "schedule": "0 2 * * *"
+    }
   ]
 }
