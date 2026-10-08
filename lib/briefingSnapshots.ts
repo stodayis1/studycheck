@@ -11,7 +11,8 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토']
 /** 버튼 뒤에서 보여 줄 세 가지를 그때 값으로 떠 둔다. */
 export async function snapshots(db: SupabaseClient, student: any, date: string, ses: any, note: any, fbs: any[]) {
   const sixMonthsAgo = new Date(Date.parse(date) - 183 * 86400_000).toISOString().slice(0, 10)
-  const threeMonthsAgo = new Date(Date.parse(date) - 92 * 86400_000).toISOString().slice(0, 10)
+  // 월별 탭으로 넘겨 보므로 출결도 학습지와 같은 6개월치를 담는다.
+  const attendFrom = sixMonthsAgo
 
   const [{ data: ws }, { data: pastSessions }] = await Promise.all([
     db.from('student_worksheets')
@@ -20,14 +21,14 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       .order('assigned_at', { ascending: false }).limit(200),
     db.from('class_sessions')
       .select('id, session_date, progress_content')
-      .eq('student_id', student.id).gte('session_date', threeMonthsAgo).lte('session_date', date)
+      .eq('student_id', student.id).gte('session_date', attendFrom).lte('session_date', date)
       .order('session_date', { ascending: false }).limit(200),
   ])
 
   const sessionIds = (pastSessions ?? []).map((s: any) => s.id)
   const { data: pastNotes } = sessionIds.length
     ? await db.from('learning_notes')
-        .select('session_id, attendance, achievement_pct, worksheet_score, worksheet_submitted, workbook_done')
+        .select('session_id, attendance, achievement_pct, worksheet_score, worksheet_submitted, workbook_done, makeup_note')
         .in('session_id', sessionIds)
     : { data: [] as any[] }
   const noteBy = new Map((pastNotes ?? []).map((n: any) => [n.session_id, n]))
@@ -83,15 +84,36 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       attendance: n?.attendance ?? null,
       pct,
       worksheetScore: n?.worksheet_score ?? null,
+      // 보강은 따로 수업으로 잡히지 않는다(session_type 이 전부 '정규'다).
+      // OPS 가 결석한 날의 learning_notes.makeup_note 에 글로 적어 두는 것이 전부다.
+      makeupNote: (n?.makeup_note ?? '').trim() || null,
     }
   })
   const counted = attRows.filter((r) => r.attendance)
   const tally = (k: string) => counted.filter((r) => r.attendance === k).length
   const pcts = attRows.map((r) => r.pct).filter((p): p is number => p != null)
+
+  // ★ "언제 결석했고 그 보강은 어떻게 됐나" 를 따로 뽑는다 —
+  //   결석이 잦은 것을 학부모가 스스로 알아보실 수 있어야 한다는 것이 원장님 요구.
+  //   전체 529건 결석 중 보강 기록이 있는 것은 57건뿐이라, 없는 것은 **없다고** 적는다.
+  const absences = attRows
+    .filter((r) => r.attendance === '결석')
+    .map((r) => {
+      const m = r.makeupNote ?? ''
+      const state: 'done' | 'planned' | 'waiting' | 'none' | 'unknown' =
+        !m ? 'none'
+          : /안 ?함|안함/.test(m) ? 'none'
+            : /완료|했음|함$/.test(m) ? 'done'
+              : /예정/.test(m) ? 'planned'
+                : /안내|대기|선택/.test(m) ? 'waiting'
+                  : 'unknown'
+      return { date: r.date, dow: r.dow, note: r.makeupNote, state }
+    })
+
   const attendanceSnapshot = {
     studentName: student.name,
     studentGrade: student.grade,
-    periodLabel: `${threeMonthsAgo} ~ ${date}`,
+    periodLabel: `${attendFrom} ~ ${date}`,
     rows: attRows,
     total: counted.length,
     onTime: tally('정시'),
@@ -99,6 +121,10 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     absent: tally('결석'),
     onTimeRate: counted.length ? Math.round((tally('정시') / counted.length) * 100) : null,
     avgPct: pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null,
+    absences,
+    makeupPlanned: absences.filter((a) => a.state === 'planned').length,
+    makeupDone: absences.filter((a) => a.state === 'done').length,
+    makeupNone: absences.filter((a) => a.state === 'none').length,
   }
 
   // ── 그날의 알림장·사진 ──────────────────────────────────────────────────

@@ -557,25 +557,92 @@ function Empty({ text }: { text: string }) {
   )
 }
 
+/** 'YYYY-MM-DD' → 'YYYY-MM'. 날짜가 비면 null. */
+function monthOf(d?: string | null) {
+  return d && /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : null
+}
+
+function monthLabel(key: string) {
+  return `${Number(key.slice(0, 4))}년 ${Number(key.slice(5, 7))}월`
+}
+
+/**
+ * 월별 좌우 탭. **클라이언트 JS 없이** 라디오 + :checked 로만 넘긴다 —
+ * 카카오톡 인앱 브라우저에서 JS 가 막히는 일이 있어서 이 화면은 서버에서 다 그린다.
+ * 들어올 때는 가장 최근 달이 펼쳐져 있다.
+ */
+function MonthTabs({ uid, months, panels }: {
+  uid: string
+  months: string[]              // 오래된 → 최신 순
+  panels: React.ReactNode[]     // months 와 같은 순서
+}) {
+  const last = months.length - 1
+  const css = [
+    `.${uid}-r{position:absolute;opacity:0;width:0;height:0;pointer-events:none}`,
+    `.${uid}-p{display:none}`,
+    ...months.map((_, i) => `#${uid}-${i}:checked~.${uid}-w>.${uid}-p[data-i="${i}"]{display:block}`),
+  ].join('')
+  const arrow = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 30, height: 30, borderRadius: 9, fontSize: 17, lineHeight: 1,
+    border: `1px solid ${BORDER}`, background: 'white', color: NAVY,
+    cursor: 'pointer', userSelect: 'none' as const, flexShrink: 0,
+  }
+  const arrowOff = { ...arrow, color: '#d1d5db', background: '#fafafa', cursor: 'default' }
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: css }} />
+      {months.map((_, i) => (
+        <input key={i} type="radio" name={uid} id={`${uid}-${i}`}
+          className={`${uid}-r`} defaultChecked={i === last} />
+      ))}
+      <div className={`${uid}-w`}>
+        {months.map((m, i) => (
+          <div key={m} className={`${uid}-p`} data-i={i}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 8, marginBottom: 10,
+            }}>
+              {i > 0
+                ? <label htmlFor={`${uid}-${i - 1}`} style={arrow} aria-label="이전 달">‹</label>
+                : <span style={arrowOff}>‹</span>}
+              <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>
+                {monthLabel(m)}
+                <span style={{ fontSize: 10, color: TEXT_MUTED, fontWeight: 400 }}>
+                  {'  '}{i + 1}/{months.length}
+                </span>
+              </span>
+              {i < last
+                ? <label htmlFor={`${uid}-${i + 1}`} style={arrow} aria-label="다음 달">›</label>
+                : <span style={arrowOff}>›</span>}
+            </div>
+            {panels[i]}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 /** 레벨학습지 점수 현황 */
 function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
   const rows: any[] = d.rows ?? []
-  return (
-    <Shell title="레벨학습지 점수 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
-        <Stat label="평균 점수" value={d.avgScore != null ? `${d.avgScore}점` : '-'} color={tierColor(d.avgScore)} />
-        {/* 통과 = 그 단원에서 가장 최근 채점한 본 학습지가 70점 이상 (docs/초등레벨학습지.md).
-            예전에 쓰던 status='passed' 는 「처리 완료」일 뿐이라 70점 미만도 들어간다. */}
-        <Stat label="단원 통과" value={d.unitsJudged ? `${d.unitsPassed}/${d.unitsJudged}` : '-'}
-          color={d.unitsJudged && d.unitsPassed === d.unitsJudged ? NAVY : ORANGE} />
-        <Stat label="받은 학습지" value={`${d.count ?? 0}장`} />
-      </div>
+  // ★ 쭉 늘어놓으면 6개월치가 한 화면에 쏟아져 읽을 수가 없다. 달로 끊어 좌우로 넘긴다.
+  const months = [...new Set(rows.map((r) => monthOf(r.date)).filter(Boolean) as string[])].sort()
 
-      {rows.length === 0 ? (
-        <Empty text="최근 6개월 동안 받은 레벨학습지가 없어요." />
-      ) : (
+  const panel = (m: string) => {
+    const mine = rows.filter((r) => monthOf(r.date) === m)
+    const scored = mine.filter((r) => r.score != null)
+    const avg = scored.length
+      ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : null
+    return (
+      <>
+        <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
+          이 달 {mine.length}장
+          {avg != null && <> · 평균 <b style={{ color: tierColor(avg) }}>{avg}점</b></>}
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {rows.map((r, i) => (
+          {mine.map((r, i) => (
             <div key={i} style={{ background: BOX_BG, borderRadius: 12, padding: '10px 12px' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, color: TEXT_MUTED, flexShrink: 0 }}>{(r.date ?? '').slice(5)}</span>
@@ -587,7 +654,6 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
                   {r.score != null ? `${r.score}점` : '-'}
                 </span>
               </div>
-              {/* 점수 막대 — CSS 폭으로만 그린다 */}
               {r.score != null && (
                 <div style={{ height: 5, background: '#e9ecf1', borderRadius: 3, overflow: 'hidden' }}>
                   <div style={{ width: `${Math.max(0, Math.min(100, r.score))}%`, height: '100%', background: tierColor(r.score, 85, 70) }} />
@@ -601,6 +667,26 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
             </div>
           ))}
         </div>
+      </>
+    )
+  }
+
+  return (
+    <Shell title="레벨학습지 점수 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+        <Stat label="평균 점수" value={d.avgScore != null ? `${d.avgScore}점` : '-'} color={tierColor(d.avgScore)} />
+        {/* 통과 = 그 단원에서 가장 최근 채점한 본 학습지가 70점 이상 (docs/초등레벨학습지.md).
+            예전에 쓰던 status='passed' 는 「처리 완료」일 뿐이라 70점 미만도 들어간다. */}
+        <Stat label="단원 통과" value={d.unitsJudged ? `${d.unitsPassed}/${d.unitsJudged}` : '-'}
+          color={d.unitsJudged && d.unitsPassed === d.unitsJudged ? NAVY : ORANGE} />
+        <Stat label="받은 학습지" value={`${d.count ?? 0}장`} />
+      </div>
+      <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 12 }}>위 숫자는 최근 6개월 전체입니다.</div>
+
+      {months.length === 0 ? (
+        <Empty text="최근 6개월 동안 받은 레벨학습지가 없어요." />
+      ) : (
+        <MonthTabs uid="ws" months={months} panels={months.map(panel)} />
       )}
       <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
         레벨학습지는 70점 미만이면 같은 단원을 다시 풀어 단원을 확실히 넘기고 갑니다.
@@ -612,51 +698,123 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
 /** 출결현황 및 과제달성률 현황 */
 function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
   const rows: any[] = d.rows ?? []
+  const absences: any[] = d.absences ?? []
+  const months = [...new Set(rows.map((r) => monthOf(r.date)).filter(Boolean) as string[])].sort()
+
+  // 보강이 어떻게 됐는지를 한 단어로. 기록이 없으면 **없다고** 적는다 —
+  // 실제로 결석 529건 중 보강 기록이 있는 것은 57건뿐이다. 있는 척하면 안 된다.
+  const makeup = (a: any): { text: string; color: string } =>
+    a.state === 'done' ? { text: a.note ?? '보강 완료', color: NAVY }
+      : a.state === 'planned' ? { text: a.note ?? '보강 예정', color: ORANGE }
+        : a.state === 'waiting' ? { text: a.note ?? '보강 안내 보냄', color: ORANGE_MID }
+          : a.state === 'none' ? { text: a.note ?? '보강 기록 없음', color: RED }
+            : { text: a.note ?? '-', color: TEXT_BODY }
+
+  const panel = (m: string) => {
+    const mine = rows.filter((r) => monthOf(r.date) === m)
+    const counted = mine.filter((r) => r.attendance)
+    const n = (k: string) => counted.filter((r) => r.attendance === k).length
+    const pcts = mine.map((r) => r.pct).filter((p: any) => p != null) as number[]
+    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null
+    return (
+      <>
+        <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
+          이 달 {counted.length}회 · 정시 {n('정시')} · 지각 <b style={{ color: n('지각') ? ORANGE : TEXT_MUTED }}>{n('지각')}</b>
+          {' · '}결석 <b style={{ color: n('결석') ? RED : TEXT_MUTED }}>{n('결석')}</b>
+          {avg != null && <> · 평균 달성률 <b style={{ color: tierColor(avg, 90, 70) }}>{avg}%</b></>}
+        </div>
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
+          {mine.map((r, i) => {
+            const attColor = r.attendance === '정시' ? NAVY : r.attendance === '지각' ? ORANGE : r.attendance === '결석' ? RED : TEXT_MUTED
+            return (
+              <div key={i} style={{
+                borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
+                background: r.attendance === '결석' ? '#fff7f7' : i % 2 === 0 ? 'white' : '#fcfcfd',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px' }}>
+                  <span style={{ fontSize: 11, color: TEXT_BODY, width: 58, flexShrink: 0 }}>
+                    {(r.date ?? '').slice(5)} <span style={{ color: TEXT_MUTED }}>{r.dow}</span>
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: attColor, width: 46, flexShrink: 0 }}>
+                    {r.attendance ?? '미기록'}
+                  </span>
+                  <div style={{ flex: 1, height: 5, background: '#e9ecf1', borderRadius: 3, overflow: 'hidden' }}>
+                    {r.pct != null && (
+                      <div style={{ width: `${Math.max(0, Math.min(100, r.pct))}%`, height: '100%', background: tierColor(r.pct, 90, 70) }} />
+                    )}
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: tierColor(r.pct, 90, 70), width: 34, textAlign: 'right', flexShrink: 0 }}>
+                    {r.pct != null ? `${r.pct}%` : '-'}
+                  </span>
+                </div>
+                {/* 결석한 날은 그 자리에서 보강이 어떻게 됐는지 바로 보이게 */}
+                {r.attendance === '결석' && (
+                  <div style={{ padding: '0 12px 9px 70px', fontSize: 10, color: r.makeupNote ? ORANGE_MID : RED }}>
+                    보강 · {r.makeupNote ?? '기록 없음'}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </>
+    )
+  }
+
   return (
     <Shell title="출결 · 과제 달성률 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
         <Stat label="정시 출석률" value={d.onTimeRate != null ? `${d.onTimeRate}%` : '-'} color={tierColor(d.onTimeRate, 90, 75)} />
         <Stat label="평균 과제 달성률" value={d.avgPct != null ? `${d.avgPct}%` : '-'} color={tierColor(d.avgPct, 90, 70)} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 6 }}>
         <Stat label="정시" value={`${d.onTime ?? 0}회`} />
         <Stat label="지각" value={`${d.late ?? 0}회`} color={(d.late ?? 0) > 0 ? ORANGE : NAVY} />
         <Stat label="결석" value={`${d.absent ?? 0}회`} color={(d.absent ?? 0) > 0 ? RED : NAVY} />
       </div>
+      <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 14 }}>위 숫자는 최근 6개월 전체입니다.</div>
 
-      {rows.length === 0 ? (
-        <Empty text="최근 3개월 동안의 수업 기록이 없어요." />
-      ) : (
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
-          {rows.map((r, i) => {
-            const attColor = r.attendance === '정시' ? NAVY : r.attendance === '지각' ? ORANGE : r.attendance === '결석' ? RED : TEXT_MUTED
+      {/* ── 결석·보강 내역 ──────────────────────────────────────────────────
+          "언제 결석했고 그 보강은 어떻게 됐는지" 를 **달과 상관없이 한자리에** 모은다.
+          달별 탭 안에 흩어 두면 결석이 잦아지는 흐름이 눈에 안 들어온다. */}
+      {absences.length > 0 && (
+        <div style={{ borderRadius: 12, border: `1px solid #f5d6cc`, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ background: '#FFF5F2', padding: '10px 14px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: ORANGE_DEEP }}>
+              결석 {absences.length}회 · 보강 내역
+            </div>
+            <div style={{ fontSize: 10, color: ORANGE_MID, marginTop: 3 }}>
+              {d.makeupDone > 0 && `완료 ${d.makeupDone}회 · `}
+              {d.makeupPlanned > 0 && `예정 ${d.makeupPlanned}회 · `}
+              {d.makeupNone > 0 && `기록 없음 ${d.makeupNone}회`}
+              {!d.makeupDone && !d.makeupPlanned && !d.makeupNone && '최근 6개월 기준'}
+            </div>
+          </div>
+          {absences.map((a, i) => {
+            const m = makeup(a)
             return (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
-                borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
-                background: i % 2 === 0 ? 'white' : '#fcfcfd',
+                display: 'flex', alignItems: 'baseline', gap: 8, padding: '9px 14px',
+                borderTop: `1px solid #f7e6e0`, background: 'white',
               }}>
-                <span style={{ fontSize: 11, color: TEXT_BODY, width: 58, flexShrink: 0 }}>
-                  {(r.date ?? '').slice(5)} <span style={{ color: TEXT_MUTED }}>{r.dow}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: RED, width: 62, flexShrink: 0 }}>
+                  {(a.date ?? '').slice(5)} <span style={{ fontWeight: 400, color: TEXT_MUTED }}>{a.dow}</span>
                 </span>
-                <span style={{ fontSize: 11, fontWeight: 500, color: attColor, width: 46, flexShrink: 0 }}>
-                  {r.attendance ?? '미기록'}
-                </span>
-                <div style={{ flex: 1, height: 5, background: '#e9ecf1', borderRadius: 3, overflow: 'hidden' }}>
-                  {r.pct != null && (
-                    <div style={{ width: `${Math.max(0, Math.min(100, r.pct))}%`, height: '100%', background: tierColor(r.pct, 90, 70) }} />
-                  )}
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 500, color: tierColor(r.pct, 90, 70), width: 34, textAlign: 'right', flexShrink: 0 }}>
-                  {r.pct != null ? `${r.pct}%` : '-'}
-                </span>
+                <span style={{ fontSize: 11, color: m.color, flex: 1, lineHeight: 1.5 }}>{m.text}</span>
               </div>
             )
           })}
         </div>
       )}
+
+      {months.length === 0 ? (
+        <Empty text="최근 6개월 동안의 수업 기록이 없어요." />
+      ) : (
+        <MonthTabs uid="at" months={months} panels={months.map(panel)} />
+      )}
       <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
         과제 달성률은 그날 수업에서 선생님이 확인한 과제 수행 정도입니다.
+        보강 일정은 미리 말씀해 주시면 언제든 바꿔 드려요.
       </div>
     </Shell>
   )
