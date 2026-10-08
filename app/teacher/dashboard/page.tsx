@@ -78,6 +78,8 @@ export default function TeacherDashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
   const [overdueConsultNames, setOverdueConsultNames] = useState<string[]>([])
+  // 강사가 올린 '원장님 상담 요청' (원장/직원 화면에만 뜬다)
+  const [consultRequests, setConsultRequests] = useState<{ id: string; name: string; reason: string | null; by: string | null }[]>([])
   // 원장이 아직 못 본 새 상담기록
   const [newConsults, setNewConsults] = useState<NewConsult[]>([])
   // 배정만 하고 5일 넘게 안 걷힌 학습지 (초·중·고 전부). 채점 대기/처리 필요와 달리 알림이 없어서
@@ -88,7 +90,7 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
-      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes()
+      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes(); fetchConsultRequests()
       fetchNewConsultations()
     }
   }, [currentUser])
@@ -121,8 +123,9 @@ export default function TeacherDashboardPage() {
       .update({ is_read: true, read_at: new Date().toISOString() }).eq('id', id)
   }
 
-  // 상담기록 기준 3개월 초과 알림 - "기존 학생은 스터디체크에 상담기록이 아직 없으니 알림 대상에서 제외하고,
-  // 처음 기록을 남기는 순간부터 그 날짜 기준으로 3개월을 센다" 원칙 (2026-09-17 원장님 확인).
+  // 상담 주기 초과 알림 — 초등 42일(6주), 중·고 90일(3개월). 상담기록이 아예 없는 학생도 '상담 필요'로 본다.
+  // (2026-10-08 원장님 지시로 변경. 그 전에는 "기록이 없으면 기준 날짜가 없으니 제외
+  //  했었음 — 2026-09-17 원칙)
   async function fetchOverdueConsults() {
     const { data: allStudents } = await supabase.from('students')
       .select('id, name, school, grade, teacher_name').eq('is_active', true)
@@ -138,11 +141,25 @@ export default function TeacherDashboardPage() {
     const todayMs = Date.now()
     const overdue = myStudents.filter((s: any) => {
       const last = lastByStudent.get(s.id)
-      if (!last) return false
+      if (!last) return true
       const days = Math.floor((todayMs - new Date(last + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
-      return days > 90
+      return days > (String(s.grade || '').startsWith('초') ? 42 : 90)
     }).map((s: any) => s.name)
     setOverdueConsultNames(overdue)
+  }
+
+  // 강사가 올린 원장 상담 요청 — 처리 완료 전(open)인 것만
+  async function fetchConsultRequests() {
+    if (!isAdmin() && currentUser?.role !== 'staff') return
+    const { data } = await supabase.from('consultation_requests')
+      .select('id, reason, requested_by_name, student:students(name)')
+      .eq('status', 'open').order('created_at', { ascending: false })
+    setConsultRequests((data ?? []).map((r: any) => ({
+      id: r.id,
+      name: Array.isArray(r.student) ? r.student[0]?.name : r.student?.name,
+      reason: r.reason,
+      by: r.requested_by_name,
+    })))
   }
 
   // 마지막으로 확인한 시각 이후에 새로 작성된 상담기록을 가져온다(원장 전용).
@@ -669,15 +686,23 @@ export default function TeacherDashboardPage() {
                 </p>
               </Link>
             )}
+            {!loading && consultRequests.length > 0 && (
+              <Link href="/teacher/consultations" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#EEF2FF' }}>
+                <i className="ti ti-user-exclamation" style={{ fontSize: 13, color: '#3730a3' }} />
+                <p style={{ color: '#3730a3' }}>
+                  원장 상담 요청 {consultRequests.length}건 · {consultRequests.slice(0, 3).map((r) => r.name).join(', ')}{consultRequests.length > 3 ? ' 외' : ''}
+                </p>
+              </Link>
+            )}
             {!loading && overdueConsultNames.length > 0 && (
               <Link href="/teacher/consultations" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF7ED' }}>
                 <i className="ti ti-phone" style={{ fontSize: 13, color: '#9a3412' }} />
                 <p style={{ color: '#9a3412' }}>
-                  상담 필요 {overdueConsultNames.length}명 · 마지막 상담 후 90일 초과 ({overdueConsultNames.slice(0, 3).join(', ')}{overdueConsultNames.length > 3 ? ' 외' : ''})
+                  상담 필요 {overdueConsultNames.length}명 · 초등 6주 / 중·고 3개월 초과 ({overdueConsultNames.slice(0, 3).join(', ')}{overdueConsultNames.length > 3 ? ' 외' : ''})
                 </p>
               </Link>
             )}
-            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && overdueConsultNames.length === 0 && longPending.count === 0 && (
+            {!loading && stats.unwrittenNotes === 0 && stats.pendingScore === 0 && stats.pendingShare === 0 && stats.needsAction === 0 && overdueConsultNames.length === 0 && consultRequests.length === 0 && longPending.count === 0 && (
               <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#F0FBF7' }}>
                 <i className="ti ti-circle-check" style={{ fontSize: 13, color: '#085041' }} />
                 <p style={{ color: '#085041' }}>오늘 모든 업무 완료! 수고하셨습니다</p>

@@ -24,7 +24,22 @@ interface Consultation {
   created_at: string
 }
 
-const OVERDUE_DAYS = 90
+// 상담 주기 — 초등은 6주(42일), 중·고등은 3개월(90일)
+const OVERDUE_DAYS_ELEM = 42
+const OVERDUE_DAYS_SECONDARY = 90
+function overdueDaysFor(grade?: string) {
+  return (grade || '').startsWith('초') ? OVERDUE_DAYS_ELEM : OVERDUE_DAYS_SECONDARY
+}
+
+// 강사가 '이 학생은 원장님이 상담해 주세요'라고 올린 요청
+interface ConsultRequest {
+  id: string
+  student_id: string
+  reason: string | null
+  status: string
+  requested_by_name: string | null
+  created_at: string
+}
 
 const CONSULTATION_TEMPLATE = `1.
 성적 및 학습상담
@@ -45,6 +60,7 @@ export default function ConsultationsPage() {
 
   const [students, setStudents] = useState<Student[]>([])
   const [consultations, setConsultations] = useState<Consultation[]>([])
+  const [requests, setRequests] = useState<ConsultRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [onlyOverdue, setOnlyOverdue] = useState(false)
@@ -61,12 +77,14 @@ export default function ConsultationsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: cData }] = await Promise.all([
+    const [{ data: sData }, { data: cData }, { data: rData }] = await Promise.all([
       supabase.from('students').select('id, name, school, grade, teacher_name').eq('is_active', true).order('name'),
       supabase.from('consultations').select('*').order('consulted_at', { ascending: false }),
+      supabase.from('consultation_requests').select('*').eq('status', 'open').order('created_at', { ascending: false }),
     ])
     if (sData) setStudents(sData)
     if (cData) setConsultations(cData)
+    setRequests(rData || [])
     setLoading(false)
   }
 
@@ -92,15 +110,43 @@ export default function ConsultationsPage() {
     return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
   }
 
+  // 상담 필요 판단 — 초등 42일(6주), 중·고 90일(3개월) 초과.
+  // 상담기록이 아예 없는 학생도 "상담 필요"로 본다 (2026-10-08 원장님 지시로 변경.
+  // 그 전에는 기록이 없으면 기준 날짜가 없다는 이유로 제외했었음)
   function isOverdue(studentId: string) {
+    const student = students.find((s) => s.id === studentId)
     const last = lastConsultByStudent.get(studentId)
-    // "오늘부터 새로 카운트" 원칙 - 상담기록이 아예 없는 학생(대부분의 기존 재원생)은
-    // 아직 기준 삼을 날짜가 없으니 초과 알림 대상에서 제외한다. 처음 기록을 남기는 순간부터 3개월을 센다.
-    if (!last) return false
-    return daysSince(last.consulted_at) > OVERDUE_DAYS
+    if (!last) return true
+    return daysSince(last.consulted_at) > overdueDaysFor(student?.grade)
   }
 
   const overdueStudents = myStudents.filter((s) => isOverdue(s.id))
+
+  // 원장님 상담 요청 — 이미 요청해 둔 학생은 버튼 대신 '요청됨'으로 표시
+  const requestedStudentIds = useMemo(() => new Set(requests.map((r) => r.student_id)), [requests])
+  const studentById = useMemo(() => new Map(students.map((s) => [s.id, s])), [students])
+
+  async function requestConsult(student: Student) {
+    const reason = window.prompt(`${student.name} 학생을 원장님이 상담하도록 요청해요.\n사유를 적어주세요 (예: 학부모님이 원장님 상담 요청)`, '')
+    if (reason === null) return
+    const { error } = await supabase.from('consultation_requests').insert({
+      student_id: student.id,
+      reason: reason.trim() || null,
+      requested_by: currentUser?.id ?? null,
+      requested_by_name: currentUser?.name ?? null,
+    })
+    if (error) { alert('요청에 실패했어요: ' + error.message); return }
+    alert('원장님께 상담 요청을 보냈어요. 원장님 대시보드에 떠요.')
+    fetchData()
+  }
+
+  async function resolveRequest(id: string) {
+    const { error } = await supabase.from('consultation_requests')
+      .update({ status: 'done', resolved_by: currentUser?.id ?? null, resolved_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) { alert('처리에 실패했어요: ' + error.message); return }
+    fetchData()
+  }
 
   const visibleStudents = myStudents
     // 학교가 비어 있는 학생이 있다(전아윤 등). ?? '' 없이 school.includes()를 부르면
@@ -180,12 +226,30 @@ export default function ConsultationsPage() {
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
 
+        {requests.length > 0 && canManageAllStudents() && (
+          <div className="rounded-2xl px-4 py-3 space-y-2" style={{ background: '#EEF2FF', border: '1.5px solid #A5B4FC' }}>
+            <p className="text-sm font-bold" style={{ color: '#3730a3' }}>원장 상담 요청 {requests.length}건</p>
+            {requests.map((r) => (
+              <div key={r.id} className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold" style={{ color: '#3730a3' }}>
+                    {studentById.get(r.student_id)?.name ?? '(알 수 없는 학생)'}
+                    <span className="font-normal" style={{ color: '#6366f1' }}> · {r.requested_by_name ?? '요청자 미상'}</span>
+                  </p>
+                  {r.reason && <p className="text-[11px]" style={{ color: '#4f46e5' }}>{r.reason}</p>}
+                </div>
+                <button onClick={() => resolveRequest(r.id)} className="text-[11px] font-bold px-2 py-1 rounded-lg shrink-0" style={{ background: 'white', color: '#3730a3', border: '1px solid #A5B4FC' }}>처리 완료</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {overdueStudents.length > 0 && (
           <div className="rounded-2xl px-4 py-3" style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74' }}>
             <div className="flex items-center gap-2 mb-1">
               <i className="ti ti-phone" style={{ fontSize: 16 }} />
               <p className="text-sm font-bold" style={{ color: '#9a3412' }}>
-                상담 필요 학생 {overdueStudents.length}명 · 마지막 상담 후 {OVERDUE_DAYS}일 초과
+                상담 필요 학생 {overdueStudents.length}명 · 초등 6주 / 중·고 3개월 초과 (기록 없는 학생 포함)
               </p>
             </div>
             <p className="text-xs" style={{ color: '#B45309' }}>
@@ -233,14 +297,23 @@ export default function ConsultationsPage() {
                         <span className="text-[11px] text-gray-400">{s.school} · {s.grade}</span>
                       </div>
                       <p className="text-xs mt-0.5" style={{ color: overdue ? '#c2410c' : '#9ca3af' }}>
-                        {last ? `마지막 상담 ${last.consulted_at} (${daysSince(last.consulted_at)}일 전)` : '상담기록 없음'}
+                        {last
+                          ? `마지막 상담 ${last.consulted_at} (${daysSince(last.consulted_at)}일 전 · 기준 ${overdueDaysFor(s.grade)}일)`
+                          : '상담기록 없음 · 상담 필요'}
                       </p>
                     </div>
-                    {overdue && (
-                      <span className="text-[10px] font-bold px-2 py-1 rounded-full shrink-0" style={{ background: '#FFF7ED', color: '#9a3412' }}>
-                        초과
-                      </span>
-                    )}
+                    <span className="flex items-center gap-1 shrink-0">
+                      {requestedStudentIds.has(s.id) && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: '#EEF2FF', color: '#3730a3' }}>
+                          원장님 요청됨
+                        </span>
+                      )}
+                      {overdue && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: '#FFF7ED', color: '#9a3412' }}>
+                          상담 필요
+                        </span>
+                      )}
+                    </span>
                   </button>
                 )
               })}
@@ -261,6 +334,19 @@ export default function ConsultationsPage() {
                 <button onClick={() => setOpenStudent(null)} className="text-gray-400 text-sm">닫기</button>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">{openStudent.school} · {openStudent.grade}</p>
+              {/* 내가 상담하기 어려운 학생은 원장님이 상담하도록 요청 — 원장님 대시보드에 뜬다 */}
+              {requestedStudentIds.has(openStudent.id) ? (
+                <p className="text-[11px] font-bold mt-2" style={{ color: '#3730a3' }}>
+                  원장님 상담 요청됨 {requests.find((r) => r.student_id === openStudent.id)?.reason
+                    ? `· ${requests.find((r) => r.student_id === openStudent.id)?.reason}` : ''}
+                </p>
+              ) : (
+                <button onClick={() => requestConsult(openStudent)}
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-lg mt-2"
+                  style={{ background: '#EEF2FF', color: '#3730a3', border: '1px solid #A5B4FC' }}>
+                  원장님 상담 요청
+                </button>
+              )}
             </div>
 
             <div className="px-5 py-4 space-y-3" style={{ borderBottom: '1px solid #f3f4f6' }}>
