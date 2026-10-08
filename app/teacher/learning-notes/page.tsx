@@ -281,6 +281,7 @@ export default function TeacherLearningNotesPage() {
   const [briefBusy, setBriefBusy] = useState(false)
   const [briefPreview, setBriefPreview] = useState<any>(null)
   const [briefResult, setBriefResult] = useState<any>(null)
+  const [tplCheck, setTplCheck] = useState<any>(null)
 
   async function runBriefing(dryRun: boolean) {
     setBriefBusy(true)
@@ -297,6 +298,20 @@ export default function TeacherLearningNotesPage() {
       else { setBriefResult(data); setBriefPreview(null) }
     } catch (e: any) {
       alert('브리핑 처리 중 오류가 났어요: ' + (e?.message ?? '연결 실패'))
+    } finally {
+      setBriefBusy(false)
+    }
+  }
+
+  // ★ 알리고는 변수를 채워 주지 않는다. 우리가 만든 본문이 **승인된 템플릿과 글자 단위로
+  //   같아야** 전송된다. 안 맞으면 에러도 없이 그냥 안 간다. 보내기 전에 꼭 눌러 볼 것.
+  async function checkTemplate() {
+    setBriefBusy(true); setTplCheck(null)
+    try {
+      const res = await apiFetch('/api/kakao-briefing/template-check')
+      setTplCheck(await res.json())
+    } catch (e: any) {
+      setTplCheck({ ok: false, error: e?.message ?? '연결 실패' })
     } finally {
       setBriefBusy(false)
     }
@@ -1801,6 +1816,10 @@ ${e?.message ?? '연결 실패'}
               <input type="date" value={briefDate} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}
                 onChange={(e) => { setBriefDate(e.target.value); setBriefPreview(null); setBriefResult(null) }}
                 className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg" />
+              <button onClick={checkTemplate} disabled={briefBusy}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                템플릿 맞는지 확인
+              </button>
               <button onClick={() => runBriefing(true)} disabled={briefBusy}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 {briefBusy && !briefResult ? '확인 중...' : '미리보기'}
@@ -1813,6 +1832,36 @@ ${e?.message ?? '연결 실패'}
                 </button>
               )}
             </div>
+
+            {tplCheck && (
+              <div className="mt-3 text-[11px] space-y-1">
+                {!tplCheck.ok ? (
+                  <div style={{ color: '#991b1b' }}>✗ {tplCheck.error}</div>
+                ) : tplCheck.본문일치 && tplCheck.승인상태 === 'APR' ? (
+                  <div style={{ color: '#27500A', fontWeight: 700 }}>
+                    ✓ 승인된 템플릿과 본문이 똑같습니다. 보내도 됩니다.
+                    <span className="font-normal text-gray-500"> · 버튼 {(tplCheck.버튼?.등록됨 ?? []).length}개</span>
+                  </div>
+                ) : (
+                  <div style={{ color: '#991b1b' }}>
+                    <div className="font-bold">
+                      ✗ 이대로 보내면 알리고가 거부합니다.
+                      {tplCheck.승인상태 !== 'APR' && ` (승인상태 ${tplCheck.승인상태})`}
+                    </div>
+                    {tplCheck.본문일치 === false && (
+                      <div className="mt-1">
+                        본문이 {tplCheck.처음_다른_자리}번째 글자부터 다릅니다
+                        (우리 {tplCheck.길이?.우리}자 / 알리고 {tplCheck.길이?.알리고}자)
+                        <pre className="mt-1 p-2 bg-white border border-gray-200 rounded whitespace-pre-wrap">
+{`우리   : ${tplCheck.우리쪽_그자리}\n알리고 : ${tplCheck.알리고쪽_그자리}`}
+                        </pre>
+                        <div className="text-gray-500">그대로 알려주시면 코드를 알리고 쪽에 맞추겠습니다.</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {briefPreview && (
               <div className="mt-3 text-[11px] text-gray-700 space-y-1.5">
