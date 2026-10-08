@@ -159,10 +159,12 @@ async function run(opts: {
         if (error) throw new Error(`링크 생성 실패: ${error.message}`)
         return token
       }
+      // 알림장 없는 날은 「알림장·사진」 버튼을 안 보내므로 링크도 만들지 않는다.
+      const needNotice = brief.template !== 'nonote'
       const [tScore, tAtt, tNotice] = await Promise.all([
         mk('worksheet_scores', snaps.worksheetSnapshot),
         mk('attendance_rate', snaps.attendanceSnapshot),
-        mk('daily_notice', snaps.noticeSnapshot),
+        needNotice ? mk('daily_notice', snaps.noticeSnapshot) : Promise.resolve(''),
       ])
 
       // ★ 알리고는 변수 치환을 해 주지 않는다. 완성된 본문을 그대로 보내고,
@@ -179,10 +181,15 @@ async function run(opts: {
         name: student.name,
         subject: `${student.name} 학생 수업 브리핑`,
         message: brief.body,
+        // ★ 버튼은 **승인된 템플릿에 등록된 것과 개수·이름·링크가 같아야** 한다.
+        //   알림장이 없는 날은 「알림장·사진 보기」를 눌러도 빈 화면이라 그 판에는 버튼을 안 둔다
+        //   (그 판 템플릿도 버튼 2개로 등록해야 한다 — docs/카톡브리핑.md).
         buttons: [
           { name: '레벨학습지 점수 현황', linkType: 'WL', linkMo: `${APP_URL}/report/${tScore}`, linkPc: `${APP_URL}/report/${tScore}` },
           { name: '출결·과제달성률 현황', linkType: 'WL', linkMo: `${APP_URL}/report/${tAtt}`, linkPc: `${APP_URL}/report/${tAtt}` },
-          { name: '알림장·사진 보기', linkType: 'WL', linkMo: `${APP_URL}/report/${tNotice}`, linkPc: `${APP_URL}/report/${tNotice}` },
+          ...(brief.template === 'nonote' ? [] : [
+            { name: '알림장·사진 보기', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tNotice}`, linkPc: `${APP_URL}/report/${tNotice}` },
+          ]),
         ],
         failoverMessage: brief.body,
       })
