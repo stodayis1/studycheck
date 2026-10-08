@@ -84,7 +84,8 @@ export default function TeacherWorkStatusPage() {
   async function fetchAll() {
     setLoading(true)
     const [{ data: tData }, { data: sData }, { data: ssData }, wData, { data: scData }] = await Promise.all([
-      supabase.from('users').select('*').eq('role', 'teacher').order('name'),
+      // 퇴사한 선생님(is_locked)은 뺀다 — 안 빼면 매주 작성률 0% 로 남아 계속 눈에 걸린다.
+      supabase.from('users').select('*').eq('role', 'teacher').or('is_locked.is.null,is_locked.eq.false').order('name'),
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('class_sessions').select('*').gte('session_date', weekStart).order('session_date', { ascending: false }),
       fetchAllRows(() => supabase.from('student_worksheets').select('*').not('status', 'in', '("passed")')),

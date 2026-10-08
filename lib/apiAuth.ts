@@ -39,10 +39,15 @@ export async function staffOrDeny(req: Request, opts: { adminOnly?: boolean } = 
   if (error || !authResult?.user)
     return out(NextResponse.json({ error: '인증에 실패했어요. 다시 로그인해주세요.' }, { status: 401 }))
 
-  const { data: profile } = await admin.from('users').select('id, name, role, supervisor_grades').eq('id', authResult.user.id).single()
+  const { data: profile } = await admin.from('users').select('id, name, role, supervisor_grades, is_locked').eq('id', authResult.user.id).single()
   const role = profile?.role as string | undefined
   if (!role || !['admin', 'teacher', 'staff'].includes(role))
     return out(NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 }))
+  // ★ 퇴사한 계정은 막는다. 2026-10-08 까지 users.is_locked 는 **아무 데서도 안 쓰이고 있어서**
+  //   '잠근' 계정도 그대로 로그인되고 API 도 다 통했다. 실제 차단은 Auth 쪽(banned_until)에서
+  //   하지만, 세션이 남아 있는 기기를 위해 여기서도 한 번 더 막는다.
+  if ((profile as { is_locked?: boolean } | null)?.is_locked)
+    return out(NextResponse.json({ error: '사용이 중지된 계정입니다.' }, { status: 403 }))
   if (opts.adminOnly && role !== 'admin')
     return out(NextResponse.json({ error: '원장님만 사용할 수 있습니다.' }, { status: 403 }))
 
