@@ -140,7 +140,8 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
                   : 'waiting'
       return {
         date: r.date, dow: r.dow, state,
-        makeupDate: null, makeupTime: null, teacherName: null,
+        makeupDate: null as string | null, makeupTime: null as string | null,
+        teacherName: null as string | null,
         lesson: [] as string[], note: r.makeupNote,
       }
     })

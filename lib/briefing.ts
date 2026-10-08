@@ -130,6 +130,40 @@ export function hwLines(ses: BriefingSession): string[] {
   return out
 }
 
+/** 그 결석에 대한 보강. OPS(makeups)에서 온다 — lib/opsMakeups.ts */
+export interface BriefingMakeup {
+  state: 'done' | 'planned' | 'noshow' | 'waiting' | 'cancelled'
+  makeupDate: string | null
+  makeupTime: string | null
+  teacherName: string | null
+}
+
+/** 「10월 17일 12:00」 꼴로. */
+function whenText(d?: string | null, t?: string | null) {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null
+  return `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일${t ? ` ${t}` : ''}`
+}
+
+/**
+ * 보강 한 줄. 결석한 날 학부모가 가장 알고 싶은 것이 이것이다.
+ * OPS 기록이 있으면 그걸 쓰고, 없으면 예전 글(makeup_note)로 보조한다.
+ */
+export function makeupLine(mk?: BriefingMakeup | null, fallback?: string | null) {
+  if (mk) {
+    const when = whenText(mk.makeupDate, mk.makeupTime)
+    const who = mk.teacherName ? ` (${mk.teacherName} 선생님)` : ''
+    switch (mk.state) {
+      case 'done': return `보강 · ${when ?? ''} 완료${who}`.replace('  ', ' ').trim()
+      case 'planned': return `보강 · ${when ?? ''} 예정${who}`.replace('  ', ' ').trim()
+      case 'noshow': return `보강 · ${when ?? ''} 보강에 오지 못했습니다`.replace('  ', ' ').trim()
+      case 'waiting': return '보강 · 날짜를 잡는 중입니다'
+      default: return null
+    }
+  }
+  const t = (fallback ?? '').trim()
+  return t ? `보강 · ${t}` : null
+}
+
 export interface BriefingResult {
   vars: Record<string, string>
   body: string
@@ -143,8 +177,14 @@ export function buildBriefing(args: {
   session: BriefingSession
   note?: BriefingNote | null
   feedbacks?: BriefingFeedback[]
+  /** 그날이 결석이면 그 보강. OPS 에서 온다. */
+  makeup?: BriefingMakeup | null
 }): BriefingResult {
   const { studentName, session: ses, note } = args
+  // ★ 결석한 날은 진도도 과제도 **안 적는 것이 정상**이다(10/7 결석 17명 전원 비어 있었다).
+  //   그런데 「기록 없음」·「따로 낸 과제가 없어요」로 나가면 선생님이 안 적은 것처럼,
+  //   학원이 과제를 안 낸 것처럼 읽힌다. 결석이면 결석이라고 말해 준다.
+  const 결석 = note?.attendance === '결석'
   const feedbacks = args.feedbacks ?? []
 
   const d = ses.session_date
@@ -169,13 +209,17 @@ export function buildBriefing(args: {
         : '해당 없음'
 
   // 진도 — progress_content 와 today_textbook_name 이 거의 늘 같은 글이라 겹치면 한 번만.
-  const 진도 = [ses.progress_content, ses.today_textbook_name, ses.today_chapter]
-    .map((t) => (t ?? '').trim())
-    .filter((t, i, arr) => t && arr.indexOf(t) === i)
-    .join(' / ') || '기록 없음'
+  const 진도 = 결석
+    ? '결석으로 수업에 참여하지 못했습니다.'
+    : ([ses.progress_content, ses.today_textbook_name, ses.today_chapter]
+        .map((t) => (t ?? '').trim())
+        .filter((t, i, arr) => t && arr.indexOf(t) === i)
+        .join(' / ') || '기록 없음')
 
   const hw = hwLines(ses)
-  const 과제배부 = hw.length > 0 ? hw.join('\n') : '오늘은 따로 낸 과제가 없어요.'
+  const 과제배부 = 결석
+    ? '보강 때 함께 안내드립니다.'
+    : (hw.length > 0 ? hw.join('\n') : '오늘은 따로 낸 과제가 없어요.')
 
   // 알림장 — 없으면 머리글만 덩그러니 남지 않게 한 줄을 채운다(심사에도 골격이 또렷한 편이 낫다).
   const photos = feedbacks.flatMap((f) => fbImages(f.ai_message))
@@ -186,7 +230,10 @@ export function buildBriefing(args: {
     if (!t || sameText(t, 진도) || noticeParts.some((p) => sameText(p, t))) continue
     noticeParts.push(t)
   }
-  if (note?.makeup_note?.trim()) noticeParts.push(`보강 · ${note.makeup_note.trim()}`)
+  // 보강은 OPS 기록을 먼저 쓰고, 없으면 예전 글로 보조한다.
+  const mkLine = makeupLine(args.makeup, note?.makeup_note)
+  if (mkLine) noticeParts.push(mkLine)
+  else if (결석) noticeParts.push('보강 · 일정을 잡는 대로 안내드리겠습니다')
   const 알림장 = noticeParts.join('\n') || '오늘은 따로 남긴 말씀이 없어요.'
 
   const vars: Record<VarName, string> = {

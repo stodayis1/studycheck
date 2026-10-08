@@ -18,6 +18,7 @@ import { randomBytes } from 'crypto'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
+import { fetchOpsMakeups } from '@/lib/opsMakeups'
 
 const APP_URL = 'https://studycheck-five.vercel.app'
 
@@ -80,6 +81,15 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
   ])
 
   const studentBy = new Map((students ?? []).map((s: any) => [s.id, s]))
+
+  // ★ 결석한 날 학부모가 가장 알고 싶은 것은 「보강이 언제인가」다.
+  //   보강은 OPS 가 들고 있다. 학생 전체 것을 **한 번에** 읽어 둔다
+  //   (학생마다 부르면 60번 왕복한다).
+  const opsIds = (students ?? []).map((s: any) => s.ops_student_id).filter(Boolean)
+  const makeupsBy = await fetchOpsMakeups(opsIds, date)
+  const makeupFor = (st: any) =>
+    (st.ops_student_id ? makeupsBy.get(st.ops_student_id) ?? [] : [])
+      .find((m) => m.absentDate === date) ?? null
   const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
   const sentAlready = new Set((already ?? []).map((r: any) => r.student_id))
 
@@ -98,7 +108,10 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
     if (!opts.testPhone && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
 
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
-    const brief = buildBriefing({ studentName: student.name, session: ses, note, feedbacks: dayFbs })
+    const brief = buildBriefing({
+      studentName: student.name, session: ses, note, feedbacks: dayFbs,
+      makeup: makeupFor(student),
+    })
 
     if (dryRun) {
       out.previews!.push({

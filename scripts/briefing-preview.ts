@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { buildBriefing } from '../lib/briefing.ts'
 import { snapshots } from '../lib/briefingSnapshots.ts'
+import { fetchOpsMakeups } from '../lib/opsMakeups.ts'
 
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -68,7 +69,13 @@ const student: any = nameBy.get(ses.student_id)
 const note: any = noteBy.get(ses.id)
 const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
 
-const brief = buildBriefing({ studentName: student.name, session: ses, note, feedbacks: dayFbs })
+const mks = student.ops_student_id
+  ? (await fetchOpsMakeups([student.ops_student_id], date)).get(student.ops_student_id) ?? []
+  : []
+const brief = buildBriefing({
+  studentName: student.name, session: ses, note, feedbacks: dayFbs,
+  makeup: mks.find((m) => m.absentDate === date) ?? null,
+})
 const snaps = await snapshots(db, student, date, ses, note, dayFbs)
 
 const mk = async (report_type: string, data: any) => {
