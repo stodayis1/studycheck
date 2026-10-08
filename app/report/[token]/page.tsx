@@ -564,7 +564,10 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
     <Shell title="레벨학습지 점수 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
         <Stat label="평균 점수" value={d.avgScore != null ? `${d.avgScore}점` : '-'} color={tierColor(d.avgScore)} />
-        <Stat label="통과율" value={d.passRate != null ? `${d.passRate}%` : '-'} color={tierColor(d.passRate, 80, 60)} />
+        {/* 통과 = 그 단원에서 가장 최근 채점한 본 학습지가 70점 이상 (docs/초등레벨학습지.md).
+            예전에 쓰던 status='passed' 는 「처리 완료」일 뿐이라 70점 미만도 들어간다. */}
+        <Stat label="단원 통과" value={d.unitsJudged ? `${d.unitsPassed}/${d.unitsJudged}` : '-'}
+          color={d.unitsJudged && d.unitsPassed === d.unitsJudged ? NAVY : ORANGE} />
         <Stat label="받은 학습지" value={`${d.count ?? 0}장`} />
       </div>
 
@@ -580,19 +583,19 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
                 {r.level != null && (
                   <span style={{ fontSize: 10, color: NAVY, flexShrink: 0 }}>{r.level}레벨</span>
                 )}
-                <span style={{ fontSize: 14, fontWeight: 600, color: tierColor(r.score), flexShrink: 0, minWidth: 38, textAlign: 'right' }}>
-                  {r.score != null ? `${r.score}점` : '미채점'}
+                <span style={{ fontSize: 14, fontWeight: 600, color: tierColor(r.score, 85, 70), flexShrink: 0, minWidth: 38, textAlign: 'right' }}>
+                  {r.score != null ? `${r.score}점` : '-'}
                 </span>
               </div>
               {/* 점수 막대 — CSS 폭으로만 그린다 */}
               {r.score != null && (
                 <div style={{ height: 5, background: '#e9ecf1', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(0, Math.min(100, r.score))}%`, height: '100%', background: tierColor(r.score) }} />
+                  <div style={{ width: `${Math.max(0, Math.min(100, r.score))}%`, height: '100%', background: tierColor(r.score, 85, 70) }} />
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                {r.status === 'passed' && <span style={{ fontSize: 9, color: NAVY }}>통과</span>}
-                {r.status && r.status !== 'passed' && <span style={{ fontSize: 9, color: ORANGE_MID }}>진행 중</span>}
+                {!r.scoredYet && <span style={{ fontSize: 9, color: TEXT_MUTED }}>채점 전</span>}
+                {r.scoredYet && r.score < 70 && <span style={{ fontSize: 9, color: RED }}>70점 미만 · 다시 풀어요</span>}
                 {r.isRetry && <span style={{ fontSize: 9, color: ORANGE_MID }}>재도전(쌍둥이)</span>}
               </div>
             </div>

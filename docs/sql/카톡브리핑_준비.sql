@@ -23,6 +23,17 @@ alter table public.report_links
 create unique index if not exists report_links_token_key
   on public.report_links (token);
 
+-- ── 1-2) report_type 에 새 값 세 개를 허용한다 ─────────────────────────────
+-- ★ 이 표에는 report_type 을 daily/monthly/quarterly 로 묶어 둔 CHECK 제약이 있다.
+--   이걸 안 넓히면 브리핑 링크 생성이 통째로 실패한다(미리보기에서 실제로 막혔다).
+--   원래 정의: CHECK (report_type = ANY (ARRAY['daily','monthly','quarterly']))
+alter table public.report_links drop constraint if exists report_links_report_type_check;
+alter table public.report_links add constraint report_links_report_type_check
+  check (report_type = any (array[
+    'daily', 'monthly', 'quarterly',
+    'worksheet_scores', 'attendance_rate', 'daily_notice'   -- 카톡 브리핑 버튼 뒤 화면
+  ]));
+
 -- ── 2) 만료된 링크는 안 내준다 ─────────────────────────────────────────────
 -- 원래 정의: select * from public.report_links where token = p_token limit 1;
 create or replace function public.get_report_by_token(p_token text)

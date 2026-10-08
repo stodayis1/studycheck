@@ -4,7 +4,7 @@
 // ★ 발송 라우트와 미리보기 스크립트가 **이 함수 하나**를 같이 쓴다.
 //   따로 두면 "미리보기에선 멀쩡했는데 실제로 간 건 달랐다" 가 된다.
 import { SupabaseClient } from '@supabase/supabase-js'
-import { fbImages, hwLines } from '@/lib/briefing'
+import { fbImages, hwLines } from './briefing.ts'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -33,14 +33,33 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
   const noteBy = new Map((pastNotes ?? []).map((n: any) => [n.session_id, n]))
 
   // ── 레벨학습지 점수 현황 ────────────────────────────────────────────────
+  // ★ status='passed' 는 「합격」이 아니라 「처리 완료」다. 전체 3,466건 중 513건이
+  //   70점 미만인데도 passed 였다. 이걸 통과로 세면 평균 60점인 학생에게
+  //   「통과율 97%」가 찍힌다(미리보기에서 실제로 그랬다).
+  //   진짜 통과 규칙은 docs/초등레벨학습지.md:
+  //     통과 = 그 단원(학년·학기·단원)에서 **가장 최근에 채점한 본 학습지(main)가 70점 이상**
   const wsRows = (ws ?? []).map((w: any) => ({
     date: (w.submitted_at ?? w.assigned_at ?? '').slice(0, 10),
     unit: w.unit_name || w.unit || '-',
     level: w.current_level ?? null,
     score: w.score ?? null,
-    status: w.status ?? null,
+    scoredYet: w.score != null,
     isRetry: w.worksheet_type === 'similar' || w.worksheet_type === 'twin',
+    unitKey: [w.grade_level ?? '', w.semester ?? '', w.unit ?? w.unit_name ?? ''].join('|'),
+    isMain: w.worksheet_type === 'main',
+    at: w.submitted_at ?? w.assigned_at ?? '',
   }))
+
+  // 단원마다 가장 최근에 채점한 본 학습지 하나만 남겨 70점으로 가른다.
+  const latestMain = new Map<string, { score: number; at: string }>()
+  for (const r of wsRows) {
+    if (!r.isMain || r.score == null) continue
+    const prev = latestMain.get(r.unitKey)
+    if (!prev || r.at > prev.at) latestMain.set(r.unitKey, { score: r.score, at: r.at })
+  }
+  const unitsJudged = [...latestMain.values()]
+  const unitsPassed = unitsJudged.filter((u) => u.score >= 70).length
+
   const scored = wsRows.filter((r) => r.score != null)
   const worksheetSnapshot = {
     studentName: student.name,
@@ -50,7 +69,8 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     count: wsRows.length,
     scoredCount: scored.length,
     avgScore: scored.length ? Math.round(scored.reduce((a, r) => a + (r.score as number), 0) / scored.length) : null,
-    passRate: wsRows.length ? Math.round((wsRows.filter((r) => r.status === 'passed').length / wsRows.length) * 100) : null,
+    unitsJudged: unitsJudged.length,
+    unitsPassed,
   }
 
   // ── 출결현황 및 과제달성률 현황 ─────────────────────────────────────────
