@@ -559,7 +559,13 @@ export default function TeacherLearningNotesPage() {
       supabase.from('student_textbooks').select('*').eq('status', 'assigned'),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('video_watch_logs').select('*'),
-      supabase.from('student_exam_prep').select('*, inner_enough(*)').neq('status', 'done'),
+      // ★ 시험이 끝난 이너프원은 과제로 낼 일이 없는데 계속 떠 있었다(2026-10-08 기준 857건).
+      //   status 는 거의 쓰이지 않아(972건 중 done 2건) 「끝남」을 상태로는 알 수 없다 —
+      //   그래서 **시험일**로 거른다. 시험 당일까지는 보이고 그 뒤로는 사라진다.
+      //   (지난 배정은 시험대비 화면의 「지난 시험까지 보기」로 확인할 수 있다)
+      supabase.from('student_exam_prep').select('*, inner_enough(*)')
+        .neq('status', 'done')
+        .gte('exam_date', new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]),
       supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name, concept_book_page_start, concept_book_page_end, concept_book_workbook_name'),
       supabase.from('ssenb_problem_map').select('*'),
     ])

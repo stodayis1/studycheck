@@ -135,6 +135,11 @@ export default function TeacherExamPrepPage() {
   // 직원(행정)도 시험대비 배정/현황/시험일정 관리를 할 수 있어야 함
   // 주임모드(중등주임 등)는 담당 학년 범위 전체를 '조회'할 수 있어야 한다.
   // canViewStudent가 관리자/직원/주임모드/담당강사를 한 번에 판단한다 (hooks/useAuth.ts).
+  // 시험이 끝난 배정은 기본으로 숨긴다 — 원장님 말씀대로 「배정현황에 더는 안 떠야」 한다.
+  //   status 가 거의 안 쓰여서(972건 중 done 2건) 시험일로 가른다.
+  const [showPast, setShowPast] = useState(false)
+  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]
+
   const myStudents = students.filter((s) => canViewStudent(s))
   // 주임모드는 넓게 "보기만" 한다. 배정·점수 입력은 담당 학생에게만 (hooks/useAuth.ts canEditStudent)
   const myEditableStudents = students.filter((s) => canEditStudent(s))
@@ -372,7 +377,8 @@ export default function TeacherExamPrepPage() {
             .map(s => ({
               student: s,
               preps: assignments
-                .filter(a => a.student_id === s.id && a.status !== 'done')
+                .filter(a => a.student_id === s.id && a.status !== 'done'
+                  && (showPast || !a.exam_date || a.exam_date >= todayKst))
                 .sort((a, b) => {
                   const isSpecialA = ['전범위','복합'].includes(a.inner_enough?.unit_name ?? '')
                   const isSpecialB = ['전범위','복합'].includes(b.inner_enough?.unit_name ?? '')
@@ -383,11 +389,70 @@ export default function TeacherExamPrepPage() {
             }))
             .filter(g => g.preps.length > 0)
 
+          // ── 새 시험이 잡혔는데 아직 배정이 없는 학교·학년 ──────────────────
+          // 시험 일정이 새로 들어오면 그 학교·학년 학생들에게 교재를 새로 배정해야 한다.
+          // 안 그러면 시험이 코앞인데 아무도 눈치 못 챈다.
+          const needAssign = (() => {
+            const out: { school: string; grade: string; examName: string; date: string; students: string[] }[] = []
+            for (const e of examSchedules) {
+              if (!e.exam_date || e.exam_date < todayKst) continue      // 지난 시험은 뺀다
+              const targets = myStudents.filter((st) =>
+                st.school === e.school_name && String(st.grade).replace(/[^0-9]/g, '') === String(e.grade))
+              if (!targets.length) continue
+              const missing = targets.filter((st) =>
+                !assignments.some((a) => a.student_id === st.id && a.exam_date === e.exam_date))
+              if (missing.length) {
+                out.push({ school: e.school_name, grade: String(e.grade), examName: e.exam_name,
+                           date: e.exam_date, students: missing.map((m) => m.name) })
+              }
+            }
+            return out.sort((a, b) => a.date.localeCompare(b.date))
+          })()
+
+          const alertBox = (
+            <>
+              {needAssign.length > 0 && (
+                <div className="bg-white rounded-2xl border-2 p-4 mb-3" style={{ borderColor: '#F5C4B3' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#993C1D' }} />
+                    <b className="text-sm" style={{ color: '#712B13' }}>새 시험인데 교재 배정이 안 된 곳</b>
+                  </div>
+                  <div className="space-y-1.5">
+                    {needAssign.map((n, i) => (
+                      <div key={i} className="text-xs" style={{ color: '#712B13' }}>
+                        <b>{n.school} {n.grade}학년</b>
+                        <span className="text-gray-500"> · {n.examName} · {n.date}</span>
+                        <div className="text-[11px] text-gray-600 mt-0.5">
+                          미배정 {n.students.length}명 — {n.students.slice(0, 8).join(', ')}
+                          {n.students.length > 8 && ` 외 ${n.students.length - 8}명`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2 mb-3">
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                  <input type="checkbox" checked={showPast} onChange={(e) => setShowPast(e.target.checked)} />
+                  지난 시험까지 보기
+                </label>
+                {!showPast && (
+                  <span className="text-[11px] text-gray-400">시험이 끝난 배정은 숨겨져 있어요</span>
+                )}
+              </div>
+            </>
+          )
+
           if (grouped.length === 0) return (
+            <>
+              {alertBox}
             <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
               <i className="ti ti-book" style={{ fontSize: 32, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
-              <p className="text-sm text-gray-500">배정된 시험대비 교재가 없어요</p>
+              <p className="text-sm text-gray-500">
+                {showPast ? '배정된 시험대비 교재가 없어요' : '앞으로 볼 시험에 배정된 교재가 없어요'}
+              </p>
             </div>
+            </>
           )
 
           // 학년별 탭 - 실제로 배정이 있는 학년만 뽑아서 교육과정 순서(초1~초6, 중1~3, 고1~3)로 정렬
