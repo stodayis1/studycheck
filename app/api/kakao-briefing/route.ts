@@ -131,6 +131,8 @@ async function run(opts: {
     const brief = buildBriefing({
       studentName: student.name, session: ses, note, feedbacks: dayFbs,
       makeup: makeupFor(student),
+      // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
+      noNoteTemplate: !!process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE,
     })
 
     if (dryRun) {
@@ -167,7 +169,12 @@ async function run(opts: {
       //   그 본문이 승인된 템플릿 서식과 일치해야 한다(lib/briefing.ts 가 그 틀을 지킨다).
       //   버튼 링크도 토큰 변수가 아니라 진짜 주소를 넣는다.
       const to = opts.testPhone ?? String(student.parent_phone)
-      const r = await sendAlimtalk(cfg!, {
+      // ★ 알림장이 없는 날은 그 칸이 **아예 없는 템플릿**으로 보낸다(빈말을 넣지 않으려고).
+      //   아직 심사 전이면 그 코드가 없으니 원래 템플릿으로 떨어뜨린다 — 그 경우에만 빈말이 나간다.
+      const tplForThis = brief.template === 'nonote'
+        ? (process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE || cfg!.tplCode)
+        : cfg!.tplCode
+      const r = await sendAlimtalk({ ...cfg!, tplCode: tplForThis }, {
         to,
         name: student.name,
         subject: `${student.name} 학생 수업 브리핑`,

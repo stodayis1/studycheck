@@ -36,6 +36,32 @@ export const BRIEFING_TEMPLATE = `[수학의지혜 수업 브리핑]
 
 아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
 
+/**
+ * 알림장이 **없는 날**에 쓰는 판.
+ *
+ * 왜 따로 두나 — 「▶ 선생님 알림장」 머리글이 승인된 골격에 박혀 있어서, 알림장이 없으면
+ * 「오늘은 따로 남긴 말씀이 없어요」 같은 빈말을 채워 넣을 수밖에 없었다.
+ * 원장님 말씀 — "성의 없어 보인다. 알림장을 남겼을 때만 생기면 된다."
+ *
+ * 승인된 템플릿의 글자는 못 바꾸므로(바꾸면 재심사) **알림장 칸이 아예 없는 판을 하나 더**
+ * 등록해서, 그날 알림장이 있으면 원래 판, 없으면 이 판으로 보낸다.
+ * 기존 템플릿은 건드리지 않으니 지금 나가는 것에는 영향이 없다.
+ */
+export const BRIEFING_TEMPLATE_NONOTE = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+▶ 지난 학습지  #{학습지결과}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
 // 칸마다의 상한. 합이 넉넉히 950 안에 들어오게 잡았다(골격 약 150자 + 아래 합 774자).
 const CAP = {
   학생명: 20,
@@ -167,6 +193,9 @@ export function makeupLine(mk?: BriefingMakeup | null, fallback?: string | null)
 export interface BriefingResult {
   vars: Record<string, string>
   body: string
+  /** 알림장이 있으면 'full', 없으면 'nonote' — 보낼 때 템플릿 코드를 가른다 */
+  template: 'full' | 'nonote'
+  hasNotice: boolean
   bodyLen: number
   overLimit: boolean
   photoCount: number
@@ -179,6 +208,12 @@ export function buildBriefing(args: {
   feedbacks?: BriefingFeedback[]
   /** 그날이 결석이면 그 보강. OPS 에서 온다. */
   makeup?: BriefingMakeup | null
+  /**
+   * 「알림장 없는 판」 템플릿이 **심사를 통과해 쓸 수 있는가**.
+   * ★ 이걸 모르고 없는 판으로 본문을 만들면, 승인된 템플릿과 안 맞아 **전송이 거부된다.**
+   *   쓸 수 없으면 원래 판으로 만들고 알림장 자리에 한 줄을 채운다.
+   */
+  noNoteTemplate?: boolean
 }): BriefingResult {
   const { studentName, session: ses, note } = args
   // ★ 결석한 날은 진도도 과제도 **안 적는 것이 정상**이다(10/7 결석 17명 전원 비어 있었다).
@@ -234,7 +269,8 @@ export function buildBriefing(args: {
   const mkLine = makeupLine(args.makeup, note?.makeup_note)
   if (mkLine) noticeParts.push(mkLine)
   else if (결석) noticeParts.push('보강 · 일정을 잡는 대로 안내드리겠습니다')
-  const 알림장 = noticeParts.join('\n') || '오늘은 따로 남긴 말씀이 없어요.'
+  // 알림장이 없으면 빈 채로 둔다 — 그 칸이 없는 판으로 나가므로 쓰이지 않는다.
+  const 알림장 = noticeParts.join('\n')
 
   const vars: Record<VarName, string> = {
     학생명: clip(studentName, CAP.학생명),
@@ -255,8 +291,19 @@ export function buildBriefing(args: {
 
   // ★ \w 는 한글을 못 잡는다. #{학생명} 같은 한글 변수가 그대로 남아 본문이 통째로
   //   골격 그대로 나가 버린다(실제로 그랬다 — scripts/briefing-check.ts 가 잡아냈다).
+  // ★ 알림장이 하나도 없으면 그 칸이 **아예 없는 판**으로 보낸다.
+  //   빈말("오늘은 따로 남긴 말씀이 없어요")을 채워 넣으면 성의 없어 보인다.
+  const hasNotice = noticeParts.length > 0
+  const useNoNote = !hasNotice && !!args.noNoteTemplate
+  const tpl = useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE
+  // ★ \w 는 한글을 못 잡는다. #{학생명} 같은 한글 변수가 그대로 남아 본문이 통째로
+  //   골격 그대로 나가 버린다(실제로 그랬다 — scripts/briefing-check.ts 가 잡아냈다).
   const render = (v: Record<string, string>) =>
-    BRIEFING_TEMPLATE.replace(/#\{([^}]+)\}/g, (_, k) => v[k] ?? '')
+    tpl.replace(/#\{([^}]+)\}/g, (_, k) => v[k] ?? '')
+
+  // 알림장 없는 판이 아직 심사 전이라 원래 템플릿으로 나갈 수도 있다.
+  // 그때는 머리글만 덩그러니 남으면 안 되니 한 줄을 채운다(버리는 값이 아니다).
+  if (!useNoNote && !hasNotice) vars.알림장 = '오늘은 따로 남긴 말씀이 없어요.'
 
   let body = render(vars)
   // ★ 마지막 조임 — 칸별 상한을 다 지켰어도 골격이 바뀌면 합이 넘을 수 있다.
@@ -274,5 +321,7 @@ export function buildBriefing(args: {
     bodyLen: body.length,
     overLimit: body.length > BODY_LIMIT,
     photoCount: photos.length,
+    template: useNoNote ? 'nonote' : 'full',
+    hasNotice,
   }
 }

@@ -11,7 +11,7 @@
  */
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { buildBriefing, BODY_LIMIT, BODY_BUDGET, BRIEFING_TEMPLATE } from '../lib/briefing.ts'
+import { buildBriefing, BODY_LIMIT, BODY_BUDGET, BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE } from '../lib/briefing.ts'
 
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -64,15 +64,19 @@ for (const f of feedbacks) {
 //   그 본문이 **승인된 템플릿 서식과 일치해야** 전송된다. 안 맞으면 조용히 안 간다.
 //   그래서 "골격의 고정된 줄이 순서대로 다 들어 있는가" 를 매 건 확인한다.
 //   (템플릿을 고치면서 BRIEFING_TEMPLATE 과 어긋나면 여기서 바로 걸린다)
-const FIXED = BRIEFING_TEMPLATE.split('\n')
+const fixedOf = (tpl: string) => tpl.split('\n')
   .map((line) => line.replace(/#\{[^}]+\}/g, '\u0000'))   // 변수 자리는 구멍으로
   .flatMap((line) => line.split('\u0000'))
   .map((part) => part.trim())
   .filter((part) => part.length > 0)
 
-function matchesTemplate(body: string) {
+const FIXED = fixedOf(BRIEFING_TEMPLATE)
+const FIXED_NONOTE = fixedOf(BRIEFING_TEMPLATE_NONOTE)
+
+/** 그 본문이 **쓰기로 한 판**과 맞는지 본다. 안 맞으면 알리고가 조용히 안 보낸다. */
+function matchesTemplate(body: string, which: 'full' | 'nonote' = 'full') {
   let at = 0
-  for (const part of FIXED) {
+  for (const part of which === 'nonote' ? FIXED_NONOTE : FIXED) {
     const i = body.indexOf(part, at)
     if (i < 0) return part            // 어느 조각이 빠졌는지 돌려준다
     at = i + part.length
@@ -87,6 +91,11 @@ function matchesTemplate(body: string) {
     console.error('✗ 검사 자체가 고장났습니다 — 멀쩡한 본문을 어긋났다고 합니다.')
     process.exit(1)
   }
+  const s2 = BRIEFING_TEMPLATE_NONOTE.replace(/#\{[^}]+\}/g, '값')
+  if (matchesTemplate(s2, 'nonote') !== null) {
+    console.error('✗ 알림장 없는 판 검사가 고장났습니다.')
+    process.exit(1)
+  }
   const broken = sample.replace('▶ 출결', '▶ 출석')      // 한 글자만 바꿔 본다
   if (matchesTemplate(broken) === null) {
     console.error('✗ 검사 자체가 고장났습니다 — 어긋난 본문을 통과시킵니다.')
@@ -95,8 +104,11 @@ function matchesTemplate(body: string) {
   console.log('템플릿 서식 검사 자가확인 ✓ (멀쩡한 건 통과, 한 글자 틀린 건 걸림)')
 }
 
+// 「알림장 없는 판」을 쓸 수 있다고 보고 검사할지(--nonote). 심사 통과 뒤 모습을 미리 본다.
+const NONOTE = process.argv.includes('--nonote')
 let over = 0
 let offTemplate = 0
+let noNoteCount = 0
 let firstOff: { who: string; date: string; missing: string } | null = null
 let overBudget = 0
 let worst = { len: 0, body: '', who: '', date: '' }
@@ -108,10 +120,12 @@ for (const ses of sessions) {
     session: ses,
     note: noteOf.get(ses.id) ?? null,
     feedbacks: fbOf.get(fbKey(ses.student_id, ses.session_date)) ?? [],
+    noNoteTemplate: NONOTE,
   })
   lens.push(r.bodyLen)
   if (r.overLimit) over++
-  const missing = matchesTemplate(r.body)
+  if (r.template === 'nonote') noNoteCount++
+  const missing = matchesTemplate(r.body, r.template)
   if (missing) {
     offTemplate++
     if (!firstOff) firstOff = { who: nameOf.get(ses.student_id) ?? '?', date: ses.session_date, missing }
@@ -129,6 +143,7 @@ console.log(`수업 ${sessions.length.toLocaleString()}건 검사`)
 console.log(`  본문 길이  중간값 ${at(0.5)}자 · 90% ${at(0.9)}자 · 99% ${at(0.99)}자 · 최대 ${worst.len}자`)
 console.log(`  ${BODY_BUDGET}자(안전선) 초과 : ${overBudget}건`)
 console.log(`  ${BODY_LIMIT}자(카카오 한도) 초과 : ${over}건  ${over === 0 ? '✓' : '✗ 이 건들은 발송이 거부됩니다'}`)
+console.log(`  알림장 없는 판으로 나갈 건 : ${noNoteCount}건${NONOTE ? '' : ' (지금은 원래 판 + 빈 한 줄)'}`)
 console.log(`  템플릿 서식과 어긋남 : ${offTemplate}건  ${offTemplate === 0 ? '✓' : '✗ 알리고가 이 건들을 보내지 않습니다'}`)
 if (firstOff) console.log(`    예) ${firstOff.who} ${firstOff.date} — 「${firstOff.missing}」 조각이 본문에 없음`)
 console.log(`\n가장 긴 본문 — ${worst.who} ${worst.date} (${worst.len}자)`)
