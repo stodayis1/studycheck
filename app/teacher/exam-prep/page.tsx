@@ -471,12 +471,71 @@ export default function TeacherExamPrepPage() {
           if (grouped.length === 0) return (
             <>
               {alertBox}
-            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-              <i className="ti ti-book" style={{ fontSize: 32, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
-              <p className="text-sm text-gray-500">
-                {showPast ? '배정된 시험대비 교재가 없어요' : '앞으로 볼 시험에 배정된 교재가 없어요'}
-              </p>
-            </div>
+              {(() => {
+                // ★ 모든 학생의 시험이 끝나면 이 목록은 비는 게 **정상**이다(시험 끝난 배정은
+                //   숨기니까). 그때 빈 화면만 보여 주면 「고장났나」 싶으시다 —
+                //   화면이 다음에 뭘 해야 하는지 직접 알려 준다(원장님 말씀 2026-10-08).
+                //     · 앞으로 볼 시험이 아예 없다  → 시험일정부터 넣어야 한다 (버튼까지 붙인다)
+                //     · 시험일정은 있는데 배정이 없다 → 교재를 배정해야 한다 (위 알림에 학교·학년이 떠 있다)
+                const upcoming = [...examSchedules]
+                  .filter((e) => e.exam_date && e.exam_date >= todayKst)
+                  .sort((a, b) => a.exam_date.localeCompare(b.exam_date))
+                // 아예 배정을 해 본 적이 없는 것과, 했는데 시험이 다 끝난 것은 다른 상황이다
+                const hadAny = myStudents.some((st) =>
+                  assignments.some((a) => a.student_id === st.id && a.status !== 'done'))
+                const canManage = canManageAllStudents() || isSupervisorModeActive()
+
+                if (showPast) return (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+                    <i className="ti ti-book" style={{ fontSize: 32, color: '#F5C4B3', display: 'block', marginBottom: 8 }} />
+                    <p className="text-sm text-gray-500">배정된 시험대비 교재가 없어요</p>
+                  </div>
+                )
+
+                return (
+                  <div className="bg-white rounded-2xl border-2 p-8 text-center" style={{ borderColor: '#F5C4B3' }}>
+                    <i className="ti ti-calendar-plus"
+                      style={{ fontSize: 32, color: '#993C1D', display: 'block', marginBottom: 10 }} />
+                    <p className="text-sm font-bold" style={{ color: '#712B13' }}>
+                      {hadAny ? '시험대비가 모두 끝났어요' : '시험대비 배정이 아직 없어요'}
+                    </p>
+
+                    {upcoming.length === 0 ? (
+                      <>
+                        <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                          <b>다음 시험일정을 넣고 교재를 배정해 주세요.</b><br />
+                          일정을 넣으면 배정이 필요한 학교·학년이 이 화면 맨 위에 바로 떠요.
+                        </p>
+                        {canManage && (
+                          <button onClick={() => setShowScheduleModal(true)}
+                            className="mt-4 px-5 py-2.5 rounded-xl text-sm font-bold inline-flex items-center gap-1.5"
+                            style={{ background: '#F5C4B3', color: '#712B13' }}>
+                            <i className="ti ti-calendar-plus" style={{ fontSize: 16 }} />시험 일정 넣기
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                          다음 시험일정은 들어와 있어요 — <b>교재를 배정해 주세요.</b>
+                        </p>
+                        <div className="text-[11px] text-gray-500 mt-3 space-y-0.5">
+                          {upcoming.slice(0, 6).map((e) => (
+                            <div key={e.id}>
+                              {e.school_name} {e.grade}학년 · {e.exam_name} · {e.exam_date}
+                            </div>
+                          ))}
+                          {upcoming.length > 6 && <div>외 {upcoming.length - 6}건</div>}
+                        </div>
+                      </>
+                    )}
+
+                    <div className="text-[11px] text-gray-400 mt-4">
+                      끝난 배정을 보시려면 위 「지난 시험까지 보기」를 켜주세요.
+                    </div>
+                  </div>
+                )
+              })()}
             </>
           )
 
