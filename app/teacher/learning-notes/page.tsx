@@ -1875,13 +1875,15 @@ ${e?.message ?? '연결 실패'}
             <div className="flex items-center gap-2 flex-wrap">
               <i className="ti ti-messages" style={{ fontSize: 16, color: '#3C1E1E' }} />
               <span className="text-sm font-bold" style={{ color: '#3C1E1E' }}>카톡 수업 브리핑</span>
-              <span className="text-[11px] text-gray-500 ml-auto">
-                자동 발송 — 초등 당일 저녁 8시 · 중고등(+못 나간 초등) 다음 날 오전 11시
+              <span className="text-[11px] font-bold ml-auto px-2 py-0.5 rounded-md"
+                style={{ background: '#FAEEDA', color: '#633806' }}>
+                자동 발송 꺼짐 — 원장님이 직접 보내셔야 나갑니다
               </span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
               기록이 끝난 학생만 보냅니다. 같은 날은 두 번 가지 않아요.
-              저녁 8시에 못 나간 초등부는 다음 날 오전 11시에 함께 나갑니다.
+              권장 시각 — 초등은 당일 저녁 8시, 중·고등(+못 보낸 초등)은 다음 날 오전 11시.
+              익숙해지시면 자동 발송으로 바꿔 드립니다.
             </p>
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               <input type="date" value={briefDate} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}
