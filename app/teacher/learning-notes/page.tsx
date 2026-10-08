@@ -187,6 +187,10 @@ export default function TeacherLearningNotesPage() {
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteStudent, setNoteStudent] = useState<Student | null>(null)
   const [noteSession, setNoteSession] = useState<ClassSession | null>(null)
+  // ★ 학습일지를 **다음 날 쓰는 경우**가 많다(중등 선생님). 그동안은 저장할 때
+  //   무조건 '오늘'로 들어가서, 수요일 수업을 목요일에 쓰면 목요일 수업으로 기록됐다.
+  //   그러면 학부모 브리핑도 엉뚱한 날짜로 나간다. 그래서 **수업한 날**을 직접 고른다.
+  const [noteDate, setNoteDate] = useState<string>('')
 
   // 전달사항 (대타 수업 등으로 다른 강사 담당 학생을 봤을 때, 담당 강사에게 남기는 메모)
   const [handoffNotes, setHandoffNotes] = useState<HandoffNote[]>([])
@@ -673,7 +677,10 @@ export default function TeacherLearningNotesPage() {
   const todayDayIndex = new Date().getDay()
   const dayMap: Record<number, string> = { 1:'월',2:'화',3:'수',4:'목',5:'금',6:'토',0:'일' }
   const todayDay = dayMap[todayDayIndex]
-  const todayStr = new Date().toISOString().split('T')[0]
+  // ★ toISOString() 은 **UTC** 다. 한국은 +9 라서 오전 9시 이전에 쓰면 **하루 전 날짜**가 찍힌다.
+  //   (한국시간 10/8 08:00 → UTC 10/07T23:00 → '2026-10-07')
+  //   수업일자가 하루씩 밀려 학부모 브리핑도 엉뚱한 날로 나간다. 한국 날짜로 고정한다.
+  const todayStr = new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]
 
   // 오늘 수업 학생 (시간순)
   const todayStudents = myStudents
@@ -774,6 +781,22 @@ export default function TeacherLearningNotesPage() {
       .update({ is_read: true, read_at: new Date().toISOString() }).eq('id', note.id)
   }
 
+  /**
+   * 그 학생이 **마지막으로 수업했을 날**을 시간표로 짐작한다.
+   * 오늘이 수업 요일이면 오늘, 아니면 바로 지난 수업 요일.
+   * 시간표가 없으면 오늘로 둔다(선생님이 고치면 된다).
+   */
+  function guessClassDate(student: Student) {
+    const days = schedules.filter((sc) => sc.student_id === student.id).map((sc) => sc.day_of_week)
+    if (!days.length) return todayStr
+    const order = ['일', '월', '화', '수', '목', '금', '토']
+    for (let back = 0; back < 7; back++) {
+      const d = new Date(Date.now() + 9 * 3600_000 - back * 86400_000)
+      if (days.includes(order[d.getUTCDay()])) return d.toISOString().split('T')[0]
+    }
+    return todayStr
+  }
+
   function openNoteModal(student: Student, targetSession?: ClassSession) {
     setJustSavedNote(false)
     // 주임모드로 넓게 보이는 것뿐인 학생(진짜 담당 아님)은 작성 불가 - 버튼 단에서 이미 막지만 안전장치로 한번 더 확인
@@ -783,6 +806,9 @@ export default function TeacherLearningNotesPage() {
     }
     // 기존 세션이 있고 편집 권한 체크
     const session = targetSession ?? getTodaySession(student.id)
+    // 수업한 날 기본값 — 이미 있는 기록이면 그 날짜, 아니면 **시간표 기준 가장 가까운 수업일**.
+    // (오늘이 그 학생 수업 요일이면 오늘, 아니면 바로 지난 수업 요일)
+    setNoteDate(session?.session_date ?? guessClassDate(student))
     if (session && !canEditNote(session.session_date, student.id)) {
       alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 그 이후 수정은 관리자에게 문의해주세요.')
       return
@@ -1298,7 +1324,7 @@ ${e?.message ?? '연결 실패'}
     let sessionId = noteSession?.id
     const sessionData = {
       student_id: noteStudent.id,
-      session_date: todayStr,
+      session_date: noteDate || todayStr,   // ★ 선생님이 고른 '수업한 날'
       session_type: '정규',
       today_textbook_name: progressText,
       today_chapter: noteProgressChapter || null,
@@ -2522,8 +2548,29 @@ ${e?.message ?? '연결 실패'}
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-800">{noteStudent.name}</p>
-                <p className="text-xs text-blue-500">{noteStudent.grade} · {todayStr}</p>
+                <p className="text-xs text-blue-500">{noteStudent.grade}</p>
               </div>
+            </div>
+
+            {/* ★ 수업한 날 — 다음 날 쓰시는 경우가 많아서 직접 고르게 한다.
+                예전에는 저장할 때 무조건 '오늘'로 들어가, 수요일 수업을 목요일에 쓰면
+                목요일 수업으로 기록되고 학부모 브리핑도 엉뚱한 날짜로 나갔다. */}
+            <div className="rounded-xl px-4 py-3 mb-4" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold" style={{ color: '#92400E' }}>수업한 날</span>
+                <input type="date" value={noteDate} max={todayStr}
+                  onChange={(e) => setNoteDate(e.target.value)}
+                  className="px-2.5 py-1.5 text-sm font-semibold border rounded-lg"
+                  style={{ borderColor: '#FDE68A', color: '#78350F' }} />
+                {noteDate && noteDate !== todayStr && (
+                  <span className="text-[11px] font-bold px-2 py-1 rounded-md" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                    지난 수업으로 저장됩니다
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] mt-1.5" style={{ color: '#A16207' }}>
+                오늘이 아니라 <b>실제로 수업한 날</b>로 맞춰 주세요. 이 날짜로 학부모님 브리핑이 나갑니다.
+              </p>
             </div>
 
             {/* 전달사항 - 대타 수업 등으로 다른 강사가 남긴, 아직 확인 안 한 메모 */}
