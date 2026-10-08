@@ -274,21 +274,37 @@ export default function TeacherExamPrepPage() {
 
   async function handleSaveSchedule() {
     if (!canManageAllStudents() && !isSupervisorModeActive()) return
-    if (!schSchool || !schGrade || !schDate) return
     // 학생 쪽과 **같은 규칙**으로 모아야 매칭이 된다. 한쪽만 통일하면 의미가 없다.
     const schoolName = normalizeSchool(schSchool)
+    // ★ 고등학교는 같은 학교면 1·2·3학년 시험일이 모두 같다(원장님). 학년을 세 번 고르게
+    //   하면 두 번 빠뜨리고, 그러면 그 학년은 시험대비 배정이 영원히 안 뜬다.
+    const grades = isHighSchool(schoolName) ? ['1', '2', '3'] : [schGrade]
+    if (!schoolName || !schDate || grades.some((g) => !g)) return
     setSavingSchedule(true)
-    await supabase.from('exam_schedule').insert({
-      school_name: schoolName, grade: schGrade,
-      exam_name: schName, exam_date: schDate,
-      created_by: currentUser?.name,
-    })
+
+    // 같은 학교·학년·시험명이 이미 있으면 또 넣지 않는다(지난번엔 중복이 쌓였다)
+    const { data: already } = await supabase.from('exam_schedule')
+      .select('grade').eq('school_name', schoolName).eq('exam_name', schName)
+    const have = new Set((already ?? []).map((r: any) => String(r.grade)))
+    const toAdd = grades.filter((g) => !have.has(g))
+    if (toAdd.length) {
+      await supabase.from('exam_schedule').insert(toAdd.map((g) => ({
+        school_name: schoolName, grade: g,
+        exam_name: schName, exam_date: schDate,
+        created_by: currentUser?.name,
+      })))
+    }
     setSavingSchedule(false); setShowScheduleModal(false)
+    if (!toAdd.length) {
+      alert(`${schoolName} ${schName}은 이미 등록돼 있어요. 날짜를 고치시려면 기존 일정을 지우고 다시 넣어주세요.`)
+    }
 
     // 해당 학교+학년 학생(및 학부모)에게 새 시험 일정 등록 푸시 알림
     const { data: targetStudents } = await supabase
-      .from('students').select('id').eq('school', schoolName).eq('grade', schGrade).eq('is_active', true)
-    const targetIds = (targetStudents ?? []).map((s: any) => s.id)
+      .from('students').select('id, grade').eq('school', schoolName).eq('is_active', true)
+    const targetIds = (targetStudents ?? [])
+      .filter((s: any) => toAdd.includes(String(s.grade ?? '').replace(/[^0-9]/g, '')))
+      .map((s: any) => s.id)
     if (targetIds.length > 0) {
       apiFetch('/api/push/send', {
         method: 'POST',
@@ -308,6 +324,12 @@ export default function TeacherExamPrepPage() {
 
     setSchSchool(''); setSchGrade(''); setSchDate('')
     fetchAll()
+  }
+
+  // 고등학교인가 — 이름이 「고」로 끝난다(normalizeSchool 을 거친 값 기준).
+  // 「○○여고」도 걸린다.
+  function isHighSchool(school: string) {
+    return /고$/.test(school)
   }
 
   async function handleDeleteSchedule(id: string) {
@@ -1125,17 +1147,25 @@ export default function TeacherExamPrepPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학년 *</label>
-              <div className="flex gap-2">
-                {['1','2','3'].map(g => (
-                  <button key={g} onClick={() => setSchGrade(g)}
-                    className="px-5 py-2 rounded-xl text-sm font-bold transition-all"
-                    style={schGrade === g
-                      ? { background: '#F5C4B3', color: '#712B13' }
-                      : { background: '#f3f4f6', color: '#9ca3af' }}>
-                    {g}학년
-                  </button>
-                ))}
-              </div>
+              {isHighSchool(normalizeSchool(schSchool)) ? (
+                /* 고등학교는 학년별로 시험일이 다르지 않다 — 세 학년을 한 번에 넣는다 */
+                <div className="rounded-xl px-4 py-3 text-xs" style={{ background: '#FDF4F0', color: '#712B13' }}>
+                  <b>1·2·3학년 모두 같은 날</b>로 등록됩니다.
+                  <div className="text-[11px] text-gray-500 mt-0.5">고등학교는 같은 학교면 시험일정이 같아요.</div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {['1','2','3'].map(g => (
+                    <button key={g} onClick={() => setSchGrade(g)}
+                      className="px-5 py-2 rounded-xl text-sm font-bold transition-all"
+                      style={schGrade === g
+                        ? { background: '#F5C4B3', color: '#712B13' }
+                        : { background: '#f3f4f6', color: '#9ca3af' }}>
+                      {g}학년
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">시험명</label>
@@ -1157,7 +1187,8 @@ export default function TeacherExamPrepPage() {
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
             </div>
             <button onClick={handleSaveSchedule}
-              disabled={!schSchool || !schGrade || !schDate || savingSchedule}
+              disabled={!schSchool || !schDate || savingSchedule
+                || (!isHighSchool(normalizeSchool(schSchool)) && !schGrade)}
               className="w-full py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: '#F5C4B3', color: '#712B13' }}>
               {savingSchedule ? '저장중...' : <><i className="ti ti-calendar-plus" style={{ fontSize: 16 }} />일정 저장</>}
