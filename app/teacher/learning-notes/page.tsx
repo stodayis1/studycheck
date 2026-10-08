@@ -1896,6 +1896,7 @@ ${e?.message ?? '연결 실패'}
                 {briefResult.testMode && (
                   <div className="font-bold px-2 py-1 rounded-lg inline-block" style={{ background: '#FAEEDA', color: '#633806' }}>
                     테스트 모드 — 실제로는 가지 않았고 요금도 안 나갔어요.
+                    발송 기록도 남기지 않으니, 나중에 진짜로 보낼 때 그대로 다 나갑니다.
                     Vercel 에서 ALIGO_TEST_MODE 를 N 으로 바꾸면 진짜로 나갑니다.
                   </div>
                 )}

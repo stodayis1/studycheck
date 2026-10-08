@@ -149,8 +149,10 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
       if (r.unit != null) out.unitCost = r.unit
 
       // 성공을 적는다. 유일 제약에 걸리면(동시에 두 번 돌았다) 발송은 이미 됐으므로 조용히 넘긴다.
-      // ★ 테스트 번호로 보낸 것은 기록하지 않는다 — 기록하면 그 학생의 진짜 발송이 막힌다.
-      if (!opts.testPhone) {
+      // ★ **테스트로 보낸 것은 기록하지 않는다** — 기록하면 그 학생의 진짜 발송이 영영 막힌다.
+      //   테스트 번호로 보낸 경우와, 알리고 테스트 모드(ALIGO_TEST_MODE 가 N 이 아닐 때)가 그렇다.
+      //   테스트 모드에서는 알리고가 실제로 보내지도, 요금을 받지도 않는다.
+      if (!opts.testPhone && !cfg!.testMode) {
         await db.from('briefing_sends').insert({
           student_id: student.id, session_date: date, session_id: ses.id,
           to_phone: String(student.parent_phone), status: 'sent', body_len: brief.bodyLen,
@@ -160,7 +162,7 @@ async function run(opts: { date: string; dryRun: boolean; studentIds?: string[];
     } catch (e: any) {
       out.failed++
       out.errors.push({ name: student.name, error: e?.message ?? '알 수 없는 오류' })
-      if (!opts.testPhone) {
+      if (!opts.testPhone && !cfg!.testMode) {
         await db.from('briefing_sends').insert({
           student_id: student.id, session_date: date, session_id: ses.id,
           status: 'failed', error: String(e?.message ?? e).slice(0, 500), body_len: brief.bodyLen,
