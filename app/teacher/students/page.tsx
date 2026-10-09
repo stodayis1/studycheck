@@ -30,6 +30,7 @@ interface Student {
   on_leave?: boolean | null
   leave_start_date?: string | null
   leave_end_date?: string | null
+  leave_reason?: string | null
 }
 
 // OPS(sumath-admin)로 학생정보 변경사항을 동기화. 연동 안 된 학생(ops_student_id 없음)은 조용히 스킵.
@@ -84,6 +85,10 @@ export default function TeacherStudentsPage() {
   // 재원 / 휴원 — 퇴원생은 어느 쪽에도 안 나온다(원장님: 퇴원은 안 보여도 됨)
   const [statusTab, setStatusTab] = useState<'재원' | '휴원'>('재원')
   const [returning, setReturning] = useState<string | null>(null)
+  // 휴원 시작 모달 — OPS 와 같은 칸을 받는다(시작일 필수 · 종료예정일·사유 선택)
+  const [leaveTarget, setLeaveTarget] = useState<Student | null>(null)
+  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '' })
+  const [savingLeave, setSavingLeave] = useState(false)
   const [importedStudents, setImportedStudents] = useState<Student[]>([])
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -363,16 +368,59 @@ export default function TeacherStudentsPage() {
     else alert('삭제 중 오류가 발생했습니다.')
   }
 
-  // 휴원 종료(복귀) — 다시 재원으로 되돌린다.
-  // 휴원을 **시작**하는 것은 OPS 학생목록에서만 한다(휴원 사유·기간을 거기서 받는다).
-  // 여기서는 돌아온 학생을 재원으로 바꾸는 것만 한다 — 원장님이 학생관리에서 바로
-  // 처리하실 수 있어야 한다(2026-10-09).
+  // 휴원 시작 — 어느 쪽(스터디체크·OPS)에서 눌러도 양쪽에 반영된다(원장님 2026-10-09).
+  //
+  // ★ 두 앱이 휴원을 **다르게** 적는다.
+  //     스터디체크 : is_active=false + on_leave=true  (담당강사 화면·학생 목록에서 빼려고)
+  //     OPS        : active=true     + on_leave=true  (재원 명단에 두고 플래그로 가른다)
+  //   그래서 OPS 로는 active 를 **보내지 않는다** — 보내면 OPS 에서 퇴원처럼 내려간다.
+  function openLeave(student: Student) {
+    setLeaveTarget(student)
+    // 오늘(한국 날짜)을 기본값으로. toISOString() 은 UTC 라 오전 9시 이전엔 하루 전이 찍힌다.
+    const kst = new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]
+    setLeaveForm({ start_date: kst, end_date: '', reason: '' })
+  }
+
+  async function handleStartLeave() {
+    if (!leaveTarget?.id) return
+    if (!leaveForm.start_date) { alert('휴원 시작일을 입력해주세요.'); return }
+    setSavingLeave(true)
+    const { error } = await supabase.from('students').update({
+      is_active: false,
+      on_leave: true,
+      leave_start_date: leaveForm.start_date,
+      leave_end_date: leaveForm.end_date || null,
+      leave_reason: leaveForm.reason.trim() || null,
+    }).eq('id', leaveTarget.id)
+    if (error) { setSavingLeave(false); alert('휴원 처리 중 오류가 발생했어요.'); return }
+
+    const syncResult = await syncStudentToOps(leaveTarget.ops_student_id, {
+      on_leave: true,
+      leave_start_date: leaveForm.start_date,
+      leave_end_date: leaveForm.end_date || null,
+      leave_reason: leaveForm.reason.trim() || null,
+    })
+    const name = leaveTarget.name
+    setSavingLeave(false)
+    setLeaveTarget(null)
+    setStatusTab('휴원')
+    fetchStudents()
+    if (!syncResult.ok) {
+      alert(`${name} 학생은 휴원 처리됐지만, OPS(행정시스템)에는 반영이 안 됐어요.
+
+${syncResult.error}
+
+OPS 학생목록에는 재원생으로 남아 있어요 — 거기서 「휴원」을 눌러주세요.`)
+    }
+  }
+
+  // 휴원 종료(복귀) — 다시 재원으로 되돌린다. 시작과 마찬가지로 양쪽에 반영된다.
   async function handleReturnFromLeave(student: Student) {
     if (!student.id) return
     if (!confirm(`${student.name} 학생 휴원을 끝내고 재원으로 되돌릴까요?`)) return
     setReturning(student.id)
     const { error } = await supabase.from('students')
-      .update({ is_active: true, on_leave: false, leave_start_date: null, leave_end_date: null })
+      .update({ is_active: true, on_leave: false, leave_start_date: null, leave_end_date: null, leave_reason: null })
       .eq('id', student.id)
     if (error) { setReturning(null); alert('복귀 처리 중 오류가 발생했어요.'); return }
 
@@ -507,8 +555,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
 
         {statusTab === '휴원' && (
           <p className="text-[11px] text-gray-500 -mt-1">
-            휴원을 <b>시작</b>하는 것은 수학OPS 학생목록에서 해요 (사유·기간을 거기서 받습니다).
-            여기서는 돌아온 학생을 <b>재원으로 되돌리는 것</b>만 합니다.
+            휴원 시작·종료는 <b>여기서도, 수학OPS에서도</b> 할 수 있어요. 어느 쪽에서 하든 양쪽에 반영됩니다.
           </p>
         )}
 
@@ -596,6 +643,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                           style={{ background: '#FEF3C7', color: '#92400E' }}>
                           휴원{student.leave_start_date ? ` ${student.leave_start_date.slice(5).replace('-', '/')}~` : ''}
+                          {student.leave_end_date ? `${student.leave_end_date.slice(5).replace('-', '/')}` : ''}
+                          {student.leave_reason ? ` · ${student.leave_reason}` : ''}
                         </span>
                       )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
@@ -629,6 +678,15 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                     </p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
+                    {/* 휴원은 수업료·명단에 걸리는 처리라 원장·직원만 누를 수 있게 한다
+                        (퇴원은 원장 전용, 휴원은 그보다 한 칸 넓게). */}
+                    {!student.on_leave && canManageAllStudents() && (
+                      <button onClick={() => openLeave(student)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                        style={{ background: '#FEF3C7', color: '#92400E' }}>
+                        휴원
+                      </button>
+                    )}
                     {student.on_leave && isEditable(student) && (
                       <button onClick={() => handleReturnFromLeave(student)}
                         disabled={returning === student.id}
@@ -971,6 +1029,58 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                 className="flex-1 py-3 bg-[#9FE1CB] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                 {adding && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                 {adding ? '등록 중...' : '등록하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 휴원 시작 — OPS 학생목록의 휴원 모달과 같은 칸을 받는다(시작일 필수 · 종료예정일·사유 선택) */}
+      {leaveTarget && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => !savingLeave && setLeaveTarget(null)}>
+          <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">{leaveTarget.name} 학생 휴원</h3>
+              <button onClick={() => setLeaveTarget(null)} className="text-gray-400">✕</button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">휴원 시작일 *</label>
+              <input type="date" value={leaveForm.start_date}
+                onChange={(e) => setLeaveForm((f) => ({ ...f, start_date: e.target.value }))}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                돌아올 예정일 <span className="font-normal text-gray-400">(모르면 비워두세요)</span>
+              </label>
+              <input type="date" value={leaveForm.end_date}
+                onChange={(e) => setLeaveForm((f) => ({ ...f, end_date: e.target.value }))}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                사유 <span className="font-normal text-gray-400">(선택)</span>
+              </label>
+              <input type="text" value={leaveForm.reason} maxLength={60}
+                onChange={(e) => setLeaveForm((f) => ({ ...f, reason: e.target.value }))}
+                placeholder="예: 가족 여행, 학교 행사"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none" />
+            </div>
+
+            <p className="text-[11px] leading-relaxed rounded-xl px-3 py-2" style={{ background: '#FEF3C7', color: '#92400E' }}>
+              휴원하면 선생님 화면·학생 목록에서 빠지고 <b>수학OPS에도 같이 휴원으로 올라갑니다.</b>
+              돌아오면 「휴원」 탭에서 <b>「재원으로」</b>를 눌러주세요. 퇴원과는 다릅니다.
+            </p>
+
+            <div className="flex gap-2">
+              <button onClick={() => setLeaveTarget(null)} disabled={savingLeave}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl disabled:opacity-50">취소</button>
+              <button onClick={handleStartLeave} disabled={savingLeave || !leaveForm.start_date}
+                className="flex-1 py-3 font-bold rounded-xl disabled:opacity-50"
+                style={{ background: '#D97706', color: 'white' }}>
+                {savingLeave ? '처리중...' : '휴원 처리'}
               </button>
             </div>
           </div>

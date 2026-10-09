@@ -37,7 +37,7 @@
 
 ### 휴원은 OPS에서 한다 — StudyCheck 의 is_active=false 가 휴원이다
 
-휴원 버튼은 **OPS 학생목록**에만 있다. 누르면 OPS 는 `on_leave=true` + 휴원시작일을 적고,
+휴원 시작·종료는 **양쪽 어디서든** 할 수 있다(2026-10-09). 누르면 OPS 는 `on_leave=true` + 휴원시작일을 적고,
 `api/studycheck/set-leave` 가 StudyCheck 에 `on_leave=true`, 휴원시작일, 그리고
 **`is_active=false`** 를 쓴다. 휴원중엔 담당강사 화면·학생 목록에서 빼려는 **의도된 동작**이다.
 
@@ -45,7 +45,13 @@
   **`on_leave` 를 보지 않고 퇴원이라고 단정하지 말 것.**
   퇴원: `is_active=false` + `on_leave=false` / 휴원: `is_active=false` + `on_leave=true`
 
-복귀(휴원 종료)도 OPS 에서 누르면 `is_active=true` 로 되돌아온다.
+반대로 **스터디체크 학생관리**(「재원 / 휴원」 탭)에서 눌러도 OPS 에 반영된다 —
+`api/sync-student-to-ops` 가 `on_leave`·`leave_start_date`·`leave_end_date`·`leave_reason` 를 받는다.
+★ 이때 `is_active` 는 **보내지 않는다.** OPS 는 휴원생을 `active=true` 로 두므로,
+보내면 OPS 에서 퇴원처럼 내려간다. 복귀할 때만 `is_active=true` 를 같이 보낸다.
+
+휴원 사유(`leave_reason`)는 2026-10-09 에 스터디체크에도 칸을 만들어 양쪽이 같아졌다
+(docs/sql/휴원사유_칸_추가.sql).
 
 ### ★ 학생 정보는 양쪽에서 고칠 수 있다 — 한쪽만 고치면 조용히 어긋난다
 
