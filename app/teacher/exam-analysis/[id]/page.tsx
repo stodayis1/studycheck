@@ -15,6 +15,7 @@ import {
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
+import AutoMatch from '@/components/exam-analysis/AutoMatch'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
 // 손풀이 그림의 긴 쪽이 이보다 작으면 블로그에서 글씨가 흐리다 (태블릿 원본 내보내기는 보통 2000px 을 넘는다)
@@ -431,6 +432,10 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
           {['대기', '진행중', '완료'].map((x) => <option key={x}>{x}</option>)}
         </select>
       }>
+      {isAdmin && (
+        <AutoMatch paperId={paper.id} hasQuestions={(data.questions ?? []).some((q: any) => q.problem_id)}
+          existing={(data.matches ?? []).length} onDone={reload} />
+      )}
       {/* 적중률 — 유형 유사 이상이 있는 문항 ÷ 전체 문항 */}
       <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: '#F0FBF7' }}>
         {hit.total ? (
