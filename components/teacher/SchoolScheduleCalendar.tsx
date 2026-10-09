@@ -9,6 +9,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { loadHolidays, dateKey, type Holiday } from '@/lib/holidays'
 
 interface Period {
@@ -44,6 +45,9 @@ function gradeLabel(p: Period) {
 }
 
 export default function SchoolScheduleCalendar() {
+  // 일정 입력은 원장·중등주임·승민정 선생님만 (2026-10-09 원장님 지정). DB 권한(RLS)으로도 막혀 있다.
+  const { currentUser } = useAuth()
+  const canEdit = currentUser?.role === 'admin' || ['신애진', '승민정'].includes(currentUser?.name || '')
   const [periods, setPeriods] = useState<Period[]>([])
   const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d })
@@ -205,7 +209,7 @@ export default function SchoolScheduleCalendar() {
                     <span className="font-bold shrink-0" style={{ color: dday <= 14 ? '#dc2626' : '#9ca3af' }}>
                       {dday > 0 ? `D-${dday}` : '진행중'}
                     </span>
-                    {p.source === 'manual' && (
+                    {p.source === 'manual' && canEdit && (
                       <button onClick={() => removeManual(p)} className="text-[10px] text-gray-300 shrink-0">지움</button>
                     )}
                   </div>
@@ -221,8 +225,9 @@ export default function SchoolScheduleCalendar() {
             학교 학사일정(시험·수행평가·방학)은 나이스에서 <b>자동으로 반영</b>돼요(매주 월요일 갱신).
             다만 <b>나이스에 미등록된 학교는 비어 있을 수 있어요.</b> 그런 학교는 아래에서 직접 입력해주세요.
             <b>학원 행사</b>도 여기서 넣으면 선생님들 화면에 함께 떠요.
+            {!canEdit && ' 일정 입력은 원장님·중등주임·승민정 선생님만 할 수 있어요.'}
           </p>
-          {adding ? (
+          {!canEdit ? null : adding ? (
             <div className="mt-2 space-y-1.5">
               <div className="flex gap-1.5">
                 <input value={form.school} onChange={e => setForm(f => ({ ...f, school: e.target.value }))}
