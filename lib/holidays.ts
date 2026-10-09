@@ -15,13 +15,30 @@ export interface Holiday {
 let cache: Map<string, Holiday> | null = null
 let inflight: Promise<Map<string, Holiday>> | null = null
 
+/**
+ * 공휴일 + 학원 자체 휴원일(방학 등)을 함께 돌려준다.
+ * 휴원일 원본은 OPS 학원달력이고, OPS 가 academy_closures 표로 밀어넣는다.
+ * 두 가지를 한 map 으로 합쳐서 주기 때문에, 이 함수를 쓰는 화면은 따로 손댈 게 없다.
+ */
 export async function loadHolidays(): Promise<Map<string, Holiday>> {
   if (cache) return cache
   if (inflight) return inflight
   inflight = (async () => {
-    const { data } = await supabase.from('holidays').select('date, name, kind').order('date')
+    const [{ data: hs }, { data: cs }] = await Promise.all([
+      supabase.from('holidays').select('date, name, kind').order('date'),
+      supabase.from('academy_closures').select('date, kind, memo').order('date'),
+    ])
     const map = new Map<string, Holiday>()
-    for (const h of (data || []) as Holiday[]) map.set(h.date, h)
+    for (const h of (hs || []) as Holiday[]) map.set(h.date, h)
+    // 학원 휴원일 — 공휴일과 겹치면 공휴일 이름을 그대로 둔다(그게 더 설명이 된다)
+    for (const c of (cs || []) as { date: string; kind: string; memo: string | null }[]) {
+      if (map.has(c.date)) continue
+      map.set(c.date, {
+        date: c.date,
+        name: c.memo || (c.kind === 'vacation' ? '학원 방학' : '휴원일'),
+        kind: 'academy',
+      })
+    }
     cache = map
     inflight = null
     return map
