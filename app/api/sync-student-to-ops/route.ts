@@ -29,6 +29,13 @@ export async function POST(req: NextRequest) {
       if ('parent_phone' in fields) data.parent_phone = fields.parent_phone || null
       if ('class_time' in fields) data.class_time = fields.class_time || null
       if ('is_active' in fields) data.active = fields.is_active
+      // 휴원·복귀 — OPS 가 휴원의 주인이지만, 복귀는 스터디체크 학생관리에서도 누를 수 있다.
+      // ★ OPS 는 휴원생을 active=true 로 두고 on_leave 플래그로 가른다(스터디체크는 is_active=false).
+      //   그래서 두 칸을 따로 보내야 한다 — docs/OPS연동.md 참고.
+      if ('on_leave' in fields) data.on_leave = !!fields.on_leave
+      if ('leave_start_date' in fields) data.leave_start_date = fields.leave_start_date || null
+      if ('leave_end_date' in fields) data.leave_end_date = fields.leave_end_date || null
+      if ('leave_reason' in fields) data.leave_reason = fields.leave_reason || null
       // OPS 학생목록 카드는 class_time 텍스트가 아니라 schedule_days 배열로 요일을 표시하므로
       // 이걸 빼먹으면 시간표를 바꿔도 OPS 화면엔 예전 요일이 그대로 남는 문제가 있었다.
       if ('schedule_days' in fields) data.schedule_days = Array.isArray(fields.schedule_days) ? fields.schedule_days : null

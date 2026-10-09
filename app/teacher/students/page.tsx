@@ -27,6 +27,9 @@ interface Student {
   student_last_login_at?: string | null
   parent_last_login_at?: string | null
   ops_student_id?: string | null
+  on_leave?: boolean | null
+  leave_start_date?: string | null
+  leave_end_date?: string | null
 }
 
 // OPS(sumath-admin)로 학생정보 변경사항을 동기화. 연동 안 된 학생(ops_student_id 없음)은 조용히 스킵.
@@ -78,6 +81,9 @@ export default function TeacherStudentsPage() {
   const [searchText, setSearchText] = useState('')
   const [teacherFilter, setTeacherFilter] = useState('')
   const [gradeFilter, setGradeFilter] = useState('')
+  // 재원 / 휴원 — 퇴원생은 어느 쪽에도 안 나온다(원장님: 퇴원은 안 보여도 됨)
+  const [statusTab, setStatusTab] = useState<'재원' | '휴원'>('재원')
+  const [returning, setReturning] = useState<string | null>(null)
   const [importedStudents, setImportedStudents] = useState<Student[]>([])
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -98,10 +104,15 @@ export default function TeacherStudentsPage() {
   const [newSchedules, setNewSchedules] = useState<{day: string, time: string, periods: number}[]>([])
   const [adding, setAdding] = useState(false)
 
+  // ★ 휴원생은 is_active=false 로 내려가 있다 — 그게 퇴원이 아니라 **휴원의 설계된 표현**이다
+  //   (OPS 휴원 버튼 → api/studycheck/set-leave 가 `is_active: !on_leave` 로 쓴다).
+  //   그래서 재원(is_active)과 휴원(on_leave)을 **둘 다** 불러온다. 퇴원생
+  //   (is_active=false + on_leave=false)은 안 불러온다 — 원장님 말씀대로 안 보여도 된다.
+  //   docs/OPS연동.md 「휴원은 OPS에서 한다」 참고.
   async function fetchStudents() {
     setLoading(true)
-    let query = supabase.from('students').select('*').eq('is_active', true).order('name')
-    const { data, error } = await query
+    const { data, error } = await supabase.from('students').select('*')
+      .or('is_active.eq.true,on_leave.eq.true').order('name')
     if (!error && data) setStudents(data)
     setLoading(false)
   }
@@ -121,11 +132,15 @@ export default function TeacherStudentsPage() {
     return teachers.includes(currentUser.name)
   }
 
+  // 재원/휴원 — 다른 버튼(강사별·학년별)과 학생 목록 모두 이 안에서만 센다
+  const onLeaveCount = myStudents.filter((s) => !!s.on_leave).length
+  const statusStudents = myStudents.filter((s) => (statusTab === '휴원' ? !!s.on_leave : !s.on_leave))
+
   // 담당쌤(관리자/직원용) 목록 - 학생 한 명당 여러 명(콤마 구분)일 수 있어서 전부 풀어서 이름별로 모으고,
   // 몇 명씩 담당하는지도 같이 세어둔다 (원장님이 강사별로 담당학생을 훑어볼 수 있게)
   const teacherCounts = (() => {
     const map = new Map<string, number>()
-    myStudents.forEach((s) => {
+    statusStudents.forEach((s) => {
       const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
       teachers.forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
     })
@@ -140,7 +155,7 @@ export default function TeacherStudentsPage() {
   const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
   const gradeCounts = (() => {
     const map = new Map<string, number>()
-    myStudents.forEach((s) => {
+    statusStudents.forEach((s) => {
       const g = (s.grade ?? '').trim()
       if (g) map.set(g, (map.get(g) ?? 0) + 1)
     })
@@ -150,7 +165,7 @@ export default function TeacherStudentsPage() {
   })()
 
   // 강사별·학년별은 **같이** 걸린다 (예: 신애진 선생님의 중2만)
-  const filtered = myStudents.filter((s) => {
+  const filtered = statusStudents.filter((s) => {
     const searchMatch = s.name?.includes(searchText) || s.school?.includes(searchText)
     if (!searchMatch) return false
     if (gradeFilter && (s.grade ?? '').trim() !== gradeFilter) return false
@@ -348,6 +363,35 @@ export default function TeacherStudentsPage() {
     else alert('삭제 중 오류가 발생했습니다.')
   }
 
+  // 휴원 종료(복귀) — 다시 재원으로 되돌린다.
+  // 휴원을 **시작**하는 것은 OPS 학생목록에서만 한다(휴원 사유·기간을 거기서 받는다).
+  // 여기서는 돌아온 학생을 재원으로 바꾸는 것만 한다 — 원장님이 학생관리에서 바로
+  // 처리하실 수 있어야 한다(2026-10-09).
+  async function handleReturnFromLeave(student: Student) {
+    if (!student.id) return
+    if (!confirm(`${student.name} 학생 휴원을 끝내고 재원으로 되돌릴까요?`)) return
+    setReturning(student.id)
+    const { error } = await supabase.from('students')
+      .update({ is_active: true, on_leave: false, leave_start_date: null, leave_end_date: null })
+      .eq('id', student.id)
+    if (error) { setReturning(null); alert('복귀 처리 중 오류가 발생했어요.'); return }
+
+    // OPS 는 휴원생을 active=true + on_leave=true 로 들고 있다. 두 칸을 따로 보내야 한다.
+    const syncResult = await syncStudentToOps(student.ops_student_id, {
+      is_active: true, on_leave: false, leave_start_date: null, leave_end_date: null, leave_reason: null,
+    })
+    setReturning(null)
+    setStatusTab('재원')
+    fetchStudents()
+    if (!syncResult.ok) {
+      alert(`${student.name} 학생은 재원으로 돌렸지만, OPS(행정시스템)에는 반영이 안 됐어요.
+
+${syncResult.error}
+
+OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「휴원 종료」를 눌러주세요.`)
+    }
+  }
+
   // 신규상담 등록으로 새로 배정된 학생 "NEW" 배지 확인 처리
   async function handleAckNew(studentId: string) {
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, assigned_seen: true } : s))
@@ -444,6 +488,30 @@ export default function TeacherStudentsPage() {
           </div>
         )}
 
+        {/* 재원 / 휴원 — 휴원생은 돌아왔을 때 재원으로 되돌려야 하므로 찾을 수 있어야 한다.
+            퇴원생은 어느 쪽에도 안 나온다(원장님: 퇴원은 안 보여도 됨). */}
+        <div className="flex gap-1.5">
+          {(['재원', '휴원'] as const).map((tab) => (
+            <button key={tab} onClick={() => { setStatusTab(tab); setTeacherFilter(''); setGradeFilter('') }}
+              className={cx('px-4 py-2 rounded-xl text-sm font-bold transition-all',
+                statusTab === tab ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-500')}>
+              {tab}
+              {tab === '휴원' && onLeaveCount > 0 && (
+                <span className={cx('ml-1.5 text-[11px]', statusTab === '휴원' ? 'text-white/80' : 'text-gray-400')}>
+                  {onLeaveCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {statusTab === '휴원' && (
+          <p className="text-[11px] text-gray-500 -mt-1">
+            휴원을 <b>시작</b>하는 것은 수학OPS 학생목록에서 해요 (사유·기간을 거기서 받습니다).
+            여기서는 돌아온 학생을 <b>재원으로 되돌리는 것</b>만 합니다.
+          </p>
+        )}
+
         {/* 강사별 보기 (관리자/직원 전용 - 강사 계정은 어차피 본인 담당만 보여서 필요 없음) */}
         {(canManageAllStudents() || isSupervisorModeActive()) && teacherCounts.length > 0 && (
           <div className="space-y-2">
@@ -452,7 +520,7 @@ export default function TeacherStudentsPage() {
               <button onClick={() => setTeacherFilter('')}
                 className={cx('px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
                   teacherFilter === '' ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
-                전체 {myStudents.length}명
+                전체 {statusStudents.length}명
               </button>
               {teacherCounts.map(([name, count]) => (
                 <button key={name} onClick={() => setTeacherFilter(teacherFilter === name ? '' : name)}
@@ -474,7 +542,7 @@ export default function TeacherStudentsPage() {
               <button onClick={() => setGradeFilter('')}
                 className={cx('px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
                   gradeFilter === '' ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
-                전체 {myStudents.length}명
+                전체 {statusStudents.length}명
               </button>
               {gradeCounts.map(([g, count]) => (
                 <button key={g} onClick={() => setGradeFilter(gradeFilter === g ? '' : g)}
@@ -494,7 +562,8 @@ export default function TeacherStudentsPage() {
 
         {/* 학생 목록 */}
         <SectionCard
-          title={[teacherFilter && `${teacherFilter} 선생님 담당`, gradeFilter]
+          title={[statusTab === '휴원' ? '휴원 학생' : null,
+                  teacherFilter && `${teacherFilter} 선생님 담당`, gradeFilter]
             .filter(Boolean).join(' · ') || '전체 학생'}
           subtitle={loading ? '불러오는 중...' : `총 ${filtered.length}명`}>
           {loading ? (
@@ -502,7 +571,9 @@ export default function TeacherStudentsPage() {
               <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
             </div>
           ) : filtered.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-8">등록된 학생이 없어요</p>
+            <p className="text-center text-sm text-gray-400 py-8">
+              {statusTab === '휴원' ? '휴원 중인 학생이 없어요' : '등록된 학생이 없어요'}
+            </p>
           ) : (
             <div className="space-y-2">
               {filtered.map((student) => (
@@ -520,6 +591,12 @@ export default function TeacherStudentsPage() {
                           className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
                           <i className="ti ti-sparkles align-[-0.125em]" /> NEW
                         </button>
+                      )}
+                      {student.on_leave && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#FEF3C7', color: '#92400E' }}>
+                          휴원{student.leave_start_date ? ` ${student.leave_start_date.slice(5).replace('-', '/')}~` : ''}
+                        </span>
                       )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
                       {student.teacher_name && <Badge variant="blue" size="sm">{student.teacher_name}</Badge>}
@@ -552,6 +629,14 @@ export default function TeacherStudentsPage() {
                     </p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
+                    {student.on_leave && isEditable(student) && (
+                      <button onClick={() => handleReturnFromLeave(student)}
+                        disabled={returning === student.id}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50"
+                        style={{ background: '#085041', color: 'white' }}>
+                        {returning === student.id ? '처리중...' : '재원으로'}
+                      </button>
+                    )}
                     {isEditable(student) ? (
                       <>
                         <button onClick={async () => {
