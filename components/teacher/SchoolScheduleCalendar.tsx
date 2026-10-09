@@ -14,7 +14,7 @@ import { loadHolidays, dateKey, type Holiday } from '@/lib/holidays'
 interface Period {
   id: string
   school: string
-  kind: 'exam' | 'vacation' | string
+  kind: 'exam' | 'suneung' | 'mock' | 'vacation' | string
   event_name: string
   start_date: string
   end_date: string
@@ -25,6 +25,15 @@ interface Period {
 }
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
+
+// 종류별 색 — 내신(빨강)·수능(보라)·모의고사(주황)·방학(파랑)
+const KIND: Record<string, { color: string; bg: string; label: string }> = {
+  exam:    { color: '#b91c1c', bg: '#FEF2F2', label: '내신' },
+  suneung: { color: '#6d28d9', bg: '#F5F3FF', label: '수능' },
+  mock:    { color: '#c2410c', bg: '#FFF7ED', label: '모의' },
+  vacation:{ color: '#1d4ed8', bg: '#F0F7FF', label: '방학' },
+}
+const kindOf = (k: string) => KIND[k] || { color: '#6b7280', bg: '#f9fafb', label: '' }
 
 function gradeLabel(p: Period) {
   const on = [p.grade1 && '1', p.grade2 && '2', p.grade3 && '3'].filter(Boolean)
@@ -70,8 +79,9 @@ export default function SchoolScheduleCalendar() {
   const upcoming = useMemo(() => {
     const limit = new Date(); limit.setDate(limit.getDate() + 60)
     const limitStr = dateKey(limit)
+    // 내신·수능·모의고사를 모두 — 고등 학생은 수능·모의고사 일정도 챙겨야 한다
     return periods
-      .filter(p => p.kind === 'exam' && p.end_date >= todayStr && p.start_date <= limitStr)
+      .filter(p => ['exam', 'suneung', 'mock'].includes(p.kind) && p.end_date >= todayStr && p.start_date <= limitStr)
       .sort((a, b) => a.start_date.localeCompare(b.start_date))
   }, [periods, todayStr])
 
@@ -127,25 +137,30 @@ export default function SchoolScheduleCalendar() {
             const dow = new Date(ds + 'T00:00:00').getDay()
             const holiday = holidays.get(ds)
             const onDay = monthPeriods.filter(p => p.start_date <= ds && p.end_date >= ds)
-            const exams = onDay.filter(p => p.kind === 'exam')
-            const vacs = onDay.filter(p => p.kind === 'vacation')
+            // 중요한 순서: 내신 → 수능 → 모의고사 → 방학
+            const ranked = [...onDay].sort((a, b) => {
+              const order: Record<string, number> = { exam: 0, suneung: 1, mock: 2, vacation: 3 }
+              return (order[a.kind] ?? 9) - (order[b.kind] ?? 9)
+            })
+            const exams = ranked.filter(p => p.kind !== 'vacation')
+            const vacs = ranked.filter(p => p.kind === 'vacation')
             const isToday = ds === todayStr
             return (
               <div key={ds} className="rounded-lg border p-1 min-h-[52px]"
                 style={{
                   borderColor: isToday ? '#F5C4B3' : '#f3f4f6',
-                  background: exams.length ? '#FEF2F2' : vacs.length ? '#F0F7FF' : '#fff',
+                  background: exams.length ? kindOf(exams[0].kind).bg : vacs.length ? '#F0F7FF' : '#fff',
                 }}>
                 <div className="text-[10px] font-bold leading-none mb-0.5"
                   style={{ color: holiday || dow === 0 ? '#dc2626' : dow === 6 ? '#2563eb' : '#6b7280' }}>
                   {day}
                 </div>
                 {exams.slice(0, 2).map(p => (
-                  <div key={p.id} className="text-[8px] leading-tight truncate" style={{ color: '#b91c1c' }} title={`${p.school} ${p.event_name}`}>
-                    {p.school}
+                  <div key={p.id} className="text-[8px] leading-tight truncate" style={{ color: kindOf(p.kind).color }} title={`${p.school} ${p.event_name}`}>
+                    {p.kind === 'suneung' ? '수능' : p.kind === 'mock' ? `${p.school} 모의` : p.school}
                   </div>
                 ))}
-                {exams.length > 2 && <div className="text-[8px]" style={{ color: '#b91c1c' }}>+{exams.length - 2}</div>}
+                {exams.length > 2 && <div className="text-[8px]" style={{ color: '#6b7280' }}>+{exams.length - 2}</div>}
                 {!exams.length && vacs.slice(0, 1).map(p => (
                   <div key={p.id} className="text-[8px] leading-tight truncate" style={{ color: '#1d4ed8' }} title={`${p.school} ${p.event_name}`}>
                     {p.school} 방학
@@ -158,7 +173,15 @@ export default function SchoolScheduleCalendar() {
 
         {/* 다가오는 시험 */}
         <div className="mt-3">
-          <p className="text-[11px] font-bold text-gray-400 mb-1.5">다가오는 시험 (60일 이내)</p>
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <p className="text-[11px] font-bold text-gray-400">다가오는 시험 (60일 이내)</p>
+            <div className="flex items-center gap-1.5 ml-auto">
+              {['exam', 'suneung', 'mock', 'vacation'].map(k => (
+                <span key={k} className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                  style={{ background: kindOf(k).bg, color: kindOf(k).color }}>{kindOf(k).label}</span>
+              ))}
+            </div>
+          </div>
           {loading ? (
             <p className="text-xs text-gray-300">불러오는 중...</p>
           ) : upcoming.length === 0 ? (
@@ -169,6 +192,8 @@ export default function SchoolScheduleCalendar() {
                 const dday = Math.ceil((new Date(p.start_date + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000)
                 return (
                   <div key={p.id} className="flex items-center gap-2 text-xs">
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                      style={{ background: kindOf(p.kind).bg, color: kindOf(p.kind).color }}>{kindOf(p.kind).label}</span>
                     <span className="font-bold text-gray-700 shrink-0">{p.school}</span>
                     <span className="text-gray-500 truncate">{p.event_name}{gradeLabel(p) && ` (${gradeLabel(p)})`}</span>
                     <span className="text-gray-400 ml-auto shrink-0">
