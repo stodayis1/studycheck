@@ -125,13 +125,21 @@ for (const p of problems) {
   const up = await supabase.storage.from('problem-images').upload(imagePath, fs.readFileSync(img.file), { contentType: 'image/png', upsert: true })
   if (up.error) die(`${no}번 그림 올리기 실패`, up.error)
 
+  // 정답이 수식·논술형이면 정답 칸 그림도 올린다 (글자로 옮기면 수식이 빠진다)
+  let answerImagePath = null
+  if (p.answer_image) {
+    answerImagePath = `exam/${paper.id}/${q.id}_a.png`
+    const ua = await supabase.storage.from('problem-images').upload(answerImagePath, fs.readFileSync(path.join(dir, p.answer_image)), { contentType: 'image/png', upsert: true })
+    if (ua.error) die(`${no}번 정답 그림 올리기 실패`, ua.error)
+  }
+
   // 문제은행 (problems)
   const row = {
     book: '학교기출', grade: key.grade, semester: key.term,
     sub_chapter_no: 0, sub_chapter_title: `${key.school_name} ${String(key.exam_year).slice(2)}-${key.term} ${key.exam_type.slice(0, 2)}`,
     local_no: `${key.school_name}${String(key.exam_year).slice(2)}-${key.term}${key.exam_type.slice(0, 2)}-${no}`,
     step: '기출', is_essay: qType === '서술형', answer_kind: ans.kind, answer_text: ans.text,
-    image_path: imagePath, source_key: sk,
+    image_path: imagePath, source_key: sk, ...(answerImagePath ? { answer_image_path: answerImagePath } : {}),
     source_meta: {
       source_type: 'exam', source_year: key.exam_year, source_term: `${key.term}학기`, source_exam_type: key.exam_type,
       source_school_name: key.school_name, source_grade: key.grade, source_problem_no: no, source_key: sk,
@@ -153,6 +161,14 @@ for (const p of problems) {
   process.stdout.write(`\r  ${no}번 완료 (문제은행 #${pid})${img.scaled ? ' · 줄여서 올림' : ''}        `)
 }
 console.log()
+
+// 정답표: 화면의 「정답」 칸이 비어 있을 때만 채운다 (누가 적어 둔 것은 건드리지 않는다)
+if (!(paper.answers_text ?? '').trim() && problems.some((p) => p.answer)) {
+  const text = problems.filter((p) => p.answer).map((p) => `${p.no} ${p.answer}`).join('\n')
+  const r = await supabase.from('exam_papers').update({ answers_text: text }).eq('id', paper.id)
+  if (r.error) die('정답표 채우기 실패', r.error)
+  console.log(`정답표 ${problems.filter((p) => p.answer).length}문항 채움`)
+}
 
 // 통째 인쇄용 학습지
 const note = `exam_paper:${paper.id}`
