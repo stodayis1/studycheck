@@ -14,6 +14,7 @@ import {
   HIT_LEVELS, checkFileName, guessExamFile, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
+import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
 // 손풀이 그림의 긴 쪽이 이보다 작으면 블로그에서 글씨가 흐리다 (태블릿 원본 내보내기는 보통 2000px 을 넘는다)
@@ -41,6 +42,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   const [tab, setTab] = useState(0)
   const [draft, setDraft] = useState<any>({})       // 아직 저장 안 한 글 칸
   const [busy, setBusy] = useState('')
+  // 원장: PDF 에서 문항 넣기 창 (작업한 시험지 PDF 를 올리면 바로 뜬다)
+  const [importSrc, setImportSrc] = useState<{ name: string; data?: ArrayBuffer; url?: string } | null>(null)
 
   const load = useCallback(async () => {
     const r = await apiFetch(`/api/exam-analysis?id=${id}`)
@@ -111,6 +114,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
         mimeType: type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
       })
       if (!a.ok) alert(a.error)
+      // 원장이 작업한 시험지 PDF 를 올렸으면 그 자리에서 문항 자르기로 넘어간다
+      else if (data?.me?.isAdmin && /\.pdf$/i.test(file.name) && (kind === '문제' || kind === '문제정답해설')) setImportSrc({ name: file.name, data: await file.arrayBuffer() })
     }
     setBusy('')
     load()
@@ -207,7 +212,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               올리면 <b>{expectedPaperFileName(paper, '문제')}</b> 처럼 규칙대로 자동으로 붙습니다.
             </p>
             <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
-            <FileList files={paperFiles} onRemove={removeFile} onKind={isAdmin ? changeKind : undefined} empty="아직 올린 시험지가 없습니다." />
+            <FileList files={paperFiles} onRemove={removeFile} onKind={isAdmin ? changeKind : undefined} empty="아직 올린 시험지가 없습니다."
+              onImport={isAdmin ? (f) => setImportSrc({ name: f.file_name, url: f.url }) : undefined} />
+            {isAdmin && !data.sheetCode && paperFiles.some((f: any) => /\.pdf$/i.test(f.file_name) && (f.kind === '문제' || f.kind === '문제정답해설')) && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">PDF 는 올라와 있지만 아직 문항으로 넣지 않았습니다. 위 파일의 <b>「문항 넣기」</b>를 누르면 문항 · 정답 · 통째 인쇄가 채워집니다.</p>
+            )}
             {data.sheetCode && (
               <button onClick={() => openPrint(id)} className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ background: GREEN }}>
                 <i className="ti ti-printer mr-1.5" />수학의지혜 시험지 양식으로 통째 인쇄
@@ -370,6 +379,10 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
             </ul>
           </div>
         </Card>
+      )}
+      {importSrc && (
+        <PdfImportDialog paperId={id} source={importSrc} existing={(data.questions ?? []).length}
+          onClose={() => setImportSrc(null)} onDone={load} />
       )}
     </Shell>
   )
@@ -599,7 +612,7 @@ function FileDrop({ accept, onFiles, label }: { accept: string; onFiles: (f: Fil
 // 내려받는 주소: 임시 주소 뒤에 download= 를 붙이면 화면에 보이는 한글 파일명 그대로 저장된다
 const downloadUrl = (f: any) => (f.url ? `${f.url}&download=${encodeURIComponent(f.file_name)}` : '#')
 
-function FileList({ files, onRemove, onKind, empty }: { files: any[]; onRemove: (f: any) => void; onKind?: (f: any, kind: string) => void; empty: string }) {
+function FileList({ files, onRemove, onKind, onImport, empty }: { files: any[]; onRemove: (f: any) => void; onKind?: (f: any, kind: string) => void; onImport?: (f: any) => void; empty: string }) {
   if (!files.length) return <p className="mt-3 text-center text-xs text-gray-400">{empty}</p>
   return (
     <ul className="mt-3 divide-y text-sm">
@@ -614,6 +627,12 @@ function FileList({ files, onRemove, onKind, empty }: { files: any[]; onRemove: 
               className="rounded border px-1 py-0.5 text-[11px] text-gray-600">
               {['문제', '정답', '해설', '문제정답해설', '원본'].filter((k) => k === '원본' || /\.pdf$/i.test(f.file_name)).map((k) => <option key={k}>{k}</option>)}
             </select>
+          )}
+          {onImport && f.url && /\.pdf$/i.test(f.file_name) && (f.kind === '문제' || f.kind === '문제정답해설') && (
+            <button onClick={() => onImport(f)} title="이 PDF 를 문항별로 잘라 문제은행에 넣습니다"
+              className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-white" style={{ background: GREEN }}>
+              <i className="ti ti-scissors" />문항 넣기
+            </button>
           )}
           <a href={downloadUrl(f)} title="내려받기" className="flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
             style={{ borderColor: GREEN, color: GREEN }}>
