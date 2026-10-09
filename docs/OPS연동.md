@@ -35,6 +35,18 @@
 | `api/absences/push-to-studycheck` | OPS에서 등록한 결석·보강 확정을 학습일지에 반영 |
 | `api/students/push-to-studycheck` | **학생의 학교·학년**을 반영 (2026-10-09 추가) |
 
+### 휴원은 OPS에서 한다 — StudyCheck 의 is_active=false 가 휴원이다
+
+휴원 버튼은 **OPS 학생목록**에만 있다. 누르면 OPS 는 `on_leave=true` + 휴원시작일을 적고,
+`api/studycheck/set-leave` 가 StudyCheck 에 `on_leave=true`, 휴원시작일, 그리고
+**`is_active=false`** 를 쓴다. 휴원중엔 담당강사 화면·학생 목록에서 빼려는 **의도된 동작**이다.
+
+→ 그래서 StudyCheck 의 `is_active=false` 는 퇴원일 수도, 휴원일 수도 있다.
+  **`on_leave` 를 보지 않고 퇴원이라고 단정하지 말 것.**
+  퇴원: `is_active=false` + `on_leave=false` / 휴원: `is_active=false` + `on_leave=true`
+
+복귀(휴원 종료)도 OPS 에서 누르면 `is_active=true` 로 되돌아온다.
+
 ### ★ 학생 정보는 양쪽에서 고칠 수 있다 — 한쪽만 고치면 조용히 어긋난다
 
 학교·학년은 **양방향**이다. 다른 칸(담당강사·시간표·보호자)은 아직 StudyCheck → OPS 한 방향뿐이다.
@@ -49,8 +61,11 @@
 - 짝은 `students.ops_student_id` (2026-10-09 기준 184명 중 183명 연결).
 - 어긋났는지 확인하려면 두 DB의 학교 분포를 맞춰 본다 —
   `select school, count(*) from students where is_active/active group by 1 order by 1`.
-  이 방법으로 문지윤(초5)의 OPS 학교가 「신원」으로 끊겨 있던 것과,
-  퇴원 처리가 StudyCheck에만 된 학생 둘(곽정민·김서율)을 찾았다.
+  이 방법으로 문지윤(초5)의 OPS 학교가 「신원」으로 끊겨 있던 것을 찾았다.
+- ★ 다만 **숫자 차이가 곧 사고는 아니다.** 휴원생은 StudyCheck 에서 `is_active=false` 로
+  내려가고(아래 참고) OPS 는 `active=true + on_leave=true` 로 남으므로, 분포를 세면
+  휴원생 수만큼 어긋나 보인다. 2026-10-09 에 이걸 퇴원 누락으로 잘못 읽은 적이 있다.
+  반드시 `on_leave` 를 함께 보고 판단할 것.
 
 ## 주의
 
