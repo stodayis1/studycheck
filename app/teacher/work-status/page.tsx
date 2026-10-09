@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { fetchAllRows } from '@/lib/utils'
+import { loadHolidays, type Holiday } from '@/lib/holidays'
 
 interface Teacher {
   id: string
@@ -51,6 +52,9 @@ export default function TeacherWorkStatusPage() {
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [worksheets, setWorksheets] = useState<Worksheet[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  // 공휴일에는 오늘 수업이 없다 — 요일만 보면 한글날에도 금요일 수업이 잡힌다
+  const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
+  useEffect(() => { loadHolidays().then(setHolidays) }, [])
   const [loading, setLoading] = useState(true)
   const [viewTab, setViewTab] = useState<'today' | 'worksheets' | 'weekly'>('today')
 
@@ -116,7 +120,8 @@ export default function TeacherWorkStatusPage() {
   // 오늘 수업 있는 학생 (스케줄 기반)
   // is_active를 안 걸러서, 시간표를 수정하며 남은 예전(비활성) 스케줄 행까지 오늘 수업으로 잘못 세던 문제
   // (이규숙 선생님 - 김환희/시지우가 실제론 오늘 수업이 없는데 떴던 원인) - 활성 스케줄만 인정하도록 수정.
-  const todayStudents = students.filter(s =>
+  const todayHoliday = holidays.get(todayStr)
+  const todayStudents = todayHoliday ? [] : students.filter(s =>
     schedules.some(sc => sc.student_id === s.id && sc.day_of_week === todayDay && sc.is_active)
   )
 
@@ -194,6 +199,12 @@ export default function TeacherWorkStatusPage() {
         {/* ── 오늘 현황 ── */}
         {viewTab === 'today' && (
           <div className="space-y-3">
+            {/* 공휴일이면 왜 0명인지 알려준다 */}
+            {todayHoliday && (
+              <div className="rounded-2xl px-4 py-3" style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5' }}>
+                <p className="text-sm font-bold" style={{ color: '#b91c1c' }}>오늘은 {todayHoliday.name} — 정규 수업이 없는 날이에요</p>
+              </div>
+            )}
             {/* 요약 */}
             <div className="grid grid-cols-3 gap-2">
               {[
