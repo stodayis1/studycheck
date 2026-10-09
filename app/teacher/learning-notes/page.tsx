@@ -6,6 +6,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
+import { loadHolidays, type Holiday } from '@/lib/holidays'
 import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
@@ -171,6 +172,9 @@ export default function TeacherLearningNotesPage() {
   const deepLinkOpenedRef = useRef(false)
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  // 공휴일에는 시간표가 뜨면 안 된다 (2026-10-09 한글날에 평소 금요일 시간표가 그대로 떴다)
+  const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
+  const [showOnHoliday, setShowOnHoliday] = useState(false)
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
@@ -506,6 +510,7 @@ export default function TeacherLearningNotesPage() {
 
   useEffect(() => {
     fetchData()
+    loadHolidays().then(setHolidays)
     // 여러 선생님이 동시에 같은 화면을 쓰다 보니, 내가 페이지를 켜놓은 사이 다른 선생님이 입력한 게
     // 새로고침 전까진 "입력완료" 표시에 안 잡히는 문제가 있었다. 30초마다 조용히 최신 상태로 맞춘다.
     const interval = setInterval(() => { refreshTodayStatus() }, 30000)
@@ -706,8 +711,14 @@ export default function TeacherLearningNotesPage() {
   //   수업일자가 하루씩 밀려 학부모 브리핑도 엉뚱한 날로 나간다. 한국 날짜로 고정한다.
   const todayStr = new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]
 
+  // 오늘이 공휴일이면 시간표를 비운다. 학원이 쉬는 날인데 평소 요일 시간표가 그대로 뜨면
+  // 선생님이 오늘 수업이 있는 줄 알고 학습일지를 쓰게 된다 (2026-10-09 한글날에 실제로 그랬다).
+  // 다만 공휴일에도 보강 등으로 수업하는 날이 있어, 버튼 한 번으로 볼 수 있게 열어둔다.
+  const todayHoliday = holidays.get(todayStr)
+  const hideForHoliday = !!todayHoliday && !showOnHoliday
+
   // 오늘 수업 학생 (시간순)
-  const todayStudents = myStudents
+  const todayStudents = (hideForHoliday ? [] : myStudents)
     .map((s) => {
       const sc = schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay)
       return { student: s, schedule: sc }
@@ -2140,6 +2151,25 @@ ${e?.message ?? '연결 실패'}
             </div>
           ) : (
             <div className="space-y-4">
+
+              {/* 공휴일 안내 — 시간표가 왜 비어 있는지 알려준다 */}
+              {todayHoliday && (
+                <div className="rounded-2xl px-4 py-3 flex items-center justify-between gap-3" style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5' }}>
+                  <div>
+                    <p className="text-sm font-bold" style={{ color: '#b91c1c' }}>
+                      오늘은 {todayHoliday.name}이라 수업이 없어요
+                    </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: '#dc2626' }}>
+                      {showOnHoliday ? '시간표를 보고 있어요. 보강 등 실제 수업이 있을 때만 쓰세요.' : '보강 등으로 수업한 학생이 있으면 아래 버튼으로 시간표를 열 수 있어요.'}
+                    </p>
+                  </div>
+                  <button onClick={() => setShowOnHoliday((v) => !v)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-xl shrink-0"
+                    style={{ background: 'white', color: '#b91c1c', border: '1px solid #FCA5A5' }}>
+                    {showOnHoliday ? '다시 숨기기' : '그래도 시간표 보기'}
+                  </button>
+                </div>
+              )}
 
               {/* 오늘 시간표 시각화 */}
               {todayStudents.length > 0 && (

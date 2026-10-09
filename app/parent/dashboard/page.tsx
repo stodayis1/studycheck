@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
+import { loadHolidays, type Holiday } from '@/lib/holidays'
 import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
@@ -120,6 +121,9 @@ export default function ParentDashboardPage() {
   const router = useRouter()
   const [student, setStudent] = useState<StudentInfo | null>(null)
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  // 공휴일에는 "오늘 수업"이 뜨면 안 된다 (요일만 보고 시간표를 만들면 한글날에도 수업이 있는 것처럼 보인다)
+  const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
+  useEffect(() => { loadHolidays().then(setHolidays) }, [])
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
@@ -276,7 +280,8 @@ export default function ParentDashboardPage() {
   const activeWS = worksheets.filter(w => w.status !== 'passed')
 
   // 오늘/다음 수업
-  const todaySchedule = schedules.find(s => s.day_of_week === todayDay)
+  const todayHoliday = holidays.get(todayStr)
+  const todaySchedule = todayHoliday ? undefined : schedules.find(s => s.day_of_week === todayDay)
   const todaySession = sessions.find(s => s.session_date === todayStr)
   const nextSchedule = (() => {
     const dayOrder = ['월','화','수','목','금','토','일']
@@ -397,7 +402,7 @@ export default function ParentDashboardPage() {
                   <p className="text-xs mt-1 truncate" style={{ color: '#993C1D', opacity: 0.8 }}>{todaySession.progress_content}</p>
                 )}
               </>
-            ) : <p className="text-sm font-semibold text-gray-400">수업 없음</p>}
+            ) : <p className="text-sm font-semibold text-gray-400">{todayHoliday ? todayHoliday.name : '수업 없음'}</p>}
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
             <div className="flex items-center gap-1.5 mb-2">
