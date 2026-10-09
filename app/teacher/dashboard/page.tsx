@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import SchoolScheduleCalendar from '@/components/teacher/SchoolScheduleCalendar'
 import { Header } from '@/components/common/Header'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -709,6 +710,9 @@ export default function TeacherDashboardPage() {
             )}
           </div>
         </div>
+
+        {/* 학교 학사일정 — 나이스에서 자동으로 들어오고, 미등록 학교는 직접 입력한다 */}
+        <SchoolScheduleCalendar />
 
       </div>
     </div>
