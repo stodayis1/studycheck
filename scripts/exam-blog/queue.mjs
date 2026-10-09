@@ -124,7 +124,9 @@ if (cmd === 'list') {
     missing,
   }
   fs.writeFileSync(path.join(dir, 'source.json'), JSON.stringify(source, null, 1))
-  console.log(JSON.stringify({ dir, questions: questions.length, killers, images, solutions, hit, missing }, null, 1))
+  // 스터디체크 화면(「블로그」 탭 → 카드뉴스 만들기)에서 이미 만든 글이 있으면 그걸 쓴다 — 원장님이 고친 글이다
+  const madeInApp = await download('exam-analysis', `blog/${paper.id}/analysis.json`, path.join(dir, 'analysis.app.json'))
+  console.log(JSON.stringify({ dir, questions: questions.length, killers, images, solutions, hit, missing, analysisFromApp: madeInApp ? 'analysis.app.json' : null }, null, 1))
 } else if (cmd === 'done' || cmd === 'fail') {
   const paper = await getPaper()
   const note = rest.join(' ').trim()

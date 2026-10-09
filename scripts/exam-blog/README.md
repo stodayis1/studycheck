@@ -17,7 +17,11 @@ node scripts/exam-blog/queue.mjs pull <id>       # <시험 폴더>/blog/source.j
 1. **재료 확인** — `pull` 결과의 `missing` 이 비어 있지 않으면 글을 쓰지 않는다.
    `queue.mjs fail <id> "<missing 을 한 줄로>"` 로 남기고 끝. (화면 버튼 옆에 이유가 보인다. 채운 뒤 다시 누르면 된다)
    지어내서 메우지 않는다.
-2. **analysis.json 쓰기** — `<시험 폴더>/blog/analysis.json`. 모양은
+2. **analysis.json** — `pull` 결과에 `analysisFromApp` 이 있으면(원장님이 스터디체크 「블로그」 탭에서 카드뉴스를 이미 만들고 고친 것)
+   **새로 쓰지 말고 `analysis.app.json` 을 그대로 쓴다**: `analysis.json` 으로 복사하고, 그림 열쇠만 바꾼다
+   (`"image": "q:6"` → `pull` 이 알려 준 `images[6]`, `"solution": "s:6"` → `solutions[6]`). 블로그 본문도 이 글에 맞춘다.
+   없을 때만 아래대로 쓴다.
+   **analysis.json 쓰기** — `<시험 폴더>/blog/analysis.json`. 모양은
    `C:\Users\USER\문제은행\기출\2026_2학기중간_도래울중_중3\blog\analysis.json` 과 같다.
    - 숫자(문항 수·배점·적중)는 `source.json` 과 시험 폴더의 `manifest.json` 에서만 가져온다.
    - 총평·출제 경향·다음 시험 전략은 선생님이 쓴 `review.*` 를 다듬는다. 없는 내용을 보태지 않는다.

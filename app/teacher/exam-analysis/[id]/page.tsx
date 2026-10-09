@@ -16,6 +16,7 @@ import {
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
 import AutoMatch from '@/components/exam-analysis/AutoMatch'
+import BlogCards from '@/components/exam-analysis/BlogCards'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
 // 손풀이 그림의 긴 쪽이 이보다 작으면 블로그에서 글씨가 흐리다 (태블릿 원본 내보내기는 보통 2000px 을 넘는다)
@@ -334,6 +335,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {/* ───────── 블로그 ───────── */}
       {tab === 5 && (
         <Card title="블로그 업로드">
+          <BlogCards paperId={id} paperName={`${paper.school_name}_${paper.grade}`} isAdmin={isAdmin} />
           {!isAdmin && <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">블로그 상태는 원장님(윤T)만 바꿀 수 있습니다.</p>}
           {/* 원장: 블로그 글 요청. 누르면 「작성중」이 되고 요청 시각이 남는다 → Claude 가 이 표시를 보고
               시험분석 카드(scripts/exam-blog)와 글을 만들어 네이버 블로그에 임시저장한다 */}
