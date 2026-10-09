@@ -14,7 +14,7 @@ import { loadHolidays, dateKey, type Holiday } from '@/lib/holidays'
 interface Period {
   id: string
   school: string
-  kind: 'exam' | 'suneung' | 'mock' | 'vacation' | string
+  kind: 'exam' | 'suneung' | 'mock' | 'perf' | 'academy' | 'vacation' | string
   event_name: string
   start_date: string
   end_date: string
@@ -29,6 +29,8 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토']
 // 종류별 색 — 내신(빨강)·수능(보라)·모의고사(주황)·방학(파랑)
 const KIND: Record<string, { color: string; bg: string; label: string }> = {
   exam:    { color: '#b91c1c', bg: '#FEF2F2', label: '내신' },
+  perf:    { color: '#0f766e', bg: '#F0FDFA', label: '수행' },
+  academy: { color: '#7c2d12', bg: '#FFF7ED', label: '학원' },
   suneung: { color: '#6d28d9', bg: '#F5F3FF', label: '수능' },
   mock:    { color: '#c2410c', bg: '#FFF7ED', label: '모의' },
   vacation:{ color: '#1d4ed8', bg: '#F0F7FF', label: '방학' },
@@ -81,17 +83,18 @@ export default function SchoolScheduleCalendar() {
     const limitStr = dateKey(limit)
     // 내신·수능·모의고사를 모두 — 고등 학생은 수능·모의고사 일정도 챙겨야 한다
     return periods
-      .filter(p => ['exam', 'suneung', 'mock'].includes(p.kind) && p.end_date >= todayStr && p.start_date <= limitStr)
+      .filter(p => ['exam', 'suneung', 'mock', 'perf', 'academy'].includes(p.kind) && p.end_date >= todayStr && p.start_date <= limitStr)
       .sort((a, b) => a.start_date.localeCompare(b.start_date))
   }, [periods, todayStr])
 
   async function saveManual() {
-    if (!form.school.trim() || !form.start_date) { alert('학교와 시작일은 넣어주세요'); return }
+    const school = form.kind === 'academy' ? (form.school.trim() || '학원') : form.school.trim()
+    if (!school || !form.start_date) { alert('학교 이름과 시작일은 넣어주세요 (학원 행사는 학교 칸을 "학원"으로)'); return }
     setSaving(true)
     const { error } = await supabase.from('school_schedule_periods').insert({
-      school: form.school.trim(),
+      school,
       kind: form.kind,
-      event_name: form.event_name.trim() || (form.kind === 'exam' ? '시험' : '방학'),
+      event_name: form.event_name.trim() || ({ exam: '시험', perf: '수행평가', academy: '학원 행사', vacation: '방학' } as Record<string, string>)[form.kind] || '일정',
       start_date: form.start_date,
       end_date: form.end_date || form.start_date,
       source: 'manual',
@@ -139,7 +142,7 @@ export default function SchoolScheduleCalendar() {
             const onDay = monthPeriods.filter(p => p.start_date <= ds && p.end_date >= ds)
             // 중요한 순서: 내신 → 수능 → 모의고사 → 방학
             const ranked = [...onDay].sort((a, b) => {
-              const order: Record<string, number> = { exam: 0, suneung: 1, mock: 2, vacation: 3 }
+              const order: Record<string, number> = { academy: 0, exam: 1, suneung: 2, mock: 3, perf: 4, vacation: 5 }
               return (order[a.kind] ?? 9) - (order[b.kind] ?? 9)
             })
             const exams = ranked.filter(p => p.kind !== 'vacation')
@@ -157,7 +160,7 @@ export default function SchoolScheduleCalendar() {
                 </div>
                 {exams.slice(0, 2).map(p => (
                   <div key={p.id} className="text-[8px] leading-tight truncate" style={{ color: kindOf(p.kind).color }} title={`${p.school} ${p.event_name}`}>
-                    {p.kind === 'suneung' ? '수능' : p.kind === 'mock' ? `${p.school} 모의` : p.school}
+                    {p.kind === 'suneung' ? '수능' : p.kind === 'academy' ? p.event_name : p.kind === 'mock' ? `${p.school} 모의` : p.kind === 'perf' ? `${p.school} 수행` : p.school}
                   </div>
                 ))}
                 {exams.length > 2 && <div className="text-[8px]" style={{ color: '#6b7280' }}>+{exams.length - 2}</div>}
@@ -174,9 +177,9 @@ export default function SchoolScheduleCalendar() {
         {/* 다가오는 시험 */}
         <div className="mt-3">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <p className="text-[11px] font-bold text-gray-400">다가오는 시험 (60일 이내)</p>
+            <p className="text-[11px] font-bold text-gray-400">다가오는 일정 (60일 이내)</p>
             <div className="flex items-center gap-1.5 ml-auto">
-              {['exam', 'suneung', 'mock', 'vacation'].map(k => (
+              {['exam', 'perf', 'suneung', 'mock', 'academy', 'vacation'].map(k => (
                 <span key={k} className="text-[9px] font-bold px-1.5 py-0.5 rounded"
                   style={{ background: kindOf(k).bg, color: kindOf(k).color }}>{kindOf(k).label}</span>
               ))}
@@ -215,22 +218,28 @@ export default function SchoolScheduleCalendar() {
         {/* 안내 문구 — 자동으로 들어오지만 비어 있는 학교는 손으로 넣어야 한다 */}
         <div className="mt-3 rounded-xl px-3 py-2" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
           <p className="text-[11px] leading-relaxed" style={{ color: '#92400e' }}>
-            학교 학사일정은 나이스에서 <b>자동으로 반영</b>돼요(매주 월요일 갱신).
+            학교 학사일정(시험·수행평가·방학)은 나이스에서 <b>자동으로 반영</b>돼요(매주 월요일 갱신).
             다만 <b>나이스에 미등록된 학교는 비어 있을 수 있어요.</b> 그런 학교는 아래에서 직접 입력해주세요.
+            <b>학원 행사</b>도 여기서 넣으면 선생님들 화면에 함께 떠요.
           </p>
           {adding ? (
             <div className="mt-2 space-y-1.5">
               <div className="flex gap-1.5">
                 <input value={form.school} onChange={e => setForm(f => ({ ...f, school: e.target.value }))}
-                  placeholder="학교 (예: 신원고)" className="flex-1 rounded-lg px-2 py-1.5 text-xs" style={{ border: '1px solid #FDE68A' }} />
-                <select value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}
+                  placeholder={form.kind === 'academy' ? '학원 (그대로 두세요)' : '학교 (예: 신원고)'}
+                  className="flex-1 rounded-lg px-2 py-1.5 text-xs" style={{ border: '1px solid #FDE68A' }} />
+                <select value={form.kind}
+                  onChange={e => setForm(f => ({ ...f, kind: e.target.value, school: e.target.value === 'academy' ? '학원' : f.school === '학원' ? '' : f.school }))}
                   className="rounded-lg px-2 py-1.5 text-xs" style={{ border: '1px solid #FDE68A' }}>
-                  <option value="exam">시험</option>
+                  <option value="exam">내신시험</option>
+                  <option value="perf">수행평가</option>
+                  <option value="academy">학원행사</option>
                   <option value="vacation">방학</option>
                 </select>
               </div>
               <input value={form.event_name} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}
-                placeholder="이름 (예: 2학기 기말고사)" className="w-full rounded-lg px-2 py-1.5 text-xs" style={{ border: '1px solid #FDE68A' }} />
+                placeholder={form.kind === 'academy' ? '행사 이름 (예: 레벨테스트, 학부모 설명회)' : '이름 (예: 2학기 기말고사)'}
+                className="w-full rounded-lg px-2 py-1.5 text-xs" style={{ border: '1px solid #FDE68A' }} />
               <div className="flex gap-1.5 items-center">
                 <input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
                   className="flex-1 rounded-lg px-2 py-1.5 text-xs" style={{ border: '1px solid #FDE68A' }} />
