@@ -77,6 +77,7 @@ export default function TeacherStudentsPage() {
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
   const [teacherFilter, setTeacherFilter] = useState('')
+  const [gradeFilter, setGradeFilter] = useState('')
   const [importedStudents, setImportedStudents] = useState<Student[]>([])
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -131,11 +132,33 @@ export default function TeacherStudentsPage() {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'ko'))
   })()
 
+  // 학년별 보기 — 가나다순이 아니라 **교육과정 순서**로 세워야 눈에 들어온다.
+  // 목록은 myStudents(= 내가 볼 수 있는 학생)에서 뽑으므로 권한을 따로 또 볼 필요가 없다.
+  //   · 일반 강사  → 본인 담당 학생의 학년만 나온다
+  //   · 중등주임   → 중1~중3 (+ 본인 담당)만 나온다
+  //   · 원장·직원  → 전체 학년
+  const GRADE_ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+  const gradeCounts = (() => {
+    const map = new Map<string, number>()
+    myStudents.forEach((s) => {
+      const g = (s.grade ?? '').trim()
+      if (g) map.set(g, (map.get(g) ?? 0) + 1)
+    })
+    const rank = (g: string) => { const i = GRADE_ORDER.indexOf(g); return i < 0 ? 99 : i }
+    return Array.from(map.entries())
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0], 'ko'))
+  })()
+
+  // 강사별·학년별은 **같이** 걸린다 (예: 신애진 선생님의 중2만)
   const filtered = myStudents.filter((s) => {
     const searchMatch = s.name?.includes(searchText) || s.school?.includes(searchText)
-    if (!teacherFilter) return searchMatch
-    const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim())
-    return searchMatch && teachers.includes(teacherFilter)
+    if (!searchMatch) return false
+    if (gradeFilter && (s.grade ?? '').trim() !== gradeFilter) return false
+    if (teacherFilter) {
+      const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim())
+      if (!teachers.includes(teacherFilter)) return false
+    }
+    return true
   })
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -442,13 +465,38 @@ export default function TeacherStudentsPage() {
           </div>
         )}
 
+        {/* 학년별 보기 — 누구나 쓸 수 있다. 학년 목록 자체가 「내가 볼 수 있는 학생」에서
+            나오므로, 일반 강사는 본인 담당 학년만·중등주임은 중등만 나온다. */}
+        {gradeCounts.length > 1 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-gray-500">학년별 보기</p>
+            <div className="flex gap-1.5 flex-wrap">
+              <button onClick={() => setGradeFilter('')}
+                className={cx('px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                  gradeFilter === '' ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
+                전체 {myStudents.length}명
+              </button>
+              {gradeCounts.map(([g, count]) => (
+                <button key={g} onClick={() => setGradeFilter(gradeFilter === g ? '' : g)}
+                  className={cx('px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                    gradeFilter === g ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
+                  {g} {count}명
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 검색 */}
         <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
           placeholder="학생 이름 또는 학교로 검색"
           className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
 
         {/* 학생 목록 */}
-        <SectionCard title={teacherFilter ? `${teacherFilter} 선생님 담당` : '전체 학생'} subtitle={loading ? '불러오는 중...' : `총 ${filtered.length}명`}>
+        <SectionCard
+          title={[teacherFilter && `${teacherFilter} 선생님 담당`, gradeFilter]
+            .filter(Boolean).join(' · ') || '전체 학생'}
+          subtitle={loading ? '불러오는 중...' : `총 ${filtered.length}명`}>
           {loading ? (
             <div className="text-center py-8">
               <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
