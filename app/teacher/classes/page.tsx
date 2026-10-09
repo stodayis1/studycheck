@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
+import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 
 interface Student {
   id: string
@@ -72,6 +73,12 @@ export default function TeacherClassesPage() {
     return teachers.includes(currentUser.name)
   })
 
+  // ★ 주임모드에서는 학년별 색 대신 **강사별 색**으로 가른다 (lib/teacherColors.ts).
+  //   주임 선생님은 세 강사의 학생을 한 화면에서 보시는데, 학년 색만으로는
+  //   누구 학생인지 알 수 없었다(원장님 지적 2026-10-09).
+  const colorByTeacher = isSupervisorModeActive()
+  const teacherColors = buildTeacherColors(myStudents)
+
   // 선택된 요일의 시간표
   const daySchedules = schedules.filter((sc) => {
     const student = myStudents.find((s) => s.id === sc.student_id)
@@ -121,6 +128,27 @@ export default function TeacherClassesPage() {
           })}
         </div>
 
+        {/* 주임모드 범례 — 색만 보고 외우게 하면 안 된다 */}
+        {colorByTeacher && (() => {
+          const shown = teacherColors.names.filter((n) =>
+            daySchedules.some((sc) => mainTeacher(getStudent(sc.student_id)?.teacher_name) === n))
+          if (shown.length < 2) return null
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 px-4 py-2.5 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-gray-400 mr-0.5">담당 강사</span>
+              {shown.map((tn) => {
+                const c = teacherColors.of(tn)
+                return (
+                  <span key={tn} className="text-[11px] font-bold px-2 py-0.5 rounded-lg"
+                    style={{ background: c.bg, color: c.text, borderLeft: `3px solid ${c.border}` }}>
+                    {tn}
+                  </span>
+                )
+              })}
+            </div>
+          )
+        })()}
+
         {loading ? (
           <div className="text-center py-8">
             <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
@@ -160,7 +188,10 @@ export default function TeacherClassesPage() {
                   {/* 학생 목록 */}
                   <div className="p-3 flex flex-wrap gap-2">
                     {studentsAtTime.map(({ student, schedule }) => {
-                      const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
+                      // 주임모드면 강사색, 평소엔 학년색
+                      const color = colorByTeacher
+                        ? teacherColors.of(student.teacher_name)
+                        : (GRADE_COLORS[student.grade] ?? GRADE_COLORS['default'])
                       return (
                         <div key={student.id}
                           className="flex items-center gap-2 px-3 py-2 rounded-xl"
@@ -173,6 +204,7 @@ export default function TeacherClassesPage() {
                             <p className="text-sm font-bold text-gray-900">{student.name}</p>
                             <p className="text-[10px] font-semibold" style={{ color: color.text }}>
                               {student.grade} · {student.school || '-'}
+                              {colorByTeacher && ` · ${mainTeacher(student.teacher_name) || '담당 미지정'}`}
                             </p>
                           </div>
                         </div>

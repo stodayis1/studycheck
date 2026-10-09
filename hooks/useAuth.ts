@@ -140,11 +140,21 @@ export function useAuth() {
   }
 
   // 이 계정이 주임으로 지정되어 있는지 (원장님이 관리자 화면에서 supervisor_grades를 지정해줌)
+  //
+  // ★ 원장님(admin)은 supervisor_grades 를 따로 안 넣어도 주임모드를 켤 수 있다.
+  //   「내 화면은 관리자 모드도 있지만 중등주임모드도 동일하게 볼 수 있게」(2026-10-09).
+  //   주임 선생님이 보는 화면 — 특히 강사별 색 구분 — 을 그대로 확인하셔야 하기 때문이다.
+  //   조회 범위는 달라지지 않는다. admin 은 canManageAllStudents() 로 이미 전체가 보이고,
+  //   canViewStudent·visibleGradeScope 가 그걸 먼저 보고 빠져나간다.
   function isSupervisorAccount() {
-    return Array.isArray(currentUser?.supervisor_grades) && currentUser.supervisor_grades.length > 0
+    if (Array.isArray(currentUser?.supervisor_grades) && currentUser.supervisor_grades.length > 0) return true
+    return currentUser?.role === 'admin'
   }
 
-  const supervisorGrades: string[] = Array.isArray(currentUser?.supervisor_grades) ? currentUser.supervisor_grades : []
+  const supervisorGrades: string[] =
+    Array.isArray(currentUser?.supervisor_grades) && currentUser.supervisor_grades.length > 0
+      ? currentUser.supervisor_grades
+      : currentUser?.role === 'admin' ? MIDDLE_GRADES : []
 
   // 주임모드가 실제로 켜져있는 상태인지 (계정이 주임이 아니면 토글값과 무관하게 항상 false)
   function isSupervisorModeActive() {

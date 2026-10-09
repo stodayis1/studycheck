@@ -10,6 +10,7 @@ import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
+import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 
 interface Student {
   id: string
@@ -682,6 +683,12 @@ export default function TeacherLearningNotesPage() {
   const myStudents = students.filter((s) =>
     isEditable(s) || (isSupervisorModeActive() && !!s.grade && supervisorGrades.includes(s.grade))
   )
+  // ★ 주임모드에서는 학년별 색 대신 **강사별 색**으로 가른다. 주임 선생님은 세 강사의
+  //   학생을 한 화면에서 보시는데, 학년 색만으로는 누구 학생인지 알 수 없었다.
+  //   색은 「볼 수 있는 학생 전체」기준으로 정한다 — 오늘 수업 학생만 보면 날마다 색이 흔들린다.
+  const colorByTeacher = isSupervisorModeActive()
+  const teacherColors = buildTeacherColors(myStudents)
+
   const todayDayIndex = new Date().getDay()
   const dayMap: Record<number, string> = { 1:'월',2:'화',3:'수',4:'목',5:'금',6:'토',0:'일' }
   const todayDay = dayMap[todayDayIndex]
@@ -698,6 +705,10 @@ export default function TeacherLearningNotesPage() {
     })
     .filter((x) => x.schedule)
     .sort((a, b) => (a.schedule!.start_time > b.schedule!.start_time ? 1 : -1))
+
+  // 범례는 **오늘 화면에 실제로 있는 강사**만 띄운다(색은 위에서 이미 고정됐으니 안 흔들린다).
+  const legendNames = teacherColors.names
+    .filter((n) => todayStudents.some(({ student }) => mainTeacher(student.teacher_name) === n))
 
   const otherStudents = myStudents
     .filter((s) => !schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay))
@@ -2128,6 +2139,22 @@ ${e?.message ?? '연결 실패'}
                     <span className="text-sm font-bold text-gray-800"><i className="ti ti-calendar align-[-0.125em]" /> 오늘 ({todayDay}요일) 시간표</span>
                     <span className="text-xs text-gray-400">{todayStudents.length}명</span>
                   </div>
+                  {/* 주임모드 범례 — 색만 보고 외우게 하면 안 된다 */}
+                  {colorByTeacher && legendNames.length > 1 && (
+                    <div className="px-4 py-2 border-b border-gray-50 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-gray-400 mr-0.5">담당 강사</span>
+                      {legendNames.map((tn) => {
+                        const c = teacherColors.of(tn)
+                        return (
+                          <span key={tn} className="text-[11px] font-bold px-2 py-0.5 rounded-lg"
+                            style={{ background: c.bg, color: c.text, borderLeft: `3px solid ${c.border}` }}>
+                            {tn}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+
                   <div className="p-3 overflow-x-auto">
                     <div className="flex gap-2" style={{ minWidth: 'max-content' }}>
                       {/* 시간 라벨 (왼쪽) */}
@@ -2149,7 +2176,11 @@ ${e?.message ?? '연결 실패'}
                           }} />
                         ))}
                         {todayStudents.map(({ student, schedule }) => {
-                          const color = GRADE_COLORS[student.grade] ?? GRADE_COLORS['default']
+                          // 주임모드면 강사색, 평소엔 학년색
+                          const color = colorByTeacher
+                            ? (() => { const c = teacherColors.of(student.teacher_name)
+                                       return { bg: c.bg, border: c.border, sub: c.text } })()
+                            : (GRADE_COLORS[student.grade] ?? GRADE_COLORS['default'])
                           const periods = schedule!.periods
                           const top = timeToOffset(schedule!.start_time)
                           const blockH = HOUR_PX * periods - 6
@@ -2168,7 +2199,9 @@ ${e?.message ?? '연결 실패'}
                                 }}>
                                 <span className="text-xs font-black text-gray-900 truncate">{student.name}</span>
                                 <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: color.sub }}>
-                                  {student.grade}
+                                  {colorByTeacher
+                                    ? `${student.grade}·${mainTeacher(student.teacher_name) || '미지정'}`
+                                    : student.grade}
                                 </span>
                                 {isComplete && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
                                 {!isComplete && schedule!.start_time.slice(0,5) && (

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 
 const NAVY = '#0f3460'
 const GOLD = '#c8992e'
@@ -90,6 +91,16 @@ export default function WeeklyPage() {
     if (q.trim()) list = list.filter((s) => s.name.includes(q.trim()))
     return list
   }, [students, grade, q, currentUser, isSupervisorModeActive()])
+
+  // ★ 주임모드에서는 학생 칸에 **강사별 색**을 붙인다 (lib/teacherColors.ts).
+  //   주임 선생님은 세 강사의 학생을 한 표에서 보시는데, 이름만으로는 누구 학생인지
+  //   알 수 없었다(원장님 지적 2026-10-09). 색은 걸러지기 전 전체 명단 기준으로 정한다 —
+  //   학년·검색으로 걸렀을 때 색이 바뀌면 안 된다.
+  const colorByTeacher = isSupervisorModeActive()
+  const teacherColors = useMemo(
+    () => buildTeacherColors(students.filter((s) => canViewStudent(s))),
+    [students, currentUser, isSupervisorModeActive()]
+  )
 
   const grades = useMemo(
     () => [...new Set(students.map((s) => s.grade).filter(Boolean))].sort() as string[],
@@ -199,6 +210,27 @@ export default function WeeklyPage() {
         </div>
       )}
 
+      {/* 주임모드 범례 — 색만 보고 외우게 하면 안 된다 */}
+      {colorByTeacher && (() => {
+        const shown = teacherColors.names.filter((n) =>
+          rows.some((s) => mainTeacher(s.teacher_name) === n))
+        if (shown.length < 2) return null
+        return (
+          <div className="px-5 py-2 border-b flex items-center gap-1.5 flex-wrap bg-white">
+            <span className="text-[11px] font-bold text-gray-400 mr-0.5">담당 강사</span>
+            {shown.map((tn) => {
+              const c = teacherColors.of(tn)
+              return (
+                <span key={tn} className="text-[11px] font-bold px-2 py-0.5 rounded-lg"
+                  style={{ background: c.bg, color: c.text, borderLeft: `3px solid ${c.border}` }}>
+                  {tn}
+                </span>
+              )
+            })}
+          </div>
+        )
+      })()}
+
       {/* 표 */}
       <div className="overflow-auto">
         <table className="w-full text-sm border-collapse">
@@ -240,11 +272,21 @@ export default function WeeklyPage() {
                     <input type="checkbox" checked={picked.has(s.id)}
                       onChange={() => setPicked((p) => { const n = new Set(p); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n })} />
                   </td>
-                  <td className="border-b p-2 align-top">
+                  <td className="border-b p-2 align-top"
+                    style={colorByTeacher
+                      ? { borderLeft: `4px solid ${teacherColors.of(s.teacher_name).border}`,
+                          background: teacherColors.of(s.teacher_name).bg }
+                      : undefined}>
                     <div className="font-medium text-gray-900">{s.name}</div>
                     <div className="text-[11px] text-gray-400">
                       {s.grade}{s.class_time ? ` · ${s.class_time}` : ''}
                     </div>
+                    {colorByTeacher && (
+                      <div className="text-[11px] font-bold"
+                        style={{ color: teacherColors.of(s.teacher_name).text }}>
+                        {mainTeacher(s.teacher_name) || '담당 미지정'}
+                      </div>
+                    )}
                     <div className="text-[11px] mt-0.5" style={{ color: avg == null ? '#cbd5e1' : NAVY }}>
                       {avg == null ? '기록 없음' : `주 평균 ${avg}점 · ${scored.length}건`}
                     </div>
