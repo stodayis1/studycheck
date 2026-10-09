@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { loadHolidays, type Holiday } from '@/lib/holidays'
 
 interface StudentInfo {
   id: string
@@ -184,6 +185,9 @@ export default function StudentAssignmentsPage() {
 
   // 달력 데이터 생성
   const firstDay = new Date(year, month, 1).getDay()
+  // 공휴일은 DB(holidays)에서 — 학생 달력에도 빨간날이 보이게
+  const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
+  useEffect(() => { loadHolidays().then(setHolidays) }, [])
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   // 날짜별 과제 현황 계산
@@ -398,6 +402,7 @@ export default function StudentAssignmentsPage() {
               const isFuture = dateStr > todayStr
               const dayOfWeek = (firstDay + i) % 7
               const status = getDayStatus(day)
+              const holiday = holidays.get(dateStr)
 
               return (
                 <div key={day} className="flex flex-col items-center py-1">
@@ -406,11 +411,12 @@ export default function StudentAssignmentsPage() {
                     <span className={`text-sm font-${isToday ? 'black' : 'medium'} w-8 h-8 flex items-center justify-center rounded-full`}
                       style={{
                         background: isToday ? '#F5C4B3' : 'transparent',
-                        color: isToday ? '#712B13' : dayOfWeek === 0 ? '#F5C4B3' : dayOfWeek === 6 ? '#93c5fd' : '#374151',
+                        color: isToday ? '#712B13' : holiday ? '#ef4444' : dayOfWeek === 0 ? '#F5C4B3' : dayOfWeek === 6 ? '#93c5fd' : '#374151',
                       }}>
                       {day}
                     </span>
                   </div>
+                  {holiday && <div className="text-[8px] leading-none mb-0.5" style={{ color: "#ef4444" }}>{holiday.name.replace(" 대체공휴일", " 대체")}</div>}
 
                   {/* 과제 마커 */}
                   {status && !isFuture && (
