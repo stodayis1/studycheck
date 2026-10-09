@@ -201,8 +201,10 @@ export default function TeacherReportsPage() {
   const rankGradesAvailable = Array.from(new Set(
     rankAllExams.map((e) => rankStudentMap.get(e.student_id)?.grade).filter((g): g is string => !!g)
   ))
-    // 관리자는 전체 학년, 주임모드는 담당 학년 범위로만 제한 (중등주임이면 중1~중3, 학년주임이면 그 학년만)
-    .filter((g) => isAdmin() || !isSupervisorModeActive() || supervisorGrades.includes(g))
+    // 주임모드면 담당 학년 범위로만 제한한다 (중등주임이면 중1~중3, 학년주임이면 그 학년만).
+    // ★ 예전엔 isAdmin() 이 먼저라서 원장님이 주임모드를 켜도 전체 학년이 그대로 나왔다.
+    //   주임모드는 켜 둔 동안 「주임이 보는 화면」이어야 한다(원장님 2026-10-09).
+    .filter((g) => !isSupervisorModeActive() || supervisorGrades.includes(g))
     .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b))
 
   // 선택한 학년의 코어테스트를 "연월 + 회차"별로 묶어 세션(=매달 한 번씩 보는 그 회차)마다 등수를 매긴다.

@@ -165,7 +165,7 @@ function PctPicker({ value, onChange, disabled }: { value: number | null; onChan
 }
 
 export default function TeacherLearningNotesPage() {
-  const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades, supervisorLabel } = useAuth()
+  const { currentUser, isAdmin, isSupervisorModeActive, supervisorLabel, supervisorScope } = useAuth()
   const searchParams = useSearchParams()
   const deepLinkedStudentId = searchParams.get('student')
   const deepLinkOpenedRef = useRef(false)
@@ -678,11 +678,20 @@ export default function TeacherLearningNotesPage() {
   }
   const myEditableStudents = students.filter(isEditable)
 
-  // 화면에 "보이는" 학생 범위 - 기존 편집 가능 범위에 더해, 주임모드가 켜진 주임은 담당 학년 범위까지
-  // 넓게 볼 수 있다 (조회만 - 실제 작성/수정은 isEditable로 별도 제한)
-  const myStudents = students.filter((s) =>
-    isEditable(s) || (isSupervisorModeActive() && !!s.grade && supervisorGrades.includes(s.grade))
-  )
+  // 화면에 "보이는" 학생 범위 (조회만 - 실제 작성/수정은 isEditable로 별도 제한).
+  //
+  // ★ 주임모드가 켜져 있으면 **그 범위로 좁힌다.** 담당 학년은 누구 학생이든, 그 밖은
+  //   같은 학교급인 내 학생만. 기준은 useAuth.supervisorScope() 한 곳에 있다.
+  //   예전엔 「isEditable(s) || 담당 학년」이라 중등주임 화면에 내 초6·고1 학생이
+  //   같이 떴다(원장님 지적 2026-10-09). 내 학생 전부를 보려면 강사모드로 바꾼다.
+  const myStudents = students.filter((s) => {
+    if (isSupervisorModeActive()) {
+      const scope = supervisorScope(s.grade)
+      if (!scope) return false
+      return scope === 'scope' || isEditable(s)
+    }
+    return isEditable(s)
+  })
   // ★ 주임모드에서는 학년별 색 대신 **강사별 색**으로 가른다. 주임 선생님은 세 강사의
   //   학생을 한 화면에서 보시는데, 학년 색만으로는 누구 학생인지 알 수 없었다.
   //   색은 「볼 수 있는 학생 전체」기준으로 정한다 — 오늘 수업 학생만 보면 날마다 색이 흔들린다.

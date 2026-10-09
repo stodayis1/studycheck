@@ -54,7 +54,7 @@ const CONSULTATION_TEMPLATE = `1.
 `
 
 export default function ConsultationsPage() {
-  const { currentUser, canManageAllStudents, canViewStudent, isSupervisorModeActive, supervisorGrades, supervisorMode, adminMode } = useAuth()
+  const { currentUser, canManageAllStudents, canViewStudent, supervisorMode, adminMode } = useAuth()
   const searchParams = useSearchParams()
   const deepLinkedStudentId = searchParams.get('student')
 
@@ -91,9 +91,9 @@ export default function ConsultationsPage() {
   // 주임모드는 담당 학년 범위까지 "조회"는 가능하되, 상담 기록 작성은 실제 담당 학생에게만 허용
   // 주임모드/관리자모드를 바꾸면 보이는 범위가 달라지므로 그 값들도 의존성에 넣어야 한다.
   // (빠져 있으면 모드를 바꿔도 목록이 예전 그대로 남는다)
-  const myStudents = useMemo(() => students.filter((s) =>
-    canViewStudent(s) || (isSupervisorModeActive() && supervisorGrades.includes(s.grade))
-  ), [students, currentUser, supervisorMode, adminMode])
+  // canViewStudent 가 주임모드 범위까지 판단한다 — 여기서 또 OR 로 더하면 규칙이 갈린다.
+  const myStudents = useMemo(() => students.filter((s) => canViewStudent(s)),
+    [students, currentUser, supervisorMode, adminMode])
 
   const lastConsultByStudent = useMemo(() => {
     const map = new Map<string, Consultation>()

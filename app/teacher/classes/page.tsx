@@ -42,7 +42,7 @@ const GRADE_COLORS: Record<string, { bg: string; border: string; text: string }>
 }
 
 export default function TeacherClassesPage() {
-  const { currentUser, isAdmin, isSupervisorModeActive, supervisorGrades } = useAuth()
+  const { currentUser, isAdmin, isSupervisorModeActive, canViewStudent } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,15 +63,9 @@ export default function TeacherClassesPage() {
     fetchData()
   }, [])
 
-  // 담당 학생 필터
-  const myStudents = students.filter((s) => {
-    if (isAdmin()) return true
-    // 주임모드는 담당 학년 범위를 조회할 수 있다 (수정 권한은 아래 담당 판정으로 따로 유지)
-    if (isSupervisorModeActive() && s.grade && supervisorGrades.includes(s.grade)) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    return teachers.includes(currentUser.name)
-  })
+  // 담당 학생 필터 — 기준은 useAuth 한 곳에 있다(여기 따로 적어 뒀다가 주임모드 규칙이
+  // 갈렸다. 중등주임 화면에 내 초6·고1 학생이 같이 뜨던 원인 — 원장님 지적 2026-10-09).
+  const myStudents = students.filter((s) => canViewStudent(s))
 
   // ★ 주임모드에서는 학년별 색 대신 **강사별 색**으로 가른다 (lib/teacherColors.ts).
   //   주임 선생님은 세 강사의 학생을 한 화면에서 보시는데, 학년 색만으로는

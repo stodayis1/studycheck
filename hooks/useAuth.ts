@@ -178,16 +178,53 @@ export function useAuth() {
     window.dispatchEvent(new Event(MODE_EVENT))
   }
 
-  // 이 학생을 "볼" 권한이 있는지 - 화면마다 제각각 구현되어 있던 teacher_name 매칭 로직을 한 곳으로 모음.
-  // admin/staff는 기존과 동일하게 전체를 봄. 주임모드가 켜진 주임 계정은 담당 학년 범위 내 학생을 봄
-  // (수정/삭제 권한은 별개 - 이 함수는 "조회"만 판단하며, 실제 수정 가능 여부는 각 화면에서 isAdmin()/
-  // canManageAllStudents()로 그대로 따로 체크해야 함).
-  function canViewStudent(student: { grade?: string | null; teacher_name?: string | null }) {
-    if (canManageAllStudents()) return true
-    if (isSupervisorModeActive() && student.grade && supervisorGrades.includes(student.grade)) return true
+  /** 「중1」→「중」, 「초6」→「초」, 「고2」→「고」 — 학교급 */
+  function gradeLevel(grade?: string | null) {
+    return (grade ?? '').trim().charAt(0)
+  }
+
+  /** 담당 강사 칸(「김은수, 박경미」)에 내 이름이 있나 */
+  function isMyStudent(student: { teacher_name?: string | null }) {
     if (!currentUser?.name || !student.teacher_name) return false
     const teachers = student.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
     return teachers.includes(currentUser.name)
+  }
+
+  /**
+   * 주임모드에서 이 학년을 화면에 올려도 되나.
+   *   'scope'      = 담당 학년 → **누구 학생이든** 보인다 (주임의 본래 목적)
+   *   'same-level' = 담당 학년은 아니지만 같은 학교급 → **내 학생만** 보인다
+   *   null         = 안 보인다
+   *
+   * 「중등주임인데 내 초6·고1 학생이 같이 뜬다」는 원장님 지적(2026-10-09)으로 생긴 기준이다.
+   * 학교급까지 쳐내면 학년주임이 손해를 본다 — 중2 주임(김은수)의 중3 학생 12명,
+   * 중1 주임(박경미)의 중2·중3 학생 14명이 주임모드에서 사라진다. 그래서 「같은 학교급
+   * 안에서는 내 학생도 보인다」로 둔다. 학년 상관없이 내 학생 전부를 보려면 강사모드로 바꾼다.
+   *
+   * 화면에서 직접 거르는 곳(수업일지·반 관리)도 이 함수를 써서 기준을 한 곳에 둔다.
+   */
+  function supervisorScope(grade?: string | null): 'scope' | 'same-level' | null {
+    const g = (grade ?? '').trim()
+    if (!g) return null
+    if (supervisorGrades.includes(g)) return 'scope'
+    const levels = new Set(supervisorGrades.map(gradeLevel))
+    return levels.has(gradeLevel(g)) ? 'same-level' : null
+  }
+
+  // 이 학생을 "볼" 권한이 있는지 - 화면마다 제각각 구현되어 있던 teacher_name 매칭 로직을 한 곳으로 모음.
+  // (수정/삭제 권한은 별개 - 이 함수는 "조회"만 판단하며, 실제 수정 가능 여부는 각 화면에서 isAdmin()/
+  // canManageAllStudents()로 그대로 따로 체크해야 함).
+  function canViewStudent(student: { grade?: string | null; teacher_name?: string | null }) {
+    // ★ 주임모드가 켜져 있으면 **그 범위로 좁힌다 — 관리자·직원도 마찬가지다.**
+    //   이 모드의 목적이 「주임 선생님이 보는 화면을 그대로 본다」인데, 켜 둔 채로 전체가
+    //   보이면 모드가 아무 일도 안 하는 셈이다. 전체는 주임모드를 끄면 그대로 보인다.
+    if (isSupervisorModeActive()) {
+      const scope = supervisorScope(student.grade)
+      if (!scope) return false
+      return scope === 'scope' || isMyStudent(student)
+    }
+    if (canManageAllStudents()) return true
+    return isMyStudent(student)
   }
 
   // 이 학생의 기록을 "고칠" 권한이 있는지 - canViewStudent와 짝이다.
@@ -195,22 +232,22 @@ export function useAuth() {
   // 즉 주임은 중등 전체가 보이지만, 점수 입력·교재 배정 같은 기록은 본인 담당 학생에게만 남길 수 있다.
   function canEditStudent(student: { teacher_name?: string | null }) {
     if (canManageAllStudents()) return true
-    if (!currentUser?.name || !student.teacher_name) return false
-    const teachers = student.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    return teachers.includes(currentUser.name)
+    return isMyStudent(student)
   }
 
   // 서버 조회용 - 지금 이 계정이 볼 수 있는 학년 범위. 'all'이면 전체 조회(관리자/직원),
   // 배열이면 그 학년들만 넓게 조회(주임모드), null이면 기존처럼 담당 학생(teacher_name)만 걸러야 함.
+  // ★ 주임모드에서는 「담당 학년 + 같은 학교급인 내 학생」이 보이므로(canViewStudent 참고)
+  //   이 배열만으로 서버에서 거르면 뒤쪽이 빠진다. 지금 쓰는 곳은 없다.
   function visibleGradeScope(): 'all' | string[] | null {
-    if (canManageAllStudents()) return 'all'
     if (isSupervisorModeActive()) return supervisorGrades
+    if (canManageAllStudents()) return 'all'
     return null
   }
 
   return {
     currentUser, currentStudent, loading, role, signIn, signOut, isAdmin, canManageAllStudents, adminMode, toggleAdminMode,
     isSupervisorAccount, isSupervisorModeActive, supervisorMode, toggleSupervisorMode, supervisorGrades, supervisorLabel,
-    canViewStudent, canEditStudent, visibleGradeScope,
+    canViewStudent, canEditStudent, visibleGradeScope, supervisorScope,
   }
 }
