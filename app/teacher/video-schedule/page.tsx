@@ -6,6 +6,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
+import { loadHolidays, dateKey, type Holiday } from '@/lib/holidays'
 
 interface Concept {
   id: string
@@ -49,13 +50,14 @@ export default function VideoSchedulePage() {
   const today = new Date()
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
+  const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
 
   useEffect(() => {
     if (currentUser && !canManageAllStudents()) {
       router.push('/teacher/dashboard')
       return
     }
-    if (currentUser) fetchData()
+    if (currentUser) { fetchData(); loadHolidays().then(setHolidays) }
   }, [currentUser])
 
   async function fetchData() {
@@ -213,12 +215,17 @@ export default function VideoSchedulePage() {
               const entries = scheduleByDate[fmtDate(cellDate)]
               const dow = cellDate.getDay()
               const isWeekend = dow === 0 || dow === 6
+              const holiday = holidays.get(dateKey(cellDate))
               const isToday = isSameDate(cellDate, today)
               const allDone = entries && entries.every(e => doneIds.has(e.concept.id))
               return (
                 <div key={day} className={cx('rounded-lg border p-1 text-[10px] min-h-[86px]',
                   allDone ? 'bg-green-50 border-green-200' : entries ? 'bg-white border-gray-100' : isWeekend ? 'bg-gray-50 border-transparent opacity-50' : 'border-transparent')}>
-                  <div className={cx('text-[10px] font-bold mb-0.5', isToday ? 'text-orange-500' : 'text-gray-300')}>{day}</div>
+                  <div className={cx('text-[10px] font-bold mb-0.5', isToday ? 'text-orange-500' : '')}
+                    style={!isToday ? { color: holiday || dow === 0 ? '#DC2626' : dow === 6 ? '#2563EB' : '#d1d5db' } : undefined}>
+                    {day}
+                    {holiday && <span className="ml-1 text-[8px] font-normal" style={{ color: '#DC2626' }}>{holiday.name.replace(' 대체공휴일', ' 대체')}</span>}
+                  </div>
                   {entries?.map(e => {
                     const isDone = doneIds.has(e.concept.id)
                     return (
