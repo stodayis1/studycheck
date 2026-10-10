@@ -1,7 +1,9 @@
 /**
  * 스터디체크 「블로그 글 작성 요청」 버튼 ↔ Claude 사이의 줄 세우기.
  *
- *   node scripts/exam-blog/queue.mjs list                  요청이 들어와 기다리는 시험 목록
+ *   node scripts/exam-blog/queue.mjs list                  기다리는 요청 목록 (kind: match 적중 대조 · cards 카드뉴스 · blog 블로그 글)
+ *   node scripts/exam-blog/queue.mjs put-analysis <id> <analysis.json>   카드뉴스 글을 스터디체크에 올린다
+ *   (done · fail 에 --kind match|cards|blog 를 붙인다. 없으면 blog)
  *   node scripts/exam-blog/queue.mjs pull <시험지 id>      글 쓸 재료를 <시험 폴더>/blog/ 에 모은다 (source.json + 문제·손풀이 그림)
  *   node scripts/exam-blog/queue.mjs done <시험지 id> [메모]   임시저장까지 끝났다고 표시
  *   node scripts/exam-blog/queue.mjs fail <시험지 id> <이유>   못 썼다고 표시 (화면에 이유가 보인다. 버튼을 다시 누르면 다시 시도)
@@ -46,16 +48,34 @@ async function download(bucket, from, to) {
   return true
 }
 
+// 요청 세 가지: 버튼이 남기는 칸과 Claude 가 끝내고 남기는 칸
+const KINDS = {
+  match: { label: '적중 대조', req: 'match_requested_at', ok: 'match_done_at', ng: 'match_failed_at', note: 'match_note', done: '적중 대조를 넣었습니다.' },
+  cards: { label: '카드뉴스', req: 'cards_requested_at', ok: 'cards_done_at', ng: 'cards_failed_at', note: 'cards_note', done: '카드뉴스를 만들었습니다. 글은 「글 고치기」로 고칠 수 있습니다.' },
+  blog: { label: '블로그 글', req: 'blog_requested_at', ok: 'blog_drafted_at', ng: 'blog_failed_at', note: 'blog_auto_note', done: '네이버 블로그에 임시저장했습니다. 확인하고 발행해 주세요.' },
+}
+// --kind match|cards|blog (없으면 blog — 예전 쓰는 법 그대로)
+const kindArg = (() => { const i = rest.indexOf('--kind'); if (i < 0) return 'blog'; const k = rest[i + 1]; rest.splice(i, 2); return k })()
+if (!KINDS[kindArg]) die('--kind 는 match · cards · blog 중 하나입니다.')
+
 if (cmd === 'list') {
-  const { data, error } = await supabase.from('exam_papers').select('id, exam_year, term, exam_type, school_name, grade, tasks').eq('blog_status', '작성중')
+  const { data, error } = await supabase.from('exam_papers').select('id, exam_year, term, exam_type, school_name, grade, tasks, blog_status')
   if (error) die(error.message)
-  const waiting = (data ?? []).filter((p) => {
+  const waiting = []
+  for (const p of data ?? []) {
     const t = p.tasks ?? {}
-    if (!t.blog_requested_at) return false
-    const handled = [t.blog_drafted_at, t.blog_failed_at].filter(Boolean).sort().pop()
-    return !handled || handled < t.blog_requested_at
-  }).sort((a, b) => a.tasks.blog_requested_at.localeCompare(b.tasks.blog_requested_at))
-  console.log(JSON.stringify(waiting.map((p) => ({ id: p.id, name: `${p.school_name} ${p.grade} ${p.exam_year} ${p.term}학기 ${p.exam_type}`, requested_at: p.tasks.blog_requested_at, folder: folderOf(p) })), null, 1))
+    for (const [kind, K] of Object.entries(KINDS)) {
+      if (!t[K.req]) continue
+      if (kind === 'blog' && p.blog_status !== '작성중') continue
+      const handled = [t[K.ok], t[K.ng]].filter(Boolean).sort().pop()
+      if (handled && handled >= t[K.req]) continue
+      waiting.push({ kind, what: K.label, id: p.id, name: `${p.school_name} ${p.grade} ${p.exam_year} ${p.term}학기 ${p.exam_type}`, requested_at: t[K.req], folder: folderOf(p) })
+    }
+  }
+  // 같은 시험이면 적중 대조 → 카드뉴스 → 블로그 순서로 (앞의 것이 뒤의 재료다)
+  const order = ['match', 'cards', 'blog']
+  waiting.sort((x, y) => x.id === y.id ? order.indexOf(x.kind) - order.indexOf(y.kind) : x.requested_at.localeCompare(y.requested_at))
+  console.log(JSON.stringify(waiting, null, 1))
 } else if (cmd === 'pull') {
   const paper = await getPaper()
   const dir = path.join(folderOf(paper), 'blog')
@@ -127,13 +147,28 @@ if (cmd === 'list') {
   // 스터디체크 화면(「블로그」 탭 → 카드뉴스 만들기)에서 이미 만든 글이 있으면 그걸 쓴다 — 원장님이 고친 글이다
   const madeInApp = await download('exam-analysis', `blog/${paper.id}/analysis.json`, path.join(dir, 'analysis.app.json'))
   console.log(JSON.stringify({ dir, questions: questions.length, killers, images, solutions, hit, missing, analysisFromApp: madeInApp ? 'analysis.app.json' : null }, null, 1))
+} else if (cmd === 'put-analysis') {
+  // 카드뉴스 글(analysis)을 스터디체크에 올린다 → 「블로그」 탭의 카드뉴스 칸이 이 글로 카드를 그린다
+  const paper = await getPaper()
+  const file = rest[0]
+  if (!file || !fs.existsSync(file)) die('쓰는 법: queue.mjs put-analysis <시험지 id> <analysis.json>')
+  const A = JSON.parse(fs.readFileSync(file, 'utf8'))
+  for (const k of A.killers ?? []) {
+    if (!/^q:/.test(k.image ?? '')) die(`${k.no}번: image 는 "q:${k.no}" 모양이어야 합니다 (화면이 그림을 찾는 열쇠)`)
+    if (k.solution && !/^s:/.test(k.solution)) die(`${k.no}번: solution 은 "s:${k.no}" 모양이어야 합니다`)
+    if ((k.steps ?? []).length !== 4) die(`${k.no}번: steps 는 4개여야 합니다 (카드 칸이 4개다)`)
+  }
+  const up = await supabase.storage.from('exam-analysis').upload(`blog/${paper.id}/analysis.json`, Buffer.from(JSON.stringify(A)), { contentType: 'application/octet-stream', upsert: true })
+  if (up.error) die('올리기 실패: ' + up.error.message)
+  console.log(`${paper.school_name} ${paper.grade}: 카드뉴스 글을 올렸습니다 (변별문항 ${(A.killers ?? []).map((k) => k.no).join(', ')}번)`)
 } else if (cmd === 'done' || cmd === 'fail') {
   const paper = await getPaper()
+  const K = KINDS[kindArg]
   const note = rest.join(' ').trim()
   if (cmd === 'fail' && !note) die('이유를 적어 주세요.')
   const now = new Date().toISOString()
-  await setTasks(paper, cmd === 'done' ? { blog_drafted_at: now, blog_failed_at: null, blog_auto_note: note || '네이버 블로그에 임시저장했습니다. 확인하고 발행해 주세요.' } : { blog_failed_at: now, blog_auto_note: note })
-  console.log(`${paper.school_name} ${paper.grade}: ${cmd === 'done' ? '임시저장 완료' : '실패'} 표시함`)
+  await setTasks(paper, cmd === 'done' ? { [K.ok]: now, [K.ng]: null, [K.note]: note || K.done } : { [K.ng]: now, [K.note]: note })
+  console.log(`${paper.school_name} ${paper.grade} · ${K.label}: ${cmd === 'done' ? '끝남' : '실패'} 표시함`)
 } else {
-  die('쓰는 법: node scripts/exam-blog/queue.mjs list | pull <id> | done <id> [메모] | fail <id> <이유>')
+  die('쓰는 법: node scripts/exam-blog/queue.mjs list | pull <id> | put-analysis <id> <analysis.json> | done <id> [--kind match|cards|blog] [메모] | fail <id> [--kind …] <이유>')
 }

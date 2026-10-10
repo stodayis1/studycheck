@@ -1,11 +1,13 @@
 'use client'
 // 「블로그」 탭 — 시험분석 카드뉴스를 화면에서 만든다.
-//   글(analysis): 서버가 Claude 로 쓴다  (/api/exam-analysis/blog  generate · 원장만)
+//   글(analysis): 원장이 「카드뉴스 요청」을 남기면 원장님 컴퓨터의 Claude 가 써서 올린다 (scripts/exam-blog/README.md).
+//                 서버가 AI 로 쓰는 길(/api/exam-analysis/blog generate)은 사용료 때문에 화면에서 뺐다 (코드는 남아 있다)
 //   그림(PNG)   : 이 화면이 굽는다       (lib/examBlogRender.ts ← lib/examBlogCards.mjs)
 // 글을 고치고 「다시 그리기」 하면 카드가 바뀌고, 고친 글은 보관된다. 네이버에 올리는 것은 여기서 하지 않는다.
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { renderBlogCards, type RenderedCard } from '@/lib/examBlogRender'
+import ClaudeRequest from './ClaudeRequest'
 import { GREEN, INPUT } from './ui'
 
 async function call(body: any) {
@@ -34,7 +36,7 @@ function F({ label, value, onChange, rows = 1 }: { label: string; value: string;
   )
 }
 
-export default function BlogCards({ paperId, paperName, isAdmin }: { paperId: string; paperName: string; isAdmin: boolean }) {
+export default function BlogCards({ paperId, paperName, isAdmin, tasks, onSaved }: { paperId: string; paperName: string; isAdmin: boolean; tasks: any; onSaved: () => void }) {
   const [analysis, setAnalysis] = useState<any>(null)
   const [images, setImages] = useState<Record<string, string>>({})
   const [missing, setMissing] = useState<string[]>([])
@@ -65,15 +67,6 @@ export default function BlogCards({ paperId, paperName, isAdmin }: { paperId: st
     })()
   }, [paperId, draw])
 
-  const generate = async () => {
-    if (analysis && !confirm('카드뉴스 글을 AI 가 처음부터 다시 씁니다. 지금 고쳐 둔 글은 사라집니다. 다시 만들까요?')) return
-    setBusy('AI 가 시험지와 손풀이를 읽고 글을 쓰는 중… (1~2분)'); setErr('')
-    try {
-      const r = await call({ action: 'generate', paperId })
-      setAnalysis(r.analysis); setImages(r.images ?? {}); setDirty(false)
-      await draw(r.analysis, r.images ?? {})
-    } catch (e: any) { setErr(e?.message ?? '만들지 못했습니다.'); setBusy('') }
-  }
   const redraw = async () => {
     await draw(analysis, images)
     if (dirty) { try { await call({ action: 'save', paperId, analysis }); setDirty(false) } catch (e: any) { setErr(`그림은 바뀌었지만 글을 보관하지 못했습니다: ${e?.message}`) } }
@@ -87,23 +80,19 @@ export default function BlogCards({ paperId, paperName, isAdmin }: { paperId: st
     <div className="mb-5 rounded-xl border p-4" style={{ borderColor: '#9FE1CB' }}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-bold" style={{ color: GREEN }}><i className="ti ti-cards mr-1" />시험분석 카드뉴스</span>
-        {isAdmin && (
-          <button onClick={generate} disabled={!!busy} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: GREEN }}>
-            <i className="ti ti-sparkles mr-1" />{analysis ? 'AI 로 다시 만들기' : '카드뉴스 만들기'}
-          </button>
-        )}
         {analysis && isAdmin && <button onClick={() => setEditing((v) => !v)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: GREEN, color: GREEN }}><i className="ti ti-pencil mr-1" />글 고치기</button>}
         {cards.length > 0 && <button onClick={saveAll} disabled={!!busy} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40" style={{ borderColor: GREEN, color: GREEN }}><i className="ti ti-download mr-1" />{cards.length}장 모두 내려받기</button>}
         {busy && <span className="text-xs text-gray-500"><i className="ti ti-loader-2 mr-1 animate-spin" />{busy}</span>}
       </div>
-      {err && <p className="mt-2 whitespace-pre-line rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{err}</p>}
-      {!analysis && !busy && !err && (
-        <p className="mt-2 text-xs text-gray-600">
-          {missing.length
-            ? <>아직 채워지지 않은 것이 있습니다: <b className="text-amber-700">{missing.join(' · ')}</b></>
-            : isAdmin ? '「카드뉴스 만들기」를 누르면 대표 썸네일 · 요약 · 변별문항 · 심층분석 · 총평 카드가 만들어집니다 (1~2분, AI 사용료가 조금 듭니다).' : '아직 만든 카드뉴스가 없습니다.'}
-        </p>
+      {isAdmin && (
+        <div className="mt-3">
+          <ClaudeRequest paperId={paperId} tasks={tasks} kind="cards" label={analysis ? '카드뉴스 다시 요청' : '카드뉴스 요청'} onSaved={onSaved}
+            blocked={missing.length ? `아직 채워지지 않은 것이 있습니다: ${missing.join(' · ')}` : undefined}
+            hint="요청을 남기고 Claude 에게 「요청 처리해줘」라고 하면 대표 썸네일 · 요약 · 변별문항 · 심층분석 · 총평 카드가 여기에 나타납니다." />
+        </div>
       )}
+      {err && <p className="mt-2 whitespace-pre-line rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{err}</p>}
+      {!analysis && !busy && !err && !isAdmin && <p className="mt-2 text-xs text-gray-600">아직 만든 카드뉴스가 없습니다.</p>}
 
       {editing && analysis && (
         <div className="mt-3 rounded-lg bg-gray-50 p-3">

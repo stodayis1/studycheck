@@ -15,7 +15,7 @@ import {
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
-import AutoMatch from '@/components/exam-analysis/AutoMatch'
+import ClaudeRequest from '@/components/exam-analysis/ClaudeRequest'
 import BlogCards from '@/components/exam-analysis/BlogCards'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
@@ -335,7 +335,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {/* ───────── 블로그 ───────── */}
       {tab === 5 && (
         <Card title="블로그 업로드">
-          <BlogCards paperId={id} paperName={`${paper.school_name}_${paper.grade}`} isAdmin={isAdmin} />
+          <BlogCards paperId={id} paperName={`${paper.school_name}_${paper.grade}`} isAdmin={isAdmin} tasks={tasks} onSaved={load} />
           {!isAdmin && <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">블로그 상태는 원장님(윤T)만 바꿀 수 있습니다.</p>}
           {/* 원장: 블로그 글 요청. 누르면 「작성중」이 되고 요청 시각이 남는다 → Claude 가 이 표시를 보고
               시험분석 카드(scripts/exam-blog)와 글을 만들어 네이버 블로그에 임시저장한다 */}
@@ -434,9 +434,11 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
           {['대기', '진행중', '완료'].map((x) => <option key={x}>{x}</option>)}
         </select>
       }>
+      {/* 원장: 적중 대조는 Claude 에게 맡긴다 (서버가 AI 를 부르는 「AI 적중 대조」 버튼은 사용료 때문에 숨겼다 — components/exam-analysis/AutoMatch.tsx 는 남아 있다) */}
       {isAdmin && (
-        <AutoMatch paperId={paper.id} hasQuestions={(data.questions ?? []).some((q: any) => q.problem_id)}
-          existing={(data.matches ?? []).length} onDone={reload} />
+        <ClaudeRequest paperId={paper.id} tasks={paper.tasks} kind="match" label="적중 대조 요청" onSaved={reload}
+          blocked={(data.questions ?? []).some((q: any) => q.problem_id) ? undefined : '먼저 「기본 · 파일」에서 PDF 의 「문항 넣기」를 해 주세요.'}
+          hint="기출 문항을 이너프원 교재와 대조해 적중률을 채웁니다. 요청을 남기고 Claude 에게 「요청 처리해줘」라고 하세요." />
       )}
       {/* 적중률 — 유형 유사 이상이 있는 문항 ÷ 전체 문항 */}
       <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: '#F0FBF7' }}>
