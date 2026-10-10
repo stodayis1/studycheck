@@ -29,7 +29,8 @@ const BOOK = {
   '타학교중3 1권': '이너프원 타학교 중3 1권', '타학교중3 2권': '이너프원 타학교 중3 2권',
 }
 const LEVELS = ['쌍둥이', '매우 유사', '유형 유사', '참고']
-const matches = files.flatMap((f) => JSON.parse(fs.readFileSync(f, 'utf8')).matches)
+// 번호는 「09」처럼 적혀 와도 「9」로 맞춘다
+const matches = files.flatMap((f) => JSON.parse(fs.readFileSync(f, 'utf8')).matches).map((m) => ({ ...m, no: /^\d+$/.test(String(m.no)) ? String(Number(m.no)) : String(m.no) }))
 for (const m of matches) if (!LEVELS.includes(m.level) || !BOOK[m.book]) { console.error('잘못된 줄:', m); process.exit(1) }
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
