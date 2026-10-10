@@ -23,6 +23,8 @@ export interface OpsExtraClass {
   originalDate: string | null
   /** 결석분 보강 성격으로 잡힌 경우의 그 결석일 */
   absentDate: string | null
+  /** 이 추가수업이 채우는 달 YYYY-MM. 수업한 달과 다를 수 있다(9월 횟수를 10월에 채우는 식). */
+  targetMonth: string | null
   hours: number | null
   teacherName: string | null
   /** 그날 한 것 (OPS 「완료」 입력창에서 적는다) */
@@ -55,7 +57,7 @@ export async function fetchOpsExtraClasses(opsStudentIds: string[], fromDate: st
   try {
     const { data, error } = await db
       .from('extra_classes')
-      .select('student_id, scheduled_date, scheduled_time, status, class_type, original_date, ' +
+      .select('student_id, scheduled_date, scheduled_time, status, class_type, original_date, target_month, ' +
               'duration_hours, teacher_id, lesson_textbook, lesson_worksheet, lesson_score, lesson_note, ' +
               'absence:attendances!extra_classes_absence_id_fkey(absent_date)')
       .in('student_id', ids)
@@ -86,6 +88,8 @@ export async function fetchOpsExtraClasses(opsStudentIds: string[], fromDate: st
         classType: e.class_type === 'substitute' ? 'substitute' : 'extra',
         originalDate: e.original_date ?? null,
         absentDate: e.absence?.absent_date ?? null,
+        // 안 적어 뒀으면 수업한 달로 본다 (OPS 에 칸이 생기기 전 기록이 그렇다)
+        targetMonth: e.target_month || String(e.scheduled_date ?? '').slice(0, 7) || null,
         hours: e.duration_hours != null ? Number(e.duration_hours) : null,
         teacherName: nameBy.get(e.teacher_id) ?? null,
         lessonTextbook: e.lesson_textbook ?? null,

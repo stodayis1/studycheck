@@ -856,7 +856,8 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
               추가수업 {extras.length}회
             </div>
             <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 3, lineHeight: 1.6 }}>
-              그 달 수업 횟수가 모자라 한 번 더 진행한 수업입니다.
+              그 달 수업 횟수가 모자라 한 번 더 진행한 수업입니다. 「○월분」은 그 수업이 채우는 달이에요
+              (지난달 횟수를 이번 달에 채우기도 합니다).
               {d.extraPlanned > 0 && ` (진행 ${d.extraDone}회 · 예정 ${d.extraPlanned}회)`}
             </div>
           </div>
@@ -884,6 +885,12 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, color: e.state === 'done' ? TEXT_BODY : ORANGE, lineHeight: 1.5 }}>
                     {label}
+                    {/* 어느 달 횟수를 채운 것인지 — 수업한 달과 다를 수 있다(9월분을 10월에 하는 식) */}
+                    {e.classType !== 'substitute' && e.targetMonth && (
+                      <span style={{ color: NAVY, fontWeight: 600 }}>
+                        {' '}{Number(e.targetMonth.slice(5, 7))}월분
+                      </span>
+                    )}
                     {e.time && ` ${e.time}`}
                     {e.hours ? ` · ${e.hours}시간` : ''}
                     {e.state === 'planned' && ' · 예정'}
