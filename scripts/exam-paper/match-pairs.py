@@ -41,6 +41,8 @@ for no in sorted(by):
     labs = [f"기출 {no}번"]
     for m in cands[:TOP]:
         p = os.path.join(E, m["book"], f"{int(m['set']):02d}_{int(m['pno']):02d}.png")
+        if not os.path.exists(p):          # 고1 공수2 S반은 번호가 3자리다 (01_006.png)
+            p = os.path.join(E, m["book"], f"{int(m['set']):02d}_{int(m['pno']):03d}.png")
         if not os.path.exists(p):
             print("없음", p); continue
         ims.append(fit(Image.open(p).convert("RGB")))

@@ -328,8 +328,9 @@ def contact_sheets(manifest):
         y = 0
         for r, h in zip(rows, hs):
             for i, (m, im) in enumerate(r):
-                d.text((i * CW + 2, y + 1), f"[S{m['set']:02d}-{m['no']}]", fill=(220, 0, 0), font=font)
                 sheet.paste(im, (i * CW + 2, y + LABEL))
+                d.rectangle([i * CW, y, i * CW + CW - 1, y + h - 1], outline=(220, 0, 0))
+                d.text((i * CW + 4, y + 1), f"[S{m['set']:02d}-{m['no']}]", fill=(220, 0, 0), font=font)
             y += h
         sheet.save(os.path.join(out_dir, f"{k // 10 + 1:03d}.png"))
     print("묶음 그림:", out_dir, (len(manifest) + 9) // 10, "장")

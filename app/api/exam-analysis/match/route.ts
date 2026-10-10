@@ -62,6 +62,8 @@ function bookFilter(paper: any): string | null {
   // 고1 은 고양일고 학생만 이너프원(공수2 S반 시험대비교재)을 쓴다 (원장님 2026-10-10)
   if (paper.grade === '고1' && /고양일고/.test(paper.school_name)) return '이너프원 고1 공수2 S반%'
   // 신원고(미래엔) · 동산고(천재(전))는 교과서 출판사 평가문제를 풀린다. 2026 2학기 중간은 범위가 같아 두 출판사 것을 다 풀렸다
+  // (교과서 본문 문제 「교과서 문제 미래엔/천재(전) 공통수학2」는 자기 학교 것만 — 이 함수는 한 묶음만 돌려줘서 아직 평가문제만 본다.
+  //  대화로 하는 적중 대조는 scripts/exam-blog/README.md 의 표대로 교과서까지 본다)
   if (paper.grade === '고1' && /신원고|동산고/.test(paper.school_name)) return '교과서 평가문제%'
   return null
 }

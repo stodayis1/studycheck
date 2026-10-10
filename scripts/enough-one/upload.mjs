@@ -36,8 +36,12 @@ const BOOKS = {
   '타학교중3 1권': ['etc3-1', '이너프원 타학교 중3 1권'],
   '타학교중3 2권': ['etc3-2', '이너프원 타학교 중3 2권'],
   // 고1 — 교과서 출판사 평가문제 (신원고 = 미래엔, 동산고 = 천재(전). scripts/enough-one/crop_eval.py)
+  '고1 공수2 S반': ['h1-s', '이너프원 고1 공수2 S반'],            // 고양일고 (그림 PDF — scripts/enough-one/index_hs.py)
   '고1 미래엔 평가': ['h1-mirae', '교과서 평가문제 미래엔 공통수학2'],
   '고1 천재전 평가': ['h1-chunjae', '교과서 평가문제 천재(전) 공통수학2'],
+  // 고1 — 교과서 본문 문제 (자기 학교 교과서만 푼다: 신원고 = 미래엔, 동산고 = 천재(전))
+  '고1 미래엔 교과서': ['h1-mirae-tb', '교과서 문제 미래엔 공통수학2'],
+  '고1 천재전 교과서': ['h1-chunjae-tb', '교과서 문제 천재(전) 공통수학2'],
 }
 const unitOf = (title) => String(title ?? '').replace(/\s*-\s*(\d회차)/, ' $1').replace(/\s+/g, ' ').trim()
 const pathOf = (x) => `enough-one/2026-2/${BOOKS[x.book][0]}/${String(x.set).padStart(2, '0')}_${String(x.no).padStart(2, '0')}.png`
