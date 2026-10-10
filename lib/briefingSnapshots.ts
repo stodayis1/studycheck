@@ -123,7 +123,10 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
   //   결석이 잦은 것을 학부모가 스스로 알아보실 수 있어야 한다는 것이 원장님 요구.
   //   전체 529건 결석 중 보강 기록이 있는 것은 57건뿐이라, 없는 것은 **없다고** 적는다.
   // ★ 보강 상태는 **OPS 기록을 먼저** 믿는다. OPS 에 없을 때만 예전 글(makeup_note)로 보조한다.
-  //   OPS 에는 결석일 → 보강일 → 완료 여부 → (이제는) 누가 봤고 무엇을 했는지까지 있다.
+  // ★ 학부모께는 **상태만** 보낸다 — 「무엇을 했는지」는 담지 않는다(원장님 2026-10-10).
+  //   보강은 학생이 빠진 정규수업에 대한 서비스이고, 그날 한 내용은 **담당 강사**가
+  //   볼 것이다(학습관리의 「보강에서 한 것」 · /api/ops-makeups).
+  //   여기 담으면 report_links 스냅샷에 얼어붙어 지울 수가 없으므로 애초에 안 담는다.
   // 보강 안내도 진짜 결석만. 시험기간은 보강 대상이 아니다.
   const absences = attRows
     .filter((r) => r.attendance === '결석')
@@ -134,11 +137,6 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
           date: r.date, dow: r.dow, state: mk.state,
           makeupDate: mk.makeupDate, makeupTime: mk.makeupTime,
           teacherName: mk.teacherName,
-          lesson: [
-            mk.lessonTextbook,
-            [mk.lessonWorksheet, mk.lessonScore != null ? `${mk.lessonScore}점` : null].filter(Boolean).join(' '),
-            mk.lessonNote,
-          ].map((t) => (t ?? '').trim()).filter(Boolean),
           note: null as string | null,
         }
       }
@@ -155,7 +153,7 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
         date: r.date, dow: r.dow, state,
         makeupDate: null as string | null, makeupTime: null as string | null,
         teacherName: null as string | null,
-        lesson: [] as string[], note: r.makeupNote,
+        note: r.makeupNote,
       }
     })
 

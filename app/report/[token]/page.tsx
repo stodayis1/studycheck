@@ -832,12 +832,10 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
                     {m.text}
                     {a.teacherName && <span style={{ color: TEXT_MUTED }}> · {a.teacherName} 선생님</span>}
                   </div>
-                  {/* 그날 보강에서 무엇을 했는지 — OPS 「보강완료」에서 적은 것 */}
-                  {(a.lesson ?? []).length > 0 && (
-                    <div style={{ fontSize: 10, color: TEXT_BODY, lineHeight: 1.6, marginTop: 3 }}>
-                      {(a.lesson as string[]).join(' · ')}
-                    </div>
-                  )}
+                  {/* ★ 보강에서 무엇을 했는지는 **보여 주지 않는다**(원장님 2026-10-10).
+                      보강은 학생이 빠진 정규수업에 대한 서비스라, 내용은 담당 강사가 본다.
+                      여기엔 상태(「10/10 보강 완료」)만 남긴다.
+                      예전 스냅샷에는 내용이 남아 있을 수 있어 화면에서도 막는다. */}
                 </div>
               </div>
             )
