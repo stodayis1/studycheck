@@ -59,6 +59,8 @@ async function askJson(content: Anthropic.ContentBlockParam[], system: string): 
 function bookFilter(paper: any): string | null {
   if (paper.grade === '중2') return '이너프원 중2%'
   if (paper.grade === '중3') return paper.school_name === '신원중' ? '이너프원 신원중3%' : '이너프원 타학교 중3%'
+  // 고1 은 고양일고 학생만 이너프원(공수2 S반 시험대비교재)을 쓴다 (원장님 2026-10-10)
+  if (paper.grade === '고1' && /고양일고/.test(paper.school_name)) return '이너프원 고1 공수2 S반%'
   return null
 }
 
