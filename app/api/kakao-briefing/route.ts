@@ -28,6 +28,7 @@ import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
 import { isExamAbsence } from '@/lib/attendance'
+import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 
 const APP_URL = 'https://studycheck-five.vercel.app'
 
@@ -261,6 +262,59 @@ export async function GET(req: NextRequest) {
 }
 
 // ── 원장님이 화면에서 직접 (미리보기 → 발송) ────────────────────────────────
+/**
+ * 담당 강사에게 **본인이 쓴 브리핑 한 통**을 보내 준다.
+ *
+ * 왜: 선생님은 자기가 적은 글이 학부모님께 어떤 모양으로 가는지 볼 수가 없었다.
+ * 그날 본인 담당 학생 중 **글이 가장 짧은 한 명**을 골라 그 선생님 번호로 보낸다
+ * (원장님 2026-10-10). 짧은 글이 기준인 이유 — 적게 쓴 날이 어떻게 보이는지가
+ * 제일 도움이 되기 때문이다.
+ *
+ * 번호는 OPS profiles 에서 읽는다(스터디체크 users 에는 전화 칸이 없다).
+ * 학부모 발송 기록(briefing_sends)은 남기지 않는다 — 진짜 발송을 막으면 안 된다.
+ */
+async function runTeacherSample(date: string) {
+  // ① 먼저 미리보기로 그날 보낼 수 있는 학생과 글 길이를 모은다.
+  const preview = await run({ date, dryRun: true })
+  const previews: any[] = preview.previews ?? []
+  if (!previews.length) {
+    return { date, sent: 0, picks: [], note: '그날 보낼 수 있는 학생이 없어요.' }
+  }
+
+  const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } })
+  const { data: students } = await db.from('students')
+    .select('id, name, teacher_name').in('id', previews.map((p) => p.studentId))
+  const teacherOf = new Map((students ?? []).map((s: any) =>
+    [s.id, String(s.teacher_name ?? '').split(/[,，、]/)[0].trim()]))
+
+  // ② 선생님마다 **글이 가장 짧은** 한 명을 고른다.
+  const pickBy = new Map<string, any>()
+  for (const p of previews) {
+    const t = teacherOf.get(p.studentId)
+    if (!t) continue
+    const cur = pickBy.get(t)
+    if (!cur || (p.bodyLen ?? 0) < (cur.bodyLen ?? 0)) pickBy.set(t, p)
+  }
+
+  const phones = await fetchOpsTeacherPhones()
+  const picks: any[] = []
+  let sent = 0
+  for (const [teacher, p] of pickBy) {
+    const phone = phones.get(teacher)
+    if (!phone) { picks.push({ teacher, student: p.name, ok: false, error: '연락처가 없어요(수학OPS 직원 정보)' }); continue }
+    const r = await run({ date, dryRun: false, studentIds: [p.studentId], testPhone: phone })
+    const ok = r.sent > 0
+    if (ok) sent++
+    picks.push({
+      teacher, student: p.name, bodyLen: p.bodyLen, ok,
+      error: ok ? undefined : (r.errors?.[0]?.error ?? '발송 실패'),
+    })
+  }
+  picks.sort((a, b) => a.teacher.localeCompare(b.teacher, 'ko'))
+  return { date, sent, picks }
+}
+
 export async function POST(req: NextRequest) {
   // 실제 요금이 나가고 학부모에게 바로 도착한다. 원장님만.
   const deny = await denyIfNotStaff(req, { adminOnly: true })
@@ -268,8 +322,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as
       { date?: string; dryRun?: boolean; studentIds?: string[]; testPhone?: string
-        only?: 'elementary' | 'secondary' }
+        only?: 'elementary' | 'secondary'; teacherSample?: boolean }
     const date = body.date ?? kstDate(-1)
+    // 담당 강사에게 본인 글 한 통씩 — 학부모 발송과 섞이지 않게 길을 따로 둔다.
+    if (body.teacherSample) return NextResponse.json(await runTeacherSample(date))
     const summary = await run({
       date, dryRun: body.dryRun !== false, studentIds: body.studentIds,
       // 테스트 번호를 주면 그 번호로만 가고 발송 기록도 남기지 않는다(진짜 발송을 막지 않게).

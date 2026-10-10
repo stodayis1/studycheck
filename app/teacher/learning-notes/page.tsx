@@ -296,6 +296,43 @@ export default function TeacherLearningNotesPage() {
   const [briefOnly, setBriefOnly] = useState<'' | 'elementary' | 'secondary'>('')
   // 학습일지 미작성자 — 원장님이 발송 전에 바로 볼 수 있어야 한다(브리핑에서 빠지는 학생들이다).
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
+  // 담당 강사에게 본인 글 한 통씩 — 자기가 쓴 글이 학부모님께 어떻게 가는지 볼 수 있어야 한다.
+  const [sampleResult, setSampleResult] = useState<any>(null)
+  // 보강에서 한 것 — OPS 기록이라 서버를 거쳐 읽는다. **담당 강사만** 본다(학부모에겐 안 간다).
+  const [opsMakeups, setOpsMakeups] = useState<any[] | null>(null)
+  const [opsMakeupsBusy, setOpsMakeupsBusy] = useState(false)
+
+  /** 담당 강사에게 그날 본인 담당 학생 중 **글이 가장 짧은 한 명**의 브리핑을 보낸다. */
+  async function sendTeacherSample() {
+    if (!confirm(`${briefDate} 수업으로, 담당 강사 한 분당 한 통씩 카톡을 보냅니다.\n\n`
+      + '선생님 본인이 쓴 글이 학부모님께 어떻게 가는지 보시라는 용도예요.\n'
+      + '학부모님께는 가지 않고, 발송 기록도 남지 않아요.')) return
+    setBriefBusy(true); setSampleResult(null)
+    try {
+      const res = await apiFetch('/api/kakao-briefing', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, teacherSample: true }),
+      })
+      setSampleResult(await res.json())
+    } catch (e: any) {
+      setSampleResult({ error: e?.message ?? '보내지 못했어요.' })
+    } finally { setBriefBusy(false) }
+  }
+
+  /** 보강에서 한 것 — 내가 보는 학생들 기준으로 최근 30일. */
+  async function loadOpsMakeups() {
+    setOpsMakeupsBusy(true)
+    try {
+      const res = await apiFetch('/api/ops-makeups', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentIds: myStudents.map((s) => s.id) }),
+      })
+      const data = await res.json()
+      setOpsMakeups(data.items ?? [])
+    } catch {
+      setOpsMakeups([])
+    } finally { setOpsMakeupsBusy(false) }
+  }
 
   async function runBriefing(dryRun: boolean) {
     setBriefBusy(true)
@@ -1955,6 +1992,54 @@ ${e?.message ?? '연결 실패'}
       <div className="px-4 py-4 space-y-3 md:px-6">
 
         {/* ── 카톡 수업 브리핑 (원장 전용) ── */}
+        {/* ── 보강에서 한 것 (담당 강사용) ───────────────────────────────────
+            보강은 학생이 빠진 정규수업에 대한 서비스라, 수업 횟수에 세지 않고
+            학부모께도 따로 보내지 않는다. 다만 **담당 강사는** 그날 보강에서 무엇을
+            했는지 알아야 다음 수업을 이어 간다(원장님 2026-10-10).
+            기록은 수학OPS 에만 있어서 서버(/api/ops-makeups)를 거쳐 읽는다. */}
+        {tab === 'today' && (
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <i className="ti ti-refresh" style={{ fontSize: 16, color: '#0F766E' }} />
+              <span className="text-sm font-bold text-gray-800">보강에서 한 것</span>
+              <span className="text-[11px] text-gray-400">최근 30일 · 보강 선생님이 적은 내용</span>
+              <button onClick={loadOpsMakeups} disabled={opsMakeupsBusy}
+                className="ml-auto px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                {opsMakeupsBusy ? '불러오는 중...' : (opsMakeups ? '새로고침' : '불러오기')}
+              </button>
+            </div>
+            {opsMakeups && (
+              opsMakeups.length === 0 ? (
+                <p className="text-xs text-gray-400 mt-3">최근 30일에 적힌 보강 학습일지가 없어요.</p>
+              ) : (
+                <div className="mt-3 space-y-1.5">
+                  {opsMakeups.map((m: any, i: number) => (
+                    <div key={i} className="text-xs rounded-xl px-3 py-2" style={{ background: '#F0FDFA' }}>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <b className="text-gray-900">{m.studentName}</b>
+                        <span className="text-[10px] text-gray-400">{m.grade}</span>
+                        <span className="text-[11px]" style={{ color: '#0F766E' }}>
+                          {m.makeupDate ?? '날짜 미정'}{m.makeupTime ? ` ${m.makeupTime}` : ''} 보강
+                        </span>
+                        {m.absentDate && <span className="text-[10px] text-gray-400">({m.absentDate} 결석분)</span>}
+                        {m.teacherName && <span className="text-[10px] text-gray-400">· {m.teacherName} 선생님</span>}
+                      </div>
+                      {m.lesson.length > 0 && (
+                        <div className="text-[11px] mt-1 leading-relaxed" style={{ color: '#115E59' }}>
+                          {m.lesson.join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-gray-400 pt-1">
+                    이 내용은 선생님만 봅니다 — 학부모님께는 가지 않아요.
+                  </p>
+                </div>
+              )
+            )}
+          </div>
+        )}
+
         {tab === 'today' && isAdmin() && (
           <div className="rounded-2xl border p-4" style={{ borderColor: '#F5DF4D', background: '#FFFDF0' }}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1988,6 +2073,11 @@ ${e?.message ?? '연결 실패'}
               <button onClick={checkTemplate} disabled={briefBusy}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 템플릿 맞는지 확인
+              </button>
+              <button onClick={sendTeacherSample} disabled={briefBusy}
+                title="담당 강사 한 분당 한 통 — 본인이 쓴 글이 학부모님께 어떻게 가는지 보시라는 용도"
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                담당강사에게 샘플
               </button>
               <button onClick={() => runBriefing(true)} disabled={briefBusy}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
@@ -2113,6 +2203,28 @@ ${e?.message ?? '연결 실패'}
                       </details>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {sampleResult && (
+              <div className="mt-3 text-[11px] space-y-1">
+                {sampleResult.error ? (
+                  <div style={{ color: '#991b1b' }}>{sampleResult.error}</div>
+                ) : (
+                  <>
+                    <div className="font-bold" style={{ color: '#27500A' }}>
+                      담당강사 샘플 {sampleResult.sent}명 발송
+                      {sampleResult.note && <span className="font-normal text-gray-500"> · {sampleResult.note}</span>}
+                    </div>
+                    {(sampleResult.picks ?? []).map((p: any, i: number) => (
+                      <div key={i} style={{ color: p.ok ? '#4b5563' : '#991b1b' }}>
+                        {p.ok ? '✓' : '✗'} {p.teacher} 선생님 — {p.student} 학생
+                        {p.bodyLen != null && <span className="text-gray-400"> ({p.bodyLen}자)</span>}
+                        {!p.ok && p.error && ` · ${p.error}`}
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
             )}
