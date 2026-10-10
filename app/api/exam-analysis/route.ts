@@ -787,6 +787,21 @@ export async function POST(req: Request) {
         if (error) return bad(error.message, 500)
         return NextResponse.json({ ok: true })
       }
+      // ── 원장: 매칭표의 「블로그 사용」을 한꺼번에 (전체 · 쌍둥이와 매우 유사만 · 모두 해제)
+      case 'bulkBlogUse': {
+        if (!isAdmin) return adminOnly()
+        const mode = String(b.mode ?? '')
+        if (!['all', 'strong', 'none'].includes(mode)) return bad('알 수 없는 요청입니다.')
+        const off = await supabase.from('exam_enough_matches').update({ use_in_blog: false }).eq('paper_id', b.paperId)
+        if (off.error) return bad(off.error.message, 500)
+        if (mode !== 'none') {
+          let q = supabase.from('exam_enough_matches').update({ use_in_blog: true }).eq('paper_id', b.paperId)
+          if (mode === 'strong') q = q.in('match_level', ['쌍둥이', '매우 유사'])
+          const on = await q
+          if (on.error) return bad(on.error.message, 500)
+        }
+        return NextResponse.json({ ok: true })
+      }
       case 'deleteMatch': {
         const { data: m } = await supabase.from('exam_enough_matches').select('id, created_by').eq('id', b.id).maybeSingle()
         if (!m) return bad('기록을 찾을 수 없습니다.', 404)

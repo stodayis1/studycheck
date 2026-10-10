@@ -421,6 +421,12 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
     if (!r.ok) alert(r.error)
     reload()
   }
+  // 원장: 「블로그 사용」을 한꺼번에 — 전체를 켜고 아닌 것만 끄는 쪽이 빠르다
+  const bulkBlog = async (mode: 'all' | 'strong' | 'none') => {
+    const r = await post({ action: 'bulkBlogUse', paperId: paper.id, mode })
+    if (!r.ok) alert(r.error)
+    reload()
+  }
   const remove = async (row: any) => {
     if (!confirm('이 매칭 기록을 지울까요?')) return
     const r = await post({ action: 'deleteMatch', id: row.id })
@@ -538,10 +544,30 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
 
       {!data.matches.length ? <p className="py-6 text-center text-xs text-gray-400">아직 매칭 기록이 없습니다.</p> : (
         <div className="overflow-x-auto">
-          <p className="mb-1 text-xs font-semibold text-gray-500">매칭 기록 전체 (표)</p>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold text-gray-500">매칭 기록 전체 (표)</p>
+            {isAdmin && (
+              <span className="ml-auto flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-gray-500">블로그 사용 {data.matches.filter((x: any) => x.use_in_blog).length} / {data.matches.length}건 ·</span>
+                {([['all', '전체 선택'], ['strong', '쌍둥이 · 매우 유사만'], ['none', '모두 해제']] as const).map(([mode, label]) => (
+                  <button key={mode} onClick={() => bulkBlog(mode)} className="rounded border px-2 py-0.5 font-semibold" style={{ borderColor: GREEN, color: GREEN }}>{label}</button>
+                ))}
+              </span>
+            )}
+          </div>
+          {isAdmin && <p className="mb-1 text-[11px] text-gray-400">체크한 매칭 가운데 정도가 높은 5개까지 카드뉴스에 문항 사진으로 실립니다. 나머지는 매칭표(번호 칸)로만 나갑니다.</p>}
           <table className="w-full text-sm">
             <thead><tr className="text-left text-[11px] text-gray-500">
-              {['기출 문항', '이너프원 교재', '단원', '문항번호', '매칭 정도', '분석 메모', '블로그 사용', '입력', ''].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
+              {['기출 문항', '이너프원 교재', '단원', '문항번호', '매칭 정도', '분석 메모'].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
+              <th className="px-2 py-2 font-semibold whitespace-nowrap">
+                <label className="flex items-center gap-1">
+                  {isAdmin && <input type="checkbox" title="전체 선택 / 해제"
+                    checked={data.matches.length > 0 && data.matches.every((x: any) => x.use_in_blog)}
+                    onChange={(e) => bulkBlog(e.target.checked ? 'all' : 'none')} />}
+                  블로그 사용
+                </label>
+              </th>
+              {['입력', ''].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody>
               {data.matches.map((row: any) => (

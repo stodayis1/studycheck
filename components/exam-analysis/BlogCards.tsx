@@ -16,8 +16,8 @@ async function call(body: any) {
   if (!r.ok) throw new Error(j.error ?? `서버 오류 (${r.status})`)
   return j
 }
-const CARD_LABEL: Record<string, string> = { '00_thumb': '대표 썸네일', '01_summary': '시험분석 요약', '02_killers': '변별력 문항', '04_review': '이번 시험 총평' }
-const labelOf = (name: string) => CARD_LABEL[name] ?? (name.startsWith('03_deep_') ? `${Number(name.slice(8))}번 심층분석` : name)
+const CARD_LABEL: Record<string, string> = { '00_thumb': '대표 썸네일', '01_summary': '시험분석 요약', '02_killers': '변별력 문항', '04_hit': '이너프원 적중 (매칭표)', '06_review': '이번 시험 총평', '04_review': '이번 시험 총평' }
+const labelOf = (name: string) => CARD_LABEL[name] ?? (name.startsWith('03_deep_') ? `${Number(name.slice(8))}번 심층분석` : name.startsWith('05_pairs_') ? `적중 문항 비교 ${name.slice(9)}` : name)
 const lines = (v: any) => (Array.isArray(v) ? v.join('\n') : '')
 const toLines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
 const pairs = (v: any) => (Array.isArray(v) ? v.map((x: any) => `${x.t ?? ''} | ${x.d ?? ''}`).join('\n') : '')

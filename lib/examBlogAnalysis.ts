@@ -28,7 +28,7 @@ export async function gather(supabase: any, paperId: string) {
   const [{ data: qs }, { data: files }, { data: matches }] = await Promise.all([
     supabase.from('exam_questions').select('id, question_no, sort_order, q_type, source_memo, is_discriminating, problem_id').eq('paper_id', paperId).order('sort_order'),
     supabase.from('exam_paper_files').select('kind, file_name, storage_path, mime_type, question_label').eq('paper_id', paperId).eq('kind', '손풀이'),
-    supabase.from('exam_enough_matches').select('question_no, match_level').eq('paper_id', paperId),
+    supabase.from('exam_enough_matches').select('question_no, match_level, enough_book, enough_unit, enough_problem_no, enough_problem_id, use_in_blog').eq('paper_id', paperId),
   ])
   const ids = (qs ?? []).map((q: any) => q.problem_id).filter(Boolean)
   const { data: ps } = ids.length ? await supabase.from('problems').select('id, image_path').in('id', ids) : { data: [] }
@@ -46,7 +46,29 @@ export async function gather(supabase: any, paperId: string) {
     if (no && !solutions[no]) solutions[no] = { path: f.storage_path, type: /png$/i.test(f.storage_path) ? 'image/png' : 'image/jpeg' }
   }
   const h = hitSummary(paper.answers_text, questions.map((q: any) => q.no), matches ?? [])
-  const hit = { rate: h.rate, hit: h.hit, total: h.total, twin: h.byLevel['쌍둥이'] ?? 0, very: h.byLevel['매우 유사'] ?? 0, type: h.byLevel['유형 유사'] ?? 0 }
+  // 매칭표: 문항마다 가장 높은 매칭 정도 하나 (없으면 null)
+  const grid = questions.map((q: any) => ({ no: Number(q.no) || q.no, level: h.best[q.no] ?? null }))
+  // 사진으로 실을 매칭: 원장이 「블로그 사용」에 체크한 것 가운데 정도가 높은 순으로, 문항마다 하나, 5개까지.
+  // 체크한 것이 없으면 쌍둥이 · 매우 유사에서 고른다. 나머지는 매칭표로만 나간다
+  const rank = (l: string) => ['쌍둥이', '매우 유사', '유형 유사', '참고'].indexOf(l)
+  const usable = (matches ?? []).filter((m: any) => m.enough_problem_id && rank(m.match_level) >= 0 && rank(m.match_level) <= 2)
+    .map((m: any) => ({ ...m, no: normNo(m.question_no ?? '') })).filter((m: any) => questions.some((q: any) => q.no === m.no && q.path))
+  const checked = usable.filter((m: any) => m.use_in_blog)
+  const pool = (checked.length ? checked : usable.filter((m: any) => rank(m.match_level) <= 1))
+    .sort((a: any, b: any) => rank(a.match_level) - rank(b.match_level) || Number(a.no) - Number(b.no))
+  const pairRows: any[] = []
+  for (const m of pool) if (pairRows.length < 5 && !pairRows.some((p) => p.no === m.no)) pairRows.push(m)
+  pairRows.sort((a, b) => Number(a.no) - Number(b.no))
+  const epIds = pairRows.map((m) => m.enough_problem_id)
+  const { data: eps } = epIds.length ? await supabase.from('enough_problems').select('id, image_path').in('id', epIds) : { data: [] }
+  const epPath = new Map((eps ?? []).map((e: any) => [e.id, e.image_path]))
+  const pairs = pairRows.filter((m) => epPath.get(m.enough_problem_id)).map((m) => ({
+    no: Number(m.no) || m.no, level: m.match_level, exam: `q:${m.no}`, enough: `e:${m.no}`,
+    source: `${String(m.enough_book).replace(/^이너프원\s*/, '')} · ${m.enough_unit} ${m.enough_problem_no}번`,
+  }))
+  const pairPaths: Record<string, string> = {}
+  for (const m of pairRows) if (epPath.get(m.enough_problem_id)) pairPaths[m.no] = epPath.get(m.enough_problem_id) as string
+  const hit = { rate: h.rate, hit: h.hit, total: h.total, twin: h.byLevel['쌍둥이'] ?? 0, very: h.byLevel['매우 유사'] ?? 0, type: h.byLevel['유형 유사'] ?? 0, grid, pairs }
   const missing: string[] = []
   if (!questions.some((q: any) => q.path)) missing.push('문항이 아직 없습니다 (「기본 · 파일」에서 PDF 의 「문항 넣기」)')
   if (!killers.length) missing.push('변별문항이 선정되지 않았습니다 (「정답 · 변별 · 손풀이」)')
@@ -55,7 +77,7 @@ export async function gather(supabase: any, paperId: string) {
   if (!(paper.review_units || paper.review_hard_types || paper.review_mistakes || paper.review_blog_summary)) missing.push('총평 내용이 비어 있습니다')
   if (!paper.review_next_points) missing.push('다음 시험 대비 포인트가 비어 있습니다')
   if (!(matches ?? []).length) missing.push('이너프원 적중 대조가 아직 없습니다 (「이너프원 매칭」)')
-  return { paper, questions, killers, solutions, hit, missing }
+  return { paper, questions, killers, solutions, hit, missing, pairPaths }
 }
 
 export async function imageUrls(supabase: any, g: NonNullable<Awaited<ReturnType<typeof gather>>>) {
@@ -65,6 +87,13 @@ export async function imageUrls(supabase: any, g: NonNullable<Awaited<ReturnType
     if (q?.path) { const { data } = await supabase.storage.from(PROBLEM_BUCKET).createSignedUrl(q.path, 3600); if (data?.signedUrl) out[`q:${no}`] = data.signedUrl }
     const s = g.solutions[no]
     if (s) { const { data } = await supabase.storage.from(FILE_BUCKET).createSignedUrl(s.path, 3600); if (data?.signedUrl) out[`s:${no}`] = data.signedUrl }
+  }
+  // 사진으로 실을 매칭: 기출 문항 그림(q:번호)과 이너프원 문항 그림(e:번호)
+  for (const [no, path] of Object.entries(g.pairPaths)) {
+    const q = g.questions.find((x: any) => x.no === no)
+    if (q?.path && !out[`q:${no}`]) { const { data } = await supabase.storage.from(PROBLEM_BUCKET).createSignedUrl(q.path, 3600); if (data?.signedUrl) out[`q:${no}`] = data.signedUrl }
+    const { data } = await supabase.storage.from(FILE_BUCKET).createSignedUrl(path, 3600)
+    if (data?.signedUrl) out[`e:${no}`] = data.signedUrl
   }
   return out
 }

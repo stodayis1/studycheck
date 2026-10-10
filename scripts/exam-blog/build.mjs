@@ -9,7 +9,9 @@
  *   01_summary.png        시험분석 요약 — 문항 수 · 난이도 · 변별문항 · 적중률 / 단원 비중 / 출제 경향 / 다음 시험 전략
  *   02_killers.png        변별력 문항 카드
  *   03_deep_<번호>.png    변별문항 심층분석 (문제 · 풀이 4단계 · 왜 어려웠나 · 선생님 한마디)
- *   04_review.png         이번 시험 총평
+ *   04_hit.png            이너프원 적중 — 큰 적중률 + 매칭표 (analysis.hit.grid 가 있을 때)
+ *   05_pairs_<n>.png      적중 문항 사진 비교 (analysis.hit.pairs, 5문항까지)
+ *   06_review.png         이번 시험 총평
  * 글과 숫자는 전부 analysis.json 에서 온다 — 여기서 지어내지 않는다.
  */
 import fs from 'node:fs'

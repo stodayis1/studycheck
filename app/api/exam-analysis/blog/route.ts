@@ -30,6 +30,8 @@ export async function POST(req: Request) {
       const buf = await download(supabase, FILE_BUCKET, keyOf(paper.id))
       let analysis: any = null
       try { analysis = buf ? JSON.parse(buf.toString('utf8')) : null } catch { analysis = null }
+      // 적중률 · 매칭표 · 사진으로 실을 매칭은 보관한 글이 아니라 지금 매칭 기록에서 온다 (「블로그 사용」을 바꾸면 카드도 바뀐다)
+      if (analysis) analysis.hit = g.hit
       return NextResponse.json({ ok: true, analysis, images: await imageUrls(supabase, g), missing: g.missing, killers: g.killers })
     }
 
