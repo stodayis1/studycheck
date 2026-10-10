@@ -6,6 +6,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { fbImages, hwLines } from './briefing.ts'
 import { fetchOpsMakeups, type OpsMakeup } from './opsMakeups.ts'
+import { fetchOpsExtraClasses } from './opsExtraClasses.ts'
 import { isExamAbsence } from './attendance.ts'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
@@ -38,6 +39,12 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     : []
   const makeupBy = new Map<string, OpsMakeup>()
   for (const mk of opsMakeups) if (mk.absentDate && !makeupBy.has(mk.absentDate)) makeupBy.set(mk.absentDate, mk)
+
+  // 추가수업도 OPS 가 들고 있다. 그 달 약정 수업 횟수를 채우려고 한 **의무수업**이라
+  // 학부모님이 아셔야 한다(원장님 2026-10-10). 결석과 짝이 없는 날도 있어서 따로 모은다.
+  const extraClasses = student.ops_student_id
+    ? (await fetchOpsExtraClasses([student.ops_student_id], attendFrom)).get(student.ops_student_id) ?? []
+    : []
 
   const sessionIds = (pastSessions ?? []).map((s: any) => s.id)
   const { data: pastNotes } = sessionIds.length
@@ -170,6 +177,9 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     makeupNone: absences.filter((a) => a.state === 'none').length,
     makeupNoshow: absences.filter((a) => a.state === 'noshow').length,
     makeupWaiting: absences.filter((a) => a.state === 'waiting').length,
+    extraClasses,
+    extraDone: extraClasses.filter((e) => e.state === 'done').length,
+    extraPlanned: extraClasses.filter((e) => e.state === 'planned').length,
   }
 
   // ── 그날의 알림장·사진 ──────────────────────────────────────────────────

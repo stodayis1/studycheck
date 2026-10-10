@@ -700,6 +700,7 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
 function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
   const rows: any[] = d.rows ?? []
   const absences: any[] = d.absences ?? []
+  const extras: any[] = d.extraClasses ?? []
   const months = [...new Set(rows.map((r) => monthOf(r.date)).filter(Boolean) as string[])].sort()
 
   // 보강 상태 한 줄. 날짜·시각은 OPS 보강 기록(makeups)에서 온다.
@@ -835,6 +836,67 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
                   {(a.lesson ?? []).length > 0 && (
                     <div style={{ fontSize: 10, color: TEXT_BODY, lineHeight: 1.6, marginTop: 3 }}>
                       {(a.lesson as string[]).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── 추가수업·대체수업 ───────────────────────────────────────────────
+          추가수업은 **그 달 약정 수업 횟수를 채우기 위한 의무수업**이다. 횟수가 모자라
+          토요일에 한 번 더 나온 것이니 학부모님이 아셔야 한다(원장님 2026-10-10).
+          결석과 짝이 없는 날도 있어서 결석·보강 칸에 끼우지 않고 따로 둔다. */}
+      {extras.length > 0 && (
+        <div style={{ borderRadius: 12, border: '1px solid #cfe3f5', overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ background: '#F2F8FD', padding: '10px 14px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: NAVY }}>
+              추가수업 {extras.length}회
+            </div>
+            <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 3, lineHeight: 1.6 }}>
+              그 달 수업 횟수가 모자라 한 번 더 진행한 수업입니다.
+              {d.extraPlanned > 0 && ` (진행 ${d.extraDone}회 · 예정 ${d.extraPlanned}회)`}
+            </div>
+          </div>
+          {extras.map((e: any, i: number) => {
+            const label = e.classType === 'substitute' ? '대체수업' : '추가수업'
+            const when = (e.date ?? '').slice(5)
+            const dow = e.date
+              ? ['일', '월', '화', '수', '목', '금', '토'][new Date(e.date + 'T00:00:00').getDay()]
+              : ''
+            const lesson = [
+              e.lessonTextbook,
+              e.lessonWorksheet
+                ? `${e.lessonWorksheet}${e.lessonScore != null ? ` ${e.lessonScore}점` : ''}`
+                : (e.lessonScore != null ? `${e.lessonScore}점` : null),
+              e.lessonNote,
+            ].filter(Boolean)
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'baseline', gap: 8, padding: '9px 14px',
+                borderTop: '1px solid #e4eef8', background: 'white',
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: NAVY, width: 62, flexShrink: 0 }}>
+                  {when} <span style={{ fontWeight: 400, color: TEXT_MUTED }}>{dow}</span>
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: e.state === 'done' ? TEXT_BODY : ORANGE, lineHeight: 1.5 }}>
+                    {label}
+                    {e.time && ` ${e.time}`}
+                    {e.hours ? ` · ${e.hours}시간` : ''}
+                    {e.state === 'planned' && ' · 예정'}
+                    {e.teacherName && <span style={{ color: TEXT_MUTED }}> · {e.teacherName} 선생님</span>}
+                  </div>
+                  {e.classType === 'substitute' && e.originalDate && (
+                    <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 2 }}>
+                      {e.originalDate.slice(5)} 수업을 이 날로 옮겼어요
+                    </div>
+                  )}
+                  {lesson.length > 0 && (
+                    <div style={{ fontSize: 10, color: TEXT_BODY, lineHeight: 1.6, marginTop: 3 }}>
+                      {lesson.join(' · ')}
                     </div>
                   )}
                 </div>
