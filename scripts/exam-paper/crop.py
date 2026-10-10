@@ -34,16 +34,20 @@ def col_bounds(page):
 
 
 def markers(page, cols):
+    spans = [s for b in page.get_text("dict")["blocks"] for l in b.get("lines", []) for s in l["spans"] if s["text"].strip()]
     out = []
-    for b in page.get_text("dict")["blocks"]:
-        for l in b.get("lines", []):
-            for s in l["spans"]:
-                m = MARK.match(s["text"].strip())
-                if m and s["size"] < 9:
-                    x0, y0, x1, y1 = s["bbox"]
-                    col = 0 if x0 < cols[1][0] - 5 else 1
-                    if abs(x0 - cols[col][0]) < 12:          # 단의 맨 왼쪽에 있는 것만
-                        out.append({"no": int(m.group(1)), "col": col, "y0": y0, "y1": y1})
+    for s in spans:
+        m = MARK.match(s["text"].strip())
+        if m and s["size"] < 9:
+            x0, y0, x1, y1 = s["bbox"]
+            col = 0 if x0 < cols[1][0] - 5 else 1
+            if abs(x0 - cols[col][0]) < 12:          # 단의 맨 왼쪽에 있는 것만
+                # 번호가 문제 첫 줄과 **같은 줄**에 찍힌 파일도 있다 (「10) 다음 중 옳지 않은 것은?」).
+                # 그때는 번호 줄 아래부터 자르면 첫 줄이 날아간다 → 그 줄 위에서부터 자르고 번호 글자만 지운다
+                same = [t for t in spans if t is not s and abs(t["origin"][1] - s["origin"][1]) < 4
+                        and t["bbox"][0] >= x1 - 1 and t["bbox"][0] < cols[col][1]]
+                top = min([t["bbox"][1] for t in same] + [y0]) - 2 if same else None
+                out.append({"no": int(m.group(1)), "col": col, "y0": y0, "y1": y1, "top": top, "box": (x0, y0, x1, y1)})
     return out
 
 
@@ -67,6 +71,7 @@ def main():
 
     # 1) 쪽·단 순서대로 훑으며 「번호 자리」와 「단 끝」을 한 줄로 늘어놓는다
     stream = []          # (쪽, 단, 단 범위, y시작, y끝, 문항번호 또는 None)
+    erase = {}           # (쪽, 문항번호) → 같은 줄에 찍힌 번호 글자의 자리 (그림에서 지운다)
     answers_page = None
     for pi in range(len(d)):
         page = d[pi]
@@ -84,10 +89,14 @@ def main():
             cm = sorted([m for m in ms if m["col"] == c], key=lambda m: m["y0"])
             y = 0
             for m in cm:
-                if m["y0"] > y + 2:
-                    stream.append((pi, c, cols[c], y, m["y0"] - 1, None))      # 앞 문항의 이어지는 부분
-                stream.append((pi, c, cols[c], m["y1"] + 1, None, m["no"]))
-                y = m["y1"] + 1
+                start = m["top"] if m["top"] is not None else m["y1"] + 1      # 번호가 첫 줄과 같은 줄이면 그 줄 위에서부터
+                cut = (m["top"] if m["top"] is not None else m["y0"]) - 1
+                if cut > y + 1:
+                    stream.append((pi, c, cols[c], y, cut, None))      # 앞 문항의 이어지는 부분
+                stream.append((pi, c, cols[c], start, None, m["no"]))
+                if m["top"] is not None:
+                    erase[(pi, m["no"])] = m["box"]
+                y = start
             # 마지막 조각의 끝 = 단 끝
             if stream and stream[-1][0] == pi and stream[-1][1] == c and stream[-1][4] is None:
                 s = stream[-1]
@@ -111,11 +120,16 @@ def main():
         cur["text"] += " " + d[pi].get_text("text", clip=pymupdf.Rect(x0, max(y0, 30), x1, y1))
         pix = d[pi].get_pixmap(matrix=pymupdf.Matrix(Z, Z), clip=pymupdf.Rect(x0, max(y0, 30), x1, y1))
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        if no is not None and (pi, no) in erase:
+            bx0, by0, bx1, by1 = erase[(pi, no)]
+            yy = max(y0, 30)
+            img.paste((255, 255, 255), (max(0, int((bx0 - x0) * Z) - 1), max(0, int((by0 - yy) * Z) - 1), int((bx1 - x0) * Z) + 3, int((by1 - yy) * Z) + 2))
         rows = ink_rows(img)
         if rows:
             cur["parts"].append(img.crop((0, max(0, rows[0] - 6), img.width, min(img.height, rows[1] + 8))))
 
     manifest = []
+    essay_ranges = []    # 「[논술형17~20]」 로 알린 서술형 번호 범위
     for p in problems:
         if not p["parts"]:
             print(f"⚠ {p['no']}번: 내용이 없습니다")
@@ -130,12 +144,20 @@ def main():
         name = f"{p['no']:02d}.png"
         sheet.save(os.path.join(out, name))
         text = re.sub(r"\s+", " ", p["text"]).strip()
-        pts = re.search(r"\[\s*(\d+(?:\.\d+)?)\s*점\s*\]", text)
+        pts = re.search(r"[\[(]\s*(\d+(?:\.\d+)?)\s*점\s*[\])]", text)          # [4점] 또는 (4점)
+        # 「[논술형17~20]」 같은 묶음 표시는 그 문항이 아니라 뒤 문항들의 것이다 → 떼고 본다
+        own = re.sub(r"\[\s*(논술|서술)형\s*\d+\s*[~∼\-]\s*\d+\s*\]", "", text)
+        for r in re.finditer(r"(논술|서술)형\s*(\d+)\s*[~∼\-]\s*(\d+)", text):
+            essay_ranges.append((int(r.group(2)), int(r.group(3))))
         manifest.append({"no": p["no"], "page": p["page"], "file": name, "w": w, "h": h, "parts": len(p["parts"]),
                          "points": float(pts.group(1)) if pts else None,          # [3점] — 비어 있으면 None
-                         "essay": bool(re.search(r"서술|논술|풀이 과정|물음에 답하시오|\[\s*총", text)),
+                         "essay": bool(re.search(r"서술|논술|풀이 과정|물음에 답하시오|\[\s*총", own)),
                          "choices": sum(1 for c in "①②③④⑤" if c in text),
                          "text": text[:300]})
+
+    for m in manifest:
+        if any(a <= m["no"] <= b for a, b in essay_ranges):
+            m["essay"] = True
 
     # 3) 미주 목록에서 정답 읽기: 「3) ④」
     #    번호는 1부터 차례로 찾는다 (정답 글 안에 「(1)」 같은 괄호가 있어도 헷갈리지 않게).
