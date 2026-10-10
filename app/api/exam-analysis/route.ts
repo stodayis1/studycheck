@@ -11,12 +11,12 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { randomUUID } from 'crypto'
+import { randomUUID, randomInt } from 'crypto'
 import { staffOrDeny } from '@/lib/apiAuth'
 import { normalizeSchool } from '@/lib/school'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
-  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
+  bankAnswer, checkFileName, discNos, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
 } from '@/lib/examAnalysis'
 
 export const dynamic = 'force-dynamic'
@@ -133,8 +133,8 @@ export async function GET(req: Request) {
         .order('exam_end_date', { ascending: true, nullsFirst: false }).order('school_name').order('grade')
       if (error) return bad(error.message, 500)
       const [files, questions, matches] = await Promise.all([
-        all((f, t) => supabase.from('exam_paper_files').select('paper_id, kind').range(f, t)),
-        all((f, t) => supabase.from('exam_questions').select('paper_id, bank_status, question_no').range(f, t)),
+        all((f, t) => supabase.from('exam_paper_files').select('paper_id, kind, question_label, file_name').range(f, t)),
+        all((f, t) => supabase.from('exam_questions').select('paper_id, bank_status, question_no, q_type, problem_id').range(f, t)),
         all((f, t) => supabase.from('exam_enough_matches').select('paper_id, question_no, match_level').range(f, t)),
       ])
       const stat: Record<string, any> = {}
@@ -156,6 +156,9 @@ export async function GET(req: Request) {
         const s = stat[String(sh.note).slice('exam_paper:'.length)]
         if (s) { s.printable = true; s.sheetCode = sh.code }
       }
+      // 카드뉴스를 만든 시험 (보관함 blog/<시험지 id>/analysis.json)
+      const { data: blogDirs } = await supabase.storage.from(FILE_BUCKET).list('blog', { limit: 1000 })
+      const hasCards = new Set((blogDirs ?? []).map((d: any) => d.name))
       // 적중률 (이너프원에 유형 유사 이상이 있는 문항 ÷ 전체 문항)
       return NextResponse.json({
         isAdmin: me.role === 'admin',
@@ -165,7 +168,25 @@ export async function GET(req: Request) {
             questions.filter((x) => x.paper_id === p.id).map((x) => x.question_no),
             matches.filter((m) => m.paper_id === p.id)
           )
-          return { ...p, stat: { ...of(p.id), hit: h.hit, total: h.total, hitRate: h.rate } }
+          // 단계별 상태 — 현황판이 「어디까지 됐고 다음은 누구 차례인지」를 한 줄로 보여 준다
+          const qs = questions.filter((x) => x.paper_id === p.id)
+          const fl = files.filter((f) => f.paper_id === p.id)
+          const disc = discNos(p.discriminating_nos, qs)
+          const handNos = new Set(fl.filter((f) => f.kind === '손풀이')
+            .flatMap((f) => discNos([f.question_label || (String(f.file_name).match(/(\d+)\s*번/) ?? [])[1] || ''], qs)))
+          const steps = {
+            original: fl.filter((f) => f.kind === '원본').length,
+            pdf: fl.filter((f) => f.kind === '문제' || f.kind === '문제정답해설').length,
+            imported: qs.filter((x) => x.problem_id).length,
+            matched: matches.filter((m) => m.paper_id === p.id).length,
+            disc,
+            handMissing: disc.filter((no) => !handNos.has(no)),
+            handCount: fl.filter((f) => f.kind === '손풀이').length,
+            review: !!(p.review_difficulty && (p.review_units || p.review_hard_types || p.review_mistakes || p.review_blog_summary) && p.review_next_points),
+            reviewStarted: !!(p.review_difficulty || p.review_units || p.review_hard_types || p.review_mistakes || p.review_next_points || p.review_blog_summary),
+            cards: hasCards.has(p.id),
+          }
+          return { ...p, stat: { ...of(p.id), hit: h.hit, total: h.total, hitRate: h.rate, steps } }
         }),
       })
     }
@@ -355,17 +376,24 @@ export async function POST(req: Request) {
         const patch = pick(b.patch, PAPER_FIELDS)
         const adminPatch = pick(b.patch, PAPER_ADMIN_FIELDS)
         if (Object.keys(adminPatch).length && !isAdmin) return adminOnly()
-        // 「할 일」 체크는 tasks 를 통째로 보낸다. 그 사이 Claude 가 남긴 블로그 자동 작성 표시(blog_*)가
-        // 옛 화면의 값으로 덮이면 같은 글을 또 쓰게 된다 → blog_* 는 「작성 요청」을 새로 눌렀을 때만 바뀐다
+        // 「할 일」 체크는 tasks 를 통째로 보낸다. 그 사이 Claude 가 남긴 처리 표시(블로그 · 적중 대조 · 카드뉴스)가
+        // 옛 화면의 값으로 덮이면 같은 일을 또 하게 된다 → 요청 표시는 원장이 「요청」을 새로 눌렀을 때만 바뀐다
         if (patch.tasks) {
           const { data: cur } = await supabase.from('exam_papers').select('tasks').eq('id', b.id).maybeSingle()
           const was: any = cur?.tasks ?? {}
           const next: any = { ...patch.tasks }
-          const asked = String(next.blog_requested_at ?? '') > String(was.blog_requested_at ?? '')
-          for (const k of ['blog_requested_at', 'blog_drafted_at', 'blog_failed_at', 'blog_auto_note']) {
-            if (asked && isAdmin) { if (k !== 'blog_requested_at') delete next[k] }
-            else if (k in was) next[k] = was[k]
-            else delete next[k]
+          const REQUESTS: [string, string[]][] = [
+            ['blog_requested_at', ['blog_drafted_at', 'blog_failed_at', 'blog_auto_note']],
+            ['match_requested_at', ['match_done_at', 'match_failed_at', 'match_note']],
+            ['cards_requested_at', ['cards_done_at', 'cards_failed_at', 'cards_note']],
+          ]
+          for (const [reqKey, marks] of REQUESTS) {
+            const asked = isAdmin && String(next[reqKey] ?? '') > String(was[reqKey] ?? '')
+            for (const k of [reqKey, ...marks]) {
+              if (asked) { if (k !== reqKey) delete next[k] }
+              else if (k in was) next[k] = was[k]
+              else delete next[k]
+            }
           }
           patch.tasks = next
         }
@@ -651,6 +679,115 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, problemId, updated: !!exist })
       }
 
+      // ── 원장: 올린 PDF 를 화면이 문항별로 잘라(lib/examPdfCrop.ts) 한 문항씩 보낸다 → 문항 · 문제은행 · 정답 그림.
+      //    scripts/exam-paper/upload.mjs 와 같은 일을 한다. 같은 번호를 또 보내면 새로 넣지 않고 고친다.
+      case 'importPdfQuestion': {
+        if (!isAdmin) return adminOnly()
+        const paper = await getPaper(b.paperId)
+        if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
+        const no = normNo(String(b.no ?? ''))
+        if (!no || !b.image) return bad('문항 번호와 그림이 필요합니다.')
+        const sk = sourceKey(paper, no)
+        const answer = String(b.answer ?? '').trim() || null
+        const picks = Array.from(answer ?? '').filter((c) => '①②③④⑤'.includes(c))
+        const qType = b.essay ? '서술형' : !answer || picks.length ? '객관식' : /^-?\d+(\.\d+)?$/.test(answer.replace(/\s/g, '')) ? '단답형' : '서술형'
+        const points = Number(b.points) > 0 ? Number(b.points) : null
+
+        let { data: q } = await supabase.from('exam_questions').select('id, problem_id').eq('source_key', sk).maybeSingle()
+        const qRow: any = {
+          paper_id: paper.id, question_no: no, sort_order: sortOrderOf(no), q_type: qType, figure_is_whole: true, source_key: sk,
+          ...(answer ? { answer } : {}), source_memo: points ? `배점 ${points}점` : null, updated_at: now,
+        }
+        if (q) {
+          const { error } = await supabase.from('exam_questions').update(qRow).eq('id', q.id)
+          if (error) return bad(`${no}번 문항 고치기 실패: ${error.message}`, 500)
+        } else {
+          const r = await supabase.from('exam_questions').insert({ ...qRow, created_by: me.name }).select('id, problem_id').single()
+          if (r.error) return bad(`${no}번 문항 만들기 실패: ${r.error.message}`, 500)
+          q = r.data
+        }
+        const base = `exam/${paper.id}/${q!.id}`
+        const up = async (path: string, b64: string) =>
+          (await supabase.storage.from(PROBLEM_BUCKET).upload(path, Buffer.from(b64, 'base64'), { contentType: 'image/png', upsert: true })).error
+        const e1 = await up(`${base}.png`, b.image)
+        if (e1) return bad(`${no}번 그림 저장 실패: ${e1.message}`, 500)
+        if (b.answerImage) {
+          const e2 = await up(`${base}_a.png`, b.answerImage)
+          if (e2) return bad(`${no}번 정답 그림 저장 실패: ${e2.message}`, 500)
+        }
+        const ans = bankAnswer(qType, answer)
+        const yy = String(paper.exam_year).slice(2)
+        const row: any = {
+          book: BANK_BOOK, grade: paper.grade, semester: paper.term,
+          sub_chapter_no: 0, sub_chapter_title: `${paper.school_name} ${yy}-${paper.term} ${paper.exam_type.slice(0, 2)}`,
+          local_no: `${paper.school_name}${yy}-${paper.term}${paper.exam_type.slice(0, 2)}-${no}`,
+          step: '기출', is_essay: qType === '서술형', answer_kind: ans.kind, answer_text: ans.text,
+          image_path: `${base}.png`, source_key: sk, ...(b.answerImage ? { answer_image_path: `${base}_a.png` } : {}),
+          source_meta: {
+            source_type: 'exam', source_year: paper.exam_year, source_term: `${paper.term}학기`, source_exam_type: paper.exam_type,
+            source_school_name: paper.school_name, source_grade: paper.grade, source_problem_no: no, source_key: sk,
+            exam_question_id: q!.id, points, from_pdf: b.pdfName ?? null,
+          },
+        }
+        const { data: exist } = await supabase.from('problems').select('id').eq('source_key', sk).maybeSingle()
+        let pid: number | null = exist?.id ?? q!.problem_id ?? null
+        if (pid) {
+          // 이미 유형을 붙여 둔 문항이면 단원·유형은 그대로 둔다 (그림 · 정답 · 배점만 바뀐다)
+          const { grade: _g, semester: _s, sub_chapter_no: _n, sub_chapter_title: _t, ...keep } = row
+          const { error } = await supabase.from('problems').update(keep).eq('id', pid)
+          if (error) return bad(`${no}번 문제은행 고치기 실패: ${error.message}`, 500)
+        } else {
+          const r = await supabase.from('problems').insert(row).select('id').single()
+          if (r.error) return bad(`${no}번 문제은행 넣기 실패: ${r.error.message}`, 500)
+          pid = r.data.id
+        }
+        await supabase.from('exam_questions').update({ problem_id: pid, bank_status: '반영완료', reflected_at: now, reflected_by: me.name }).eq('id', q!.id)
+        return NextResponse.json({ ok: true, problemId: pid, updated: !!exist })
+      }
+
+      // ── 원장: 다 넣은 뒤 마무리 — 통째 인쇄용 학습지(exam_sheets)를 번호 순서로 다시 짜고, 정답표가 비어 있으면 채운다
+      case 'importPdfFinish': {
+        if (!isAdmin) return adminOnly()
+        const paper = await getPaper(b.paperId)
+        if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
+        const { data: qs } = await supabase.from('exam_questions').select('question_no, sort_order, answer, problem_id')
+          .eq('paper_id', paper.id).not('problem_id', 'is', null).order('sort_order')
+        const list = qs ?? []
+        if (!list.length) return bad('문제은행에 들어간 문항이 없습니다.')
+        const title = `${String(paper.exam_year).slice(2)}년 ${paper.school_name} ${paper.term}학기 ${paper.exam_type}`
+        let { data: sheet } = await supabase.from('exam_sheets').select('id, code').eq('note', sheetNote(paper.id)).maybeSingle()
+        if (!sheet) {
+          const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+          const newCode = () => Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('')
+          let code = newCode()
+          for (let i = 0; i < 5; i++) {
+            const { data: dup } = await supabase.from('exam_sheets').select('id').eq('code', code).maybeSingle()
+            if (!dup) break
+            code = newCode()
+          }
+          const r = await supabase.from('exam_sheets')
+            .insert({ code, title, grade: paper.grade, semester: paper.term, note: sheetNote(paper.id), show_source: false, show_difficulty: false })
+            .select('id, code').single()
+          if (r.error) return bad(`학습지 만들기 실패: ${r.error.message}`, 500)
+          sheet = r.data
+        } else {
+          // 문항 목록만 다시 짠다 (채점 기록은 그대로)
+          const del = await supabase.from('exam_sheet_problems').delete().eq('sheet_id', sheet.id)
+          if (del.error) return bad(`학습지 문항 정리 실패: ${del.error.message}`, 500)
+        }
+        const ins = await supabase.from('exam_sheet_problems').insert(list.map((x: any, i: number) => ({ sheet_id: sheet!.id, no: i + 1, problem_id: x.problem_id })))
+        if (ins.error) return bad(`학습지 문항 넣기 실패: ${ins.error.message}`, 500)
+        let answersFilled = 0
+        if (!(paper.answers_text ?? '').trim()) {
+          const lines = list.filter((x: any) => x.answer).map((x: any) => `${x.question_no} ${String(x.answer).replace(/\s+/g, ' ')}`)
+          if (lines.length) {
+            await supabase.from('exam_papers').update({ answers_text: lines.join('\n'), updated_at: now }).eq('id', paper.id)
+            answersFilled = lines.length
+          }
+        }
+        return NextResponse.json({ ok: true, sheetCode: sheet!.code, count: list.length, answersFilled })
+      }
+
       // ── 이너프원 매칭 저장 / 지우기
       case 'saveMatch': {
         const m = b.match ?? {}
@@ -669,6 +806,21 @@ export async function POST(req: Request) {
           ? await supabase.from('exam_enough_matches').update(row).eq('id', m.id)
           : await supabase.from('exam_enough_matches').insert({ ...row, paper_id: b.paperId, created_by: me.name })
         if (error) return bad(error.message, 500)
+        return NextResponse.json({ ok: true })
+      }
+      // ── 원장: 매칭표의 「블로그 사용」을 한꺼번에 (전체 · 쌍둥이와 매우 유사만 · 모두 해제)
+      case 'bulkBlogUse': {
+        if (!isAdmin) return adminOnly()
+        const mode = String(b.mode ?? '')
+        if (!['all', 'strong', 'none'].includes(mode)) return bad('알 수 없는 요청입니다.')
+        const off = await supabase.from('exam_enough_matches').update({ use_in_blog: false }).eq('paper_id', b.paperId)
+        if (off.error) return bad(off.error.message, 500)
+        if (mode !== 'none') {
+          let q = supabase.from('exam_enough_matches').update({ use_in_blog: true }).eq('paper_id', b.paperId)
+          if (mode === 'strong') q = q.in('match_level', ['쌍둥이', '매우 유사'])
+          const on = await q
+          if (on.error) return bad(on.error.message, 500)
+        }
         return NextResponse.json({ ok: true })
       }
       case 'deleteMatch': {

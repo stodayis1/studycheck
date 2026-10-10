@@ -168,12 +168,19 @@ export default function ExamAnalysisPage() {
         {papers && !rows.length && <p className="p-10 text-center text-gray-400">아직 등록된 시험지가 없습니다. 「+ 시험지 추가」로 만들어 주세요.</p>}
 
         {!!rows.length && (
+          <>
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
+            <span><Chip ok>✓ 됨</Chip></span><span><Chip warn>일부만</Chip></span><span><Chip>아직</Chip></span>
+            <span>왼쪽부터 일하는 순서입니다. <b style={{ color: GREEN }}>윤T</b> = 원장님이 할 일, <b>담당</b> = 담당 선생님이 할 일.</span>
+            <span className="rounded px-1.5 py-0.5 font-semibold" style={{ background: '#E1F5EE', color: GREEN }}>초록 줄 = 재료가 다 모여 블로그를 요청할 수 있음</span>
+          </div>
           <div className="overflow-x-auto rounded-xl border bg-white">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] text-gray-500" style={{ background: '#F0FBF7' }}>
-                  {['학교 · 학년', '시험명', '시험 종료일', '인쇄', '시험지', '정답', '변별문항', '손풀이', '총평', '이너프원', '적중률', '문제은행', '블로그', '담당자', '작업 기한', '비고'].map((h) => (
-                    <th key={h} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
+                  {[['학교 · 학년', ''], ['지금 할 일', ''], ['① 원본 스캔', '선생님이 올린 스캔본'], ['② 작업 PDF', '윤T가 한글 작업해 올린 것'], ['③ 문항', '윤T · 문항 넣기'], ['④ 적중', '윤T · 적중 대조 요청'],
+                    ['⑤ 변별문항', '담당'], ['⑥ 손풀이', '담당'], ['⑦ 총평', '담당'], ['⑧ 카드뉴스', '윤T · 카드뉴스 요청'], ['⑨ 블로그', '윤T'], ['인쇄', ''], ['담당자', ''], ['작업 기한', '']].map(([h, tip]) => (
+                    <th key={h} title={tip} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -181,58 +188,73 @@ export default function ExamAnalysisPage() {
                 {rows.map((p) => {
                   const t = p.tasks ?? {}
                   const s = p.stat ?? {}
-                  const nDisc = (p.discriminating_nos ?? []).length
-                  const reviewed = !!(p.review_difficulty || p.review_blog_summary)
+                  const st = s.steps ?? { original: 0, pdf: 0, imported: 0, matched: 0, disc: [], handMissing: [], handCount: 0, review: false, reviewStarted: false, cards: false }
+                  const who = p.assignee || '담당'
+                  const published = p.blog_status === '업로드완료'
+                  // 원장님 차례인 일 / 담당 선생님 차례인 일 (둘은 같이 갈 수 있다)
+                  const mine = !st.pdf ? (st.original ? '한글 작업해 PDF 올리기' : '') : !st.imported ? '문항 넣기' : !st.matched ? '적중 대조 요청' : ''
+                  const theirs = !st.original && !st.pdf ? '시험지 스캔 올리기'
+                    : !st.disc.length ? '변별문항 선정' : st.handMissing.length ? `손풀이 ${st.handMissing.join(' · ')}번` : !st.review ? '총평' : ''
+                  const ready = !!st.pdf && !!st.imported && !!st.matched && !!st.disc.length && !st.handMissing.length && st.review
+                  const next = ready && !mine && !theirs ? (!st.cards ? '카드뉴스 요청' : p.blog_status === '작성중' ? '블로그 글 확인 · 발행' : '블로그 글 작성 요청') : ''
                   return (
                     <tr key={p.id} onClick={() => router.push(`/teacher/exam-analysis/${p.id}`)}
-                      className="cursor-pointer border-t hover:bg-gray-50">
+                      className="cursor-pointer border-t hover:bg-gray-50" style={ready && !published ? { background: '#F0FBF7' } : undefined}>
                       <td className="px-3 py-2.5 whitespace-nowrap font-semibold" style={{ color: GREEN }}>
                         {p.school_name} {p.grade}
                         {p.priority === '높음' && <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">우선</span>}
-                        {t.done && <i className="ti ti-circle-check ml-1" style={{ color: '#0F6E56' }} />}
+                        <div className="text-[11px] font-normal text-gray-400">{p.exam_name}{p.exam_end_date ? ` · ${p.exam_end_date.slice(5)} 종료` : ''}</div>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{p.exam_name}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{p.exam_end_date ?? <Chip warn>확인 필요</Chip>}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-xs leading-5">
+                        {published ? <span className="font-semibold" style={{ color: GREEN }}><i className="ti ti-circle-check mr-1" />발행 완료</span>
+                          : next ? <span className="font-bold" style={{ color: GREEN }}><i className="ti ti-arrow-right mr-1" />윤T · {next}</span>
+                          : <>
+                              {mine && <div><b style={{ color: GREEN }}>윤T</b> · {mine}</div>}
+                              {theirs && <div className="text-gray-700"><b>{who}</b> · {theirs}</div>}
+                              {!mine && !theirs && <span className="text-gray-400">-</span>}
+                            </>}
+                        {t.needs_check && <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">윤T 확인 필요</span>}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {st.original > 0
+                          ? (isAdmin
+                            ? <button onClick={(e) => { e.stopPropagation(); downloadOriginals(p.id) }} title="원본 파일 내려받기 (원장님만)"
+                                className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: '#E1F5EE', color: GREEN }}>
+                                ✓ {st.original}개 <i className="ti ti-download" />
+                              </button>
+                            : <Chip ok>✓ {st.original}개</Chip>)
+                          : <Chip>아직</Chip>}
+                      </td>
+                      <td className="px-3 py-2.5"><Chip ok={st.pdf > 0}>{st.pdf > 0 ? '✓ 올림' : '아직'}</Chip></td>
+                      <td className="px-3 py-2.5"><Chip ok={st.imported > 0} warn={!st.imported && st.pdf > 0}>{st.imported > 0 ? `✓ ${st.imported}문항` : st.pdf > 0 ? '넣기 전' : '아직'}</Chip></td>
+                      <td className="px-3 py-2.5 whitespace-nowrap"><Chip ok={st.matched > 0 && s.hitRate != null}>{st.matched > 0 && s.hitRate != null ? `✓ ${s.hitRate}% (${s.hit}/${s.total})` : '아직'}</Chip></td>
+                      <td className="px-3 py-2.5"><Chip ok={st.disc.length > 0}>{st.disc.length ? `✓ ${st.disc.join(' · ')}번` : '아직'}</Chip></td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <Chip ok={st.disc.length > 0 && !st.handMissing.length} warn={st.handCount > 0 && (st.handMissing.length > 0 || !st.disc.length)}>
+                          {st.disc.length > 0 && !st.handMissing.length ? `✓ ${st.disc.length}장` : st.handCount > 0 ? `${st.handCount}장 올림${st.handMissing.length ? ` · ${st.handMissing.join(' · ')}번 없음` : ''}` : '아직'}
+                        </Chip>
+                      </td>
+                      <td className="px-3 py-2.5"><Chip ok={st.review} warn={!st.review && st.reviewStarted}>{st.review ? '✓ 작성' : st.reviewStarted ? '작성 중' : '아직'}</Chip></td>
+                      <td className="px-3 py-2.5"><Chip ok={st.cards}>{st.cards ? '✓ 만듦' : '아직'}</Chip></td>
+                      <td className="px-3 py-2.5"><Chip ok={published} warn={p.blog_status === '작성중'}>{published ? '✓ 발행' : p.blog_status === '작성중' ? '요청함' : '아직'}</Chip></td>
                       <td className="px-3 py-2.5">
                         {s.printable
                           ? <button onClick={(e) => { e.stopPropagation(); openPrint(p.id) }} title="시험지 통째로 인쇄 (학생 풀이용)"
                               className="rounded-lg border px-2 py-1 text-xs font-semibold whitespace-nowrap" style={{ borderColor: GREEN, color: GREEN }}><i className="ti ti-printer" /> 인쇄</button>
                           : <span className="text-xs text-gray-300">-</span>}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Chip ok={s.files > 0}>{s.files > 0 ? `${s.files}개` : '없음'}</Chip>
-                        {s.originals > 0 && (isAdmin
-                          ? <button onClick={(e) => { e.stopPropagation(); downloadOriginals(p.id) }} title="원본 파일 내려받기 (원장님만)"
-                              className="ml-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
-                              <i className="ti ti-download" /> 원본 {s.originals}
-                            </button>
-                          : <span className="ml-1 text-[10px] text-gray-400" title="원본 보관 (원장님만 열람)">원본 {s.originals}</span>)}
-                      </td>
-                      <td className="px-3 py-2.5"><Chip ok={!!t.answers} warn={!t.answers && !!p.answers_text}>{t.answers ? '완료' : p.answers_text ? '작업중' : '대기'}</Chip></td>
-                      <td className="px-3 py-2.5"><Chip ok={nDisc >= 2} warn={nDisc === 1}>{nDisc ? `${nDisc}문항` : '대기'}</Chip></td>
-                      <td className="px-3 py-2.5"><Chip ok={s.handsolve >= Math.max(nDisc, 1)} warn={s.handsolve > 0 && s.handsolve < nDisc}>{s.handsolve ? `${s.handsolve}장` : '대기'}</Chip></td>
-                      <td className="px-3 py-2.5"><Chip ok={!!t.review} warn={!t.review && reviewed}>{t.review ? '완료' : reviewed ? '작성중' : '대기'}</Chip></td>
-                      <td className="px-3 py-2.5"><Chip ok={p.match_status === '완료'} warn={p.match_status === '진행중'}>{p.match_status}{s.matches ? ` ${s.matches}` : ''}</Chip></td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {s.hitRate == null || !s.matches ? <Chip>-</Chip> : <Chip ok={p.match_status === '완료'} warn={p.match_status !== '완료'}>{s.hitRate}% ({s.hit}/{s.total})</Chip>}
-                      </td>
-                      <td className="px-3 py-2.5"><Chip ok={s.questions > 0 && s.reflected === s.questions} warn={s.questions > 0 && s.reflected < s.questions}>{s.questions ? `${s.reflected}/${s.questions}` : '대기'}</Chip></td>
-                      <td className="px-3 py-2.5"><Chip ok={p.blog_status === '업로드완료'} warn={p.blog_status === '작성중'}>{p.blog_status}</Chip></td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
-                        {p.assignee ?? '-'}
-                        {t.needs_check && <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">윤T 확인</span>}
-                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{p.assignee ?? '-'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
                         {p.work_due_date ?? '-'}
-                        {p.work_due_date && !t.done && <span className="ml-1 text-[11px] text-gray-400">{dday(p.work_due_date)}</span>}
+                        {p.work_due_date && !t.done && !published && <span className="ml-1 text-[11px] text-gray-400">{dday(p.work_due_date)}</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[220px] truncate">{p.note}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+          </>
         )}
         <p className="mt-3 text-xs text-gray-400">
           줄을 누르면 그 학교의 상세 화면으로 갑니다. 학생·학부모 계정에서는 이 화면과 자료가 보이지 않습니다.

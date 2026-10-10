@@ -182,6 +182,21 @@ export function parseAnswerTable(text: string | null | undefined): AnswerRow[] {
   return raw.map((r) => ({ no: String(r.essay ? lastObjective + r.n : r.n), answer: r.answer, essay: r.essay, label: r.label }))
 }
 
+// 변별문항 칸에 적힌 것을 문항 번호로 푼다. 선생님마다 적는 법이 다르다:
+//   ["14", "16"] · ["20/22"] · ["객관식6", "객관식20"] · ["19/20/21/논술형"] · ["36", "논술형4"]
+// 「논술형2」는 그 시험의 두 번째 서술형 문항 번호로 바꾼다 (문항 목록이 있을 때). 손풀이 파일의 문항 표시(「17번」)도 이걸로 푼다.
+export function discNos(raw: string[] | null | undefined, questions?: { question_no: string; q_type?: string | null }[]): string[] {
+  const parts = (raw ?? []).flatMap((s) => String(s ?? '').split(/[\/,·\s]+/)).map((s) => s.trim()).filter(Boolean)
+  const essays = (questions ?? []).filter((q) => q.q_type === '서술형').map((q) => normNo(q.question_no))
+    .sort((a, b) => sortOrderOf(a) - sortOrderOf(b))
+  const out = parts.map((p) => {
+    const e = p.match(/^(서술형|논술형|서답형|주관식)\s*(\d+)?/)
+    if (e) return essays[Number(e[2] ?? 1) - 1] ?? normNo(p)
+    return normNo(p)
+  })
+  return Array.from(new Set(out.filter(Boolean)))
+}
+
 // 정답표에서 문항번호만
 export function answerNos(text: string | null | undefined): string[] {
   return parseAnswerTable(text).map((r) => r.no)

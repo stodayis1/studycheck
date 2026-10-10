@@ -74,8 +74,10 @@ def main():
         ms = markers(page, cols)
         words = page.get_text("words")
         n_mark = sum(1 for w in words if MARK.match(w[4]))
-        if n_mark >= 5 and n_mark >= 0.4 * len(words) and not page.get_images():
-            answers_page = pi                                 # 번호만 줄줄이 있는 쪽 = 미주(정답) 목록
+        # 미주(정답) 목록 쪽: 번호만 줄줄이 있거나, 작은 미주 번호 없이 「1) ③」 줄이 5개 넘게 있는 쪽
+        n_line = len(re.findall(r"(?m)^\s*\d+\)", page.get_text()))
+        if (n_mark >= 5 and n_mark >= 0.4 * len(words) and not page.get_images()) or (not ms and n_line >= 5):
+            answers_page = pi
             continue
         bottom = max([w[3] for w in page.get_text("words")] + [b["bbox"][3] for b in page.get_text("dict")["blocks"]] + [0]) + 4
         for c in (0, 1):
@@ -131,20 +133,65 @@ def main():
         pts = re.search(r"\[\s*(\d+(?:\.\d+)?)\s*점\s*\]", text)
         manifest.append({"no": p["no"], "page": p["page"], "file": name, "w": w, "h": h, "parts": len(p["parts"]),
                          "points": float(pts.group(1)) if pts else None,          # [3점] — 비어 있으면 None
-                         "essay": bool(re.search(r"서술|풀이 과정", text)),
+                         "essay": bool(re.search(r"서술|논술|풀이 과정|물음에 답하시오|\[\s*총", text)),
                          "choices": sum(1 for c in "①②③④⑤" if c in text),
                          "text": text[:300]})
 
     # 3) 미주 목록에서 정답 읽기: 「3) ④」
-    answers = {}
+    #    번호는 1부터 차례로 찾는다 (정답 글 안에 「(1)」 같은 괄호가 있어도 헷갈리지 않게).
+    #    ①~⑤ 나 숫자 하나가 아닌 정답(논술형·수식)은 글자로 옮기면 수식이 빠지므로 그 자리를 그림으로도 잘라 둔다.
+    answers, answer_images = {}, {}
     if answers_page is not None:
-        flat = re.sub(r"\s+", " ", d[answers_page].get_text())
-        for m in re.finditer(r"(\d+)\)\s*([^)]*?)(?=\s*\d+\)|$)", flat):
-            if m.group(2).strip():
-                answers[int(m.group(1))] = m.group(2).strip()
-    # 배점: 문항 글 안의 [3점]
+        page = d[answers_page]
+        cols = col_bounds(page)
+        marks = []                                            # (번호, 단, y0)
+        want = 1
+        for c in (0, 1):
+            ws = sorted([w for w in page.get_text("words") if (w[0] >= cols[1][0] - 5) == (c == 1)], key=lambda w: (round(w[1]), w[0]))
+            for w in ws:
+                if w[4] == f"{want})" and abs(w[0] - cols[c][0]) < 14:
+                    marks.append((want, c, w[1], w[2]))
+                    want += 1
+        bottom = max([w[3] for w in page.get_text("words")] + [0]) + 6
+        for i, (no, c, y0, xr) in enumerate(marks):
+            nxt = marks[i + 1] if i + 1 < len(marks) and marks[i + 1][1] == c else None
+            y1 = nxt[2] - 1 if nxt else bottom
+            x0, x1 = cols[c]
+            text = re.sub(r"\s+", " ", page.get_text("text", clip=pymupdf.Rect(xr + 1, y0 - 1, x1, y1))).strip()
+            text = re.sub(r"^(논술|서술)형?\s*\d+\s*[.)]\s*", "", text)
+            if re.fullmatch(r"[①②③④⑤,\s]+", re.sub(r"[^\w①②③④⑤,]", "", text) or " "):     # 빈 수식 틀 같은 찌꺼기 글자는 버린다
+                text = re.sub(r"[^①②③④⑤,]", "", text)
+            if not text:
+                continue
+            answers[no] = text
+            if not re.fullmatch(r"[①②③④⑤,\s]+|-?\d+(\.\d+)?", text):
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(Z, Z), clip=pymupdf.Rect(xr + 1, y0 - 9, x1, y1 - 4))   # 분수는 번호 줄보다 위로 올라온다
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                # 맨 윗줄에 닿아 있는 글자 = 윗 정답(분수 아랫부분 등)의 꼬리 → 첫 빈 줄까지 버린다
+                #   줄 간격이 좁아 빈 줄이 없을 수 있으므로, 윗줄에 닿은 글자 덩어리만 따라가며 지운다
+                gp = img.convert("L").load(); ip = img.load()
+                todo = [(x, 0) for x in range(img.width) if gp[x, 0] < INK]
+                seen = set(todo)
+                while todo:
+                    x, y = todo.pop()
+                    ip[x, y] = (255, 255, 255)
+                    for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x + 1, y + 1), (x - 1, y + 1)):
+                        if 0 <= nx < img.width and ny < min(img.height, 30) and (nx, ny) not in seen and gp[nx, ny] < 235:
+                            seen.add((nx, ny)); todo.append((nx, ny))
+                rows = ink_rows(img)
+                if rows:
+                    name = f"ans_{no:02d}.png"
+                    img.crop((0, max(0, rows[0] - 6), img.width, min(img.height, rows[1] + 8))).save(os.path.join(out, name))
+                    answer_images[no] = name
+    # 배점이 수식으로 찍혀 글자로 안 읽히는 문항은 points.json ({"7": 4, …})에 적어 두면 그 값을 쓴다
+    over = {}
+    if os.path.exists(os.path.join(out, "points.json")):
+        over = json.load(open(os.path.join(out, "points.json"), encoding="utf-8"))
     for m in manifest:
         m["answer"] = answers.get(m["no"])
+        m["answer_image"] = answer_images.get(m["no"])
+        if str(m["no"]) in over:
+            m["points"] = float(over[str(m["no"])])
     nos = [m["no"] for m in manifest]
     json.dump({"pdf": os.path.basename(pdf), "pages": len(d), "problems": manifest},
               open(os.path.join(out, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)

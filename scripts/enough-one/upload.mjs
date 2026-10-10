@@ -95,5 +95,32 @@ if (mode === 'link') {
   process.exit(0)
 }
 
-console.error('쓰는 법: node scripts/enough-one/upload.mjs images | rows | link')
+// 묶음 그림(10문항씩 한 장, 칸마다 빨간 [S01-31] 표시): 화면의 「AI 적중 대조」가 이걸 보고 비슷한 문항을 찾는다.
+// 보관함 enough-one/2026-2/sheets/<교재>/<NNN>.png — NNN 번째 장에는 그 교재의 (NNN-1)×10+1 ~ NNN×10 번째 문항이 있다.
+if (mode === 'sheets') {
+  const SHEETS = path.join(ROOT, '..', 'sheets')
+  const jobs = []
+  for (const [folder, [code]] of Object.entries(BOOKS)) {
+    const dir = path.join(SHEETS, folder)
+    if (!fs.existsSync(dir)) { console.error('묶음 그림 폴더가 없습니다:', dir); continue }
+    for (const f of fs.readdirSync(dir).filter((x) => /^\d{3}\.png$/.test(x))) jobs.push([path.join(dir, f), `enough-one/2026-2/sheets/${code}/${f}`])
+  }
+  let up = 0, skip = 0, fail = 0
+  async function worker() {
+    for (;;) {
+      const j = jobs.shift()
+      if (!j) return
+      const r = await supabase.storage.from(BUCKET).upload(j[1], fs.readFileSync(j[0]), { contentType: 'image/png', upsert: false })
+      if (!r.error) up++
+      else if (/exists|Duplicate/i.test(r.error.message)) skip++
+      else { fail++; console.error('\n✗', j[1], r.error.message) }
+    }
+  }
+  const total = jobs.length
+  await Promise.all(Array.from({ length: 6 }, worker))
+  console.log(`묶음 그림: 올림 ${up} · 이미 있음 ${skip} · 실패 ${fail} / 전체 ${total}`)
+  process.exit(fail ? 1 : 0)
+}
+
+console.error('쓰는 법: node scripts/enough-one/upload.mjs images | rows | link | sheets')
 process.exit(1)

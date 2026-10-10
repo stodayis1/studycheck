@@ -14,6 +14,9 @@ import {
   HIT_LEVELS, checkFileName, guessExamFile, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
+import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
+import ClaudeRequest from '@/components/exam-analysis/ClaudeRequest'
+import BlogCards from '@/components/exam-analysis/BlogCards'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
 
 // 손풀이 그림의 긴 쪽이 이보다 작으면 블로그에서 글씨가 흐리다 (태블릿 원본 내보내기는 보통 2000px 을 넘는다)
@@ -41,6 +44,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   const [tab, setTab] = useState(0)
   const [draft, setDraft] = useState<any>({})       // 아직 저장 안 한 글 칸
   const [busy, setBusy] = useState('')
+  // 원장: PDF 에서 문항 넣기 창 (작업한 시험지 PDF 를 올리면 바로 뜬다)
+  const [importSrc, setImportSrc] = useState<{ name: string; data?: ArrayBuffer; url?: string } | null>(null)
 
   const load = useCallback(async () => {
     const r = await apiFetch(`/api/exam-analysis?id=${id}`)
@@ -111,6 +116,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
         mimeType: type, fileSize: file.size, questionLabel: handsolveLabel(file.name),
       })
       if (!a.ok) alert(a.error)
+      // 원장이 작업한 시험지 PDF 를 올렸으면 그 자리에서 문항 자르기로 넘어간다
+      else if (data?.me?.isAdmin && /\.pdf$/i.test(file.name) && (kind === '문제' || kind === '문제정답해설')) setImportSrc({ name: file.name, data: await file.arrayBuffer() })
     }
     setBusy('')
     load()
@@ -207,7 +214,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               올리면 <b>{expectedPaperFileName(paper, '문제')}</b> 처럼 규칙대로 자동으로 붙습니다.
             </p>
             <FileDrop accept=".pdf,.png,.jpg,.jpeg" onFiles={(f) => upload(f)} label="작업한 시험지 PDF 올리기" />
-            <FileList files={paperFiles} onRemove={removeFile} onKind={isAdmin ? changeKind : undefined} empty="아직 올린 시험지가 없습니다." />
+            <FileList files={paperFiles} onRemove={removeFile} onKind={isAdmin ? changeKind : undefined} empty="아직 올린 시험지가 없습니다."
+              onImport={isAdmin ? (f) => setImportSrc({ name: f.file_name, url: f.url }) : undefined} />
+            {isAdmin && !data.sheetCode && paperFiles.some((f: any) => /\.pdf$/i.test(f.file_name) && (f.kind === '문제' || f.kind === '문제정답해설')) && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">PDF 는 올라와 있지만 아직 문항으로 넣지 않았습니다. 위 파일의 <b>「문항 넣기」</b>를 누르면 문항 · 정답 · 통째 인쇄가 채워집니다.</p>
+            )}
             {data.sheetCode && (
               <button onClick={() => openPrint(id)} className="mt-3 w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ background: GREEN }}>
                 <i className="ti ti-printer mr-1.5" />수학의지혜 시험지 양식으로 통째 인쇄
@@ -324,6 +335,7 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
       {/* ───────── 블로그 ───────── */}
       {tab === 5 && (
         <Card title="블로그 업로드">
+          <BlogCards paperId={id} paperName={`${paper.school_name}_${paper.grade}`} isAdmin={isAdmin} tasks={tasks} onSaved={load} />
           {!isAdmin && <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">블로그 상태는 원장님(윤T)만 바꿀 수 있습니다.</p>}
           {/* 원장: 블로그 글 요청. 누르면 「작성중」이 되고 요청 시각이 남는다 → Claude 가 이 표시를 보고
               시험분석 카드(scripts/exam-blog)와 글을 만들어 네이버 블로그에 임시저장한다 */}
@@ -371,6 +383,10 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
           </div>
         </Card>
       )}
+      {importSrc && (
+        <PdfImportDialog paperId={id} source={importSrc} existing={(data.questions ?? []).length}
+          onClose={() => setImportSrc(null)} onDone={load} />
+      )}
     </Shell>
   )
 }
@@ -405,6 +421,12 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
     if (!r.ok) alert(r.error)
     reload()
   }
+  // 원장: 「블로그 사용」을 한꺼번에 — 전체를 켜고 아닌 것만 끄는 쪽이 빠르다
+  const bulkBlog = async (mode: 'all' | 'strong' | 'none') => {
+    const r = await post({ action: 'bulkBlogUse', paperId: paper.id, mode })
+    if (!r.ok) alert(r.error)
+    reload()
+  }
   const remove = async (row: any) => {
     if (!confirm('이 매칭 기록을 지울까요?')) return
     const r = await post({ action: 'deleteMatch', id: row.id })
@@ -418,6 +440,12 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
           {['대기', '진행중', '완료'].map((x) => <option key={x}>{x}</option>)}
         </select>
       }>
+      {/* 원장: 적중 대조는 Claude 에게 맡긴다 (서버가 AI 를 부르는 「AI 적중 대조」 버튼은 사용료 때문에 숨겼다 — components/exam-analysis/AutoMatch.tsx 는 남아 있다) */}
+      {isAdmin && (
+        <ClaudeRequest paperId={paper.id} tasks={paper.tasks} kind="match" label="적중 대조 요청" onSaved={reload}
+          blocked={(data.questions ?? []).some((q: any) => q.problem_id) ? undefined : '먼저 「기본 · 파일」에서 PDF 의 「문항 넣기」를 해 주세요.'}
+          hint="기출 문항을 이너프원 교재와 대조해 적중률을 채웁니다. 요청을 남기고 Claude 에게 「요청 처리해줘」라고 하세요." />
+      )}
       {/* 적중률 — 유형 유사 이상이 있는 문항 ÷ 전체 문항 */}
       <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: '#F0FBF7' }}>
         {hit.total ? (
@@ -516,10 +544,30 @@ function MatchTab({ paper, data, isAdmin, reload, onStatus }: { paper: any; data
 
       {!data.matches.length ? <p className="py-6 text-center text-xs text-gray-400">아직 매칭 기록이 없습니다.</p> : (
         <div className="overflow-x-auto">
-          <p className="mb-1 text-xs font-semibold text-gray-500">매칭 기록 전체 (표)</p>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold text-gray-500">매칭 기록 전체 (표)</p>
+            {isAdmin && (
+              <span className="ml-auto flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-gray-500">블로그 사용 {data.matches.filter((x: any) => x.use_in_blog).length} / {data.matches.length}건 ·</span>
+                {([['all', '전체 선택'], ['strong', '쌍둥이 · 매우 유사만'], ['none', '모두 해제']] as const).map(([mode, label]) => (
+                  <button key={mode} onClick={() => bulkBlog(mode)} className="rounded border px-2 py-0.5 font-semibold" style={{ borderColor: GREEN, color: GREEN }}>{label}</button>
+                ))}
+              </span>
+            )}
+          </div>
+          {isAdmin && <p className="mb-1 text-[11px] text-gray-400">체크한 매칭 가운데 정도가 높은 5개까지 카드뉴스에 문항 사진으로 실립니다. 나머지는 매칭표(번호 칸)로만 나갑니다.</p>}
           <table className="w-full text-sm">
             <thead><tr className="text-left text-[11px] text-gray-500">
-              {['기출 문항', '이너프원 교재', '단원', '문항번호', '매칭 정도', '분석 메모', '블로그 사용', '입력', ''].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
+              {['기출 문항', '이너프원 교재', '단원', '문항번호', '매칭 정도', '분석 메모'].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
+              <th className="px-2 py-2 font-semibold whitespace-nowrap">
+                <label className="flex items-center gap-1">
+                  {isAdmin && <input type="checkbox" title="전체 선택 / 해제"
+                    checked={data.matches.length > 0 && data.matches.every((x: any) => x.use_in_blog)}
+                    onChange={(e) => bulkBlog(e.target.checked ? 'all' : 'none')} />}
+                  블로그 사용
+                </label>
+              </th>
+              {['입력', ''].map((h) => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody>
               {data.matches.map((row: any) => (
@@ -599,7 +647,7 @@ function FileDrop({ accept, onFiles, label }: { accept: string; onFiles: (f: Fil
 // 내려받는 주소: 임시 주소 뒤에 download= 를 붙이면 화면에 보이는 한글 파일명 그대로 저장된다
 const downloadUrl = (f: any) => (f.url ? `${f.url}&download=${encodeURIComponent(f.file_name)}` : '#')
 
-function FileList({ files, onRemove, onKind, empty }: { files: any[]; onRemove: (f: any) => void; onKind?: (f: any, kind: string) => void; empty: string }) {
+function FileList({ files, onRemove, onKind, onImport, empty }: { files: any[]; onRemove: (f: any) => void; onKind?: (f: any, kind: string) => void; onImport?: (f: any) => void; empty: string }) {
   if (!files.length) return <p className="mt-3 text-center text-xs text-gray-400">{empty}</p>
   return (
     <ul className="mt-3 divide-y text-sm">
@@ -614,6 +662,12 @@ function FileList({ files, onRemove, onKind, empty }: { files: any[]; onRemove: 
               className="rounded border px-1 py-0.5 text-[11px] text-gray-600">
               {['문제', '정답', '해설', '문제정답해설', '원본'].filter((k) => k === '원본' || /\.pdf$/i.test(f.file_name)).map((k) => <option key={k}>{k}</option>)}
             </select>
+          )}
+          {onImport && f.url && /\.pdf$/i.test(f.file_name) && (f.kind === '문제' || f.kind === '문제정답해설') && (
+            <button onClick={() => onImport(f)} title="이 PDF 를 문항별로 잘라 문제은행에 넣습니다"
+              className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-white" style={{ background: GREEN }}>
+              <i className="ti ti-scissors" />문항 넣기
+            </button>
           )}
           <a href={downloadUrl(f)} title="내려받기" className="flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
             style={{ borderColor: GREEN, color: GREEN }}>
