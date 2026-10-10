@@ -885,12 +885,15 @@ function AttendanceRate({ d, link }: { d: any; link: ReportLink }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, color: e.state === 'done' ? TEXT_BODY : ORANGE, lineHeight: 1.5 }}>
                     {label}
-                    {/* 어느 달 횟수를 채운 것인지 — 수업한 달과 다를 수 있다(9월분을 10월에 하는 식) */}
-                    {e.classType !== 'substitute' && e.targetMonth && (
-                      <span style={{ color: NAVY, fontWeight: 600 }}>
-                        {' '}{Number(e.targetMonth.slice(5, 7))}월분
-                      </span>
-                    )}
+                    {/* 어느 달 횟수인지 — 수업한 달과 다를 수 있다.
+                        대체수업은 옮겨 온 원래 수업일의 달로 센다(9/25 수업을 10/10에 하면 9월분). */}
+                    {(() => {
+                      const ym = e.classType === 'substitute'
+                        ? String(e.originalDate ?? '').slice(0, 7)
+                        : String(e.targetMonth ?? '').slice(0, 7)
+                      const mm = Number(ym.slice(5, 7))
+                      return mm ? <span style={{ color: NAVY, fontWeight: 600 }}>{' '}{mm}월분</span> : null
+                    })()}
                     {e.time && ` ${e.time}`}
                     {e.hours ? ` · ${e.hours}시간` : ''}
                     {e.state === 'planned' && ' · 예정'}
