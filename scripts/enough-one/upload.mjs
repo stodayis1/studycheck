@@ -35,12 +35,20 @@ const BOOKS = {
   '신원중3 2권 B': ['sw3-2b', '이너프원 신원중3 2권 (상)'],
   '타학교중3 1권': ['etc3-1', '이너프원 타학교 중3 1권'],
   '타학교중3 2권': ['etc3-2', '이너프원 타학교 중3 2권'],
+  // 고1 — 교과서 출판사 평가문제 (신원고 = 미래엔, 동산고 = 천재(전). scripts/enough-one/crop_eval.py)
+  '고1 미래엔 평가': ['h1-mirae', '교과서 평가문제 미래엔 공통수학2'],
+  '고1 천재전 평가': ['h1-chunjae', '교과서 평가문제 천재(전) 공통수학2'],
 }
 const unitOf = (title) => String(title ?? '').replace(/\s*-\s*(\d회차)/, ' $1').replace(/\s+/g, ' ').trim()
 const pathOf = (x) => `enough-one/2026-2/${BOOKS[x.book][0]}/${String(x.set).padStart(2, '0')}_${String(x.no).padStart(2, '0')}.png`
 
 const mode = process.argv[2]
-const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'))
+// manifest.json (중등 9권) + manifest_<책>.json (나중에 더한 책). 이 파일의 BOOKS 에 적힌 책만 올린다
+const manifest = [
+  ...JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')),
+  ...fs.readdirSync(ROOT).filter((f) => /^manifest_.+\.json$/.test(f)).flatMap((f) => JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'))),
+].filter((x) => BOOKS[x.book])
+  .filter((x, i, all) => all.findIndex((y) => y.book === x.book && y.set === x.set && y.no === x.no) === i)      // 두 파일에 같이 든 책(중2 하)은 한 번만
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
 if (mode === 'images') {
