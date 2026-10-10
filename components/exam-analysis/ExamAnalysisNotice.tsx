@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { apiFetch } from '@/lib/apiFetch'
 
 const GREEN = '#085041'
-export const ORDER_PDF = '/docs/exam-analysis-order-2026-2.pdf'
+export const ORDER_PDF = '/docs/exam-analysis-flow-2026-2.pdf'
 
 function Dot({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -73,7 +73,7 @@ export function ExamAnalysisNotice() {
             시험지 분석 열기
           </Link>
           <a href={ORDER_PDF} target="_blank" rel="noreferrer" className="flex-1 rounded-xl border px-3 py-2 text-center text-xs font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
-            업무지시 보기 (PDF)
+            업무플로우 안내문 보기 (PDF)
           </a>
         </div>
       </div>
