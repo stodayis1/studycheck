@@ -77,6 +77,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   let cur: (typeof problems)[number] | null = null
   const answers: Record<number, string> = {}
   const answerImages: Record<number, HTMLCanvasElement> = {}
+  let inAnswers = false, lastAnswerNo = 0
 
   for (let pi = 0; pi < doc.numPages; pi++) {
     onProgress?.(pi + 1, doc.numPages)
@@ -138,9 +139,11 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     // 정답표 쪽: 번호만 줄줄이 있거나, 작은 미주 번호 없이 「1) ③」 줄이 5개 넘게 있는 쪽
     const lineStarts = items.filter((t) => /^\d+\)/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
     const nMark = items.filter((t) => MARK.test(t.str)).length
-    if ((nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
+    // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
+    if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
+      inAnswers = true
       const marks: { no: number; c: number; y0: number; xr: number }[] = []
-      let want = Object.keys(answers).length + 1
+      let want = lastAnswerNo + 1
       for (const c of [0, 1]) {
         const ws = lineStarts.filter((t) => colOf(t.x) === c).sort((a, b) => a.base - b.base)
         for (const t of ws) {
@@ -151,6 +154,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           }
         }
       }
+      lastAnswerNo = want - 1
       const rows = inkRows(ctx, canvas.width, canvas.height)
       const bottom = Math.min(vp1.height, (rows ? rows[1] / Z : vp1.height) + 6)
       marks.forEach((m, i) => {
@@ -162,6 +166,8 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         let text = textIn(items, cols[m.c][0] - 1, m.y0 - 1, x1, y1).replace(/[-]/g, '').replace(/\s+/g, ' ').trim()
         text = text.replace(new RegExp(`(^|\\s)${m.no}\\)\\s*`), ' ').trim().replace(/^(논술|서술)형?\s*\d+\s*[.)]\s*/, '')
         if (/^[①②③④⑤,\s]+$/.test(text.replace(/[^\p{L}\p{N}①②③④⑤,]/gu, '') || ' ')) text = text.replace(/[^①②③④⑤,]/g, '')   // 빈 수식 틀 같은 찌꺼기는 버린다
+        const lead = text.match(/^[①②③④⑤](\s*,\s*[①②③④⑤])*/)
+        if (lead && text.length > lead[0].length) text = lead[0]          // 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
         if (!text) return
         answers[m.no] = text
         if (/^([①②③④⑤,\s]+|-?\d+(\.\d+)?)$/.test(text)) return
