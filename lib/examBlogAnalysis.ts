@@ -2,7 +2,7 @@
 // app/api/exam-analysis/blog/route.ts 가 부른다. 재료 모으기(gather)와 Claude 호출(generateBlogAnalysis)을 여기 둔다.
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
-import { hitSummary, normNo } from '@/lib/examAnalysis'
+import { discNos, hitSummary, normNo } from '@/lib/examAnalysis'
 
 const MODEL = 'claude-opus-5-5'
 export const FILE_BUCKET = 'exam-analysis'
@@ -38,11 +38,11 @@ export async function gather(supabase: any, paperId: string) {
     pts: Number(String(q.source_memo ?? '').match(/배점\s*([\d.]+)/)?.[1] ?? 0) || 0,
     path: pathOf.get(q.problem_id) as string | undefined, disc: !!q.is_discriminating,
   }))
-  const picked: string[] = (paper.discriminating_nos ?? []).length ? paper.discriminating_nos.map((n: string) => normNo(n)) : questions.filter((q: any) => q.disc).map((q: any) => q.no)
+  const picked: string[] = (paper.discriminating_nos ?? []).length ? discNos(paper.discriminating_nos, qs ?? []) : questions.filter((q: any) => q.disc).map((q: any) => q.no)
   const killers = Array.from(new Set(picked)).filter((no) => questions.some((q: any) => q.no === no))
   const solutions: Record<string, { path: string; type: string }> = {}
   for (const f of files ?? []) {
-    const no = normNo(String(f.question_label || (String(f.file_name).match(/(\d+)\s*번/) ?? [])[1] || ''))
+    const no = discNos([String(f.question_label || (String(f.file_name).match(/(\d+)\s*번/) ?? [])[1] || '')], qs ?? [])[0]
     if (no && !solutions[no]) solutions[no] = { path: f.storage_path, type: /png$/i.test(f.storage_path) ? 'image/png' : 'image/jpeg' }
   }
   const h = hitSummary(paper.answers_text, questions.map((q: any) => q.no), matches ?? [])

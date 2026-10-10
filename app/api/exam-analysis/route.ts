@@ -16,7 +16,7 @@ import { staffOrDeny } from '@/lib/apiAuth'
 import { normalizeSchool } from '@/lib/school'
 import {
   EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
-  bankAnswer, checkFileName, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
+  bankAnswer, checkFileName, discNos, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
 } from '@/lib/examAnalysis'
 
 export const dynamic = 'force-dynamic'
@@ -133,8 +133,8 @@ export async function GET(req: Request) {
         .order('exam_end_date', { ascending: true, nullsFirst: false }).order('school_name').order('grade')
       if (error) return bad(error.message, 500)
       const [files, questions, matches] = await Promise.all([
-        all((f, t) => supabase.from('exam_paper_files').select('paper_id, kind').range(f, t)),
-        all((f, t) => supabase.from('exam_questions').select('paper_id, bank_status, question_no').range(f, t)),
+        all((f, t) => supabase.from('exam_paper_files').select('paper_id, kind, question_label, file_name').range(f, t)),
+        all((f, t) => supabase.from('exam_questions').select('paper_id, bank_status, question_no, q_type, problem_id').range(f, t)),
         all((f, t) => supabase.from('exam_enough_matches').select('paper_id, question_no, match_level').range(f, t)),
       ])
       const stat: Record<string, any> = {}
@@ -156,6 +156,9 @@ export async function GET(req: Request) {
         const s = stat[String(sh.note).slice('exam_paper:'.length)]
         if (s) { s.printable = true; s.sheetCode = sh.code }
       }
+      // 카드뉴스를 만든 시험 (보관함 blog/<시험지 id>/analysis.json)
+      const { data: blogDirs } = await supabase.storage.from(FILE_BUCKET).list('blog', { limit: 1000 })
+      const hasCards = new Set((blogDirs ?? []).map((d: any) => d.name))
       // 적중률 (이너프원에 유형 유사 이상이 있는 문항 ÷ 전체 문항)
       return NextResponse.json({
         isAdmin: me.role === 'admin',
@@ -165,7 +168,25 @@ export async function GET(req: Request) {
             questions.filter((x) => x.paper_id === p.id).map((x) => x.question_no),
             matches.filter((m) => m.paper_id === p.id)
           )
-          return { ...p, stat: { ...of(p.id), hit: h.hit, total: h.total, hitRate: h.rate } }
+          // 단계별 상태 — 현황판이 「어디까지 됐고 다음은 누구 차례인지」를 한 줄로 보여 준다
+          const qs = questions.filter((x) => x.paper_id === p.id)
+          const fl = files.filter((f) => f.paper_id === p.id)
+          const disc = discNos(p.discriminating_nos, qs)
+          const handNos = new Set(fl.filter((f) => f.kind === '손풀이')
+            .flatMap((f) => discNos([f.question_label || (String(f.file_name).match(/(\d+)\s*번/) ?? [])[1] || ''], qs)))
+          const steps = {
+            original: fl.filter((f) => f.kind === '원본').length,
+            pdf: fl.filter((f) => f.kind === '문제' || f.kind === '문제정답해설').length,
+            imported: qs.filter((x) => x.problem_id).length,
+            matched: matches.filter((m) => m.paper_id === p.id).length,
+            disc,
+            handMissing: disc.filter((no) => !handNos.has(no)),
+            handCount: fl.filter((f) => f.kind === '손풀이').length,
+            review: !!(p.review_difficulty && (p.review_units || p.review_hard_types || p.review_mistakes || p.review_blog_summary) && p.review_next_points),
+            reviewStarted: !!(p.review_difficulty || p.review_units || p.review_hard_types || p.review_mistakes || p.review_next_points || p.review_blog_summary),
+            cards: hasCards.has(p.id),
+          }
+          return { ...p, stat: { ...of(p.id), hit: h.hit, total: h.total, hitRate: h.rate, steps } }
         }),
       })
     }

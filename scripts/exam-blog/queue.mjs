@@ -88,7 +88,8 @@ if (cmd === 'list') {
   const questions = qs ?? []
   // 변별문항: 선생님이 「정답·변별·손풀이」에 적은 번호가 기준. 비어 있을 때만 문항에 표시된 것을 쓴다
   const picked = (paper.discriminating_nos ?? []).length ? paper.discriminating_nos : questions.filter((q) => q.is_discriminating).map((q) => q.question_no)
-  const killers = Array.from(new Set(picked.map(normNo).filter(Boolean)))
+  // 선생님마다 적는 법이 다르다 (「20/22」 「객관식6」) → 쪼개서 번호만 남긴다 (lib/examAnalysis.ts discNos 와 같은 규칙)
+  const killers = Array.from(new Set(picked.flatMap((x) => String(x).split(/[\/,·\s]+/)).map(normNo).filter((n) => questions.some((q) => normNo(q.question_no) === n))))
 
   // 적중: 문항마다 가장 높은 매칭 하나만. 「참고」는 적중이 아니다 (lib/examAnalysis.ts hitSummary 와 같은 규칙)
   const nos = questions.map((q) => normNo(q.question_no))
