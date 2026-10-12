@@ -12,6 +12,7 @@ import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenb
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
+import { findMissingNotes } from '@/lib/missingNotes'
 
 interface Student {
   id: string
@@ -298,9 +299,31 @@ export default function TeacherLearningNotesPage() {
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
   // 담당 강사에게 본인 글 한 통씩 — 자기가 쓴 글이 학부모님께 어떻게 가는지 볼 수 있어야 한다.
   const [sampleResult, setSampleResult] = useState<any>(null)
+  // 수업일지가 덜 된 선생님께 보내는 알림 문자 — 미리보기를 본 뒤에만 발송된다.
+  const [remind, setRemind] = useState<any>(null)
   // 보강에서 한 것 — OPS 기록이라 서버를 거쳐 읽는다. **담당 강사만** 본다(학부모에겐 안 간다).
   const [opsMakeups, setOpsMakeups] = useState<any[] | null>(null)
   const [opsMakeupsBusy, setOpsMakeupsBusy] = useState(false)
+
+  /** 수업일지가 덜 된 선생님께 본인 몫만 문자로. 미리보기 → 확인 → 발송. */
+  async function runRemind(dryRun: boolean) {
+    if (!dryRun) {
+      const n = (remind?.items ?? []).filter((x: any) => !x.error).length
+      if (!n) return
+      if (!confirm(`${n}분의 선생님께 문자를 보냅니다.\n\n선생님마다 본인 담당 학생만 적혀 나가요.`)) return
+    }
+    setBriefBusy(true)
+    if (dryRun) setRemind(null)
+    try {
+      const res = await apiFetch('/api/teacher-reminder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, dryRun }),
+      })
+      setRemind(await res.json())
+    } catch (e: any) {
+      setRemind({ error: e?.message ?? '보내지 못했어요.' })
+    } finally { setBriefBusy(false) }
+  }
 
   /** 담당 강사에게 그날 본인 담당 학생 중 **글이 가장 짧은 한 명**의 브리핑을 보낸다. */
   async function sendTeacherSample() {
@@ -362,32 +385,18 @@ export default function TeacherLearningNotesPage() {
   async function loadMissing(date: string) {
     setMissing(null)
     const { data: ses } = await supabase.from('class_sessions')
-      .select('id, student_id, progress_content, today_textbook_name, hw_textbook_name, hw_textbook_page, hw_worksheet_range')
+      .select('id, student_id, session_type, progress_content, today_textbook_name, hw_textbook_name, hw_textbook_page, hw_worksheet_range')
       .eq('session_date', date)
     if (!ses?.length) { setMissing([]); return }
     const [{ data: notes }, { data: stus }] = await Promise.all([
       supabase.from('learning_notes').select('session_id, attendance').in('session_id', ses.map((x) => x.id)),
       supabase.from('students').select('id, name, grade, teacher_name').in('id', ses.map((x) => x.student_id)),
     ])
-    const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
-    const stuBy = new Map((stus ?? []).map((x: any) => [x.id, x]))
-    const out: { name: string; grade: string; teacher: string | null; why: string }[] = []
-    for (const x of ses) {
-      const n: any = noteBy.get(x.id)
-      const st: any = stuBy.get(x.student_id)
-      if (!st) continue
-      if (!n) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '수업일지 없음' }); continue }
-      if (!n.attendance) { out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '출결 미입력' }); continue }
-      // 결석·시험기간은 진도·과제를 안 쓰는 것이 정상이다
-      if (n.attendance === '결석' || n.attendance === ATT_EXAM) continue
-      const hasContent = !!(x.progress_content || x.today_textbook_name)
-      const hasHw = !!(x.hw_textbook_name || x.hw_worksheet_range || x.hw_textbook_page)
-      if (!hasContent && !hasHw) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '진도·과제 비었음' })
-      else if (!hasContent) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '진도 비었음' })
-      else if (!hasHw) out.push({ name: st.name, grade: st.grade, teacher: st.teacher_name, why: '과제 비었음' })
-    }
-    out.sort((a, b) => (a.teacher ?? '').localeCompare(b.teacher ?? '') || a.name.localeCompare(b.name))
-    setMissing(out)
+    // ★ 판정은 lib/missingNotes.ts 한 곳에만 둔다 — 선생님께 가는 알림 문자와
+    //   **같은 함수**를 써야 「원장님 화면엔 3건인데 문자엔 5건」이 안 생긴다.
+    setMissing(findMissingNotes({
+      sessions: ses as any, notes: (notes ?? []) as any, students: (stus ?? []) as any,
+    }))
   }
 
   // ★ 알리고는 변수를 채워 주지 않는다. 우리가 만든 본문이 **승인된 템플릿과 글자 단위로
@@ -2070,6 +2079,11 @@ ${e?.message ?? '연결 실패'}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 학습일지 미작성 보기
               </button>
+              <button onClick={() => runRemind(true)} disabled={briefBusy}
+                title="덜 채워진 수업일지를 선생님별로 묶어 문자로 알려요. 미리보기부터 나옵니다."
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                강사에게 알림 문자
+              </button>
               <button onClick={checkTemplate} disabled={briefBusy}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 템플릿 맞는지 확인
@@ -2203,6 +2217,47 @@ ${e?.message ?? '연결 실패'}
                       </details>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {remind && (
+              <div className="mt-3 text-[11px] space-y-1.5">
+                {remind.error ? (
+                  <div style={{ color: '#991b1b' }}>{remind.error}</div>
+                ) : remind.note ? (
+                  <div className="text-gray-500">{remind.note}</div>
+                ) : (
+                  <>
+                    <div className="font-bold" style={{ color: remind.dryRun ? '#633806' : '#27500A' }}>
+                      {remind.dryRun
+                        ? `미리보기 — 선생님 ${remind.items.length}분 · 보낼 내용 확인해주세요`
+                        : `알림 문자 ${remind.sent}분 발송`}
+                      {remind.testMode && <span className="font-normal"> (테스트 모드 — 실제로는 안 갔어요)</span>}
+                    </div>
+                    {remind.items.map((it: any, i: number) => (
+                      <div key={i} className="rounded-xl px-3 py-2" style={{ background: 'white' }}>
+                        <div className="font-bold text-gray-800">
+                          {it.ok === false ? '✗ ' : it.ok ? '✓ ' : ''}{it.teacher} 선생님
+                          <span className="font-normal text-gray-400"> · {it.count}건 · {it.phone ?? '번호 없음'} · {it.bytes}바이트</span>
+                        </div>
+                        {it.error && <div style={{ color: '#991b1b' }}>{it.error}</div>}
+                        <pre className="text-[11px] text-gray-600 whitespace-pre-wrap mt-1 leading-relaxed">{it.text}</pre>
+                      </div>
+                    ))}
+                    {(remind.noTeacher ?? []).length > 0 && (
+                      <div style={{ color: '#991b1b' }}>
+                        담당 강사가 안 적힌 학생 {remind.noTeacher.length}명은 못 보냅니다 — {remind.noTeacher.join(', ')}
+                      </div>
+                    )}
+                    {remind.dryRun && remind.items.some((x: any) => !x.error) && (
+                      <button onClick={() => runRemind(false)} disabled={briefBusy}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg text-white disabled:opacity-50"
+                        style={{ background: '#085041' }}>
+                        <i className="ti ti-send align-[-0.125em]" /> {remind.items.filter((x: any) => !x.error).length}분께 문자 보내기
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
