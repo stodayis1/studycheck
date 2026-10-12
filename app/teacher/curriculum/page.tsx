@@ -1064,7 +1064,7 @@ export default function TeacherCurriculumPage() {
                             <span className="text-xs text-gray-500 ml-1.5">{t.textbook_name}</span>
                             {t.grade && (
                               <span className="text-[10px] text-gray-400 ml-1.5">
-                                {t.grade} {t.semester ? `${t.semester}학기` : ''}
+                                {t.grade}{t.semester ? ` ${t.semester}학기` : ''}
                               </span>
                             )}
                           </div>
@@ -1090,6 +1090,14 @@ export default function TeacherCurriculumPage() {
                               style={{ background: '#e5e7eb', color: '#6b7280' }}>중단</span>
                             <span className="text-xs font-bold text-gray-500">{t.textbook_type}</span>
                             <span className="text-xs text-gray-400 ml-1.5">{t.textbook_name}</span>
+                            {/* ★ 학년·학기는 진행중 줄에만 있었다. 같은 교재를 학기별로 두 권 쓰는 일이
+                                흔해서(박지호 학생의 초능력연산 1학기·2학기) 안 보이면 똑같아 보이고,
+                                「1학기 연산서가 두 권인가?」를 화면에서 가릴 수가 없었다(원장님 2026-10-12). */}
+                            {t.grade && (
+                              <span className="text-[10px] text-gray-400 ml-1.5">
+                                {t.grade}{t.semester ? ` ${t.semester}학기` : ''}
+                              </span>
+                            )}
                           </div>
                           <button onClick={() => handleResumeTB(t.id)}
                             className="text-[10px] px-2 py-1 rounded-lg transition-all shrink-0"
@@ -1108,6 +1116,11 @@ export default function TeacherCurriculumPage() {
                               style={{ background: '#9FE1CB', color: '#085041' }}>완료</span>
                             <span className="text-xs font-bold text-gray-600">{t.textbook_type}</span>
                             <span className="text-xs text-gray-400 ml-1.5">{t.textbook_name}</span>
+                            {t.grade && (
+                              <span className="text-[10px] text-gray-400 ml-1.5">
+                                {t.grade}{t.semester ? ` ${t.semester}학기` : ''}
+                              </span>
+                            )}
                           </div>
                           {renderDeleteControl(t)}
                         </div>
