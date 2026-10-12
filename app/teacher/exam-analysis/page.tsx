@@ -180,8 +180,8 @@ export default function ExamAnalysisPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] text-gray-500" style={{ background: '#F0FBF7' }}>
-                  {[['학교 · 학년', ''], ['지금 할 일', ''], ['① 원본 스캔', '선생님이 올린 스캔본'], ['② 작업 PDF', '윤T가 한글 작업해 올린 것'], ['③ 문항', '윤T · 문항 넣기'], ['④ 적중', '윤T · 적중 대조 요청'],
-                    ['⑤ 변별문항', '담당'], ['⑥ 손풀이', '담당'], ['⑦ 총평', '담당'], ['⑧ 카드뉴스', '윤T · 카드뉴스 요청'], ['⑨ 블로그', '윤T'], ['인쇄', ''], ['담당자', ''], ['작업 기한', '']].map(([h, tip]) => (
+                  {[['학교 · 학년', ''], ['인쇄', '시험지 통째로 인쇄 (학생 풀이용)'], ['지금 할 일', ''], ['① 원본 스캔', '선생님이 올린 스캔본'], ['② 작업 PDF', '윤T가 한글 작업해 올린 것'], ['③ 문항', '윤T · 문항 넣기'], ['④ 적중', '윤T · 적중 대조 요청'],
+                    ['⑤ 변별문항', '담당'], ['⑥ 손풀이', '담당'], ['⑦ 총평', '담당'], ['⑧ 카드뉴스', '윤T · 카드뉴스 요청'], ['⑨ 블로그', '윤T'], ['담당자', ''], ['작업 기한', '']].map(([h, tip]) => (
                     <th key={h} title={tip} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -206,6 +206,12 @@ export default function ExamAnalysisPage() {
                         {p.school_name} {p.grade}
                         {p.priority === '높음' && <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">우선</span>}
                         <div className="text-[11px] font-normal text-gray-400">{p.exam_name}{p.exam_end_date ? ` · ${p.exam_end_date.slice(5)} 종료` : ''}</div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {s.printable
+                          ? <button onClick={(e) => { e.stopPropagation(); openPrint(p.id) }} title="시험지 통째로 인쇄 (학생 풀이용)"
+                              className="rounded-lg border px-2 py-1 text-xs font-semibold whitespace-nowrap" style={{ borderColor: GREEN, color: GREEN }}><i className="ti ti-printer" /> 인쇄</button>
+                          : <span className="text-xs text-gray-300">-</span>}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-xs leading-5">
                         {published ? <span className="font-semibold" style={{ color: GREEN }}><i className="ti ti-circle-check mr-1" />발행 완료</span>
@@ -239,12 +245,6 @@ export default function ExamAnalysisPage() {
                       <td className="px-3 py-2.5"><Chip ok={st.review} warn={!st.review && st.reviewStarted}>{st.review ? '✓ 작성' : st.reviewStarted ? '작성 중' : '아직'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={st.cards}>{st.cards ? '✓ 만듦' : '아직'}</Chip></td>
                       <td className="px-3 py-2.5"><Chip ok={published} warn={p.blog_status === '작성중'}>{published ? '✓ 발행' : p.blog_status === '작성중' ? '요청함' : '아직'}</Chip></td>
-                      <td className="px-3 py-2.5">
-                        {s.printable
-                          ? <button onClick={(e) => { e.stopPropagation(); openPrint(p.id) }} title="시험지 통째로 인쇄 (학생 풀이용)"
-                              className="rounded-lg border px-2 py-1 text-xs font-semibold whitespace-nowrap" style={{ borderColor: GREEN, color: GREEN }}><i className="ti ti-printer" /> 인쇄</button>
-                          : <span className="text-xs text-gray-300">-</span>}
-                      </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{p.assignee ?? '-'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
                         {p.work_due_date ?? '-'}
