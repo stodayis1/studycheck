@@ -249,7 +249,10 @@ export async function GET(req: NextRequest) {
     // 1차 = 당일 저녁 8시, 초등부 / 2차 = 다음 날 오전 11시, 전원(초등 못 나간 것 포함)
     const phase = q.get('phase') === '1' ? 1 : 2
     const date = q.get('date') ?? (phase === 1 ? kstDate(0) : kstDate(-1))
-    const summary = await run({ date, dryRun: false, only: phase === 1 ? 'elementary' : undefined })
+    // ★ 1차를 초등부만 보내던 것을 **학년 구분 없이** 바꿨다(원장님 2026-10-12).
+    //   기준이 학년이 아니라 「그 시각까지 작성이 끝났나」다. 밤 8시에 끝난 것은 그날 나가고,
+    //   못 끝낸 것은 다음 날 오전 11시에 나간다. 중복은 briefing_sends 가 막는다.
+    const summary = await run({ date, dryRun: false })
     summary.phase = phase
     // 만료된 링크를 치운다 — 쌓이면 표가 무거워지고, 만료된 링크를 남길 이유도 없다.
     const { count } = await admin().from('report_links').delete({ count: 'exact' })

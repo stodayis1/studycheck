@@ -1,5 +1,15 @@
 {
   "regions": [
     "icn1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/briefing?phase=1",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/briefing?phase=2",
+      "schedule": "0 2 * * *"
+    }
   ]
 }

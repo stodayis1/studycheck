@@ -2094,14 +2094,16 @@ ${e?.message ?? '연결 실패'}
               <i className="ti ti-messages" style={{ fontSize: 16, color: '#3C1E1E' }} />
               <span className="text-sm font-bold" style={{ color: '#3C1E1E' }}>카톡 수업 브리핑</span>
               <span className="text-[11px] font-bold ml-auto px-2 py-0.5 rounded-md"
-                style={{ background: '#FAEEDA', color: '#633806' }}>
-                자동 발송 꺼짐 — 원장님이 직접 보내셔야 나갑니다
+                style={{ background: '#EAF3DE', color: '#27500A' }}>
+                자동 발송 켜짐 — 저녁 8시 · 다음 날 오전 11시
               </span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
-              기록이 끝난 학생만 보냅니다. 같은 날은 두 번 가지 않아요.
-              권장 시각 — 초등은 당일 저녁 8시, 중·고등(+못 보낸 초등)은 다음 날 오전 11시.
-              익숙해지시면 자동 발송으로 바꿔 드립니다.
+              <b>저녁 8시</b>에 그날 기록이 끝난 학생에게 자동으로 나가고, <b>다음 날 오전 11시</b>에
+              그때 못 나간 나머지가 나갑니다. 같은 날은 두 번 가지 않아요.
+              보내기 직전에 오타·문장을 자동으로 다듬고(교재명·숫자는 건드리지 않습니다),
+              그 시각에도 덜 채워진 수업일지는 담당 선생님께 문자로 알립니다.
+              아래 버튼은 <b>그 사이에 직접 보내시거나 미리 확인하실 때</b> 쓰세요.
             </p>
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               <input type="date" value={briefDate} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}
