@@ -301,9 +301,48 @@ export default function TeacherLearningNotesPage() {
   const [sampleResult, setSampleResult] = useState<any>(null)
   // 수업일지가 덜 된 선생님께 보내는 알림 문자 — 미리보기를 본 뒤에만 발송된다.
   const [remind, setRemind] = useState<any>(null)
+  // 오타·문장 점검 — 고치지 않고 「이렇게 바꿀까요」를 내놓는다. 고른 것만 반영한다.
+  const [polish, setPolish] = useState<any>(null)
+  const [polishPick, setPolishPick] = useState<Set<string>>(new Set())
   // 보강에서 한 것 — OPS 기록이라 서버를 거쳐 읽는다. **담당 강사만** 본다(학부모에겐 안 간다).
   const [opsMakeups, setOpsMakeups] = useState<any[] | null>(null)
   const [opsMakeupsBusy, setOpsMakeupsBusy] = useState(false)
+
+  /** 오타·문장 점검 — AI 가 고칠 것을 내놓고, 원장님이 고른 것만 반영한다. */
+  async function runPolish() {
+    setBriefBusy(true); setPolish(null); setPolishPick(new Set())
+    try {
+      const res = await apiFetch('/api/note-polish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate }),
+      })
+      const data = await res.json()
+      setPolish(data)
+      // 처음엔 전부 골라 둔다 — 원장님이 빼고 싶은 것만 빼시면 된다.
+      setPolishPick(new Set((data.items ?? []).map((i: any) => `${i.kind}:${i.id}`)))
+    } catch (e: any) {
+      setPolish({ error: e?.message ?? '점검하지 못했어요.' })
+    } finally { setBriefBusy(false) }
+  }
+
+  async function applyPolish() {
+    const picked = (polish?.items ?? []).filter((i: any) => polishPick.has(`${i.kind}:${i.id}`))
+    if (!picked.length) return
+    if (!confirm(`${picked.length}건을 고칩니다.\n\n선생님이 쓰신 글이 바뀌어요. 되돌리려면 수업일지에서 직접 고치셔야 합니다.`)) return
+    setBriefBusy(true)
+    try {
+      const res = await apiFetch('/api/note-polish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, apply: picked.map((i: any) => ({ id: i.id, kind: i.kind, after: i.after })) }),
+      })
+      const data = await res.json()
+      setPolish({ ...polish, applied: data.applied, items: [] })
+      setBriefPreview(null)   // 글이 바뀌었으니 미리보기는 다시 받아야 한다
+      fetchData()
+    } catch (e: any) {
+      setPolish({ ...polish, error: e?.message ?? '고치지 못했어요.' })
+    } finally { setBriefBusy(false) }
+  }
 
   /** 수업일지가 덜 된 선생님께 본인 몫만 문자로. 미리보기 → 확인 → 발송. */
   async function runRemind(dryRun: boolean) {
@@ -2079,6 +2118,11 @@ ${e?.message ?? '연결 실패'}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 학습일지 미작성 보기
               </button>
+              <button onClick={runPolish} disabled={briefBusy}
+                title="그날 진도·알림장의 오타를 잡고 문장을 다듬어요. 고치지 않고 먼저 보여드립니다."
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                오타·문장 점검
+              </button>
               <button onClick={() => runRemind(true)} disabled={briefBusy}
                 title="덜 채워진 수업일지를 선생님별로 묶어 문자로 알려요. 미리보기부터 나옵니다."
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
@@ -2217,6 +2261,59 @@ ${e?.message ?? '연결 실패'}
                       </details>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {polish && (
+              <div className="mt-3 text-[11px] space-y-1.5">
+                {polish.error ? (
+                  <div style={{ color: '#991b1b' }}>{polish.error}</div>
+                ) : polish.applied != null ? (
+                  <div className="font-bold" style={{ color: '#27500A' }}>
+                    {polish.applied}건을 고쳤어요. 미리보기를 다시 눌러 확인해주세요.
+                  </div>
+                ) : polish.note ? (
+                  <div className="text-gray-500">{polish.note}</div>
+                ) : (
+                  <>
+                    <div className="font-bold" style={{ color: '#633806' }}>
+                      {polish.checked}건을 보고 {polish.items.length}건을 고치자고 합니다 — 보시고 고르세요
+                      {polish.truncated > 0 && <span className="font-normal"> (글이 많아 {polish.truncated}건은 다음에)</span>}
+                    </div>
+                    {polish.partialError && <div style={{ color: '#991b1b' }}>{polish.partialError}</div>}
+                    {polish.items.map((it: any) => {
+                      const key = `${it.kind}:${it.id}`
+                      const on = polishPick.has(key)
+                      return (
+                        <div key={key} className="rounded-xl px-3 py-2 bg-white">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" checked={on} onChange={() => setPolishPick((p) => {
+                              const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n
+                            })} />
+                            <b className="text-gray-800">{it.student}</b>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background: it.kind === 'notice' ? '#EFF6FF' : '#F0FDF4', color: it.kind === 'notice' ? '#1D4ED8' : '#15803D' }}>
+                              {it.kind === 'notice' ? '알림장' : '진도'}
+                            </span>
+                            {it.teacher && <span className="text-[10px] text-gray-400">{it.teacher} 선생님</span>}
+                            <span className="text-[10px] text-gray-400 ml-auto">{it.why}</span>
+                          </label>
+                          <div className="mt-1 pl-5 space-y-0.5">
+                            <div className="text-gray-400 line-through whitespace-pre-wrap">{it.before}</div>
+                            <div className="text-gray-800 whitespace-pre-wrap">{it.after}</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {polish.items.length > 0 && (
+                      <button onClick={applyPolish} disabled={briefBusy || polishPick.size === 0}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg text-white disabled:opacity-50"
+                        style={{ background: '#633806' }}>
+                        <i className="ti ti-wand align-[-0.125em]" /> 고른 {polishPick.size}건 고치기
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
