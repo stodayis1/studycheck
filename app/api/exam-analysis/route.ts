@@ -191,23 +191,28 @@ export async function GET(req: Request) {
       })
     }
 
-    // ?todo=1 → 대시보드 알림용. 중등 선생님(과 원장)에게 「이번 시험 기출분석에서 남은 일」을 준다
+    // ?todo=1 → 대시보드 알림용. 중 · 고등 선생님(과 원장)에게 「이번 시험 기출분석에서 남은 일」을 준다 (자기 학교급 시험만)
     if (q.get('todo')) {
       const u = { name: me.name, role: me.role, supervisor_grades: me.supervisorGrades }
-      // 중등 선생님 = 중등 학년 주임이거나, 맡은 재원생 중에 중학생이 있는 선생님
-      let middle = u?.role === 'admin' || (u?.supervisor_grades ?? []).some((g: string) => String(g).startsWith('중'))
-      if (!middle && u?.name) {
-        const { data: st } = await supabase.from('students').select('id')
-          .eq('is_active', true).like('grade', '중%').ilike('teacher_name', `%${u.name}%`).limit(1)
-        middle = !!st?.length
+      // 그 학교급 선생님 = 그 학교급 학년 주임이거나, 맡은 재원생 중에 그 학교급 학생이 있는 선생님. 원장은 둘 다
+      const levels: string[] = []
+      for (const lv of ['중', '고']) {
+        let mine = u?.role === 'admin' || (u?.supervisor_grades ?? []).some((g: string) => String(g).startsWith(lv))
+        if (!mine && u?.name) {
+          const { data: st } = await supabase.from('students').select('id')
+            .eq('is_active', true).like('grade', `${lv}%`).ilike('teacher_name', `%${u.name}%`).limit(1)
+          mine = !!st?.length
+        }
+        if (mine) levels.push(lv)
       }
-      if (!middle) return NextResponse.json({ show: false, papers: [] })
+      if (!levels.length) return NextResponse.json({ show: false, papers: [] })
 
       const { data: all0 } = await supabase.from('exam_papers').select('*')
         .order('exam_year', { ascending: false }).order('term', { ascending: false }).order('created_at', { ascending: false })
       // 가장 최근 시험(연도 · 학기 · 구분) 한 묶음만, 아직 「완료」가 아닌 것
       const first = (all0 ?? [])[0]
-      const cur = (all0 ?? []).filter((p: any) => first && p.exam_year === first.exam_year && p.term === first.term && p.exam_type === first.exam_type && !p.tasks?.done)
+      const cur = (all0 ?? []).filter((p: any) => first && p.exam_year === first.exam_year && p.term === first.term && p.exam_type === first.exam_type && !p.tasks?.done
+        && levels.includes(String(p.grade).charAt(0)))
       if (!cur.length) return NextResponse.json({ show: true, papers: [] })
       const ids = cur.map((p: any) => p.id)
       const [{ data: fs }, { data: qs }] = await Promise.all([

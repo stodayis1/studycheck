@@ -79,7 +79,7 @@ export default function ExamAnalysisPage() {
   const curExam = exam || exams[0] || ''
   const rows = (papers ?? []).filter((p) =>
     (curExam === 'all' || !curExam || examPrefix(p) === curExam) &&
-    (!fSchool || p.school_name === fSchool) && (!fGrade || p.grade === fGrade))
+    (!fSchool || p.school_name === fSchool) && (!fGrade || p.grade === fGrade || (fGrade.length === 1 && String(p.grade).startsWith(fGrade))))
   const schools = useMemo(() => Array.from(new Set((papers ?? []).map((p) => p.school_name))).sort(), [papers])
 
   const create = async () => {
@@ -148,6 +148,8 @@ export default function ExamAnalysisPage() {
           </select>
           <select value={fGrade} onChange={(e) => setFGrade(e.target.value)} className="rounded-lg border bg-white px-2.5 py-1.5">
             <option value="">전체 학년</option>
+            <option value="중">중등 전체</option>
+            <option value="고">고등 전체</option>
             {GRADES.map((x) => <option key={x}>{x}</option>)}
           </select>
           <span className="text-xs text-gray-400">{rows.length}건</span>

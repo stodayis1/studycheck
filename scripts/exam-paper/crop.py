@@ -72,7 +72,7 @@ def main():
     # 1) 쪽·단 순서대로 훑으며 「번호 자리」와 「단 끝」을 한 줄로 늘어놓는다
     stream = []          # (쪽, 단, 단 범위, y시작, y끝, 문항번호 또는 None)
     erase = {}           # (쪽, 문항번호) → 같은 줄에 찍힌 번호 글자의 자리 (그림에서 지운다)
-    answers_page = None
+    answers_pages = []   # 정답표가 시작된 쪽부터 끝까지 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
     for pi in range(len(d)):
         page = d[pi]
         cols = col_bounds(page)
@@ -81,8 +81,8 @@ def main():
         n_mark = sum(1 for w in words if MARK.match(w[4]))
         # 미주(정답) 목록 쪽: 번호만 줄줄이 있거나, 작은 미주 번호 없이 「1) ③」 줄이 5개 넘게 있는 쪽
         n_line = len(re.findall(r"(?m)^\s*\d+\)", page.get_text()))
-        if (n_mark >= 5 and n_mark >= 0.4 * len(words) and not page.get_images()) or (not ms and n_line >= 5):
-            answers_page = pi
+        if (n_mark >= 5 and n_mark >= 0.4 * len(words) and not page.get_images()) or (not ms and n_line >= 5) or answers_pages:
+            answers_pages.append(pi)
             continue
         bottom = max([w[3] for w in page.get_text("words")] + [b["bbox"][3] for b in page.get_text("dict")["blocks"]] + [0]) + 4
         for c in (0, 1):
@@ -163,11 +163,11 @@ def main():
     #    번호는 1부터 차례로 찾는다 (정답 글 안에 「(1)」 같은 괄호가 있어도 헷갈리지 않게).
     #    ①~⑤ 나 숫자 하나가 아닌 정답(논술형·수식)은 글자로 옮기면 수식이 빠지므로 그 자리를 그림으로도 잘라 둔다.
     answers, answer_images = {}, {}
-    if answers_page is not None:
+    want = 1
+    for answers_page in answers_pages:              # 정답 · 해설이 여러 쪽에 걸칠 수 있다
         page = d[answers_page]
         cols = col_bounds(page)
         marks = []                                            # (번호, 단, y0)
-        want = 1
         for c in (0, 1):
             ws = sorted([w for w in page.get_text("words") if (w[0] >= cols[1][0] - 5) == (c == 1)], key=lambda w: (round(w[1]), w[0]))
             for w in ws:
@@ -183,6 +183,9 @@ def main():
             text = re.sub(r"^(논술|서술)형?\s*\d+\s*[.)]\s*", "", text)
             if re.fullmatch(r"[①②③④⑤,\s]+", re.sub(r"[^\w①②③④⑤,]", "", text) or " "):     # 빈 수식 틀 같은 찌꺼기 글자는 버린다
                 text = re.sub(r"[^①②③④⑤,]", "", text)
+            lead = re.match(r"^[①②③④⑤](\s*,\s*[①②③④⑤])*", text)
+            if lead and len(text) > len(lead.group(0)):      # 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
+                text = lead.group(0)
             if not text:
                 continue
             answers[no] = text

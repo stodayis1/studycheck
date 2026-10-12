@@ -4,11 +4,11 @@
 // 칸을 채워 보여 주고, 틀린 칸만 고쳐서 올린다. 보관할 때의 파일명은 앱이 규칙대로 붙인다.
 import { useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { EXAM_TYPES, SCHOOLS, guessExamFile, standardFileName } from '@/lib/examAnalysis'
+import { EXAM_TYPES, GRADES, SCHOOLS, guessExamFile, standardFileName } from '@/lib/examAnalysis'
 import { GREEN, post } from './ui'
 
 const KINDS = ['문제', '원본', '정답', '해설', '문제정답해설']
-const ALL_GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
+const ALL_GRADES = GRADES
 const CELL = 'rounded border px-1.5 py-1 text-xs'
 
 type Row = { file: File; exam_year: string; term: string; exam_type: string; school_name: string; grade: string; kind: string; state: string }

@@ -1,5 +1,5 @@
 'use client'
-// 대시보드 맨 위에 뜨는 기출분석 알림. 중등 선생님(과 원장)에게만 보인다.
+// 대시보드 맨 위에 뜨는 기출분석 알림. 중 · 고등 선생님(과 원장)에게 자기 학교급 시험만 보인다.
 // 올라온 시험지마다 무엇이 남았는지(변별 · 손풀이 · 총평 · 다음 시험 대비) 한 줄씩 보여 준다.
 // 정답은 선생님 일이 아니다 — 원장이 한글 파일에 넣어 올린다 (루트 · 분수를 앱에 칠 수 없어서. 2026-10-08)
 // 전부 「완료」로 체크되면 사라진다.
@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { apiFetch } from '@/lib/apiFetch'
 
 const GREEN = '#085041'
-export const ORDER_PDF = '/docs/exam-analysis-order-2026-2.pdf'
+export const ORDER_PDF = '/docs/exam-analysis-flow-2026-2.pdf'
 
 function Dot({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -73,7 +73,7 @@ export function ExamAnalysisNotice() {
             시험지 분석 열기
           </Link>
           <a href={ORDER_PDF} target="_blank" rel="noreferrer" className="flex-1 rounded-xl border px-3 py-2 text-center text-xs font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
-            업무지시 보기 (PDF)
+            업무플로우 안내문 보기 (PDF)
           </a>
         </div>
       </div>
