@@ -2371,7 +2371,7 @@ ${e?.message ?? '연결 실패'}
                     </div>
                     {(sampleResult.picks ?? []).map((p: any, i: number) => (
                       <div key={i} style={{ color: p.ok ? '#4b5563' : '#991b1b' }}>
-                        {p.ok ? '✓' : '✗'} {p.teacher} 선생님 — {p.student} 학생
+                        {p.ok ? '✓' : '✗'} {p.teacher} 선생님{p.student ? ` — ${p.student} 학생` : ''}
                         {p.bodyLen != null && <span className="text-gray-400"> ({p.bodyLen}자)</span>}
                         {!p.ok && p.error && ` · ${p.error}`}
                       </div>

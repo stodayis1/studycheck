@@ -148,6 +148,7 @@ async function run(opts: {
         studentId: student.id,
         name: student.name,
         phone: String(student.parent_phone).replace(/^(\d{3})\d+(\d{4})$/, '$1****$2'),
+        attendance: note.attendance ?? null,
         bodyLen: brief.bodyLen,
         body: brief.body,
       })
@@ -270,6 +271,10 @@ export async function GET(req: NextRequest) {
  * (원장님 2026-10-10). 짧은 글이 기준인 이유 — 적게 쓴 날이 어떻게 보이는지가
  * 제일 도움이 되기 때문이다.
  *
+ * ★ 결석한 날은 뺀다(원장님 2026-10-12). 결석 브리핑은 선생님이 쓴 글이 아니라
+ *   「결석으로 수업에 참여하지 못했습니다」 같은 자동 문구라서, 본인 글을 보시라는
+ *   이 기능의 뜻에 안 맞는다. 게다가 글이 짧아 「가장 짧은 글」에 자꾸 뽑혔다.
+ *
  * 번호는 OPS profiles 에서 읽는다(스터디체크 users 에는 전화 칸이 없다).
  * 학부모 발송 기록(briefing_sends)은 남기지 않는다 — 진짜 발송을 막으면 안 된다.
  */
@@ -288,14 +293,18 @@ async function runTeacherSample(date: string) {
   const teacherOf = new Map((students ?? []).map((s: any) =>
     [s.id, String(s.teacher_name ?? '').split(/[,，、]/)[0].trim()]))
 
-  // ② 선생님마다 **글이 가장 짧은** 한 명을 고른다.
+  // ② 선생님마다 **글이 가장 짧은** 한 명을 고른다. 결석한 날은 빼고 본다.
   const pickBy = new Map<string, any>()
+  const onlyAbsent = new Set<string>()
   for (const p of previews) {
     const t = teacherOf.get(p.studentId)
     if (!t) continue
+    if (p.attendance === '결석') { onlyAbsent.add(t); continue }
     const cur = pickBy.get(t)
     if (!cur || (p.bodyLen ?? 0) < (cur.bodyLen ?? 0)) pickBy.set(t, p)
   }
+  // 그날 담당 학생이 전부 결석이면 보낼 것이 없다 — 조용히 넘기지 말고 알린다.
+  const absentOnly = [...onlyAbsent].filter((t) => !pickBy.has(t))
 
   const phones = await fetchOpsTeacherPhones()
   const picks: any[] = []
@@ -310,6 +319,9 @@ async function runTeacherSample(date: string) {
       teacher, student: p.name, bodyLen: p.bodyLen, ok,
       error: ok ? undefined : (r.errors?.[0]?.error ?? '발송 실패'),
     })
+  }
+  for (const t of absentOnly) {
+    picks.push({ teacher: t, student: null, ok: false, error: '그날 담당 학생이 모두 결석이라 보낼 글이 없어요' })
   }
   picks.sort((a, b) => a.teacher.localeCompare(b.teacher, 'ko'))
   return { date, sent, picks }
