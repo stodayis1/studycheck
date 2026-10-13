@@ -6,6 +6,7 @@ import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { DailyFlow } from '@/components/teacher/DailyFlow'
 import { LevelGuide, LevelTabs, ClassRules, ProblemBankNote, type Level } from '@/components/teacher/LevelGuide'
+import { EvalPurpose } from '@/components/teacher/EvalPurpose'
 
 // 선생님용 사용 매뉴얼. 원장님이 매번 가서 알려주지 않아도 되도록 메뉴별로 "무엇을 하는 곳인지 /
 // 주로 누르는 버튼 / 주의할 점"을 모아둔다. 묶음은 사이드바(components/teacher/Sidebar.tsx)와 같게 유지할 것.
@@ -282,6 +283,9 @@ export default function TeacherManualPage() {
         {/* 부별 안내 — 고른 부만 보인다. 메뉴는 같고 과정·교재·평가·운영이 다르다. */}
         <LevelTabs level={level} onChange={setLevel} />
         <LevelGuide level={level} />
+
+        {/* 평가 세 가지를 무엇에 쓰는지 — 세 부가 같아서 따로 묶었다(원장님 2026-10-13) */}
+        <EvalPurpose />
 
         {/* 세 부가 똑같이 지키는 운영 규칙 */}
         <ClassRules />
