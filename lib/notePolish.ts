@@ -146,3 +146,37 @@ export async function applyPolish(
   }
   return done
 }
+
+/**
+ * 무엇을 고쳤고 무엇을 건너뛰었는지 남긴다 (note_polish_log).
+ *
+ * 밤 8시 자동 교정은 **사람 없이** 선생님 글을 바꾼다. 기록이 없으면 나중에
+ * 「이 문장 내가 이렇게 안 썼는데」가 나왔을 때 확인할 길이 없다(2026-10-13).
+ * 기록이 실패해도 발송은 막지 않는다 — 곁들이는 정보다.
+ */
+export async function logPolish(
+  db: SupabaseClient,
+  date: string,
+  items: PolishItem[],
+  source: 'auto' | 'manual',
+  appliedIds?: Set<string>,
+) {
+  if (!items.length) return
+  try {
+    await db.from('note_polish_log').insert(items.map((i) => ({
+      session_date: date,
+      kind: i.kind,
+      ref_id: i.id,
+      student_name: i.student,
+      teacher_name: i.teacher,
+      before_text: i.before,
+      after_text: i.after,
+      why: i.why,
+      applied: appliedIds ? appliedIds.has(i.id) : i.safe,
+      skip_reason: i.safe ? null : i.unsafeReason,
+      source,
+    })))
+  } catch {
+    // 기록이 안 남아도 발송은 나가야 한다.
+  }
+}

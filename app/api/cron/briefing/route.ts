@@ -14,7 +14,7 @@
 // ★ 순서가 중요하다. 교정을 **발송 전에** 끝내야 고쳐진 글이 나간다.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { collectPolishTargets, proposePolish, applyPolish } from '@/lib/notePolish'
+import { collectPolishTargets, proposePolish, applyPolish, logPolish } from '@/lib/notePolish'
 import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherReminder'
 
 // 111명 발송이 51초였다(2026-10-12 실측). 교정·알림까지 더해도 여유가 있어야 한다.
@@ -58,6 +58,8 @@ export async function GET(req: NextRequest) {
       const done = safe.length
         ? await applyPolish(db, safe.map((i) => ({ id: i.id, kind: i.kind, after: i.after })))
         : []
+      // 고친 것과 건너뛴 것을 모두 남긴다 — 사람 없이 고치는 일이라 추적이 돼야 한다.
+      await logPolish(db, date, items, 'auto', new Set(done.filter((d) => d.ok).map((d) => d.id)))
       out.polish = {
         checked,
         제안: items.length,
