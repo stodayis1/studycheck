@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { DailyFlow } from '@/components/teacher/DailyFlow'
-import { LevelGuide, IdeaInvite } from '@/components/teacher/LevelGuide'
+import { LevelGuide, LevelTabs, ClassRules, ProblemBankNote, type Level } from '@/components/teacher/LevelGuide'
 
 // 선생님용 사용 매뉴얼. 원장님이 매번 가서 알려주지 않아도 되도록 메뉴별로 "무엇을 하는 곳인지 /
 // 주로 누르는 버튼 / 주의할 점"을 모아둔다. 묶음은 사이드바(components/teacher/Sidebar.tsx)와 같게 유지할 것.
@@ -257,6 +257,9 @@ export default function TeacherManualPage() {
   const { isAdmin } = useAuth()
   const [open, setOpen] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // ★ 고른 부가 **페이지 전체**를 가른다. 예전엔 아래쪽 초등 전용 안내가 탭과 상관없이
+  //   늘 떠서 「고등부를 눌렀는데 초등 내용이 뜬다」는 지적을 받았다(원장님 2026-10-12).
+  const [level, setLevel] = useState<Level>('초등부')
   const admin = isAdmin()
 
   const q = query.trim()
@@ -276,13 +279,17 @@ export default function TeacherManualPage() {
         {/* 하루 흐름 — 대시보드와 **같은 내용**을 쓴다(components/teacher/DailyFlow) */}
         <DailyFlow />
 
-        {/* 부별 안내 — 메뉴는 같고 과정·교재·평가가 다르다.
-            2026-10-12 고등부 선생님이 오시면서 따로 묶었다. */}
-        <LevelGuide />
+        {/* 부별 안내 — 고른 부만 보인다. 메뉴는 같고 과정·교재·평가·운영이 다르다. */}
+        <LevelTabs level={level} onChange={setLevel} />
+        <LevelGuide level={level} />
 
-        {/* 교재·과정을 늘려 달라고 말할 수 있다는 안내 */}
-        <IdeaInvite />
+        {/* 세 부가 똑같이 지키는 운영 규칙 */}
+        <ClassRules />
 
+        {/* 문제은행(매쓰홀릭)과 오답관리 — 고등은 맞춰 가는 중이라 의견을 받는다 */}
+        <ProblemBankNote />
+
+        {level === '초등부' && (<>
         {/* 초등 레벨학습지 규칙 - 가장 중요 */}
         <section className="rounded-2xl p-4 space-y-3" style={{ background: '#fef2f2', border: '1px solid #fca5a5' }}>
           <h2 className="text-sm font-bold flex items-center gap-1.5" style={{ color: '#991b1b' }}>
@@ -367,6 +374,7 @@ export default function TeacherManualPage() {
             <p>초등 레벨학습지가 바로 이 <b>단원평가 대비용</b>이에요 — 위 빨간 안내와 같이 봐주세요.</p>
           </div>
         </section>
+        </>)}
 
         {/* 검색 */}
         <div className="relative">
