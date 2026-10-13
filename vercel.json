@@ -4,11 +4,11 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/briefing?phase=1",
+      "path": "/api/cron/briefing/evening",
       "schedule": "0 11 * * *"
     },
     {
-      "path": "/api/cron/briefing?phase=2",
+      "path": "/api/cron/briefing/morning",
       "schedule": "0 2 * * *"
     }
   ]

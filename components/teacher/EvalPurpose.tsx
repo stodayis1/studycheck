@@ -11,8 +11,11 @@ import { useState } from 'react'
 //
 // 세 부가 같아서 부와 상관없이 늘 보인다.
 
+// 2026-10-13 새 판으로 바꿨다. 레벨 1·2·6 설명이 단계마다 다르게 적혔고, 아래 네 칸의
+// 오타(「처음만 접수가」·「수학자 연습」·「최상화」)가 고쳐졌다.
+// ★ 같은 경로에 덮어쓰지 않고 새 경로를 쓴다 — 덮어쓰면 CDN 이 옛 그림을 한참 더 내보낸다.
 const LEVEL_GUIDE_IMAGE =
-  'https://cggskjxsyrvuhsldgkoj.supabase.co/storage/v1/object/public/feedback-images/manual/level-worksheet-guide.webp'
+  'https://cggskjxsyrvuhsldgkoj.supabase.co/storage/v1/object/public/feedback-images/manual/level-worksheet-guide-v2.webp'
 
 const PURPOSES = [
   {
