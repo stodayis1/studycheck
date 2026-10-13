@@ -485,7 +485,13 @@ export default function TeacherLearningNotesPage() {
 
   function confirmSendBriefing() {
     const n = briefPreview?.sent ?? 0
-    if (n === 0) { alert('보낼 대상이 없어요.'); return }
+    if (n === 0) {
+      const already = briefPreview?.skippedAlreadySent ?? 0
+      alert(already > 0
+        ? `${briefDate} 브리핑은 이미 ${already}명 모두 나갔어요.\n더 보낼 사람이 없습니다.`
+        : '보낼 대상이 없어요. 미리보기에 적힌 사유를 확인해 주세요.')
+      return
+    }
     const who = briefOnly === 'elementary' ? '초등부' : briefOnly === 'secondary' ? '중·고등부' : '전체'
     if (!confirm(`${briefDate} 수업 브리핑을 ${who} 학부모 ${n}명에게 발송합니다.\n\n` +
       `보내면 되돌릴 수 없고 건당 요금이 나갑니다.\n` +
@@ -2225,11 +2231,59 @@ ${e?.message ?? '연결 실패'}
 
             {briefPreview && (
               <div className="mt-3 text-[11px] text-gray-700 space-y-1.5">
-                <div className="font-semibold">
-                  {briefOnly === 'elementary' ? '초등부 ' : briefOnly === 'secondary' ? '중·고등부 ' : ''}
-                  보낼 대상 {briefPreview.sent}명
-                  {briefPreview.skippedAlreadySent > 0 && <span className="text-gray-400"> · 이미 보냄 {briefPreview.skippedAlreadySent}명</span>}
-                </div>
+                {(() => {
+                  const sent = briefPreview.sent ?? 0
+                  const already = briefPreview.skippedAlreadySent ?? 0
+                  const who = briefOnly === 'elementary' ? '초등부 ' : briefOnly === 'secondary' ? '중·고등부 ' : ''
+                  if (sent > 0) {
+                    return (
+                      <div className="font-semibold">
+                        {who}보낼 대상 {sent}명
+                        {already > 0 && <span className="text-gray-400"> · 이미 보냄 {already}명</span>}
+                      </div>
+                    )
+                  }
+                  // ★ 0명일 때 **왜** 0명인지를 또렷이 적는다(원장님 2026-10-13).
+                  //   예전엔 「보낼 대상 0명 · 이미 보냄 26명」이었는데, 뒤쪽이 작은 회색 글씨라
+                  //   다 보낸 날에도 「작성된 학생이 없다」로 읽혔다. 둘은 전혀 다른 상황이다 —
+                  //   다 보낸 것은 할 일이 없는 것이고, 아무도 안 쓴 것은 선생님을 찾아야 하는 것이다.
+                  const noRec = briefPreview.skippedNoRecord?.length ?? 0
+                  const other = noRec
+                    + (briefPreview.skippedNoPhone?.length ?? 0)
+                    + (briefPreview.skippedExam?.length ?? 0)
+                  if (already > 0 && other === 0) {
+                    return (
+                      <div className="rounded-lg border p-2.5" style={{ borderColor: '#cfe3b5', background: '#EAF3DE' }}>
+                        <div className="font-bold" style={{ color: '#27500A' }}>
+                          ✓ {who}{briefDate} 브리핑은 {already}명 모두 나갔어요 — 더 보낼 사람이 없습니다.
+                        </div>
+                        <div className="text-gray-600 mt-1">
+                          학습일지가 없는 게 아닙니다. 같은 날 두 번 가지 않도록 이미 보낸 학생을 대상에서 뺀 것이에요.
+                        </div>
+                      </div>
+                    )
+                  }
+                  if (already > 0) {
+                    return (
+                      <div className="font-bold" style={{ color: '#633806' }}>
+                        {who}이미 {already}명 보냈고, 남은 {other}명은 아래 사유로 못 보냅니다.
+                      </div>
+                    )
+                  }
+                  if (other > 0) {
+                    return (
+                      <div className="font-bold" style={{ color: '#991b1b' }}>
+                        {who}보낼 대상이 없습니다 — {other}명이 아래 사유로 빠졌어요.
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="font-bold" style={{ color: '#991b1b' }}>
+                      {who}{briefDate}에 해당하는 수업 기록이 없어요.
+                      <span className="font-normal text-gray-500"> (날짜와 「초등부만 / 중·고등부만」 선택을 확인해 주세요)</span>
+                    </div>
+                  )
+                })()}
                 {briefPreview.skippedNoRecord?.length > 0 && (
                   <div style={{ color: '#991b1b' }}>
                     기록 미완으로 제외 {briefPreview.skippedNoRecord.length}명 — {briefPreview.skippedNoRecord.map((x: any) => x.name).join(', ')}
@@ -2238,6 +2292,12 @@ ${e?.message ?? '연결 실패'}
                 {briefPreview.skippedNoPhone?.length > 0 && (
                   <div style={{ color: '#991b1b' }}>
                     보호자 번호 없음 {briefPreview.skippedNoPhone.length}명 — {briefPreview.skippedNoPhone.map((x: any) => x.name).join(', ')}
+                  </div>
+                )}
+                {/* 시험기간 결석은 일부러 안 보낸다. 사유를 안 적으면 「왜 빠졌지」가 남는다. */}
+                {briefPreview.skippedExam?.length > 0 && (
+                  <div className="text-gray-500">
+                    시험기간 결석이라 일부러 제외 {briefPreview.skippedExam.length}명 — {briefPreview.skippedExam.map((x: any) => x.name).join(', ')}
                   </div>
                 )}
                 {/* 한 사람씩 — 어떤 글이 어디로 가는지 보고, 원하면 그 사람만 보낸다 */}
