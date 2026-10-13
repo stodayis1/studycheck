@@ -36,7 +36,16 @@ export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
   const auth = req.headers.get('authorization') ?? ''
   if (!secret || auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: '권한이 없어요.' }, { status: 401 })
+    // 막힌 이유를 **값 없이** 알려 준다. 2026-10-13 저녁 8시 발송이 통째로 안 나갔는데,
+    // 「예약이 함수를 안 깨웠나」와 「깨웠지만 401 로 막혔나」가 구분이 안 돼서 하루를
+    // 더 기다려야 했다. CRON_SECRET 이 Vercel 에 들어 있는지만 즉시 볼 수 있으면 된다.
+    //
+    // ★ 비밀값 자체는 내보내지 않는다. 있다/없다만 보낸다. 없으면 어차피 아무도 들어올
+    //   수 없으므로(항상 401) 이 사실만으로 열리는 문은 없다.
+    return NextResponse.json(
+      { error: '권한이 없어요.', secretSet: Boolean(secret), authHeaderSent: Boolean(auth) },
+      { status: 401 },
+    )
   }
 
   const q = new URL(req.url).searchParams
