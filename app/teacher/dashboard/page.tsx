@@ -11,6 +11,7 @@ import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { fetchAllRows } from '@/lib/utils'
 import { ExamAnalysisNotice } from '@/components/exam-analysis/ExamAnalysisNotice'
+import { DailyFlow } from '@/components/teacher/DailyFlow'
 
 const DAYS = ['일','월','화','수','목','금','토']
 // 배정만 하고 며칠째 안 걷히면 '미제출'로 볼지 (업무현황 화면의 '장기 미제출' 기준과 같게 유지)
@@ -409,6 +410,11 @@ export default function TeacherDashboardPage() {
         ) : undefined} />
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
+
+        {/* 하루 업무 흐름 — 출근해서 처음 보는 자리에 둔다(원장님 2026-10-12).
+            매뉴얼 안에만 있으면 새로 오신 선생님이 찾아 들어가지 않는다.
+            매뉴얼과 **같은 내용**을 쓴다(components/teacher/DailyFlow). */}
+        <DailyFlow withManualLink />
 
         {/* 기출분석 알림 — 중등 선생님에게만, 남은 일이 있을 때만 뜬다 */}
         <ExamAnalysisNotice />

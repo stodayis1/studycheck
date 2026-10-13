@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
+import { DailyFlow } from '@/components/teacher/DailyFlow'
+import { LevelGuide, IdeaInvite } from '@/components/teacher/LevelGuide'
 
 // 선생님용 사용 매뉴얼. 원장님이 매번 가서 알려주지 않아도 되도록 메뉴별로 "무엇을 하는 곳인지 /
 // 주로 누르는 버튼 / 주의할 점"을 모아둔다. 묶음은 사이드바(components/teacher/Sidebar.tsx)와 같게 유지할 것.
@@ -251,13 +253,6 @@ const GROUPS: ManualGroup[] = [
   },
 ]
 
-const DAILY_FLOW = [
-  { icon: 'ti-layout-dashboard', title: '출근하면 대시보드', desc: '오늘 할 일 · 전달사항 확인' },
-  { icon: 'ti-notebook', title: '수업 후 학습관리', desc: '수업일지 저장 + 알림장' },
-  { icon: 'ti-file-text', title: '학습지관리', desc: '제출확인 → 점수입력 → 다음 단계' },
-  { icon: 'ti-circle-check', title: '대시보드 다시 확인', desc: '"오늘 모든 업무 완료!" 뜨면 끝' },
-]
-
 export default function TeacherManualPage() {
   const { isAdmin } = useAuth()
   const [open, setOpen] = useState<string | null>(null)
@@ -278,25 +273,15 @@ export default function TeacherManualPage() {
       <Header title="사용 매뉴얼" subtitle="처음이거나 헷갈릴 때 여기부터 보세요" />
 
       <div className="px-4 py-4 space-y-4 md:px-6 max-w-3xl">
-        {/* 하루 흐름 */}
-        <section className="rounded-2xl p-4" style={{ background: '#F0FBF7', border: '1px solid #9FE1CB' }}>
-          <h2 className="text-sm font-bold mb-3 flex items-center gap-1.5" style={{ color: '#085041' }}>
-            <i className="ti ti-route" style={{ fontSize: 16 }} />하루 업무 흐름
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {DAILY_FLOW.map((s, i) => (
-              <div key={s.title} className="rounded-xl bg-white p-3" style={{ border: '1px solid #d1f0e4' }}>
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                    style={{ background: '#085041', color: 'white' }}>{i + 1}</span>
-                  <i className={`ti ${s.icon}`} style={{ fontSize: 15, color: '#0F6E56' }} />
-                </div>
-                <p className="text-xs font-bold text-gray-800">{s.title}</p>
-                <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* 하루 흐름 — 대시보드와 **같은 내용**을 쓴다(components/teacher/DailyFlow) */}
+        <DailyFlow />
+
+        {/* 부별 안내 — 메뉴는 같고 과정·교재·평가가 다르다.
+            2026-10-12 고등부 선생님이 오시면서 따로 묶었다. */}
+        <LevelGuide />
+
+        {/* 교재·과정을 늘려 달라고 말할 수 있다는 안내 */}
+        <IdeaInvite />
 
         {/* 초등 레벨학습지 규칙 - 가장 중요 */}
         <section className="rounded-2xl p-4 space-y-3" style={{ background: '#fef2f2', border: '1px solid #fca5a5' }}>
