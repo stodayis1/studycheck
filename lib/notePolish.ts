@@ -98,7 +98,13 @@ export async function proposePolish(targets: Awaited<ReturnType<typeof collectPo
           model, max_tokens: 8000,
           messages: [{ role: 'user', content: `${RULES}\n\n다듬을 글 ${part.length}건:\n${JSON.stringify(payload, null, 1)}` }],
         })
-        return msg.content[0].type === 'text' ? msg.content[0].text : ''
+        // ★ 첫 블록이 text 라고 믿으면 안 된다. 모델이 thinking 블록을 먼저 내보내면
+        //   content[0] 이 text 가 아니고, 예전 코드는 그걸 빈 문자열로 돌려보냈다.
+        //   그러면 아래 루프가 조용히 건너뛰어 **고칠 것이 하나도 없는 것처럼** 보인다.
+        //   2026-10-13 에 95건·128건을 검사하고 0건이 나온 이유가 이것이었다.
+        const said = msg.content.find((c: any) => c.type === 'text') as any
+        if (!said?.text) { lastErr = new Error(`글 블록이 없어요 (${msg.content.map((c: any) => c.type).join(',')})`); continue }
+        return said.text as string
       } catch (e: any) { lastErr = e }
     }
     // 한 묶음이 실패해도 나머지는 살린다.
