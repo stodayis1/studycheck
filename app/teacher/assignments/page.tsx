@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, formatConceptRangeLabel, fetchAllRows } from '@/lib/utils'
+import { splitTeachers } from '@/lib/teachers'
 
 interface Student {
   id: string
@@ -395,7 +396,7 @@ export default function TeacherAssignmentsPage() {
   function isEditable(s: Student) {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    const teachers = splitTeachers(s.teacher_name)
     return teachers.includes(currentUser.name)
   }
   const myEditableStudents = students.filter(isEditable)

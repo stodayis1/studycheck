@@ -12,6 +12,7 @@ import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { fetchAllRows } from '@/lib/utils'
 import { ExamAnalysisNotice } from '@/components/exam-analysis/ExamAnalysisNotice'
 import { DailyFlow } from '@/components/teacher/DailyFlow'
+import { splitTeachers } from '@/lib/teachers'
 
 const DAYS = ['일','월','화','수','목','금','토']
 // 배정만 하고 며칠째 안 걷히면 '미제출'로 볼지 (업무현황 화면의 '장기 미제출' 기준과 같게 유지)
@@ -107,7 +108,7 @@ export default function TeacherDashboardPage() {
       .eq('is_read', false)
       .order('created_at', { ascending: false })
     const mine = (data ?? []).filter((n: any) =>
-      (n.to_teacher ?? '').split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
+      splitTeachers(n.to_teacher).includes(currentUser.name)
     )
     if (mine.length === 0) { setHandoffNotes([]); return }
     const studentIds = [...new Set(mine.map((n: any) => n.student_id))]

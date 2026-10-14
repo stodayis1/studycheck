@@ -13,6 +13,8 @@
 //
 // ★ 색만 보고 외우게 하면 안 된다. 쓰는 화면은 **반드시 범례**(강사 이름 + 색)를 같이 띄운다.
 
+import { mainTeacherOf } from './teachers'
+
 export type TeacherColor = { bg: string; border: string; text: string }
 
 // 서로 뚜렷하게 구분되는 색만 고른다. 강사 8명(2026-10-09)에 여유 두 칸.
@@ -34,7 +36,7 @@ const NO_TEACHER: TeacherColor = { bg: '#F5F5F5', border: '#BDBDBD', text: '#616
 
 /** 담당 강사가 여러 명 적힌 경우(「김은수, 박경미」)는 첫 사람을 대표로 본다. */
 export function mainTeacher(teacherName?: string | null): string {
-  return (teacherName ?? '').split(/[,，、]/)[0].trim()
+  return mainTeacherOf(teacherName)
 }
 
 /**

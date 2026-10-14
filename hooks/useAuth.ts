@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { isTeacherOf } from '@/lib/teachers'
 
 const SESSION_KEY = 'studycheck_student'
 const ADMIN_MODE_KEY = 'studycheck_admin_mode'
@@ -186,8 +187,7 @@ export function useAuth() {
   /** 담당 강사 칸(「김은수, 박경미」)에 내 이름이 있나 */
   function isMyStudent(student: { teacher_name?: string | null }) {
     if (!currentUser?.name || !student.teacher_name) return false
-    const teachers = student.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    return teachers.includes(currentUser.name)
+    return isTeacherOf(student.teacher_name, currentUser.name)
   }
 
   /**

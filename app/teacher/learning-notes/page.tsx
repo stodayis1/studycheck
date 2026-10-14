@@ -13,6 +13,7 @@ import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
+import { splitTeachers } from '@/lib/teachers'
 
 interface Student {
   id: string
@@ -776,7 +777,7 @@ export default function TeacherLearningNotesPage() {
     if (isAdmin()) return true
     if (!currentUser?.name || !s.teacher_name) return false
     // 콤마/공백으로 구분된 여러 강사명에서 본인 이름 찾기
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    const teachers = splitTeachers(s.teacher_name)
     // 직원(행정)은 본인 담당 학생이 따로 없으므로, 본인이 근무하는 관과 같은 관 소속
     // 담당 강사의 학생이면 모두 보이게 한다 (예: 코어관 근무 직원 → 코어관 강사진 학생 전체)
     if (currentUser.role === 'staff') {
@@ -3055,7 +3056,7 @@ ${e?.message ?? '연결 실패'}
                   // 받는 사람 본인만 "확인"으로 읽음 처리할 수 있게 한다. 안 그러면 메모를 남긴
                   // 사람이 저장 직후 같은 화면에 뜬 자기 메모를 실수로 눌러서(예: "저장됐다"는
                   // 뜻인 줄 알고) 정작 받아야 할 담당 강사가 보기도 전에 사라지는 문제가 생김.
-                  const targets = (n.to_teacher ?? '').split(/[,，、]/).map((t) => t.trim())
+                  const targets = splitTeachers(n.to_teacher)
                   const isRecipient = !!currentUser?.name && targets.includes(currentUser.name)
                   return (
                     <div key={n.id} className="flex items-start gap-2">

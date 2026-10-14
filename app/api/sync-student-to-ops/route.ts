@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { mainTeacherOf } from '@/lib/teachers'
 
 // 스터디체크에서 학생정보를 수정/삭제(퇴원처리)했을 때, 연동된 OPS(sumath-admin) 학생 레코드에도
 // 동일하게 반영하기 위한 연동 API. 두 앱은 DB가 완전히 분리되어 있어서 서비스롤 키로 직접 연결한다.
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     // 담당강사 자유텍스트(콤마 구분 가능) -> OPS profiles.id 매핑. 첫 번째 이름만 사용.
     if (teacherName !== undefined) {
-      const firstName = String(teacherName || '').split(/[,，、]/)[0].trim()
+      const firstName = mainTeacherOf(teacherName)
       if (firstName) {
         const { data: prof } = await ops.from('profiles').select('id').eq('name', firstName).maybeSingle()
         if (prof) data.teacher_id = prof.id

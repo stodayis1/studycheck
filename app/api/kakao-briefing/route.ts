@@ -29,6 +29,7 @@ import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
 import { isExamAbsence } from '@/lib/attendance'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
+import { mainTeacherOf } from '@/lib/teachers'
 
 const APP_URL = 'https://studycheck-five.vercel.app'
 
@@ -294,7 +295,7 @@ async function runTeacherSample(date: string) {
   const { data: students } = await db.from('students')
     .select('id, name, teacher_name').in('id', previews.map((p) => p.studentId))
   const teacherOf = new Map((students ?? []).map((s: any) =>
-    [s.id, String(s.teacher_name ?? '').split(/[,，、]/)[0].trim()]))
+    [s.id, mainTeacherOf(s.teacher_name)]))
 
   // ② 선생님마다 **글이 가장 짧은** 한 명을 고른다. 결석한 날은 빼고 본다.
   const pickBy = new Map<string, any>()

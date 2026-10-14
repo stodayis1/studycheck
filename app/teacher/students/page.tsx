@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { normalizeSchool } from '@/lib/school'
+import { splitTeachers } from '@/lib/teachers'
 
 interface Student {
   id?: string
@@ -133,7 +134,7 @@ export default function TeacherStudentsPage() {
   function isEditable(s: Student) {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    const teachers = splitTeachers(s.teacher_name)
     return teachers.includes(currentUser.name)
   }
 
@@ -146,7 +147,7 @@ export default function TeacherStudentsPage() {
   const teacherCounts = (() => {
     const map = new Map<string, number>()
     statusStudents.forEach((s) => {
-      const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+      const teachers = splitTeachers(s.teacher_name)
       teachers.forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
     })
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'ko'))
@@ -175,7 +176,7 @@ export default function TeacherStudentsPage() {
     if (!searchMatch) return false
     if (gradeFilter && (s.grade ?? '').trim() !== gradeFilter) return false
     if (teacherFilter) {
-      const teachers = (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim())
+      const teachers = splitTeachers(s.teacher_name)
       if (!teachers.includes(teacherFilter)) return false
     }
     return true
@@ -254,19 +255,23 @@ export default function TeacherStudentsPage() {
       .eq('id', editStudent.id)
     if (error) { alert('수정 중 오류가 발생했습니다.'); return }
 
-    // schedules 테이블 업데이트 (기존 삭제 후 재등록)
-    await supabase.from('schedules').update({ is_active: false }).eq('student_id', editStudent.id)
-    for (const sc of editSchedules) {
-      if (sc.day && sc.time) {
-        await supabase.from('schedules').insert({
-          student_id: editStudent.id,
-          day_of_week: sc.day,
-          start_time: sc.time,
-          periods: sc.periods,
-          is_active: true,
-        })
-      }
-    }
+    // 시간표를 다시 쓴다 — **끈 행을 남기지 않고 지운다.**
+    //
+    // ★ 예전에는 기존 행을 is_active=false 로 끄고 새 행을 넣었다. 저장할 때마다 줄이
+    //   쌓여서, 이도윤 학생은 39줄까지 늘어나 있었다(2026-10-14 확인. 그날 조윤희 선생님이
+    //   3초 동안 13번 저장하면서 11줄이 한꺼번에 늘었다). 끈 행은 아무도 읽지 않는다 —
+    //   오늘 수업 목록도 시간표 화면도 is_active 가 참인 것만 본다. 남겨 둘 이유가 없다.
+    const rows = editSchedules
+      .filter((sc) => sc.day && sc.time)
+      .map((sc) => ({
+        student_id: editStudent.id,
+        day_of_week: sc.day,
+        start_time: sc.time,
+        periods: sc.periods,
+        is_active: true,
+      }))
+    await supabase.from('schedules').delete().eq('student_id', editStudent.id)
+    if (rows.length) await supabase.from('schedules').insert(rows)
 
     // class_time 텍스트 자동 업데이트 (목록 표시용)
     const DAY_ORDER = ['월','화','수','목','금','토','일']
@@ -302,13 +307,33 @@ export default function TeacherStudentsPage() {
     if (!name) { alert('이름을 입력해주세요.'); return }
     setAdding(true)
     try {
-      // 이미 있는 재원생인지(이름+학교) 확인 — 중복 등록 방지
-      const { data: existing } = await supabase
-        .from('students').select('id').eq('name', name).eq('school', school).eq('is_active', true).maybeSingle()
-      if (existing) {
-        alert('같은 이름·학교의 재원생이 이미 있어요. 학생관리 목록에서 확인해주세요.')
+      // ★ 같은 이름이 이미 있으면 **이름만으로** 먼저 걸러 멈춘다.
+      //   예전에는 이름+학교가 **둘 다** 같아야 걸렸다. 그래서 2026-10-14 에 이도윤 학생을
+      //   학교만 「신원6」(원래는 「신원초」)로 적은 채 새로 만들어 계정이 둘이 됐다.
+      //   학교·학년은 사람마다 적는 꼴이 달라서 중복을 막는 기준이 될 수 없다.
+      const { data: sameName } = await supabase
+        .from('students').select('id, school, grade, teacher_name, parent_phone, is_active')
+        .eq('name', name)
+      const live = (sameName ?? []).filter((x: any) => x.is_active)
+      if (live.length > 0) {
+        const lines = live.map((x: any) => {
+          const phone = x.parent_phone ? ` · ${x.parent_phone}` : ''
+          return `· ${x.grade ?? '학년?'} · ${x.school ?? '학교?'} · 담당 ${x.teacher_name ?? '없음'}${phone}`
+        }).join('\n')
+        alert([
+          `이미 ${name} 학생이 있어요 (${live.length}명).`, '',
+          lines, '',
+          '같은 학생이면 새로 만들지 마시고 목록에서 찾아 고쳐 주세요.',
+          '정말 다른 학생(동명이인)이면 원장님께 말씀해 주세요.',
+        ].join('\n'))
         return
       }
+      const { data: gone } = await supabase
+        .from('students').select('id').eq('name', name).eq('is_active', false).limit(1)
+      if (gone?.length && !confirm(`${name} 학생이 퇴원·휴원 명단에 있어요.
+돌아온 학생이면 그 기록을 되살리는 편이 낫습니다.
+
+그래도 새로 만들까요?`)) return
 
       // 로그인 아이디 결정: 동명이인이 있으면 "이름+보호자전화번호 뒷4자리"로 구분
       const { data: isDup } = await supabase.rpc('check_duplicate_name', { p_name: name })

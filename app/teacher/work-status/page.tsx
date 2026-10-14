@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { fetchAllRows } from '@/lib/utils'
 import { loadHolidays, type Holiday } from '@/lib/holidays'
+import { splitTeachers } from '@/lib/teachers'
 
 interface Teacher {
   id: string
@@ -132,7 +133,7 @@ export default function TeacherWorkStatusPage() {
   const teacherTodayStatus = teachers.map(t => {
     const myStudents = todayStudents.filter((s) => {
       if (!s.teacher_name) return false
-      const teachers = s.teacher_name.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
+      const teachers = splitTeachers(s.teacher_name)
       return teachers.includes(t.name)
     })
     const written = myStudents.filter(s => todayWritten.some(w => w.student_id === s.id))
@@ -152,7 +153,7 @@ export default function TeacherWorkStatusPage() {
   const weeklyStats = teachers.map(t => {
     const myStudents = students.filter((s) => {
       if (!s.teacher_name) return false
-      const teachers = s.teacher_name.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
+      const teachers = splitTeachers(s.teacher_name)
       return teachers.includes(t.name)
     })
     const myScheduledDays = [...new Set(

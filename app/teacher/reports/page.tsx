@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { isExamAbsence } from '@/lib/attendance'
+import { splitTeachers } from '@/lib/teachers'
 
 // 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
 function laTierColor(v: number | null, good = 85, mid = 70) {
@@ -336,14 +337,14 @@ export default function TeacherReportsPage() {
 
   const currentGrades = GRADE_GROUPS.find((g) => g.label === selectedGroup)?.grades ?? []
   const teachers = [...new Set(
-    students.flatMap((s) => (s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).filter(Boolean))
+    students.flatMap((s) => splitTeachers(s.teacher_name))
   )].sort()
 
   // 직원(행정)도 보고서 발송 업무를 할 수 있어야 함
   const myStudents = students.filter((s) => {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
-    const ts = s.teacher_name.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    const ts = splitTeachers(s.teacher_name)
     return ts.includes(currentUser.name)
   })
 
@@ -355,7 +356,7 @@ export default function TeacherReportsPage() {
     )
     const gradeFilterMatch = selectedGrade ? s.grade === selectedGrade : true
     const teacherMatch = selectedTeacher
-      ? ((s.teacher_name ?? '').split(/[,，、]/).map((t) => t.trim()).includes(selectedTeacher))
+      ? splitTeachers(s.teacher_name).includes(selectedTeacher)
       : true
     const searchMatch = s.name.includes(searchText) || s.school?.includes(searchText)
     return gradeMatch && gradeFilterMatch && teacherMatch && searchMatch
@@ -768,7 +769,7 @@ export default function TeacherReportsPage() {
   const myStudentsForGrade = students.filter((s) => {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
-    return s.teacher_name.split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
+    return splitTeachers(s.teacher_name).includes(currentUser.name)
   }).filter((s) => s.name.includes(gSearchText) || s.school?.includes(gSearchText))
 
   async function saveGradeAsImage() {
@@ -803,7 +804,7 @@ export default function TeacherReportsPage() {
   const myStudentsForMonthly = students.filter((s) => {
     if (canManageAllStudents()) return true
     if (!currentUser?.name || !s.teacher_name) return false
-    return s.teacher_name.split(/[,，、]/).map((t: string) => t.trim()).includes(currentUser.name)
+    return splitTeachers(s.teacher_name).includes(currentUser.name)
   }).filter((s) => s.name.includes(mSearchText) || s.school?.includes(mSearchText))
 
   return (

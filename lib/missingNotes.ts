@@ -11,6 +11,8 @@
 //   4. 진도(진도내용/교재)가 비었다
 //   5. 과제(교재·쪽수·학습지 범위)가 비었다
 
+import { mainTeacherOf } from './teachers'
+
 export interface MissingNote {
   studentId: string
   name: string
@@ -62,7 +64,6 @@ export function findMissingNotes(a: {
   return out
 }
 
-/** 담당 강사 칸에 여러 명이 적힌 경우(「김은수, 박경미」) 첫 사람이 대표다. */
-export function mainTeacherOf(teacher?: string | null) {
-  return String(teacher ?? '').split(/[,，、]/)[0].trim()
-}
+// 담당 강사 대표 한 사람 — 규칙은 lib/teachers.ts 에 있다. 쓰던 곳이 여기서 가져가고
+// 있어서 그대로 다시 내보낸다.
+export { mainTeacherOf }
