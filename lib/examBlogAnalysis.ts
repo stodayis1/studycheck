@@ -190,8 +190,9 @@ ${SPEC}`))
     message: ai.message ?? '',
     thumb: {
       kicker: '수학의지혜 기출분석',
-      headline: g.hit.total ? [`${g.hit.total}문항 중`, `${g.hit.hit}문항`, '적중했어요'] : [paper.school_name, `${gradeNo}학년 수학`, '기출분석'],
-      sub: `${paper.school_name} ${gradeNo}학년 ${paper.term}학기 ${paper.exam_type}`,
+      // 원장님 지정 2026-10-13: 대표 썸네일은 「○○중 ○학년 / ○학기 ○○고사 / 기출분석」. 적중률은 부제로
+      headline: [`${paper.school_name} ${gradeNo}학년`, `${paper.term}학기 ${paper.exam_type}`, '기출분석'],
+      sub: g.hit.total ? `이너프원 적중률 ${g.hit.rate}% (${g.hit.total}문항 중 ${g.hit.hit}문항)` : `${paper.exam_year}학년도 수학`,
     },
     phone: PHONE, generated_at: new Date().toISOString(), generated_by: by,
   }
