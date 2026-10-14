@@ -33,7 +33,8 @@ const SHOT = ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-d
 
 const tmp = path.join(dir, '_html')
 fs.mkdirSync(tmp, { recursive: true })
-for (const card of buildCards(A, { asset, img })) {
+const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null   // --only 00_thumb : 그 카드 하나만
+for (const card of buildCards(A, { asset, img }).filter((c) => !only || c.name === only)) {
   const html = path.join(tmp, `${card.name}.html`)
   fs.writeFileSync(html, cardDocument(card))
   const out = path.join(dir, `${card.name}.png`)
