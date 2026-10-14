@@ -80,6 +80,8 @@ export default function ExamAnalysisPage() {
   const rows = (papers ?? []).filter((p) =>
     (curExam === 'all' || !curExam || examPrefix(p) === curExam) &&
     (!fSchool || p.school_name === fSchool) && (!fGrade || p.grade === fGrade || (fGrade.length === 1 && String(p.grade).startsWith(fGrade))))
+    // 블로그 발행까지 끝난 시험은 맨 아래로 (원장님 2026-10-14). 나머지 순서는 그대로 둔다
+    .sort((a, b) => Number(a.blog_status === '업로드완료') - Number(b.blog_status === '업로드완료'))
   const schools = useMemo(() => Array.from(new Set((papers ?? []).map((p) => p.school_name))).sort(), [papers])
 
   const create = async () => {
