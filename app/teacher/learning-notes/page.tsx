@@ -299,6 +299,9 @@ export default function TeacherLearningNotesPage() {
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
   // 담당 강사에게 본인 글 한 통씩 — 자기가 쓴 글이 학부모님께 어떻게 가는지 볼 수 있어야 한다.
   const [sampleResult, setSampleResult] = useState<any>(null)
+  // ★ 오늘 수업을 **다른 날로 옮긴** 학생 (수학OPS 의 대체수업). 오늘 목록에서 뺀다.
+  //   안 빼면 오지도 않은 날에 결석이 찍힌다(원장님 2026-10-14).
+  const [movedAway, setMovedAway] = useState<{ studentId: string; name: string; movedTo: string }[]>([])
   // 수업일지가 덜 된 선생님께 보내는 알림 문자 — 미리보기를 본 뒤에만 발송된다.
   const [remind, setRemind] = useState<any>(null)
   // 오타·문장 점검 — 고치지 않고 「이렇게 바꿀까요」를 내놓는다. 고른 것만 반영한다.
@@ -421,6 +424,17 @@ export default function TeacherLearningNotesPage() {
    * 이 학생들은 브리핑에서 조용히 빠지므로, 원장님이 발송 전에 보고 선생님께 말할 수 있어야 한다.
    * 판정 기준은 발송 라우트와 같다 — 출결이 적혀 있어야 '끝난 것'으로 본다.
    */
+  // 오늘 수업을 다른 날로 옮긴 학생을 수학OPS 에서 읽어 둔다.
+  useEffect(() => {
+    const date = new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]
+    let alive = true
+    apiFetch(`/api/ops-moved-away?date=${date}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.moved) setMovedAway(d.moved) })
+      .catch(() => {})   // 못 읽어도 화면은 돌아가야 한다
+    return () => { alive = false }
+  }, [])
+
   async function loadMissing(date: string) {
     setMissing(null)
     const { data: ses } = await supabase.from('class_sessions')
@@ -809,17 +823,23 @@ export default function TeacherLearningNotesPage() {
   const hideForHoliday = !!todayHoliday && !showOnHoliday
 
   // 오늘 수업 학생 (시간순)
+  // ★ 대체수업으로 **다른 날에 이미 한** 학생은 뺀다. 시간표에는 오늘 수업이 남아 있지만
+  //   오늘은 오지 않는다 — 목록에 두면 결석으로 눌리게 된다.
+  const movedIds = new Set(movedAway.map((m) => m.studentId))
   const todayStudents = (hideForHoliday ? [] : myStudents)
     .map((s) => {
       const sc = schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay)
       return { student: s, schedule: sc }
     })
-    .filter((x) => x.schedule)
+    .filter((x) => x.schedule && !movedIds.has(x.student.id))
     .sort((a, b) => (a.schedule!.start_time > b.schedule!.start_time ? 1 : -1))
 
   // 범례는 **오늘 화면에 실제로 있는 강사**만 띄운다(색은 위에서 이미 고정됐으니 안 흔들린다).
   const legendNames = teacherColors.names
     .filter((n) => todayStudents.some(({ student }) => mainTeacher(student.teacher_name) === n))
+
+  // 화면에 적어 줄 것 — 내 학생 중 오늘 옮겨 간 사람
+  const movedMine = movedAway.filter((m) => myStudents.some((s) => s.id === m.studentId))
 
   const otherStudents = myStudents
     .filter((s) => !schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay))
@@ -2477,6 +2497,21 @@ ${e?.message ?? '연결 실패'}
             </div>
           ) : (
             <div className="space-y-4">
+
+              {/* 대체수업으로 다른 날에 이미 한 학생 — 조용히 사라지면 「왜 안 보이지」가 된다 */}
+              {movedMine.length > 0 && (
+                <div className="rounded-2xl px-4 py-3" style={{ background: '#F0FBF7', border: '1.5px solid #9FE1CB' }}>
+                  <p className="text-sm font-bold" style={{ color: '#085041' }}>
+                    대체수업으로 다른 날에 한 학생 {movedMine.length}명 — 오늘 목록에서 뺐어요
+                  </p>
+                  <p className="text-[11px] mt-1 leading-relaxed" style={{ color: '#0F6E56' }}>
+                    {movedMine.map((m) => `${m.name} (${m.movedTo} 로 옮김)`).join(' · ')}
+                  </p>
+                  <p className="text-[11px] mt-1" style={{ color: '#4a8f7a' }}>
+                    오늘은 오지 않는 학생이라 결석으로 두면 안 됩니다. 수업일지는 옮긴 날짜에 씁니다.
+                  </p>
+                </div>
+              )}
 
               {/* 공휴일 안내 — 시간표가 왜 비어 있는지 알려준다 */}
               {todayHoliday && (
