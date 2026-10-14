@@ -457,16 +457,20 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
       <Header
         title="학생관리"
         action={
-          <div className="flex gap-2">
-            <button onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg">
-              <i className="ti ti-table-import align-[-0.125em]" /> 엑셀 업로드
-            </button>
-            <button onClick={() => { setNewStudent(EMPTY_STUDENT); setNewSchedules([]); setShowAddModal(true) }}
-              className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
-              + 학생 등록
-            </button>
-          </div>
+          /* ★ 학생 만들기는 원장님 전용이다(원장님 2026-10-14). RLS 도 is_admin() 으로 막아 뒀으니
+             버튼을 남겨 두면 선생님은 눌렀다가 오류만 보게 된다. 아예 안 보이게 한다. */
+          isAdmin() ? (
+            <div className="flex gap-2">
+              <button onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg">
+                <i className="ti ti-table-import align-[-0.125em]" /> 엑셀 업로드
+              </button>
+              <button onClick={() => { setNewStudent(EMPTY_STUDENT); setNewSchedules([]); setShowAddModal(true) }}
+                className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
+                + 학생 등록
+              </button>
+            </div>
+          ) : null
         }
       />
 
@@ -818,22 +822,28 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               </div>
             ))}
 
-            {/* 시간표 편집 */}
+            {/* 시간표 편집 — ★ 바꾸는 것은 원장님 전용(원장님 2026-10-14).
+                선생님은 보기만 한다. RLS 도 schedules 쓰기를 is_admin() 으로 막아 뒀다. */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-600">수업 시간표</label>
-                <button
-                  onClick={() => setEditSchedules([...editSchedules, { day: '월', time: '16:00', periods: 2 }])}
-                  className="text-xs font-bold text-gray-800 bg-blue-50 px-2 py-1 rounded-lg">
-                  + 추가
-                </button>
+                <label className="text-xs font-semibold text-gray-600">
+                  수업 시간표
+                  {!isAdmin() && <span className="ml-1.5 font-normal text-gray-400">· 변경은 원장님께 말씀해 주세요</span>}
+                </label>
+                {isAdmin() && (
+                  <button
+                    onClick={() => setEditSchedules([...editSchedules, { day: '월', time: '16:00', periods: 2 }])}
+                    className="text-xs font-bold text-gray-800 bg-blue-50 px-2 py-1 rounded-lg">
+                    + 추가
+                  </button>
+                )}
               </div>
               {editSchedules.length === 0 && (
                 <p className="text-xs text-gray-400 text-center py-2">등록된 시간표가 없어요</p>
               )}
               {editSchedules.map((sc, idx) => (
                 <div key={idx} className="flex items-center gap-2 mb-2">
-                  <select value={sc.day}
+                  <select value={sc.day} disabled={!isAdmin()}
                     onChange={(e) => {
                       const updated = [...editSchedules]
                       updated[idx] = { ...updated[idx], day: e.target.value }
@@ -844,7 +854,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       <option key={d} value={d}>{d}요일</option>
                     ))}
                   </select>
-                  <select value={sc.time}
+                  <select value={sc.time} disabled={!isAdmin()}
                     onChange={(e) => {
                       const updated = [...editSchedules]
                       updated[idx] = { ...updated[idx], time: e.target.value }
@@ -855,7 +865,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
-                  <select value={sc.periods}
+                  <select value={sc.periods} disabled={!isAdmin()}
                     onChange={(e) => {
                       const updated = [...editSchedules]
                       updated[idx] = { ...updated[idx], periods: parseFloat(e.target.value) }
@@ -866,11 +876,13 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       <option key={p} value={p}>{p}교시</option>
                     ))}
                   </select>
-                  <button
-                    onClick={() => setEditSchedules(editSchedules.filter((_, i) => i !== idx))}
-                    className="text-red-400 hover:text-red-600 text-sm font-bold px-1">
-                    ✕
-                  </button>
+                  {isAdmin() && (
+                    <button
+                      onClick={() => setEditSchedules(editSchedules.filter((_, i) => i !== idx))}
+                      className="text-red-400 hover:text-red-600 text-sm font-bold px-1">
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
