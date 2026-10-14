@@ -268,7 +268,10 @@ export function buildBriefing(args: {
   // 보강은 OPS 기록을 먼저 쓰고, 없으면 예전 글로 보조한다.
   const mkLine = makeupLine(args.makeup, note?.makeup_note)
   if (mkLine) noticeParts.push(mkLine)
-  else if (결석) noticeParts.push('보강 · 일정을 잡는 대로 안내드리겠습니다')
+  // ★ 보강 배정은 매주 금요일에 일괄로 하고, 그날 예약 안내문자가 나간다(원장님 2026-10-14).
+  //   그래서 결석 당일에는 보강 날짜를 알 수 없다. 「잡는 대로」라고만 하면 학부모님이
+  //   언제까지 기다려야 하는지 모른다. 언제 안내가 가는지를 적어 준다.
+  else if (결석) noticeParts.push('보강 · 보강 예약 안내는 매주 금요일에 문자로 보내 드립니다')
   // 알림장이 없으면 빈 채로 둔다 — 그 칸이 없는 판으로 나가므로 쓰이지 않는다.
   const 알림장 = noticeParts.join('\n')
 
