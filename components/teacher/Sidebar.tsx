@@ -37,6 +37,7 @@ const ITEM = {
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
   workStatus:    { href: '/teacher/work-status',    label: '업무현황',     icon: 'ti-briefcase' },
+  changeLog:     { href: '/teacher/change-log',     label: '변경 기록',    icon: 'ti-history' },
   settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
 } satisfies Record<string, NavItem>
 
@@ -50,7 +51,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.importRecords] },
   ]
-  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.settings] })
+  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.changeLog, ITEM.settings] })
   return groups
 }
 
