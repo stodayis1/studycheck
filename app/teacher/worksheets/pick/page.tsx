@@ -42,6 +42,11 @@ export default function PickPage() {
   const [err, setErr] = useState('')
 
   // 출제문항 구성
+  // 가운데 칸 보기 방식. 기본은 **번호만** — 그림을 다 띄우면 화면이 정신없고 느리다.
+  const [view, setView] = useState<'num' | 'img'>('num')
+  // 번호 위에 마우스를 올리면 그 문제를 띄운다
+  const [peek, setPeek] = useState<{ p: Problem; x: number; y: number } | null>(null)
+
   const [twin, setTwin] = useState(0)
   const [similar, setSimilar] = useState(0)
   const [similarLevel, setSimilarLevel] = useState<'easier' | 'same' | 'harder'>('same')
@@ -69,7 +74,7 @@ export default function PickPage() {
     apiFetch(`/api/book-pick?book=${encodeURIComponent(target.book)}&grade=${encodeURIComponent(target.grade)}&semester=${target.semester}&group=${cur}`)
       .then((r) => r.json())
       .then((d) => setProblems(d.problems ?? []))
-      .finally(() => setListLoading(false))
+      .finally(() => { setListLoading(false); setPeek(null) })
   }, [target, cur])
 
   const toggle = (id: number) =>
@@ -201,32 +206,87 @@ export default function PickPage() {
               </span>
               <span className="text-xs text-gray-400">전체 고르기</span>
             </label>
-            <span className="text-xs text-gray-400">{problems.length}문항</span>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border overflow-hidden text-xs">
+                {([['num', '번호만'], ['img', '문제 그림']] as const).map(([v, t]) => (
+                  <button key={v} onClick={() => setView(v)} className="px-2.5 py-1"
+                    style={view === v ? { background: NAVY, color: '#fff' } : { color: '#555' }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-gray-400">{problems.length}문항</span>
+            </div>
           </div>
 
           {listLoading && <div className="py-10 text-center text-gray-400">불러오는 중…</div>}
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            {problems.map((p) => {
-              const on = picked.includes(p.id)
-              return (
-                <button key={p.id} onClick={() => toggle(p.id)}
-                  className={`text-left border rounded-lg p-2 ${on ? 'border-blue-500 bg-blue-50/40' : 'hover:bg-gray-50'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <input type="checkbox" readOnly checked={on} />
-                    <span className="text-sm font-bold" style={{ color: NAVY }}>{p.localNo}</span>
-                    {p.level != null && <Chip>레벨{p.level}</Chip>}
-                    {p.step && <Chip>{p.step}</Chip>}
-                    {p.hasTwin && <Chip tone="pink">쌍둥이 있음</Chip>}
-                    {p.answerKind !== 'choice' && <Chip tone="green">주관식</Chip>}
-                  </div>
-                  {p.image
-                    ? <img src={p.image} alt="" className="w-full rounded border bg-white" loading="lazy" />
-                    : <div className="text-xs text-gray-400 py-6 text-center">그림 없음</div>}
-                </button>
-              )
-            })}
-          </div>
+          {/* 번호만 — 체크해서 고르고, 마우스를 올리면 그 문제가 뜬다 */}
+          {view === 'num' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-x-3 gap-y-1">
+              {problems.map((p) => {
+                const on = picked.includes(p.id)
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => toggle(p.id)}
+                    onMouseEnter={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setPeek({ p, x: r.right, y: r.top })
+                    }}
+                    onMouseLeave={() => setPeek((q) => (q?.p.id === p.id ? null : q))}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-left ${
+                      on ? 'bg-blue-50' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <span
+                      className="w-4 h-4 rounded border grid place-items-center shrink-0 text-[11px] text-white"
+                      style={on ? { background: NAVY, borderColor: NAVY } : { borderColor: '#cbd5e1' }}
+                    >
+                      {on ? '✓' : ''}
+                    </span>
+                    <span className={`text-sm ${on ? 'font-bold' : ''}`} style={on ? { color: NAVY } : undefined}>
+                      {p.localNo}
+                    </span>
+                    {/* 작은 표시만 — 쌍둥이(분홍) · 주관식(초록) */}
+                    {p.hasTwin && <i className="w-1.5 h-1.5 rounded-full bg-pink-400 shrink-0" title="쌍둥이 있음" />}
+                    {p.answerKind !== 'choice' && (
+                      <i className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="주관식" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+              {problems.map((p) => {
+                const on = picked.includes(p.id)
+                return (
+                  <button key={p.id} onClick={() => toggle(p.id)}
+                    className={`text-left border rounded-lg p-2 ${on ? 'border-blue-500 bg-blue-50/40' : 'hover:bg-gray-50'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <input type="checkbox" readOnly checked={on} />
+                      <span className="text-sm font-bold" style={{ color: NAVY }}>{p.localNo}</span>
+                      {p.level != null && <Chip>레벨{p.level}</Chip>}
+                      {p.step && <Chip>{p.step}</Chip>}
+                      {p.hasTwin && <Chip tone="pink">쌍둥이 있음</Chip>}
+                      {p.answerKind !== 'choice' && <Chip tone="green">주관식</Chip>}
+                    </div>
+                    {p.image
+                      ? <img src={p.image} alt="" className="w-full rounded border bg-white" loading="lazy" />
+                      : <div className="text-xs text-gray-400 py-6 text-center">그림 없음</div>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {view === 'num' && problems.length > 0 && (
+            <p className="mt-3 pt-2 border-t text-[11px] text-gray-400">
+              번호에 마우스를 올리면 문제가 뜹니다 ·
+              <i className="inline-block w-1.5 h-1.5 rounded-full bg-pink-400 mx-1 align-middle" />쌍둥이 있음 ·
+              <i className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mx-1 align-middle" />주관식
+            </p>
+          )}
           {!listLoading && !problems.length && (
             <div className="py-10 text-center text-gray-400">이 묶음에는 문항이 없습니다.</div>
           )}
@@ -299,7 +359,43 @@ export default function PickPage() {
           )}
         </aside>
       </div>
+
+      {/* 번호에 마우스를 올렸을 때 뜨는 문제 */}
+      {peek && <Peek peek={peek} />}
     </Shell>
+  )
+}
+
+// 마우스를 올린 번호 옆에 문제를 띄운다.
+// 화면 오른쪽 끝에 가까우면 왼쪽에, 아래쪽이면 위로 올려 붙여 잘리지 않게 한다.
+function Peek({ peek }: { peek: { p: Problem; x: number; y: number } }) {
+  const W = 420
+  const vw = typeof window === 'undefined' ? 1200 : window.innerWidth
+  const vh = typeof window === 'undefined' ? 800 : window.innerHeight
+  const left = peek.x + 12 + W > vw ? Math.max(8, peek.x - W - 220) : peek.x + 12
+  const top = Math.min(Math.max(8, peek.y - 20), Math.max(8, vh - 360))
+  const { p } = peek
+  return (
+    <div
+      className="fixed z-50 rounded-xl border bg-white shadow-xl p-2 pointer-events-none"
+      style={{ left, top, width: W, borderColor: NAVY }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-sm font-bold" style={{ color: NAVY }}>{p.localNo}</span>
+        {p.level != null && <Chip>레벨{p.level}</Chip>}
+        {p.step && <Chip>{p.step}</Chip>}
+        {p.hasTwin && <Chip tone="pink">쌍둥이 있음</Chip>}
+        {p.answerKind !== 'choice' && <Chip tone="green">주관식</Chip>}
+        <span className="ml-auto text-[10px] text-gray-400">{p.source}</span>
+      </div>
+      {p.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={p.image} alt={`${p.localNo}번`} className="w-full rounded border bg-white"
+             style={{ maxHeight: 420, objectFit: 'contain', objectPosition: 'left top' }} />
+      ) : (
+        <div className="text-xs text-gray-400 py-8 text-center">그림이 없습니다.</div>
+      )}
+    </div>
   )
 }
 
