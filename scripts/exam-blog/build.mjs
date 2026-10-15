@@ -18,6 +18,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL, fileURLToPath } from 'node:url'
+import sharp from 'sharp'
 import { buildCards, cardDocument } from '../../lib/examBlogCards.mjs'
 
 const file = process.argv[2]
@@ -34,7 +35,10 @@ const SHOT = ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-d
 const tmp = path.join(dir, '_html')
 fs.mkdirSync(tmp, { recursive: true })
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null   // --only 00_thumb : 그 카드 하나만
-for (const card of buildCards(A, { asset, img }).filter((c) => !only || c.name === only)) {
+// 손풀이 사진 크기 (가로로 긴 사진이면 카드가 폭 전체를 준다)
+const sizes = {}
+for (const k of A.killers ?? []) if (k.solution) { try { const m = await sharp(path.resolve(dir, k.solution)).metadata(); sizes[k.solution] = { w: m.width, h: m.height } } catch {} }
+for (const card of buildCards(A, { asset, img, size: (p) => sizes[p] }).filter((c) => !only || c.name === only)) {
   const html = path.join(tmp, `${card.name}.html`)
   fs.writeFileSync(html, cardDocument(card))
   const out = path.join(dir, `${card.name}.png`)

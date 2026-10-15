@@ -56,7 +56,12 @@ export async function renderBlogCards(A: any, images: Record<string, string>, on
   const imgs: Record<string, string> = {}
   await Promise.all(Object.entries(images).map(async ([k, u]) => { if (u) imgs[k] = await toDataUrl(u) }))
   const blank = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='
-  const cards = buildCards(A, { asset: (n: string) => assets[n] ?? blank, img: (k: string) => imgs[k] ?? blank })
+  // 손풀이 사진 크기 (가로로 긴 사진이면 카드가 폭 전체를 준다)
+  const sizes: Record<string, { w: number; h: number }> = {}
+  await Promise.all(Object.entries(imgs).filter(([k]) => k.startsWith('s:')).map(async ([k, u]) => {
+    try { const i = await loadImage(u); sizes[k] = { w: i.naturalWidth, h: i.naturalHeight } } catch { /* 크기를 모르면 예전 배치 */ }
+  }))
+  const cards = buildCards(A, { asset: (n: string) => assets[n] ?? blank, img: (k: string) => imgs[k] ?? blank, size: (k: string) => sizes[k] })
 
   const out: RenderedCard[] = []
   for (let i = 0; i < cards.length; i++) {
