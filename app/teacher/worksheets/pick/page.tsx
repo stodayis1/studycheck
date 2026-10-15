@@ -157,9 +157,14 @@ export default function PickPage() {
         <Steps now={1} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr_290px] gap-3 px-5 py-4">
+      {/* 세 칸이 **같은 줄에** 서야 한다.
+          전에는 「쪽 범위 담기」를 격자 1열에 따로 박아 둬서, 그 뒤의 가운데·오른쪽 칸이
+          둘째 줄로 밀려났다(왼쪽 목록이 길어 화면 한참 아래에 떴다).
+          → 왼쪽 열은 목록+범위담기를 한 덩어리로 묶는다. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr_290px] gap-3 px-5 py-4 items-start">
         {/* 왼쪽 — 쪽 / 단원 */}
-        <aside className="border rounded-xl bg-white overflow-hidden self-start max-h-[72vh] overflow-y-auto">
+        <div className="space-y-2">
+        <aside className="border rounded-xl bg-white overflow-hidden max-h-[72vh] overflow-y-auto">
           <div className="px-3 py-2 text-xs text-gray-500 border-b bg-gray-50 sticky top-0">
             {hasPage ? '교재 쪽' : '단원 · 문항번호'}
           </div>
@@ -181,7 +186,7 @@ export default function PickPage() {
         </aside>
 
         {/* 쪽 범위로 한 번에 담기 — 왼쪽 목록 아래에 붙인다 */}
-        <div className="lg:col-start-1 lg:col-end-2 flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <input
             value={range}
             onChange={(e) => setRange(e.target.value)}
@@ -194,6 +199,7 @@ export default function PickPage() {
             style={{ background: NAVY }}>
             {rangeBusy ? '담는 중' : '담기'}
           </button>
+        </div>
         </div>
 
         {/* 가운데 — 문항 고르기 */}
