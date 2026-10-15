@@ -25,7 +25,7 @@ const index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'))
 let rows = []
 for (let from = 0; ; from += 1000) {
   const { data, error } = await db.from('problems')
-    .select('id, local_no, image_path, solution_image_path')
+    .select('id, local_no, sub_chapter_no, image_path, solution_image_path')
     .eq('book', book).eq('grade', grade).eq('semester', sem)
     .order('id').range(from, from + 999)
   if (error) throw error
@@ -36,12 +36,18 @@ for (let from = 0; ; from += 1000) {
 
 const plan = []
 for (const r of rows) {
-  const hit = index[String(Number(r.local_no))]
+  // 일품처럼 소단원마다 번호가 1부터 다시 시작하는 교재는 「소단원|번호」로 찾는다
+  const hit = index[`${String(r.sub_chapter_no).padStart(2, '0')}|${r.local_no}`]
+          ?? index[String(Number(r.local_no))]
   if (!hit) continue
   const file = path.join(dir, hit.file)
   if (!fs.existsSync(file)) continue
-  // 문제 그림과 같은 폴더에 <번호>_s.png 로 둔다
-  const dest = r.image_path.replace(/\/[^/]+$/, '/') + String(Number(r.local_no)).padStart(4, '0') + '_s.png'
+  // 문제 그림과 같은 폴더에 <번호>_s.png 로 둔다.
+  // 숫자 번호는 예전부터 네 자리로 채워 올렸으므로 그대로 두고(이미 올라간 교재와 어긋나면 안 된다),
+  // 일품의 M12 처럼 글자가 섞인 번호만 문제 그림 이름을 그대로 따른다.
+  const dest = /^\d+$/.test(r.local_no)
+    ? r.image_path.replace(/\/[^/]+$/, '/') + String(Number(r.local_no)).padStart(4, '0') + '_s.png'
+    : r.image_path.replace(/\.[a-z]+$/i, '') + '_s.png'
   plan.push({ id: r.id, no: Number(r.local_no), file, dest, had: !!r.solution_image_path })
 }
 console.log(`${book} ${grade}-${sem}: 문항 ${rows.length} · 풀이 그림 ${Object.keys(index).length} → 이어진 것 ${plan.length}`)
