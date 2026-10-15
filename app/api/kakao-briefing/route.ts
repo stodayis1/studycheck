@@ -74,6 +74,14 @@ async function run(opts: {
   date: string; dryRun: boolean; studentIds?: string[]; testPhone?: string
   /** 'elementary' 면 초등부만, 'secondary' 면 중·고등부만. 안 주면 전원. */
   only?: 'elementary' | 'secondary'
+  /**
+   * ★ 이미 보낸 학생도 **포함**해서 글을 만든다 (미리보기 전용).
+   *   담당강사 샘플은 「학부모님께 이렇게 나갔습니다」를 보여 주는 것이라, 이미 나간
+   *   학생이 오히려 대상이다. 그런데 이미 보낸 사람을 걸러 버려서, 학부모 발송이 끝난
+   *   뒤에는 늘 「보낼 수 있는 학생이 없어요」가 됐다 (2026-10-14 신애진 선생님이
+   *   샘플을 못 받으신 이유).
+   */
+  includeSent?: boolean
 }): Promise<BriefingSummary> {
   const db = admin()
   const { date, dryRun } = opts
@@ -134,7 +142,7 @@ async function run(opts: {
     //   학부모도 아는 상황을 굳이 들춰 보는 꼴이 된다. 보낼 내용도 없다.
     if (isExamAbsence(note.attendance)) { out.skippedExam.push({ name: student.name }); continue }
     if (!student.parent_phone) { out.skippedNoPhone.push({ name: student.name }); continue }
-    if (!opts.testPhone && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
+    if (!opts.testPhone && !opts.includeSent && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
 
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({
@@ -283,8 +291,10 @@ export async function GET(req: NextRequest) {
  * 학부모 발송 기록(briefing_sends)은 남기지 않는다 — 진짜 발송을 막으면 안 된다.
  */
 async function runTeacherSample(date: string) {
-  // ① 먼저 미리보기로 그날 보낼 수 있는 학생과 글 길이를 모은다.
-  const preview = await run({ date, dryRun: true })
+  // ① 먼저 미리보기로 그날 **기록이 있는** 학생과 글 길이를 모은다.
+  //   ★ 이미 학부모님께 나간 학생도 포함한다 — 샘플은 「이렇게 나갔습니다」를 보여 주는
+  //     것이라 나간 학생이 오히려 대상이다.
+  const preview = await run({ date, dryRun: true, includeSent: true })
   const previews: any[] = preview.previews ?? []
   if (!previews.length) {
     return { date, sent: 0, picks: [], note: '그날 보낼 수 있는 학생이 없어요.' }
