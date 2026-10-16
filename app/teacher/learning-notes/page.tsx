@@ -300,6 +300,10 @@ export default function TeacherLearningNotesPage() {
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
   // 담당 강사에게 본인 글 한 통씩 — 자기가 쓴 글이 학부모님께 어떻게 가는지 볼 수 있어야 한다.
   const [sampleResult, setSampleResult] = useState<any>(null)
+  // 「선생님께 보내기」로 고르는 중인 학생. null 이면 창이 닫혀 있다.
+  const [pickTo, setPickTo] = useState<
+    { studentId: string; name: string; options: { name: string; why: string }[]; chosen: string[] } | null>(null)
+
   // ★ 오늘 수업을 **다른 날로 옮긴** 학생 (수학OPS 의 대체수업). 오늘 목록에서 뺀다.
   //   안 빼면 오지도 않은 날에 결석이 찍힌다(원장님 2026-10-14).
   const [movedAway, setMovedAway] = useState<{ studentId: string; name: string; movedTo: string }[]>([])
@@ -470,18 +474,22 @@ export default function TeacherLearningNotesPage() {
   // 고른 학생 글을 **고른 선생님께** 보낸다 (원장님 2026-10-16).
   //   「담당강사에게 샘플」은 글이 가장 짧은 학생을 자동으로 고른다. 그런데
   //   「이 학생 글을 이 선생님께 보여 주고 싶다」가 따로 생긴다. 학부모에게는 가지 않는다.
-  async function sendToTeachers(p: { studentId: string; name: string }) {
-    const typed = window.prompt(
-      `${p.name} 학생 ${briefDate} 브리핑을 어느 선생님께 보낼까요?
-이름을 쉼표로 적어 주세요.`,
-      '윤지혜, 윤주희')
-    if (!typed) return
-    const teachers = typed.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
-    if (!teachers.length) return
-    if (!confirm(`${teachers.join(' · ')} 선생님께 ${p.name} 학생 브리핑을 보냅니다.
-학부모님께는 가지 않습니다.
+  // 받으실 분을 **고르는 창**을 연다. 담당 강사는 미리 체크해 둔다 — 대개 그분께 보낸다.
+  function openSendToTeachers(p: { studentId: string; name: string; teacherName?: string | null }) {
+    const mine = splitTeachers(p.teacherName)
+    const admins: string[] = briefPreview?.staffOptions?.admins ?? []
+    const supers: string[] = (briefPreview?.staffOptions?.supervisors ?? []).filter((n: string) => !admins.includes(n))
+    const options = [
+      ...mine.map((name) => ({ name, why: '담당' })),
+      ...admins.filter((n) => !mine.includes(n)).map((name) => ({ name, why: '원장' })),
+      ...supers.filter((n) => !mine.includes(n)).map((name) => ({ name, why: '주임' })),
+    ]
+    if (!options.length) { alert('보낼 수 있는 선생님이 없어요. 담당 강사가 비어 있는지 확인해주세요.'); return }
+    setPickTo({ studentId: p.studentId, name: p.name, options, chosen: mine })
+  }
 
-진행할까요?`)) return
+  async function sendToTeachers(p: { studentId: string; name: string }, teachers: string[]) {
+    if (!teachers.length) return
     setBriefBusy(true)
     try {
       const res = await apiFetch('/api/kakao-briefing', {
@@ -498,6 +506,7 @@ export default function TeacherLearningNotesPage() {
       alert('발송 중 오류: ' + (e?.message ?? '연결 실패'))
     } finally {
       setBriefBusy(false)
+      setPickTo(null)
     }
   }
 
@@ -2284,6 +2293,53 @@ ${e?.message ?? '연결 실패'}
               </div>
             )}
 
+            {/* 선생님께 보내기 — 받으실 분 고르기 */}
+            {pickTo && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                style={{ background: 'rgba(0,0,0,.35)' }} onClick={() => setPickTo(null)}>
+                <div className="bg-white rounded-2xl p-4 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+                  <p className="text-sm font-bold text-gray-800">
+                    {pickTo.name} 학생 브리핑 — 받으실 분
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1 mb-3">
+                    {briefDate} 글이 고르신 분들 휴대폰으로 갑니다. <b>학부모님께는 가지 않습니다.</b>
+                  </p>
+                  <div className="space-y-1 mb-3">
+                    {pickTo.options.map((o) => {
+                      const on = pickTo.chosen.includes(o.name)
+                      return (
+                        <button key={o.name} type="button"
+                          onClick={() => setPickTo({
+                            ...pickTo,
+                            chosen: on ? pickTo.chosen.filter((n) => n !== o.name) : [...pickTo.chosen, o.name],
+                          })}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-left"
+                          style={on
+                            ? { borderColor: '#9FE1CB', background: '#F0FBF7' }
+                            : { borderColor: '#e5e7eb', background: '#fff' }}>
+                          <i className={`ti ti-${on ? 'checkbox' : 'square'}`}
+                            style={{ fontSize: 16, color: on ? '#085041' : '#c9c9c9' }} />
+                          <span className="text-sm font-semibold text-gray-800">{o.name}</span>
+                          <span className="text-[11px] text-gray-400">{o.why}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setPickTo(null)}
+                      className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">취소</button>
+                    <button
+                      disabled={briefBusy || pickTo.chosen.length === 0}
+                      onClick={() => sendToTeachers({ studentId: pickTo.studentId, name: pickTo.name }, pickTo.chosen)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
+                      style={{ background: '#993C1D' }}>
+                      {pickTo.chosen.length}분께 보내기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {briefPreview && (
               <div className="mt-3 text-[11px] text-gray-700 space-y-1.5">
                 {(() => {
@@ -2364,8 +2420,12 @@ ${e?.message ?? '연결 실패'}
                           <span className="font-semibold text-gray-800">{p.name}</span>
                           <span className="text-gray-500">{p.phone}</span>
                           <span className="text-gray-400">{p.bodyLen}자</span>
+                          {p.alreadySent && (
+                            <span className="px-1.5 py-0.5 rounded-md font-bold"
+                              style={{ background: '#EAF3DE', color: '#27500A' }}>이미 보냄</span>
+                          )}
                           <button
-                            onClick={(e) => { e.preventDefault(); sendToTeachers(p) }}
+                            onClick={(e) => { e.preventDefault(); openSendToTeachers(p) }}
                             disabled={briefBusy}
                             title="이 학생 글을 고른 선생님께만 보냅니다. 학부모님께는 안 갑니다."
                             className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-md border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
@@ -2373,7 +2433,8 @@ ${e?.message ?? '연결 실패'}
                           </button>
                           <button
                             onClick={(e) => { e.preventDefault(); sendOne(p) }}
-                            disabled={briefBusy}
+                            disabled={briefBusy || p.alreadySent}
+                            title={p.alreadySent ? '이미 학부모님께 나간 날이에요' : undefined}
                             className="px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
                             style={{ background: '#FEE500' }}>
                             이 학생만 보내기

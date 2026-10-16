@@ -75,7 +75,16 @@ export interface BriefingSummary {
   /** 시험기간 결석이라 일부러 안 보낸 학생 */
   skippedExam: { name: string }[]
   errors: { name: string; error: string }[]
-  previews?: { studentId: string; name: string; phone: string; bodyLen: number; body: string }[]
+  previews?: {
+    studentId: string; name: string; phone: string; bodyLen: number; body: string
+    attendance?: string | null
+    /** 담당 강사 칸 그대로 (「조윤희, 이규숙」처럼 여럿일 수 있다) */
+    teacherName?: string | null
+    /** 학부모님께 이미 나간 학생. 보낼 대상 수에는 안 들어가지만 목록에는 보인다. */
+    alreadySent?: boolean
+  }[]
+  /** 「선생님께 보내기」에서 고를 수 있는 분 — 원장·주임 (담당 강사는 줄마다 따로) */
+  staffOptions?: { admins: string[]; supervisors: string[] }
   cleanedExpiredLinks?: number
   /** 알리고가 돌려준 남은 포인트 · 건당 단가 */
   pointLeft?: number
@@ -111,7 +120,7 @@ async function run(opts: {
   const studentIds = [...new Set(sessions.map((s: any) => s.student_id))]
   const sessionIds = sessions.map((s: any) => s.id)
   const [{ data: students }, { data: notes }, { data: fbs }, { data: already }] = await Promise.all([
-    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id').in('id', studentIds),
+    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id, teacher_name').in('id', studentIds),
     db.from('learning_notes').select('*').in('session_id', sessionIds),
     // 알림장은 session_id 가 없어 작성 시각으로 묶는다. 한국 날짜 하루치를 UTC 범위로 받는다.
     db.from('feedbacks').select('*').in('student_id', studentIds)
@@ -154,7 +163,11 @@ async function run(opts: {
     //   학부모도 아는 상황을 굳이 들춰 보는 꼴이 된다. 보낼 내용도 없다.
     if (isExamAbsence(note.attendance)) { out.skippedExam.push({ name: student.name }); continue }
     if (!student.parent_phone) { out.skippedNoPhone.push({ name: student.name }); continue }
-    if (!opts.testPhone && !opts.includeSent && sentAlready.has(student.id)) { out.skippedAlreadySent++; continue }
+    // ★ 미리보기에서는 **이미 보낸 학생도 보여 준다.** 원장님이 그 줄에서 「선생님께 보내기」를
+    //   하시기 때문이다. 예전에는 빼 버려서, 학부모 발송이 끝난 학생은 목록에서 사라졌다
+    //   (2026-10-16 조은서 학생이 안 뜬 이유). 보낼 대상 수에는 안 들어간다.
+    const already = !opts.testPhone && sentAlready.has(student.id)
+    if (already && !dryRun && !opts.includeSent) { out.skippedAlreadySent++; continue }
 
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({
@@ -177,10 +190,13 @@ async function run(opts: {
         name: student.name,
         phone: String(student.parent_phone).replace(/^(\d{3})\d+(\d{4})$/, '$1****$2'),
         attendance: note.attendance ?? null,
+        teacherName: student.teacher_name ?? null,
         bodyLen: brief.bodyLen,
         body: brief.body,
+        alreadySent: already,
       })
-      out.sent++
+      if (already) out.skippedAlreadySent++
+      else out.sent++
       continue
     }
 
@@ -266,6 +282,18 @@ async function run(opts: {
   }
 
   if (!dryRun) delete out.previews
+  // 「선생님께 보내기」에서 고를 분 — 원장·주임. 담당 강사는 줄마다 다르므로 거기서 읽는다.
+  if (dryRun) {
+    const { data: staff } = await db.from('users')
+      .select('name, role, supervisor_grades').in('role', ['admin', 'teacher', 'staff'])
+    out.staffOptions = {
+      admins: (staff ?? []).filter((u: any) => u.role === 'admin').map((u: any) => u.name).filter(Boolean),
+      supervisors: (staff ?? [])
+        .filter((u: any) => Array.isArray(u.supervisor_grades) && u.supervisor_grades.length > 0)
+        .map((u: any) => u.name).filter(Boolean),
+    }
+  }
+
   return out
 }
 
