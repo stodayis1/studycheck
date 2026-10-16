@@ -62,6 +62,54 @@ export const BRIEFING_TEMPLATE_NONOTE = `[수학의지혜 수업 브리핑]
 
 아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
 
+
+/**
+ * ★ 새 판(V2) — 「▶ 지난 학습지」를 **「▶ 과제 성취도」** 로 바로잡았다 (원장님 2026-10-16).
+ *
+ * 왜 바꾸나
+ *   그 칸에 들어가던 값(learning_notes.worksheet_score)은 학습지 점수가 아니라
+ *   학습일지 화면의 **「과제 성취도」** 다. 학습지를 낸 적 없는 날에도 「지난 학습지 90점」이
+ *   나가고 있었다. 화면은 %로 보여 주는데 브리핑은 「점」으로 내보내 단위도 어긋나 있었다.
+ *
+ * 쓰는 때
+ *   알리고에 이 원문으로 새 템플릿을 등록해 심사를 통과하면, 그 코드를
+ *   **ALIGO_BRIEFING_TPL_CODE_V2** 에 넣는다. 그 값이 있으면 이 판으로 나간다.
+ *   값을 지우면 예전 판으로 바로 돌아간다 — 배포를 되돌릴 필요가 없다.
+ */
+export const BRIEFING_TEMPLATE_V2 = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+▶ 과제 성취도  #{과제성취도}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+▶ 선생님 알림장
+#{알림장}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
+/** 새 판 중 알림장 칸이 없는 것. */
+export const BRIEFING_TEMPLATE_V2_NONOTE = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+▶ 과제 성취도  #{과제성취도}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
 // 칸마다의 상한. 합이 넉넉히 950 안에 들어오게 잡았다(골격 약 150자 + 아래 합 774자).
 const CAP = {
   학생명: 20,
@@ -69,6 +117,7 @@ const CAP = {
   출결: 12,
   과제달성률: 14,
   학습지결과: 34,
+  과제성취도: 34,
   진도: 350,
   과제배부: 250,
   알림장: 300,
@@ -214,6 +263,8 @@ export function buildBriefing(args: {
    *   쓸 수 없으면 원래 판으로 만들고 알림장 자리에 한 줄을 채운다.
    */
   noNoteTemplate?: boolean
+  /** 새 판(과제 성취도)으로 만들까. 알리고 심사를 통과한 뒤에만 켠다. */
+  useV2?: boolean
 }): BriefingResult {
   const { studentName, session: ses, note } = args
   // ★ 결석한 날은 진도도 과제도 **안 적는 것이 정상**이다(10/7 결석 17명 전원 비어 있었다).
@@ -275,12 +326,20 @@ export function buildBriefing(args: {
   // 알림장이 없으면 빈 채로 둔다 — 그 칸이 없는 판으로 나가므로 쓰이지 않는다.
   const 알림장 = noticeParts.join('\n')
 
+  // ★ 같은 값인데 판에 따라 이름과 단위가 다르다.
+  //   예전 판 「지난 학습지 90점」 · 새 판 「과제 성취도 90%」(학습일지 화면과 같은 꼴).
+  const 과제성취도 =
+    note?.worksheet_score != null
+      ? [`${note.worksheet_score}%`, note.worksheet_unit, note.worksheet_level].filter(Boolean).join(' · ')
+      : '해당 없음'
+
   const vars: Record<VarName, string> = {
     학생명: clip(studentName, CAP.학생명),
     날짜: clip(날짜, CAP.날짜),
     출결: clip(출결, CAP.출결),
     과제달성률: clip(과제달성률, CAP.과제달성률),
     학습지결과: clip(학습지결과, CAP.학습지결과),
+    과제성취도: clip(과제성취도, CAP.과제성취도),
     진도: clip(진도, CAP.진도),
     과제배부: clip(과제배부, CAP.과제배부),
     알림장: clip(알림장, CAP.알림장),
@@ -298,7 +357,10 @@ export function buildBriefing(args: {
   //   빈말("오늘은 따로 남긴 말씀이 없어요")을 채워 넣으면 성의 없어 보인다.
   const hasNotice = noticeParts.length > 0
   const useNoNote = !hasNotice && !!args.noNoteTemplate
-  const tpl = useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE
+  const v2 = !!args.useV2
+  const tpl = v2
+    ? (useNoNote ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_V2)
+    : (useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE)
   // ★ \w 는 한글을 못 잡는다. #{학생명} 같은 한글 변수가 그대로 남아 본문이 통째로
   //   골격 그대로 나가 버린다(실제로 그랬다 — scripts/briefing-check.ts 가 잡아냈다).
   const render = (v: Record<string, string>) =>

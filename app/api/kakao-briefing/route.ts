@@ -161,7 +161,14 @@ async function run(opts: {
       studentName: student.name, session: ses, note, feedbacks: dayFbs,
       makeup: makeupFor(student),
       // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
-      noNoteTemplate: !!process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE,
+      // ★ 「알림장 없는 판」은 **쓰는 판에 맞는 코드가 있을 때만** 쓴다.
+      //   새 판으로 넘어갔는데 새 판의 알림장-없는 코드가 아직 없으면, 본문만 알림장 없는
+      //   꼴로 만들어 놓고 코드는 알림장 있는 것을 보내게 되어 서식이 어긋난다(그러면 안 나간다).
+      noNoteTemplate: process.env.ALIGO_BRIEFING_TPL_CODE_V2
+        ? !!process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE
+        : !!process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE,
+      // 새 판 코드가 들어오면 그때부터 「과제 성취도」 판으로 나간다.
+      useV2: !!process.env.ALIGO_BRIEFING_TPL_CODE_V2,
     })
 
     if (dryRun) {
@@ -203,9 +210,13 @@ async function run(opts: {
       const to = opts.testPhone ?? String(student.parent_phone)
       // ★ 알림장이 없는 날은 그 칸이 **아예 없는 템플릿**으로 보낸다(빈말을 넣지 않으려고).
       //   아직 심사 전이면 그 코드가 없으니 원래 템플릿으로 떨어뜨린다 — 그 경우에만 빈말이 나간다.
+      // ★ 새 판(「과제 성취도」)이 심사를 통과하면 그 코드로 보낸다. 코드가 없으면 예전 판 그대로.
+      //   본문도 lib/briefing.ts 가 같은 조건으로 새 판 서식에 맞춰 만든다 — 둘이 어긋나면 안 나간다.
+      const v2 = process.env.ALIGO_BRIEFING_TPL_CODE_V2
+      const v2NoNote = process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE
       const tplForThis = brief.template === 'nonote'
-        ? (process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE || cfg!.tplCode)
-        : cfg!.tplCode
+        ? (v2 ? (v2NoNote || v2) : (process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE || cfg!.tplCode))
+        : (v2 || cfg!.tplCode)
       const r = await sendAlimtalk({ ...cfg!, tplCode: tplForThis }, {
         to,
         name: student.name,
