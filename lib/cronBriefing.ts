@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { collectPolishTargets, proposePolish, applyPolish, logPolish } from '@/lib/notePolish'
 import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherReminder'
+import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 
 function kstDate(offsetDays = 0) {
   const t = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000)
@@ -89,6 +90,16 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   } catch (e: any) {
     // 교정이 안 돼도 발송은 나가야 한다.
     out.polish = { error: e?.message ?? '점검 실패' }
+  }
+
+  // ── ①-2 본수업에 이어서 한 추가수업을 수학OPS 에 옮겨 적는다 ─────────────
+  // 선생님은 스터디체크에 일지를 한 번 쓰는데 OPS 추가수업 칸은 따로 비어 있어서
+  // 같은 내용을 또 적어야 했다(원장님 2026-10-16). 그날 배운 **교재**만 옮긴다.
+  // ★ 교정(①) 뒤에 한다 — 다듬어진 글이 OPS 로 가야 한다.
+  try {
+    out.opsExtra = await fillOpsExtraFromNotes(db, date)
+  } catch (e: any) {
+    out.opsExtra = { error: e?.message ?? 'OPS 반영 실패' }
   }
 
   // ── ② 학부모 발송 ───────────────────────────────────────────────────────
