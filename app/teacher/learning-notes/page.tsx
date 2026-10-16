@@ -14,6 +14,7 @@ import { ATT_EXAM } from '@/lib/attendance'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { splitTeachers } from '@/lib/teachers'
+import { expectedStudentsOn } from '@/lib/expectedToday'
 
 interface Student {
   id: string
@@ -442,18 +443,27 @@ export default function TeacherLearningNotesPage() {
 
   async function loadMissing(date: string) {
     setMissing(null)
+    // ★ 시간표 기준으로 「그날 일지를 써야 하는 학생」을 먼저 잡는다.
+    //   예전에는 수업 기록만 훑었는데, 선생님이 아무것도 안 쓰면 그 기록 자체가 안 생겨서
+    //   **아무것도 안 쓴 사람이 통째로 빠졌다** (원장님 2026-10-16: 금요일 135명 중 44명).
+    const expected = await expectedStudentsOn(supabase as any, date)
     const { data: ses } = await supabase.from('class_sessions')
       .select('id, student_id, session_type, progress_content, today_textbook_name, hw_textbook_name, hw_textbook_page, hw_worksheet_range')
       .eq('session_date', date)
-    if (!ses?.length) { setMissing([]); return }
+    if (expected.closed) { setMissing([]); return }
+    if (!ses?.length && !expected.ids.length) { setMissing([]); return }
+    const ids = [...new Set([...(ses ?? []).map((x) => x.student_id), ...expected.ids])]
     const [{ data: notes }, { data: stus }] = await Promise.all([
-      supabase.from('learning_notes').select('session_id, attendance').in('session_id', ses.map((x) => x.id)),
-      supabase.from('students').select('id, name, grade, teacher_name').in('id', ses.map((x) => x.student_id)),
+      (ses ?? []).length
+        ? supabase.from('learning_notes').select('session_id, attendance').in('session_id', (ses ?? []).map((x) => x.id))
+        : Promise.resolve({ data: [] as any[] }),
+      supabase.from('students').select('id, name, grade, teacher_name').in('id', ids),
     ])
     // ★ 판정은 lib/missingNotes.ts 한 곳에만 둔다 — 선생님께 가는 알림 문자와
     //   **같은 함수**를 써야 「원장님 화면엔 3건인데 문자엔 5건」이 안 생긴다.
     setMissing(findMissingNotes({
-      sessions: ses as any, notes: (notes ?? []) as any, students: (stus ?? []) as any,
+      sessions: (ses ?? []) as any, notes: (notes ?? []) as any, students: (stus ?? []) as any,
+      expected: expected.ids,
     }))
   }
 

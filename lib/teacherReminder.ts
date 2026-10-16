@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { findMissingNotes, mainTeacherOf } from './missingNotes'
 import { fetchOpsTeacherPhones } from './opsTeachers'
 import { sendSmsViaOps } from './opsSms'
+import { expectedStudentsOn } from './expectedToday'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycheck-five.vercel.app'
 
@@ -29,16 +30,29 @@ export async function buildTeacherReminders(db: SupabaseClient, date: string, op
   const { data: sessions } = await db.from('class_sessions')
     .select('id, student_id, session_type, progress_content, today_textbook_name, hw_textbook_name, hw_textbook_page, hw_worksheet_range')
     .eq('session_date', date)
-  if (!sessions?.length) return { items: [] as ReminderItem[], noTeacher: [] as string[], note: '그날 수업이 없어요.' }
 
+  // ★ 시간표 기준으로 「써야 하는 사람」을 먼저 잡는다. 기록만 보면 아무것도 안 쓴
+  //   선생님이 알림을 안 받는다(원장님 2026-10-16).
+  const expected = await expectedStudentsOn(db, date)
+  if (expected.closed) {
+    return { items: [] as ReminderItem[], noTeacher: [] as string[], note: `${expected.closed} — 쉬는 날이에요.` }
+  }
+  if (!sessions?.length && !expected.ids.length) {
+    return { items: [] as ReminderItem[], noTeacher: [] as string[], note: '그날 수업이 없어요.' }
+  }
+
+  const ids = [...new Set([...(sessions ?? []).map((s: any) => s.student_id), ...expected.ids])]
   const [{ data: notes }, { data: students }] = await Promise.all([
-    db.from('learning_notes').select('session_id, attendance').in('session_id', sessions.map((s: any) => s.id)),
-    db.from('students').select('id, name, grade, teacher_name').in('id', sessions.map((s: any) => s.student_id)),
+    (sessions ?? []).length
+      ? db.from('learning_notes').select('session_id, attendance').in('session_id', (sessions ?? []).map((s: any) => s.id))
+      : Promise.resolve({ data: [] as any[] }),
+    db.from('students').select('id, name, grade, teacher_name').in('id', ids),
   ])
 
   // ★ 원장님 화면의 「학습일지 미작성 보기」와 같은 함수다(lib/missingNotes.ts).
   const missing = findMissingNotes({
-    sessions: sessions as any, notes: (notes ?? []) as any, students: (students ?? []) as any,
+    sessions: (sessions ?? []) as any, notes: (notes ?? []) as any, students: (students ?? []) as any,
+    expected: expected.ids,
   })
 
   const byTeacher = new Map<string, typeof missing>()

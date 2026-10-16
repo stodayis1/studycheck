@@ -34,6 +34,13 @@ const NO_WORK = new Set(['결석', '시험기간 결석', '시험기간'])
 
 export function findMissingNotes(a: {
   sessions: Session[]; notes: Note[]; students: Student[]
+  /**
+   * ★ 그날 수업이 있어서 **일지를 써야 하는** 학생 id (lib/expectedToday.ts).
+   *   수업 기록만 훑으면 **아무것도 안 쓴 사람이 통째로 빠진다** — 안 쓰면 그 행이
+   *   아예 안 생기기 때문이다(원장님 2026-10-16: 금요일 135명 중 44명이 숨어 있었다).
+   *   안 주면 예전처럼 기록이 있는 학생만 본다.
+   */
+  expected?: string[]
 }): MissingNote[] {
   const noteBy = new Map(a.notes.map((n) => [n.session_id, n]))
   const stuBy = new Map(a.students.map((s) => [s.id, s]))
@@ -58,6 +65,17 @@ export function findMissingNotes(a: {
     if (!hasContent && !hasHw) out.push({ ...base, why: '진도·과제 비었음' })
     else if (!hasContent) out.push({ ...base, why: '진도 비었음' })
     else if (!hasHw) out.push({ ...base, why: '과제 비었음' })
+  }
+
+  // 그날 수업이 있는데 **기록이 아예 없는** 학생 — 가장 중요한 미작성이다.
+  if (a.expected?.length) {
+    const hasRow = new Set(a.sessions.map((s) => s.student_id))
+    for (const id of a.expected) {
+      if (hasRow.has(id)) continue
+      const st = stuBy.get(id)
+      if (!st) continue
+      out.push({ studentId: id, name: st.name, grade: st.grade, teacher: st.teacher_name ?? null, why: '수업일지 없음' })
+    }
   }
 
   out.sort((x, y) => (x.teacher ?? '').localeCompare(y.teacher ?? '', 'ko') || x.name.localeCompare(y.name, 'ko'))
