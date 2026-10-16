@@ -18,6 +18,7 @@ interface ClassSession {
   session_date: string
   hw_textbook_name: string | null
   hw_worksheet_range: string | null
+  hw_worksheet_ids?: string[] | null
 }
 
 interface LearningNote {
@@ -84,7 +85,7 @@ export default function StudentAssignmentsPage() {
 
   async function fetchData(sid: string) {
     const [{ data: ssData }, { data: tbData }, { data: wsData }] = await Promise.all([
-      supabase.from('class_sessions').select('id, session_date, hw_textbook_name, hw_worksheet_range')
+      supabase.from('class_sessions').select('id, session_date, hw_textbook_name, hw_worksheet_range, hw_worksheet_ids')
         .eq('student_id', sid).order('session_date'),
       supabase.from('student_textbooks').select('*').eq('student_id', sid),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).order('assigned_at'),
@@ -233,7 +234,18 @@ export default function StudentAssignmentsPage() {
       totalTasks++
       if (achievement !== null && achievement >= 100) doneTasks++
     }
-    if (session.hw_worksheet_range) {
+    // ★ 학습지를 하루에 여러 개 낼 수 있다(원장님 2026-10-16). 예전에는 글 한 줄만 보고
+    //   몇 개를 내줬든 **한 건**으로 셌다. 이제 낸 학습지마다 따로 센다.
+    const wsIds = session.hw_worksheet_ids ?? []
+    if (wsIds.length > 0) {
+      for (const id of wsIds) {
+        totalTasks++
+        const w = worksheets.find((x) => x.id === id)
+        // 「처리 완료(passed)」면 끝난 것으로 본다 — 학습지관리에서 점수까지 들어간 상태다.
+        if (w?.status === 'passed') doneTasks++
+      }
+    } else if (session.hw_worksheet_range) {
+      // id 가 없던 예전 기록은 글 한 줄뿐이라 한 건으로 센다.
       totalTasks++
       if (note?.worksheet_submitted) doneTasks++
     }

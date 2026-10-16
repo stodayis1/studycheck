@@ -89,6 +89,7 @@ interface ClassSession {
   hw_textbook_name: string | null
   hw_textbook_page: string | null
   hw_worksheet_range: string | null
+  hw_worksheet_ids?: string[] | null
 }
 
 interface LearningNote {
@@ -278,7 +279,9 @@ export default function TeacherLearningNotesPage() {
   const [lnCatalog, setLNCatalog] = useState<any[]>([])
   const [progressChecks, setProgressChecks] = useState<any[]>([])
   const [videoWatchLogs, setVideoWatchLogs] = useState<any[]>([])
-  const [hwSelectedWSId, setHwSelectedWSId] = useState('')
+  // ★ 하루에 학습지를 여러 개 낼 수 있다(원장님 2026-10-16). 예전에는 하나만 골라져서
+  //   안 고른 학습지가 브리핑에도 학생 앱에도 안 나갔다.
+  const [hwSelectedWSIds, setHwSelectedWSIds] = useState<string[]>([])
   const [savingNote, setSavingNote] = useState(false)
   const [justSavedNote, setJustSavedNote] = useState(false) // 저장 성공 시 잠깐 보여줄 확인 표시 (성공해도 화면이 그대로라 "저장 안 됐나?" 하고 헷갈리는 것 방지)
   const [sendingKakao, setSendingKakao] = useState<string | null>(null) // 카톡 발송 중인 session id
@@ -1129,6 +1132,7 @@ export default function TeacherLearningNotesPage() {
     setHwMemo(savedHwMemoPart ? savedHwMemoPart.slice(2).trim() : '')
     setHwTextbookPage(savedHwOtherParts.join(' / '))
     setHwWorksheetRange(session?.hw_worksheet_range ?? '')
+    setHwSelectedWSIds(session?.hw_worksheet_ids ?? [])
     setHwVideoUrls(session?.video_url ? session.video_url.split('\n').filter(Boolean) : [''])
     setShowNoteModal(true)
   }
@@ -1534,6 +1538,18 @@ ${e?.message ?? '연결 실패'}
       ? progressParts.join(' / ')
       : (noteNoTextbook ? (noteMemo || noteProgress) : noteProgress) || null
 
+    // ★ 진행중 학습지가 있는데 하나도 안 골랐으면 한 번 더 묻는다 (원장님 2026-10-16).
+    //   10/16 에 학습지가 배정돼 있는데 안 고른 채 저장된 학생이 다섯 명이었다 —
+    //   그 학생들은 학부모 브리핑에 학습지 과제가 **빠진 채** 나갔다.
+    if (noteStudent && hwSelectedWSIds.length === 0 && !hwWorksheetRange.trim()) {
+      const open = worksheets.filter((w) => w.student_id === noteStudent.id && w.status !== 'passed')
+      if (open.length > 0 && !confirm(
+        `${noteStudent.name} 학생에게 진행중인 학습지가 ${open.length}개 있는데 하나도 안 고르셨어요.\n` +
+        '이대로 저장하면 학부모님 브리핑에 학습지 과제가 안 나갑니다.\n\n' +
+        '학습지 과제 없이 저장할까요?')) return
+
+    }
+
     // session 없으면 생성, 있으면 업데이트
     let sessionId = noteSession?.id
     const sessionData = {
@@ -1613,12 +1629,17 @@ ${e?.message ?? '연결 실패'}
         return noteNoHomework ? NO_HOMEWORK_MARKER : null
       })(),
       hw_worksheet_range: (() => {
-        if (hwSelectedWSId) {
-          const ws = worksheets.find((w) => w.id === hwSelectedWSId)
-          return ws ? `${ws.grade_level} · ${ws.unit}${ws.unit_name ? ` (${ws.unit_name})` : ''} · ${ws.current_level}레벨` : null
+        if (hwSelectedWSIds.length) {
+          const labels = hwSelectedWSIds
+            .map((id) => worksheets.find((w) => w.id === id))
+            .filter(Boolean)
+            .map((ws: any) => `${ws.grade_level} · ${ws.unit}${ws.unit_name ? ` (${ws.unit_name})` : ''} · ${ws.current_level}레벨`)
+          if (labels.length) return labels.join(' / ')
         }
         return hwWorksheetRange || null
       })(),
+      // 달성률을 **학습지마다** 세려면 글만으론 안 된다. 고른 id 를 같이 남긴다.
+      hw_worksheet_ids: hwSelectedWSIds.length ? hwSelectedWSIds : null,
       video_url: hwVideoUrls.filter((u) => u.trim()).join('\n') || null,
       created_by: currentUser?.name,
     }
@@ -4181,19 +4202,21 @@ ${e?.message ?? '연결 실패'}
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-2">
                         <i className="ti ti-file-text align-[-0.125em]" /> 학습지 과제
-                        <span className="ml-1.5 text-[10px] font-normal text-gray-400">학습지관리탭과 자동연동</span>
+                        <span className="ml-1.5 text-[10px] font-normal text-gray-400">학습지관리탭과 자동연동 · 여러 개 고를 수 있어요</span>
                       </label>
                       {myWSList.length === 0 ? (
                         <p className="text-xs text-gray-400">학습지관리탭에서 배정된 학습지가 없어요</p>
                       ) : (
                         <div className="space-y-1.5">
                           {myWSList.map((ws) => (
-                            <button key={ws.id} onClick={() => setHwSelectedWSId(ws.id === hwSelectedWSId ? '' : ws.id)}
+                            <button key={ws.id}
+                              onClick={() => setHwSelectedWSIds((prev) =>
+                                prev.includes(ws.id) ? prev.filter((x) => x !== ws.id) : [...prev, ws.id])}
                               className={cx('w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all',
-                                hwSelectedWSId === ws.id ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200')}>
-                              <span className={cx('w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0',
-                                hwSelectedWSId === ws.id ? 'bg-[#9FE1CB] border-[#9FE1CB]' : 'border-gray-300')}>
-                                {hwSelectedWSId === ws.id && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                                hwSelectedWSIds.includes(ws.id) ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200')}>
+                              <span className={cx('w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0',
+                                hwSelectedWSIds.includes(ws.id) ? 'bg-[#9FE1CB] border-[#9FE1CB]' : 'border-gray-300')}>
+                                {hwSelectedWSIds.includes(ws.id) && <i className="ti ti-check text-white" style={{ fontSize: 11 }} />}
                               </span>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-semibold text-gray-800">
