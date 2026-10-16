@@ -152,7 +152,7 @@ export function standardFileName(p: PaperKey, kind: string, originalName: string
 
 // 손풀이 파일명에서 문항번호 뽑기: 도래울중_중3_18번_손풀이_김T.png → '18번'
 export function handsolveLabel(fileName: string): string | null {
-  const m = fileName.normalize('NFC').match(/^.+?_중[1-3]_(.+?)_손풀이_/)
+  const m = fileName.normalize('NFC').match(/^.+?_[중고][1-3]_(.+?)_손풀이_/)   // 중·고 모두
   return m ? m[1] : null
 }
 

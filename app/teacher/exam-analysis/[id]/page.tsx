@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import {
   FILE_KINDS, MATCH_LEVELS, REVIEW_DIFFICULTIES, TASKS,
   HIT_LEVELS, checkFileName, guessExamFile, kindOfFile, expectedPaperFileName, handsolveLabel, hitSummary, noLabel, normNo,
+  discNos as discNosOf,
 } from '@/lib/examAnalysis'
 import { QuestionsTab } from '@/components/exam-analysis/QuestionsTab'
 import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
@@ -151,7 +152,10 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   const paperFiles = data.files.filter((f: any) => f.kind !== '손풀이' && f.kind !== '원본')
   const originals = data.files.filter((f: any) => f.kind === '원본')      // 원장에게만 내려온다
   const handFiles = data.files.filter((f: any) => f.kind === '손풀이')
-  const discNos: string[] = paper.discriminating_nos ?? []
+  // 「19/20/21/22」처럼 한 칸에 몰아 적힌 것 · 「논술형1」도 문항 번호로 풀어 본다 (현황판과 같은 규칙)
+  const discNos: string[] = discNosOf(paper.discriminating_nos ?? [], data.questions ?? [])
+  // 손풀이 번호: 붙여 둔 번호가 없으면 파일 이름의 「21번」에서 읽는다 (현황판과 같은 규칙)
+  const handNo = (f: any) => discNosOf([f.question_label || (String(f.file_name ?? '').match(/(\d+)\s*번/) ?? [])[1] || ''], data.questions ?? [])[0] ?? ''
 
   return (
     <Shell title={`${paper.school_name} ${paper.grade}`} subtitle={`${paper.exam_name ?? ''}${paper.exam_end_date ? ` · 시험 종료 ${paper.exam_end_date}` : ''}`}>
@@ -293,9 +297,9 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
                 ))}
               </div>
               {!handFiles.length && <p className="mt-3 text-center text-xs text-gray-400">아직 올린 손풀이가 없습니다.</p>}
-              {discNos.filter((n) => !handFiles.some((f: any) => normNo(f.question_label ?? '') === normNo(n))).length > 0 && handFiles.length > 0 && (
+              {discNos.filter((n) => !handFiles.some((f: any) => handNo(f) === normNo(n))).length > 0 && handFiles.length > 0 && (
                 <p className="mt-2 text-xs text-amber-700">
-                  손풀이가 아직 없는 변별문항: {discNos.filter((n) => !handFiles.some((f: any) => normNo(f.question_label ?? '') === normNo(n))).map(noLabel).join(', ')}
+                  손풀이가 아직 없는 변별문항: {discNos.filter((n) => !handFiles.some((f: any) => handNo(f) === normNo(n))).map(noLabel).join(', ')}
                 </p>
               )}
             </Card>
