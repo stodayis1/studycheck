@@ -33,6 +33,18 @@ import { mainTeacherOf } from '@/lib/teachers'
 
 const APP_URL = 'https://studycheck-five.vercel.app'
 
+/**
+ * 담당강사 샘플을 **저녁 8시에** 받을 선생님.
+ *
+ * 왜 나누나 (원장님 2026-10-15)
+ *   이 두 분은 그날 안에 기록을 끝내셔서 담당 학생 브리핑이 저녁 8시에 다 나간다.
+ *   그러니 본인 글을 보시는 샘플도 그때 같이 가는 것이 맞다. 나머지 선생님은
+ *   학생 브리핑이 다음 날 오전 11시에 나가므로 샘플도 그때 간다.
+ *
+ * ★ 선생님이 바뀌거나 기록 습관이 바뀌면 이 줄만 고치면 된다.
+ */
+export const EVENING_SAMPLE_TEACHERS = ['윤주희', '조윤희']
+
 // 발송량이 많아 기본 10초로는 끝나지 않는다.
 export const maxDuration = 300
 
@@ -258,6 +270,12 @@ export async function GET(req: NextRequest) {
     // 1차 = 당일 저녁 8시, 초등부 / 2차 = 다음 날 오전 11시, 전원(초등 못 나간 것 포함)
     const phase = q.get('phase') === '1' ? 1 : 2
     const date = q.get('date') ?? (phase === 1 ? kstDate(0) : kstDate(-1))
+
+    // 담당강사 샘플 — 자동 발송이 부른다. 화면 버튼은 POST 쪽을 쓴다.
+    const sample = q.get('sample')
+    if (sample === 'evening' || sample === 'morning') {
+      return NextResponse.json(await runTeacherSample(date, sample))
+    }
     // ★ 1차를 초등부만 보내던 것을 **학년 구분 없이** 바꿨다(원장님 2026-10-12).
     //   기준이 학년이 아니라 「그 시각까지 작성이 끝났나」다. 밤 8시에 끝난 것은 그날 나가고,
     //   못 끝낸 것은 다음 날 오전 11시에 나간다. 중복은 briefing_sends 가 막는다.
@@ -290,7 +308,11 @@ export async function GET(req: NextRequest) {
  * 번호는 OPS profiles 에서 읽는다(스터디체크 users 에는 전화 칸이 없다).
  * 학부모 발송 기록(briefing_sends)은 남기지 않는다 — 진짜 발송을 막으면 안 된다.
  */
-async function runTeacherSample(date: string) {
+async function runTeacherSample(
+  date: string,
+  /** 'evening' 이면 위 두 분만, 'morning' 이면 나머지만. 안 주면 전원(원장님이 버튼으로 부를 때). */
+  who?: 'evening' | 'morning',
+) {
   // ① 먼저 미리보기로 그날 **기록이 있는** 학생과 글 길이를 모은다.
   //   ★ 이미 학부모님께 나간 학생도 포함한다 — 샘플은 「이렇게 나갔습니다」를 보여 주는
   //     것이라 나간 학생이 오히려 대상이다.
@@ -317,6 +339,17 @@ async function runTeacherSample(date: string) {
     const cur = pickBy.get(t)
     if (!cur || (p.bodyLen ?? 0) < (cur.bodyLen ?? 0)) pickBy.set(t, p)
   }
+  // ★ 선생님마다 자기 학생 브리핑이 나가는 시각이 다르다. 그 시각에 맞춰 거른다.
+  if (who) {
+    const evening = (t: string) => EVENING_SAMPLE_TEACHERS.includes(t)
+    for (const t of [...pickBy.keys()]) {
+      if (who === 'evening' ? !evening(t) : evening(t)) pickBy.delete(t)
+    }
+    for (const t of [...onlyAbsent]) {
+      if (who === 'evening' ? !evening(t) : evening(t)) onlyAbsent.delete(t)
+    }
+  }
+
   // 그날 담당 학생이 전부 결석이면 보낼 것이 없다 — 조용히 넘기지 말고 알린다.
   const absentOnly = [...onlyAbsent].filter((t) => !pickBy.has(t))
 

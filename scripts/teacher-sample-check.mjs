@@ -55,10 +55,18 @@ for (const ses of sessions ?? []) {
   if (!cur || brief.bodyLen < cur.len) picks.set(t, { name: st.name, grade: st.grade, len: brief.bodyLen })
 }
 
+// 저녁 8시에 받는 분 — app/api/kakao-briefing 의 EVENING_SAMPLE_TEACHERS 와 같은 명단
+const EVENING = ['윤주희', '조윤희']
+
 console.log(`\n═══ ${date} 담당강사 샘플 — 보낼 것 ═══\n`)
 console.log(`그날 글이 만들어지는 학생 ${made}명\n`)
-for (const [t, p] of [...picks].sort((a, b) => a[0].localeCompare(b[0], 'ko'))) {
-  console.log(`  ${t} 선생님  ←  ${p.name}(${p.grade}) 브리핑 · ${p.len}자`)
+for (const when of ['evening', 'morning']) {
+  const rows = [...picks]
+    .filter(([t]) => (when === 'evening') === EVENING.includes(t))
+    .sort((a, b) => a[0].localeCompare(b[0], 'ko'))
+  console.log(when === 'evening' ? '  [저녁 8시]' : '  [다음 날 오전 11시]')
+  if (!rows.length) console.log('     (없음)')
+  for (const [t, p] of rows) console.log(`     ${t} 선생님  ←  ${p.name}(${p.grade}) 브리핑 · ${p.len}자`)
 }
 const only = [...absentOnly].filter((t) => !picks.has(t))
 if (only.length) console.log(`\n  결석만 있어 못 보내는 선생님: ${only.join(', ')}`)

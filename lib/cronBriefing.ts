@@ -116,6 +116,22 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
     out.remind = { error: e?.message ?? '알림 실패' }
   }
 
+  // ── ④ 담당 강사 샘플 ───────────────────────────────────────────────────
+  // 선생님이 **본인이 쓴 글**이 학부모님께 어떤 모양으로 가는지 한 통 받아 보신다.
+  // 담당 학생 브리핑이 나가는 시각에 맞춘다 — 저녁에 나가는 분은 저녁에,
+  // 다음 날 나가는 분은 다음 날에(원장님 2026-10-15).
+  //
+  // ★ 학부모 발송 **뒤에** 부른다. 그래야 그날 기록이 다 들어간 상태에서 고른다.
+  try {
+    const res = await fetch(
+      `${APP_URL}/api/kakao-briefing?date=${date}&sample=${phase === 1 ? 'evening' : 'morning'}`,
+      { headers: { Authorization: `Bearer ${secret}` } },
+    )
+    out.sample = await res.json()
+  } catch (e: any) {
+    out.sample = { error: e?.message ?? '샘플 발송 실패' }
+  }
+
   out.finishedAt = new Date().toISOString()
   return NextResponse.json(out)
 }
