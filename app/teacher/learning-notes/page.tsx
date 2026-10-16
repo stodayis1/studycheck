@@ -467,6 +467,40 @@ export default function TeacherLearningNotesPage() {
     }
   }
 
+  // 고른 학생 글을 **고른 선생님께** 보낸다 (원장님 2026-10-16).
+  //   「담당강사에게 샘플」은 글이 가장 짧은 학생을 자동으로 고른다. 그런데
+  //   「이 학생 글을 이 선생님께 보여 주고 싶다」가 따로 생긴다. 학부모에게는 가지 않는다.
+  async function sendToTeachers(p: { studentId: string; name: string }) {
+    const typed = window.prompt(
+      `${p.name} 학생 ${briefDate} 브리핑을 어느 선생님께 보낼까요?
+이름을 쉼표로 적어 주세요.`,
+      '윤지혜, 윤주희')
+    if (!typed) return
+    const teachers = typed.split(/[,，、]/).map((t) => t.trim()).filter(Boolean)
+    if (!teachers.length) return
+    if (!confirm(`${teachers.join(' · ')} 선생님께 ${p.name} 학생 브리핑을 보냅니다.
+학부모님께는 가지 않습니다.
+
+진행할까요?`)) return
+    setBriefBusy(true)
+    try {
+      const res = await apiFetch('/api/kakao-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, studentIds: [p.studentId], toTeachers: teachers }),
+      })
+      const d = await res.json()
+      if (!res.ok) { alert('발송 실패: ' + (d.error ?? '알 수 없는 오류')); return }
+      const lines = (d.results ?? []).map((r: any) =>
+        `${r.ok ? '보냄' : '실패'}  ${r.teacher}${r.phone ? ' ' + r.phone : ''}${r.error ? ' — ' + r.error : ''}`)
+      alert([`${p.name} 학생 브리핑 — ${d.sent}통 보냈어요.`, '', ...lines].join('\n'))
+    } catch (e: any) {
+      alert('발송 중 오류: ' + (e?.message ?? '연결 실패'))
+    } finally {
+      setBriefBusy(false)
+    }
+  }
+
   // 한 학생만 보낸다.
   // ★ 수업일지 목록은 **시간표상 오늘 수업이 있는 학생**만 보여 준다. 그래서 보강·추가 수업으로
   //   그날 기록이 생긴 학생(예: 화·금 시간표인데 목요일에 수업한 윤수지)은 목록에 없고
@@ -2331,9 +2365,16 @@ ${e?.message ?? '연결 실패'}
                           <span className="text-gray-500">{p.phone}</span>
                           <span className="text-gray-400">{p.bodyLen}자</span>
                           <button
+                            onClick={(e) => { e.preventDefault(); sendToTeachers(p) }}
+                            disabled={briefBusy}
+                            title="이 학생 글을 고른 선생님께만 보냅니다. 학부모님께는 안 갑니다."
+                            className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-md border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                            선생님께 보내기
+                          </button>
+                          <button
                             onClick={(e) => { e.preventDefault(); sendOne(p) }}
                             disabled={briefBusy}
-                            className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
+                            className="px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
                             style={{ background: '#FEE500' }}>
                             이 학생만 보내기
                           </button>

@@ -308,6 +308,34 @@ export async function GET(req: NextRequest) {
  * 번호는 OPS profiles 에서 읽는다(스터디체크 users 에는 전화 칸이 없다).
  * 학부모 발송 기록(briefing_sends)은 남기지 않는다 — 진짜 발송을 막으면 안 된다.
  */
+/**
+ * **고른 학생 한 명의 브리핑을 고른 선생님들께** 보낸다 (원장님 2026-10-16).
+ *
+ * 왜 따로 두나 — 「담당강사에게 샘플」은 선생님마다 글이 가장 짧은 학생을 **자동으로**
+ * 고른다. 그런데 「이 학생 글을 이 선생님께 보여 주고 싶다」가 종종 생긴다
+ * (조은서 학생 10/15 브리핑을 윤지혜·윤주희 선생님께, 같은 식).
+ *
+ * 학부모 발송 기록(briefing_sends)은 남기지 않는다 — 진짜 발송을 막으면 안 된다.
+ */
+async function sendBriefingToTeachers(date: string, studentId: string, teachers: string[]) {
+  const phones = await fetchOpsTeacherPhones()
+  const out: any[] = []
+  for (const name of teachers) {
+    const phone = phones.get(name)
+    if (!phone) { out.push({ teacher: name, ok: false, error: '연락처가 없어요 (수학OPS 직원 정보)' }); continue }
+    const r = await run({ date, dryRun: false, studentIds: [studentId], testPhone: phone })
+    const ok = r.sent > 0
+    out.push({
+      teacher: name, ok,
+      phone: phone.replace(/^(\d{3})\d+(\d{4})$/, '$1****$2'),
+      error: ok ? undefined
+        : r.errors?.[0]?.error
+          ?? (r.skippedNoRecord?.length ? '그날 기록이 없어요' : '발송 실패'),
+    })
+  }
+  return { date, studentId, sent: out.filter((x) => x.ok).length, results: out }
+}
+
 async function runTeacherSample(
   date: string,
   /** 'evening' 이면 위 두 분만, 'morning' 이면 나머지만. 안 주면 전원(원장님이 버튼으로 부를 때). */
@@ -381,10 +409,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as
       { date?: string; dryRun?: boolean; studentIds?: string[]; testPhone?: string
-        only?: 'elementary' | 'secondary'; teacherSample?: boolean }
+        only?: 'elementary' | 'secondary'; teacherSample?: boolean; toTeachers?: string[] }
     const date = body.date ?? kstDate(-1)
     // 담당 강사에게 본인 글 한 통씩 — 학부모 발송과 섞이지 않게 길을 따로 둔다.
     if (body.teacherSample) return NextResponse.json(await runTeacherSample(date))
+    // 고른 학생 글을 고른 선생님들께 — 학부모에게는 가지 않는다.
+    if (body.toTeachers?.length && body.studentIds?.length) {
+      return NextResponse.json(await sendBriefingToTeachers(date, body.studentIds[0], body.toTeachers))
+    }
     const summary = await run({
       date, dryRun: body.dryRun !== false, studentIds: body.studentIds,
       // 테스트 번호를 주면 그 번호로만 가고 발송 기록도 남기지 않는다(진짜 발송을 막지 않게).
