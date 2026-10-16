@@ -1099,7 +1099,7 @@ export default function TeacherLearningNotesPage() {
     setHwTBSubChapters(restoredSubChapters)
     setHwTBPages(restoredPages)
     setHwAutostepVirtual({})
-    setHwSelectedWSId('')
+    setHwSelectedWSIds([])
     setHwSelectedEPIds([])
     setHwEPPages({})
     // achievement_pct 컬럼 생기기 전 기존 기록은 boolean만 남아있어서, 그 경우엔 근사치로 복원
