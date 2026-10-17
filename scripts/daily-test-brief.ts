@@ -44,8 +44,9 @@ for (const ses of sessions as any[]) {
       `  ${ses.session_date} ${s.name}(${s.grade}) — 데일리 ${ses.daily_test_score}점인데 브리핑엔 성취도 ${n.worksheet_score}`)
   }
   const r = buildBriefing({
-    studentName: s.name, session: ses as any, note: n ?? null,
-    useV2: true, useV3: true, noNoteTemplate: true, noNoteTemplateV3: true,
+    studentName: s.name, studentGrade: s.grade, session: ses as any, note: n ?? null,
+    // ★ 지금 판(V3 없음)으로 — 점수 칸 뒤에 붙는 모양을 센다.
+    useV2: true, noNoteTemplate: true,
   })
   if (r.bodyLen > 950) over++
 }

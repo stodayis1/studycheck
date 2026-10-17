@@ -171,8 +171,9 @@ const CAP = {
   날짜: 14,
   출결: 12,
   과제달성률: 14,
-  학습지결과: 34,
-  과제성취도: 34,
+  // ★ 데일리테스트를 뒤에 붙일 수 있어서 넓혔다(아래 「데일리테스트를 붙인다」 참고).
+  학습지결과: 72,
+  과제성취도: 72,
   데일리테스트: 34,
   진도: 350,
   과제배부: 250,
@@ -310,6 +311,20 @@ export interface BriefingResult {
 
 export function buildBriefing(args: {
   studentName: string
+  /**
+   * 학년('고1' 꼴). 있으면 **「이수아 학생(고1)」** 로 나간다.
+   *
+   * 왜 (원장님 2026-10-17)
+   *   한 집에 자녀가 여럿인 가정이 많다. 이미진 어머님 번호 하나로 이수아(고1)·
+   *   이수연(중1)·이수애(초5) 세 자매 브리핑이 간다. 게다가 고1 반에는 **이수아와
+   *   이수연이 같이** 있어 진도도 알림장도 글자까지 같다. 그래서 「고등부 이수연 브리핑이
+   *   중등부 이수연 어머님께 갔다」는 오해가 생겼다(발송은 정확했다).
+   *   이름 옆에 학년 두 글자가 있으면 그 오해가 생기지 않는다.
+   *
+   * ★ 학생명은 **승인된 템플릿의 변수 칸**이다. 안에 무엇을 넣든 서식은 그대로여서
+   *   재심사가 필요 없다.
+   */
+  studentGrade?: string | null
   session: BriefingSession
   note?: BriefingNote | null
   feedbacks?: BriefingFeedback[]
@@ -342,6 +357,10 @@ export function buildBriefing(args: {
   const 날짜 = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`
 
   const 출결 = note?.attendance ?? '기록 없음'
+
+  // 「이수아(고1)」 — 학년을 모르면 이름만. 템플릿 골격은 그대로다(변수 칸이다).
+  const 학년 = (args.studentGrade ?? '').trim()
+  const 학생명 = 학년 ? `${studentName}(${학년})` : studentName
 
   // 결석이면 비율이 의미가 없다. 그 외엔 선생님이 적은 %를 쓰고, 옛 기록은 한 단어로 근사한다.
   const 과제달성률 =
@@ -407,7 +426,7 @@ export function buildBriefing(args: {
     : '해당 없음'
 
   const vars: Record<VarName, string> = {
-    학생명: clip(studentName, CAP.학생명),
+    학생명: clip(학생명, CAP.학생명),
     날짜: clip(날짜, CAP.날짜),
     출결: clip(출결, CAP.출결),
     과제달성률: clip(과제달성률, CAP.과제달성률),
@@ -433,6 +452,24 @@ export function buildBriefing(args: {
   // ★ 데일리테스트를 본 날만 그 줄이 있는 판으로 간다. 코드가 없으면(심사 전) 예전대로.
   const v3 = !!args.useV3 && hasDaily
   const v2 = !!args.useV2
+
+  // ── 데일리테스트를 붙인다 (원장님 2026-10-17) ───────────────────────────
+  // 「▶ 데일리테스트」 **한 줄**을 쓰려면 알리고에 템플릿을 새로 등록해 심사를 받아야 한다.
+  // 그걸 기다리는 동안에도 점수가 묻히면 안 되니, 줄을 늘리지 않고 **점수 칸 뒤에** 붙인다
+  //   「▶ 과제 성취도  100% · 데일리테스트 95점」
+  // 변수 칸 안의 글자는 심사와 무관하다 — 그래서 **지금 쓰는 판 그대로 오늘부터** 나간다.
+  // 새 판(V3)으로 가면 그 줄이 따로 생기므로 붙이지 않는다(두 번 나가면 안 된다).
+  if (!v3 && hasDaily) {
+    const 꼬리 = ` · 데일리테스트 ${vars.데일리테스트}`
+    // 예전 판의 「지난 학습지」 칸은 성취도가 **비었을 때** 이미 데일리테스트를 쓰고 있다.
+    // 그 경우엔 같은 말이 두 번 되니 붙이지 않는다.
+    const 이미들어있음 = note?.worksheet_score == null
+    const slot: VarName = v2 ? '과제성취도' : '학습지결과'
+    if (!(slot === '학습지결과' && 이미들어있음)) {
+      const base = vars[slot] === '해당 없음' ? '' : vars[slot]
+      vars[slot] = clip(base ? base + 꼬리 : 꼬리.replace(/^ · /, ''), CAP[slot])
+    }
+  }
   // 「알림장 없는 판」을 쓸 수 있는지는 **지금 쓰는 판**에 달렸다 — V3 로 가면 V3 의 것을 본다.
   const useNoNote = !hasNotice && (v3 ? !!args.noNoteTemplateV3 : !!args.noNoteTemplate)
   const tpl = v3

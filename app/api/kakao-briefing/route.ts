@@ -171,7 +171,7 @@ async function run(opts: {
 
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({
-      studentName: student.name, session: ses, note, feedbacks: dayFbs,
+      studentName: student.name, studentGrade: student.grade, session: ses, note, feedbacks: dayFbs,
       makeup: makeupFor(student),
       // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
       // ★ 「알림장 없는 판」은 **쓰는 판에 맞는 코드가 있을 때만** 쓴다.
