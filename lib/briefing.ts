@@ -110,6 +110,61 @@ export const BRIEFING_TEMPLATE_V2_NONOTE = `[수학의지혜 수업 브리핑]
 
 아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
 
+/**
+ * ★ V3 — V2 에 **「▶ 데일리테스트」 한 줄**을 더한 판 (원장님 2026-10-17).
+ *
+ * 왜
+ *   「고등부는 학습지도 학습지지만 데일리테스트를 더 많이 활용하거든.
+ *     데일리테스트가 학습브리핑에 올라와야 할듯해」
+ *   지금은 데일리테스트가 **예전 판의 「지난 학습지」 칸이 비었을 때만** 대신 들어갔다.
+ *   그 칸은 worksheet_score 를 쓰는데 0점도 「있는 값」이라, 10/15 고1 두 학생은
+ *   데일리테스트 95점·100점을 받고도 「지난 학습지 0점」이 나갔다 — 점수가 묻혔다.
+ *
+ * 왜 줄을 늘린 판을 따로 두나
+ *   데일리테스트를 **본 날만** 그 줄이 있는 판으로 보낸다. 안 본 날까지 줄을 띄우면
+ *   초·중등 브리핑마다 「데일리테스트 해당 없음」이 붙는다 — 알림장 빈말을 뺀 것과 같은 이유다.
+ *   그래서 판이 네 개가 된다: (알림장 O/X) × (데일리테스트 O/X).
+ *
+ * 쓰는 때
+ *   알리고에 이 원문으로 등록해 심사를 통과하면 코드를 **ALIGO_BRIEFING_TPL_CODE_V3**
+ *   (알림장 없는 판은 **_V3_NONOTE**) 에 넣는다. 값이 없으면 V2·예전 판으로 그대로 나간다.
+ */
+export const BRIEFING_TEMPLATE_V3 = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+▶ 과제 성취도  #{과제성취도}
+▶ 데일리테스트  #{데일리테스트}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+▶ 선생님 알림장
+#{알림장}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
+/** V3 중 알림장 칸이 없는 것. */
+export const BRIEFING_TEMPLATE_V3_NONOTE = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+▶ 과제 성취도  #{과제성취도}
+▶ 데일리테스트  #{데일리테스트}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
 // 칸마다의 상한. 합이 넉넉히 950 안에 들어오게 잡았다(골격 약 150자 + 아래 합 774자).
 const CAP = {
   학생명: 20,
@@ -118,6 +173,7 @@ const CAP = {
   과제달성률: 14,
   학습지결과: 34,
   과제성취도: 34,
+  데일리테스트: 34,
   진도: 350,
   과제배부: 250,
   알림장: 300,
@@ -244,6 +300,8 @@ export interface BriefingResult {
   body: string
   /** 알림장이 있으면 'full', 없으면 'nonote' — 보낼 때 템플릿 코드를 가른다 */
   template: 'full' | 'nonote'
+  /** 「데일리테스트」 줄이 있는 판(V3)으로 만들었는가 — 보낼 때 코드를 가른다 */
+  dailyShown: boolean
   hasNotice: boolean
   bodyLen: number
   overLimit: boolean
@@ -265,6 +323,13 @@ export function buildBriefing(args: {
   noNoteTemplate?: boolean
   /** 새 판(과제 성취도)으로 만들까. 알리고 심사를 통과한 뒤에만 켠다. */
   useV2?: boolean
+  /**
+   * 「데일리테스트」 줄이 있는 판(V3)을 쓸 수 있는가. 심사 통과 뒤에만 켠다.
+   * 켜 두어도 그날 데일리테스트 점수가 **있을 때만** 그 판으로 만든다.
+   */
+  useV3?: boolean
+  /** V3 중 알림장 없는 판까지 심사를 통과했는가 (V3 로 갈 때의 noNoteTemplate). */
+  noNoteTemplateV3?: boolean
 }): BriefingResult {
   const { studentName, session: ses, note } = args
   // ★ 결석한 날은 진도도 과제도 **안 적는 것이 정상**이다(10/7 결석 17명 전원 비어 있었다).
@@ -333,6 +398,14 @@ export function buildBriefing(args: {
       ? [`${note.worksheet_score}%`, note.worksheet_unit, note.worksheet_level].filter(Boolean).join(' · ')
       : '해당 없음'
 
+  // ★ 데일리테스트 — 점수가 **있을 때만** 쓴다. 범위를 적어 두셨으면 뒤에 붙인다.
+  //   결석한 날은 볼 수 없으니 없는 것으로 둔다.
+  const 데일리점수 = 결석 ? null : (ses.daily_test_score ?? null)
+  const hasDaily = 데일리점수 != null
+  const 데일리테스트 = hasDaily
+    ? [`${데일리점수}점`, (ses.daily_test_unit ?? '').trim() || null].filter(Boolean).join(' · ')
+    : '해당 없음'
+
   const vars: Record<VarName, string> = {
     학생명: clip(studentName, CAP.학생명),
     날짜: clip(날짜, CAP.날짜),
@@ -340,6 +413,7 @@ export function buildBriefing(args: {
     과제달성률: clip(과제달성률, CAP.과제달성률),
     학습지결과: clip(학습지결과, CAP.학습지결과),
     과제성취도: clip(과제성취도, CAP.과제성취도),
+    데일리테스트: clip(데일리테스트, CAP.데일리테스트),
     진도: clip(진도, CAP.진도),
     과제배부: clip(과제배부, CAP.과제배부),
     알림장: clip(알림장, CAP.알림장),
@@ -356,11 +430,16 @@ export function buildBriefing(args: {
   // ★ 알림장이 하나도 없으면 그 칸이 **아예 없는 판**으로 보낸다.
   //   빈말("오늘은 따로 남긴 말씀이 없어요")을 채워 넣으면 성의 없어 보인다.
   const hasNotice = noticeParts.length > 0
-  const useNoNote = !hasNotice && !!args.noNoteTemplate
+  // ★ 데일리테스트를 본 날만 그 줄이 있는 판으로 간다. 코드가 없으면(심사 전) 예전대로.
+  const v3 = !!args.useV3 && hasDaily
   const v2 = !!args.useV2
-  const tpl = v2
-    ? (useNoNote ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_V2)
-    : (useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE)
+  // 「알림장 없는 판」을 쓸 수 있는지는 **지금 쓰는 판**에 달렸다 — V3 로 가면 V3 의 것을 본다.
+  const useNoNote = !hasNotice && (v3 ? !!args.noNoteTemplateV3 : !!args.noNoteTemplate)
+  const tpl = v3
+    ? (useNoNote ? BRIEFING_TEMPLATE_V3_NONOTE : BRIEFING_TEMPLATE_V3)
+    : v2
+      ? (useNoNote ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_V2)
+      : (useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE)
   // ★ \w 는 한글을 못 잡는다. #{학생명} 같은 한글 변수가 그대로 남아 본문이 통째로
   //   골격 그대로 나가 버린다(실제로 그랬다 — scripts/briefing-check.ts 가 잡아냈다).
   const render = (v: Record<string, string>) =>
@@ -387,6 +466,7 @@ export function buildBriefing(args: {
     overLimit: body.length > BODY_LIMIT,
     photoCount: photos.length,
     template: useNoNote ? 'nonote' : 'full',
+    dailyShown: v3,
     hasNotice,
   }
 }

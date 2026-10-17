@@ -11,7 +11,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { denyIfNotStaff } from '@/lib/apiAuth'
-import { BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE } from '@/lib/briefing'
+import {
+  BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
+  BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
+  BRIEFING_TEMPLATE_V3, BRIEFING_TEMPLATE_V3_NONOTE,
+} from '@/lib/briefing'
 import { aligoPost } from '@/lib/aligo'
 
 export const runtime = 'nodejs'
@@ -129,8 +133,12 @@ export async function GET(req: NextRequest) {
       버튼: { 등록됨: gotButtons, 코드가_기대하는것: wantButtons },
       // 두 판을 나란히 — 알림장 있는 날 / 없는 날
       판: {
-        '알림장 있는 날': inspect(tplCode, BRIEFING_TEMPLATE, BTN3),
-        '알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE, BRIEFING_TEMPLATE_NONOTE, BTN2),
+        '① 예전 판 · 알림장 있는 날': inspect(tplCode, BRIEFING_TEMPLATE, BTN3),
+        '① 예전 판 · 알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE, BRIEFING_TEMPLATE_NONOTE, BTN2),
+        '② 과제 성취도 판 · 알림장 있는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V2, BRIEFING_TEMPLATE_V2, BTN3),
+        '② 과제 성취도 판 · 알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE, BRIEFING_TEMPLATE_V2_NONOTE, BTN2),
+        '③ 데일리테스트 판 · 알림장 있는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V3, BRIEFING_TEMPLATE_V3, BTN3),
+        '③ 데일리테스트 판 · 알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V3_NONOTE, BRIEFING_TEMPLATE_V3_NONOTE, BTN2),
       },
       // 본문에 쓰인 변수 이름이 우리와 같은지(치환이 안 되면 #{...} 가 그대로 나간다)
       변수: {
