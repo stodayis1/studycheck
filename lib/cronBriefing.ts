@@ -31,6 +31,21 @@ function kstHhmm() {
   return t.toISOString().slice(11, 16)
 }
 
+/** 한국 기준 요일 (0=일 … 6=토) */
+function kstDow() {
+  return new Date(Date.now() + 9 * 3600_000).getUTCDay()
+}
+
+/**
+ * 그날 저녁 발송을 **언제부터** 해도 되나.
+ *
+ * 토요일은 오전에 수업을 시작해 오전에 끝난다. 평일처럼 저녁 8시까지 기다리면
+ * 수업이 끝나고 한참 뒤에야 브리핑이 간다(원장님 2026-10-17). 그래서 토요일만 오후 6시.
+ */
+function eveningNotBefore() {
+  return kstDow() === 6 ? '18:00' : '20:00'
+}
+
 function kstDate(offsetDays = 0) {
   const t = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000)
   return t.toISOString().slice(0, 10)
@@ -80,7 +95,7 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   // ?force=1 을 주면 두 가지를 모두 건너뛴다 — 손으로 다시 돌릴 때 쓴다.
   const force = q.get('force') === '1'
   const phaseName = phase === 1 ? 'evening' : 'morning'
-  const notBefore = phase === 1 ? '20:00' : '11:00'
+  const notBefore = phase === 1 ? eveningNotBefore() : '11:00'
   const now = kstHhmm()
   if (!force && now < notBefore) {
     return NextResponse.json({ ...out, skipped: `아직 ${notBefore} 전이에요 (지금 ${now})` })
