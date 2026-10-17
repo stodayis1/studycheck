@@ -173,16 +173,25 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
 
   // ── ③ 담당 강사 알림 ────────────────────────────────────────────────────
   // 발송 **뒤에** 본다. 그래야 「지금 이 시각에도 덜 된 것」이 정확히 잡힌다.
-  try {
-    const { items, noTeacher } = await buildTeacherReminders(db, date, { when: phase === 2 ? 'morning' : 'evening' })
-    const sent = items.length ? await sendTeacherReminders(items) : 0
-    out.remind = {
-      보냄: sent,
-      선생님: items.map((i) => `${i.teacher}(${i.count}건${i.ok === false ? ` · ${i.error}` : ''})`),
-      담당없는학생: noTeacher.length ? noTeacher : undefined,
+  //
+  // ★ **저녁에 한 번만** 보낸다 (원장님 2026-10-17).
+  //   오전 11시 알림은 이미 두 번의 발송이 끝난 뒤라, 받아도 그 학생 브리핑은 못 나간
+  //   뒤다. 저녁에 받으시면 밤에 쓰셔서 다음 날 11시에 나간다. 두 번 보내면 그냥
+  //   재촉이 한 번 더 늘 뿐이다.
+  if (phase === 2) {
+    out.remind = { 건너뜀: '알림 문자는 저녁에 한 번만 보냅니다' }
+  } else {
+    try {
+      const { items, noTeacher } = await buildTeacherReminders(db, date, { when: 'evening' })
+      const sent = items.length ? await sendTeacherReminders(items) : 0
+      out.remind = {
+        보냄: sent,
+        선생님: items.map((i) => `${i.teacher}(${i.count}건${i.ok === false ? ` · ${i.error}` : ''})`),
+        담당없는학생: noTeacher.length ? noTeacher : undefined,
+      }
+    } catch (e: any) {
+      out.remind = { error: e?.message ?? '알림 실패' }
     }
-  } catch (e: any) {
-    out.remind = { error: e?.message ?? '알림 실패' }
   }
 
   // ── ④ 담당 강사 샘플 ───────────────────────────────────────────────────
