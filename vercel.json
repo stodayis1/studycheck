@@ -5,11 +5,11 @@
   "crons": [
     {
       "path": "/api/cron/briefing/evening",
-      "schedule": "0 11 * * *"
+      "schedule": "*/10 10-11 * * *"
     },
     {
       "path": "/api/cron/briefing/morning",
-      "schedule": "0 2 * * *"
+      "schedule": "*/10 1-2 * * *"
     }
   ]
 }

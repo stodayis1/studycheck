@@ -25,6 +25,12 @@ import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherRemind
 import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
 
+/** 한국 시각 'HH:MM'. 서버는 UTC 로 돈다. */
+function kstHhmm() {
+  const t = new Date(Date.now() + 9 * 3600_000)
+  return t.toISOString().slice(11, 16)
+}
+
 function kstDate(offsetDays = 0) {
   const t = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000)
   return t.toISOString().slice(0, 10)
@@ -63,6 +69,33 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   const out: any = { phase, date, startedAt: new Date().toISOString() }
 
   const db = admin()
+
+  // ── 언제 돌까 ───────────────────────────────────────────────────────────
+  // Vercel 예약은 40~50분 늦게 깨운다(저녁 8시 것이 20:41, 오전 11시 것이 11:50 에 돌았다).
+  // 그래서 **10분마다 깨우고** 여기서 두 가지로 막는다 (원장님 2026-10-17).
+  //   ① 정해진 시각 전이면 그냥 돌아간다
+  //   ② 그날 이미 돌았으면 그냥 돌아간다
+  // 그러면 정해진 시각 직후 첫 깨움이 일을 하고 나머지는 조용히 지나간다.
+  //
+  // ?force=1 을 주면 두 가지를 모두 건너뛴다 — 손으로 다시 돌릴 때 쓴다.
+  const force = q.get('force') === '1'
+  const phaseName = phase === 1 ? 'evening' : 'morning'
+  const notBefore = phase === 1 ? '20:00' : '11:00'
+  const now = kstHhmm()
+  if (!force && now < notBefore) {
+    return NextResponse.json({ ...out, skipped: `아직 ${notBefore} 전이에요 (지금 ${now})` })
+  }
+
+  // ② 하루 한 번 — 먼저 자리를 잡는다. 이미 있으면 다른 깨움이 벌써 했다는 뜻이다.
+  if (!force) {
+    const { data: claimed } = await db.from('cron_runs')
+      .upsert({ phase: phaseName, run_date: kstDate(0) }, { onConflict: 'phase,run_date', ignoreDuplicates: true })
+      .select('id')
+    if (!claimed?.length) {
+      return NextResponse.json({ ...out, skipped: '오늘은 이미 돌았어요' })
+    }
+    out.runId = claimed[0].id
+  }
 
   // ── ① 오타·문장 자동 교정 ───────────────────────────────────────────────
   // 사람이 없는 시각이라, AI 가 내놓은 교정을 **기계 검사에 통과한 것만** 반영한다.
@@ -154,5 +187,13 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   }
 
   out.finishedAt = new Date().toISOString()
+
+  // 무엇을 했는지 남긴다 — 「예약이 돌았나」를 이 표만 보면 알 수 있다.
+  if (out.runId) {
+    try {
+      await db.from('cron_runs').update({ finished_at: out.finishedAt, result: out }).eq('id', out.runId)
+    } catch { /* 기록이 안 남아도 발송은 끝났다 */ }
+  }
+
   return NextResponse.json(out)
 }
