@@ -13,6 +13,8 @@
 //   · **첫 수업 전인 학생** — 등록하면서 시간표를 먼저 넣어 두기 때문에 시간표에는 있다
 //     (원장님 2026-10-17: 10/16 에 다섯 명이 첫 수업 전인데 미작성으로 잡혀 있었다)
 //   · 휴원·퇴원 학생 — is_active 로 이미 걸러진다
+//   · **학습일지를 안 쓰는 학생**(skip_lesson_note) — 수업에는 오지만 일지를 쓰지 않는다
+//     (원장님 2026-10-17: 이윤경 고3 — 「시간표에만 뜨고 학습일지는 안뜨게」)
 import { fetchMovedAway } from './opsMovedAway'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
@@ -26,6 +28,8 @@ export interface ExpectedResult {
   movedAway: number
   /** 아직 첫 수업 전이라 뺀 학생 수 */
   beforeFirst: number
+  /** 학습일지를 안 쓰기로 한 학생 id — 기록이 남아 있어도 미작성으로 세지 않는다 */
+  skipNote: string[]
 }
 
 /**
@@ -43,22 +47,25 @@ export async function expectedStudentsOn(
     db.from('academy_closures').select('date, memo').eq('date', date),
   ])
   const closed = (hs ?? [])[0]?.name ?? (cs ?? [])[0]?.memo ?? ((cs ?? []).length ? '학원 휴원일' : null)
-  if (closed) return { ids: [], closed, movedAway: 0, beforeFirst: 0 }
+  if (closed) return { ids: [], closed, movedAway: 0, beforeFirst: 0, skipNote: [] }
 
   const [{ data: sch }, { data: students }] = await Promise.all([
     db.from('schedules').select('student_id, is_active').eq('day_of_week', dow),
-    db.from('students').select('id, first_class_date').eq('is_active', true),
+    db.from('students').select('id, first_class_date, skip_lesson_note').eq('is_active', true),
   ])
   // ★ 첫 수업 전인 학생은 뺀다. 첫 수업일이 비어 있으면 **빼지 않는다** —
   //   값이 없다고 수업을 안 한다고 볼 수는 없으니 안전한 쪽(다 센다)으로 기운다.
   const notYet = new Set((students ?? [])
     .filter((s: any) => s.first_class_date && s.first_class_date > date)
     .map((s: any) => s.id))
+  // ★ 학습일지를 안 쓰는 학생 — 시간표에는 두고, 「써야 하는 사람」에서만 뺀다.
+  const skipNote = (students ?? []).filter((s: any) => s.skip_lesson_note).map((s: any) => s.id)
+  const skipSet = new Set(skipNote)
   const live = new Set((students ?? []).map((s: any) => s.id))
   let ids = [...new Set((sch ?? [])
     .filter((x: any) => x.is_active !== false)
     .map((x: any) => x.student_id)
-    .filter((id: string) => live.has(id) && !notYet.has(id)))] as string[]
+    .filter((id: string) => live.has(id) && !notYet.has(id) && !skipSet.has(id)))] as string[]
 
   // 대체수업으로 그날 수업을 다른 날로 옮긴 학생은 뺀다.
   const moved = await fetchMovedAway(db, date)
@@ -66,5 +73,5 @@ export async function expectedStudentsOn(
   const before = ids.length
   ids = ids.filter((id) => !movedIds.has(id))
 
-  return { ids, closed: null, movedAway: before - ids.length, beforeFirst: notYet.size }
+  return { ids, closed: null, movedAway: before - ids.length, beforeFirst: notYet.size, skipNote }
 }

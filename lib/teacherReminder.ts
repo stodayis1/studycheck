@@ -52,7 +52,7 @@ export async function buildTeacherReminders(db: SupabaseClient, date: string, op
   // ★ 원장님 화면의 「학습일지 미작성 보기」와 같은 함수다(lib/missingNotes.ts).
   const missing = findMissingNotes({
     sessions: (sessions ?? []) as any, notes: (notes ?? []) as any, students: (students ?? []) as any,
-    expected: expected.ids,
+    expected: expected.ids, skipNote: expected.skipNote,
   })
 
   const byTeacher = new Map<string, typeof missing>()

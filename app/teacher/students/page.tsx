@@ -28,6 +28,8 @@ interface Student {
   student_last_login_at?: string | null
   parent_last_login_at?: string | null
   ops_student_id?: string | null
+  /** 학습일지를 안 쓰는 학생 — 시간표에는 뜨지만 일지 작성·미작성·강사 알림에서 뺀다 */
+  skip_lesson_note?: boolean
   on_leave?: boolean | null
   leave_start_date?: string | null
   leave_end_date?: string | null
@@ -251,6 +253,7 @@ export default function TeacherStudentsPage() {
         parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
         textbook_grade: editStudent.textbook_grade,
         wise_step: editStudent.wise_step || 'W',
+        skip_lesson_note: !!editStudent.skip_lesson_note,
       })
       .eq('id', editStudent.id)
     if (error) { alert('수정 중 오류가 발생했습니다.'); return }
@@ -828,6 +831,27 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               )}
             </div>
 
+            {/* 학습일지를 안 쓰는 학생 — 원장님만 켜고 끌 수 있다.
+                수업에는 오시니 시간표에는 그대로 두고, 일지 작성·미작성·강사 알림에서만 뺀다
+                (원장님 2026-10-17: 이윤경 고3). */}
+            {isAdmin() && (
+              <div className="rounded-xl border border-gray-200 p-3">
+                <button onClick={() => setEditStudent({ ...editStudent, skip_lesson_note: !editStudent.skip_lesson_note })}
+                  className="flex items-start gap-2.5 w-full text-left">
+                  <span className={cx('w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center mt-0.5',
+                    editStudent.skip_lesson_note ? 'bg-[#9FE1CB] border-[#9FE1CB] text-white' : 'bg-white border-gray-300')}>
+                    {editStudent.skip_lesson_note && <i className="ti ti-check" style={{ fontSize: 13 }} />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-bold text-gray-800">학습일지를 쓰지 않는 학생</span>
+                    <span className="block text-[11px] text-gray-400 mt-0.5">
+                      시간표에는 「일지 없음」으로 그대로 뜨고, 작성 목록·미작성 보기·담당 강사 알림 문자에서 빠집니다.
+                    </span>
+                  </span>
+                </button>
+              </div>
+            )}
+
             {/* 기타 정보 */}
             {[
               { label:'이름',       key:'name',         placeholder:'학생 이름' },
@@ -875,7 +899,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       setEditSchedules(updated)
                     }}
                     className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
-                    {['월','화','수','목','금','토'].map((d) => (
+                    {['월','화','수','목','금','토','일'].map((d) => (
                       <option key={d} value={d}>{d}요일</option>
                     ))}
                   </select>
@@ -1024,7 +1048,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       setNewSchedules(updated)
                     }}
                     className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
-                    {['월','화','수','목','금','토'].map((d) => (
+                    {['월','화','수','목','금','토','일'].map((d) => (
                       <option key={d} value={d}>{d}요일</option>
                     ))}
                   </select>

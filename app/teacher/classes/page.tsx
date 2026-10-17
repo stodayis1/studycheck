@@ -23,7 +23,8 @@ interface Schedule {
   periods: number
 }
 
-const DAYS = ['월', '화', '수', '목', '금', '토']
+// ★ 일요일도 넣는다. 일요일 수업 학생이 있는데 탭이 없어서 보이지 않았다 (원장님 2026-10-17).
+const DAYS = ['월', '화', '수', '목', '금', '토', '일']
 
 const GRADE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   '초1': { bg: '#fffde7', border: '#ffe082', text: '#f57f17' },

@@ -27,6 +27,8 @@ interface Student {
   on_leave?: boolean
   leave_start_date?: string | null
   leave_end_date?: string | null
+  /** 학습일지를 안 쓰는 학생 — 시간표에는 뜨지만 일지 작성·미작성에서 뺀다 */
+  skip_lesson_note?: boolean
 }
 
 // 강사/직원 이름 → 관(코어관/프라임관) 매핑. 학생별로 관을 따로 입력하지 않고,
@@ -120,7 +122,8 @@ interface Feedback {
   created_at: string
 }
 
-const DAYS = ['월','화','수','목','금','토']
+// ★ 일요일도 넣는다 — 일요일에 오는 학생이 있다 (원장님 2026-10-17).
+const DAYS = ['월','화','수','목','금','토','일']
 const TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30','21:00']
 const ACHIEVEMENT_OPTIONS = [
   { label: '100%', value: 100, color: 'text-green-600', bg: 'bg-green-50 border-green-300' },
@@ -466,7 +469,7 @@ export default function TeacherLearningNotesPage() {
     //   **같은 함수**를 써야 「원장님 화면엔 3건인데 문자엔 5건」이 안 생긴다.
     setMissing(findMissingNotes({
       sessions: (ses ?? []) as any, notes: (notes ?? []) as any, students: (stus ?? []) as any,
-      expected: expected.ids,
+      expected: expected.ids, skipNote: expected.skipNote,
     }))
   }
 
@@ -890,6 +893,11 @@ export default function TeacherLearningNotesPage() {
     })
     .filter((x) => x.schedule && !movedIds.has(x.student.id))
     .sort((a, b) => (a.schedule!.start_time > b.schedule!.start_time ? 1 : -1))
+
+  // ★ 「일지를 쓸 학생」은 시간표보다 좁다. 학습일지를 안 쓰기로 한 학생은
+  //   시간표에는 그대로 두고(수업에 오시니까) 아래 작성 목록과 「입력완료 x/N」에서만 뺀다.
+  //   (원장님 2026-10-17: 이윤경 고3 — 「시간표에만 뜨고 학습일지는 안뜨게」)
+  const noteStudents = todayStudents.filter(({ student }) => !student.skip_lesson_note)
 
   // 범례는 **오늘 화면에 실제로 있는 강사**만 띄운다(색은 위에서 이미 고정됐으니 안 흔들린다).
   const legendNames = teacherColors.names
@@ -2719,7 +2727,9 @@ ${e?.message ?? '연결 실패'}
                           const top = timeToOffset(schedule!.start_time)
                           const blockH = HOUR_PX * periods - 6
                           const isComplete = isTodayComplete(student.id)
-                          const editable = isEditable(student)
+                          // 일지를 안 쓰는 학생은 시간표에만 남기고 눌러도 안 열리게 한다.
+                          const skipNote = !!student.skip_lesson_note
+                          const editable = isEditable(student) && !skipNote
                           return (
                             <div key={student.id} className="shrink-0 relative" style={{ width: 80, height: totalHeight }}>
                               <button
@@ -2728,7 +2738,8 @@ ${e?.message ?? '연결 실패'}
                                 className="rounded-xl px-2 flex flex-col justify-center w-full transition-all hover:opacity-80 absolute"
                                 style={{
                                   backgroundColor: color.bg,
-                                  borderLeft: `4px solid ${isComplete ? '#10b981' : color.border}`,
+                                  borderLeft: `4px solid ${skipNote ? '#d1d5db' : isComplete ? '#10b981' : color.border}`,
+                                  opacity: skipNote ? 0.72 : 1,
                                   height: blockH, top, zIndex: 1
                                 }}>
                                 <span className="text-xs font-black text-gray-900 truncate">{student.name}</span>
@@ -2737,8 +2748,9 @@ ${e?.message ?? '연결 실패'}
                                     ? `${student.grade}·${mainTeacher(student.teacher_name) || '미지정'}`
                                     : student.grade}
                                 </span>
-                                {isComplete && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
-                                {!isComplete && schedule!.start_time.slice(0,5) && (
+                                {skipNote && <span className="text-[9px] font-bold text-gray-400">일지 없음</span>}
+                                {!skipNote && isComplete && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
+                                {!skipNote && !isComplete && schedule!.start_time.slice(0,5) && (
                                   <span className="text-[9px] text-gray-400">{schedule!.start_time.slice(0,5)} · {periods}교시</span>
                                 )}
                               </button>
@@ -2800,15 +2812,15 @@ ${e?.message ?? '연결 실패'}
               </div>
 
               {/* 오늘 수업 학생 목록 */}
-              {todayStudents.length > 0 && (() => {
-                const missingStudents = todayStudents.filter(({ student }) => !isTodayComplete(student.id))
+              {noteStudents.length > 0 && (() => {
+                const missingStudents = noteStudents.filter(({ student }) => !isTodayComplete(student.id))
                 return (
                 <div>
                   <div className="flex items-center justify-between px-1 mb-2">
                     <p className="text-xs font-bold text-gray-800">
-                      <i className="ti ti-calendar align-[-0.125em]" /> 오늘 ({todayDay}요일) 수업 {todayStudents.length}명
+                      <i className="ti ti-calendar align-[-0.125em]" /> 오늘 ({todayDay}요일) 수업 {noteStudents.length}명
                       <span className="ml-1.5 font-normal text-gray-400">
-                        · 입력완료 {todayStudents.length - missingStudents.length}/{todayStudents.length}
+                        · 입력완료 {noteStudents.length - missingStudents.length}/{noteStudents.length}
                       </span>
                     </p>
                     <button onClick={refreshTodayStatus} disabled={refreshing}
@@ -2828,7 +2840,7 @@ ${e?.message ?? '연결 실패'}
                       ))}
                     </div>
                   )}
-                  {todayStudents.map(({ student, schedule }) => {
+                  {noteStudents.map(({ student, schedule }) => {
                     const note = getTodayNote(student.id)
                     const session = getTodaySession(student.id)
                     const isComplete = isTodayComplete(student.id)
@@ -3072,7 +3084,7 @@ ${e?.message ?? '연결 실패'}
                 </div>
               )}
 
-              {todayStudents.length === 0 && otherStudents.length === 0 && (
+              {noteStudents.length === 0 && otherStudents.length === 0 && (
                 <div className="text-center py-8 text-sm text-gray-400">담당 학생이 없어요</div>
               )}
             </div>

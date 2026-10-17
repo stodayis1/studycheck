@@ -10,6 +10,8 @@
 //   3. 결석·시험기간 결석이면 진도·과제를 안 쓰는 것이 **정상**이라 통과
 //   4. 진도(진도내용/교재)가 비었다
 //   5. 과제(교재·쪽수·학습지 범위)가 비었다
+//
+// 아예 세지 않는 학생 — skipNote (학습일지를 안 쓰기로 한 학생). 기록이 남아 있어도 넘긴다.
 
 import { mainTeacherOf } from './teachers'
 
@@ -41,7 +43,10 @@ export function findMissingNotes(a: {
    *   안 주면 예전처럼 기록이 있는 학생만 본다.
    */
   expected?: string[]
+  /** 학습일지를 안 쓰기로 한 학생 id — 아예 세지 않는다 (lib/expectedToday.ts 의 skipNote) */
+  skipNote?: string[]
 }): MissingNote[] {
+  const skip = new Set(a.skipNote ?? [])
   const noteBy = new Map(a.notes.map((n) => [n.session_id, n]))
   const stuBy = new Map(a.students.map((s) => [s.id, s]))
   const out: MissingNote[] = []
@@ -51,6 +56,7 @@ export function findMissingNotes(a: {
     //   빼지 않으면 「과제 비었음」으로 잡혀서 엉뚱한 선생님께 알림이 간다
     //   (2026-10-12 확인: 10/10 미완료 8건 중 3건이 추가수업이었다).
     if (ses.session_type && ses.session_type !== '정규') continue
+    if (skip.has(ses.student_id)) continue
     const st = stuBy.get(ses.student_id)
     if (!st) continue
     const base = { studentId: st.id, name: st.name, grade: st.grade, teacher: st.teacher_name ?? null }
@@ -71,7 +77,7 @@ export function findMissingNotes(a: {
   if (a.expected?.length) {
     const hasRow = new Set(a.sessions.map((s) => s.student_id))
     for (const id of a.expected) {
-      if (hasRow.has(id)) continue
+      if (hasRow.has(id) || skip.has(id)) continue
       const st = stuBy.get(id)
       if (!st) continue
       out.push({ studentId: id, name: st.name, grade: st.grade, teacher: st.teacher_name ?? null, why: '수업일지 없음' })

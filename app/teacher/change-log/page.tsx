@@ -39,6 +39,8 @@ const FIELD: Record<string, string> = {
   textbook_grade: '교재단계', wise_step: '지혜단계', ops_student_id: 'OPS 연결',
   day_of_week: '요일', start_time: '시작시각', periods: '교시', student_id: '학생',
   intake_notes: '상담메모', assigned_seen: '배정 확인',
+  first_class_date: '첫 수업일', first_class_time: '첫 수업시각',
+  skip_lesson_note: '학습일지 안 씀',
 }
 
 const show = (v: any) =>
