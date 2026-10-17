@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { collectPolishTargets, proposePolish, applyPolish, logPolish } from '@/lib/notePolish'
 import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherReminder'
 import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
+import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
 
 function kstDate(offsetDays = 0) {
   const t = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000)
@@ -90,6 +91,15 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   } catch (e: any) {
     // 교정이 안 돼도 발송은 나가야 한다.
     out.polish = { error: e?.message ?? '점검 실패' }
+  }
+
+  // ── ①-1 첫 수업일을 수학OPS 에서 가져온다 ───────────────────────────────
+  // 아직 수업을 시작하지 않은 학생이 「미작성」으로 잡히면 안 된다. 그 판단을
+  // 선생님 화면에서도 하므로(브라우저는 OPS 키가 없다) 값을 옮겨 둔다.
+  try {
+    out.firstClass = await syncFirstClassFromOps(db)
+  } catch (e: any) {
+    out.firstClass = { error: e?.message ?? '첫 수업일 동기화 실패' }
   }
 
   // ── ①-2 본수업에 이어서 한 추가수업을 수학OPS 에 옮겨 적는다 ─────────────

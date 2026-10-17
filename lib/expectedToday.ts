@@ -10,6 +10,8 @@
 // 그래서 **시간표**를 기준으로 삼는다. 다만 시간표에 있다고 다 수업하는 것은 아니다:
 //   · 공휴일·학원 휴원일 — 그날은 아무도 수업하지 않는다
 //   · 대체수업으로 **다른 날로 옮긴** 학생 — 그날은 오지 않는다
+//   · **첫 수업 전인 학생** — 등록하면서 시간표를 먼저 넣어 두기 때문에 시간표에는 있다
+//     (원장님 2026-10-17: 10/16 에 다섯 명이 첫 수업 전인데 미작성으로 잡혀 있었다)
 //   · 휴원·퇴원 학생 — is_active 로 이미 걸러진다
 import { fetchMovedAway } from './opsMovedAway'
 
@@ -22,6 +24,8 @@ export interface ExpectedResult {
   closed: string | null
   /** 대체수업으로 그날 빠진 학생 수 */
   movedAway: number
+  /** 아직 첫 수업 전이라 뺀 학생 수 */
+  beforeFirst: number
 }
 
 /**
@@ -39,17 +43,22 @@ export async function expectedStudentsOn(
     db.from('academy_closures').select('date, memo').eq('date', date),
   ])
   const closed = (hs ?? [])[0]?.name ?? (cs ?? [])[0]?.memo ?? ((cs ?? []).length ? '학원 휴원일' : null)
-  if (closed) return { ids: [], closed, movedAway: 0 }
+  if (closed) return { ids: [], closed, movedAway: 0, beforeFirst: 0 }
 
   const [{ data: sch }, { data: students }] = await Promise.all([
     db.from('schedules').select('student_id, is_active').eq('day_of_week', dow),
-    db.from('students').select('id').eq('is_active', true),
+    db.from('students').select('id, first_class_date').eq('is_active', true),
   ])
+  // ★ 첫 수업 전인 학생은 뺀다. 첫 수업일이 비어 있으면 **빼지 않는다** —
+  //   값이 없다고 수업을 안 한다고 볼 수는 없으니 안전한 쪽(다 센다)으로 기운다.
+  const notYet = new Set((students ?? [])
+    .filter((s: any) => s.first_class_date && s.first_class_date > date)
+    .map((s: any) => s.id))
   const live = new Set((students ?? []).map((s: any) => s.id))
   let ids = [...new Set((sch ?? [])
     .filter((x: any) => x.is_active !== false)
     .map((x: any) => x.student_id)
-    .filter((id: string) => live.has(id)))] as string[]
+    .filter((id: string) => live.has(id) && !notYet.has(id)))] as string[]
 
   // 대체수업으로 그날 수업을 다른 날로 옮긴 학생은 뺀다.
   const moved = await fetchMovedAway(db, date)
@@ -57,5 +66,5 @@ export async function expectedStudentsOn(
   const before = ids.length
   ids = ids.filter((id) => !movedIds.has(id))
 
-  return { ids, closed: null, movedAway: before - ids.length }
+  return { ids, closed: null, movedAway: before - ids.length, beforeFirst: notYet.size }
 }
