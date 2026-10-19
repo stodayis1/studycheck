@@ -1789,6 +1789,11 @@ ${e?.message ?? '연결 실패'}
                 : '예전 판(지난 학습지) — 새 판이 아직 안 잡혔어요'}
             </p>
           )}
+          {isAdmin() && briefMode?.why && !briefMode?.useV2 && (
+            <p className="text-[10.5px]" style={{ color: '#B91C1C' }}>
+              · 까닭: {briefMode.why}
+            </p>
+          )}
         </div>
       </div>
     )

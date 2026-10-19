@@ -22,10 +22,13 @@ export async function GET(req: NextRequest) {
 
   // ★ 발송 코드와 **같은 방법**으로 정한다 — 알리고에 물어보고, 없으면 환경변수.
   //   여기서만 다르게 보면 미리보기와 실제가 어긋난다.
-  const tpl = pickCodes(await resolveBriefingTemplateCodes())
+  const auto = await resolveBriefingTemplateCodes()
+  const tpl = pickCodes(auto)
   return NextResponse.json({
     useV2: !!tpl.v2,
     useV3: !!tpl.v3,
+    // 「과제 성취도 판이 왜 안 잡히지?」를 화면에서 바로 알 수 있게 까닭을 같이 준다.
+    why: auto.why?.v2 ?? auto.note ?? null,
     // 「알림장 없는 판」은 **지금 쓰는 판에 맞는 코드가 있을 때만** 쓴다.
     noNoteTemplate: tpl.v2 ? !!tpl.v2NoNote : !!tpl.v1NoNote,
     noNoteTemplateV3: !!tpl.v3NoNote,
