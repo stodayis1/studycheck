@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { loadHolidays, type Holiday } from '@/lib/holidays'
-import { cx, fetchAllRows, formatDailyTestUnitLabel } from '@/lib/utils'
+import { cx, fetchAllRows, formatDailyTestUnitLabel, formatWorksheetScope } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
@@ -1642,7 +1642,12 @@ ${e?.message ?? '연결 실패'}
           const labels = hwSelectedWSIds
             .map((id) => worksheets.find((w) => w.id === id))
             .filter(Boolean)
-            .map((ws: any) => `${ws.grade_level} · ${ws.unit}${ws.unit_name ? ` (${ws.unit_name})` : ''} · ${ws.current_level}레벨`)
+            // ★ 소개념을 쫘르르 늘어놓지 않는다 — 중단원, 그보다 넓으면 대단원으로 올려 적는다
+            //   (원장님 2026-10-19. 10/19 최다빈 학생은 이 한 줄이 539자였다).
+            .map((ws: any) => {
+              const scope = formatWorksheetScope(concepts, ws.unit, ws.unit_name)
+              return `${ws.grade_level} · ${ws.unit}${scope ? ` (${scope})` : ''} · ${ws.current_level}레벨`
+            })
           if (labels.length) return labels.join(' / ')
         }
         return hwWorksheetRange || null

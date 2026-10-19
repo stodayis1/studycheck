@@ -120,3 +120,49 @@ export async function fetchAllRows<T = any>(
   }
   return all
 }
+
+/**
+ * 학습지 과제 범위를 **한 줄로** 줄인다 (원장님 2026-10-19).
+ *
+ *   「쌍둥이 학습지 과제를 내줬는데 소개념이 쫘르르르르륵 나열되고 있어.
+ *     소개념이 있으면 중단원, 중단원이 쫘르르 나가면 대단원 단위로 제목을 바꿔써줘야 하는데」
+ *
+ * student_worksheets.unit_name 에는 소개념 이름이 통째로 들어 있는 경우가 있다.
+ * 10/19 최다빈 학생은 **539자**였다 — 학부모 브리핑 한 통이 1,000자 한도인데 그 절반을
+ * 학습지 한 줄이 먹었다. 읽히지도 않는다.
+ *
+ * 규칙 — 소개념이 둘 이상이면 올려 적는다.
+ *   · 소개념이 한 중단원에 모여 있으면 → 그 **중단원** 이름
+ *   · 한 대단원 안에서 중단원 두셋에 걸치면 → 「첫 중단원 ~ 끝 중단원」
+ *   · 그보다 넓으면 → 괄호를 **통째로 버린다**(대단원 이름만 남는다)
+ *
+ * 왜 콤마로 안 자르나 — 「덧셈, 뺄셈, 곱셈, 나눗셈의 혼합 계산」처럼 **이름 안에 콤마가 있다.**
+ * 그래서 교육과정(concepts)의 소개념 이름을 글 안에서 찾는 방식으로 센다.
+ * 못 찾으면(이미 중단원 범위로 적혀 있는 경우 등) 적힌 글을 그대로 둔다.
+ *
+ * @param unit      대단원 (student_worksheets.unit)
+ * @param unitName  괄호 안에 적혀 있던 글 (student_worksheets.unit_name)
+ * @returns 괄호 안에 넣을 글. 빈 문자열이면 괄호를 아예 붙이지 않는다.
+ */
+export function formatWorksheetScope(
+  concepts: { chapter: string; sub_chapter: string; concept_name: string; concept_order: number }[],
+  unit: string,
+  unitName: string | null | undefined,
+): string {
+  const raw = (unitName ?? '').trim()
+  if (!raw) return ''
+  // 대단원 이름이 여러 개 이어 붙은 경우(「Ⅰ 기본도형 + Ⅱ 평면도형」)도 각각 찾아 본다.
+  const chapters = (unit ?? '').split('+').map((c) => c.trim()).filter(Boolean)
+  const pool = concepts.filter((c) => chapters.some((ch) => ch === c.chapter))
+  if (pool.length === 0) return raw
+
+  const hit = pool.filter((c) => c.concept_name && raw.includes(c.concept_name))
+  if (hit.length < 2) return raw          // 하나뿐이면 그대로 보여 주는 편이 친절하다
+
+  const ordered = [...hit].sort((a, b) => a.concept_order - b.concept_order)
+  const subs = [...new Set(ordered.map((c) => c.sub_chapter).filter(Boolean))]
+  if (subs.length === 1) return subs[0]
+  const chaps = [...new Set(ordered.map((c) => c.chapter))]
+  if (chaps.length === 1 && subs.length <= 3) return `${subs[0]} ~ ${subs[subs.length - 1]}`
+  return ''                                // 대단원 이름만 남긴다
+}
