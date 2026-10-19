@@ -24,6 +24,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/aligo'
 import { randomBytes } from 'crypto'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
@@ -74,6 +75,8 @@ export interface BriefingSummary {
   skippedNoRecord: { name: string }[]
   /** 시험기간 결석이라 일부러 안 보낸 학생 */
   skippedExam: { name: string }[]
+  /** 어느 판으로 나가는지 — 「예전 판」이면 새 템플릿이 아직 안 잡힌 것이다 */
+  template?: string
   errors: { name: string; error: string }[]
   previews?: {
     studentId: string; name: string; phone: string; bodyLen: number; body: string
@@ -141,6 +144,13 @@ async function run(opts: {
   const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
   const sentAlready = new Set((already ?? []).map((r: any) => r.student_id))
 
+  // ★ 어느 판으로 보낼지 **알리고에 물어서** 정한다 (원장님 2026-10-19).
+  //   승인된 새 판을 두고도 환경변수에 코드를 안 넣어 예전 판으로 나가고 있었다.
+  //   사람이 기억해야 하는 단계는 언젠가 빠진다 — 그 단계를 없앤다.
+  //   못 물어보면(키 없음·연결 실패) 예전처럼 환경변수로 떨어진다.
+  const tpl = pickCodes(await resolveBriefingTemplateCodes())
+  out.template = tpl.v3 ? '데일리테스트 판' : tpl.v2 ? '과제 성취도 판' : '예전 판'
+
   // 설정이 빠졌으면 **여기서** 멈춘다. 반쯤 보내 놓고 멈추는 것이 제일 나쁘다.
   const cfg: AligoConfig | null = dryRun ? null : aligoConfig()
   if (cfg) out.testMode = cfg.testMode
@@ -177,15 +187,13 @@ async function run(opts: {
       // ★ 「알림장 없는 판」은 **쓰는 판에 맞는 코드가 있을 때만** 쓴다.
       //   새 판으로 넘어갔는데 새 판의 알림장-없는 코드가 아직 없으면, 본문만 알림장 없는
       //   꼴로 만들어 놓고 코드는 알림장 있는 것을 보내게 되어 서식이 어긋난다(그러면 안 나간다).
-      noNoteTemplate: process.env.ALIGO_BRIEFING_TPL_CODE_V2
-        ? !!process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE
-        : !!process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE,
+      noNoteTemplate: tpl.v2 ? !!tpl.v2NoNote : !!tpl.v1NoNote,
       // 새 판 코드가 들어오면 그때부터 「과제 성취도」 판으로 나간다.
-      useV2: !!process.env.ALIGO_BRIEFING_TPL_CODE_V2,
+      useV2: !!tpl.v2,
       // ★ 데일리테스트 줄이 있는 판(V3). 코드가 있고 **그날 점수가 있을 때만** 그 판으로 간다
       //   (원장님 2026-10-17: 고등부는 데일리테스트를 더 많이 쓰신다).
-      useV3: !!process.env.ALIGO_BRIEFING_TPL_CODE_V3,
-      noNoteTemplateV3: !!process.env.ALIGO_BRIEFING_TPL_CODE_V3_NONOTE,
+      useV3: !!tpl.v3,
+      noNoteTemplateV3: !!tpl.v3NoNote,
     })
 
     if (dryRun) {
@@ -232,17 +240,13 @@ async function run(opts: {
       //   아직 심사 전이면 그 코드가 없으니 원래 템플릿으로 떨어뜨린다 — 그 경우에만 빈말이 나간다.
       // ★ 새 판(「과제 성취도」)이 심사를 통과하면 그 코드로 보낸다. 코드가 없으면 예전 판 그대로.
       //   본문도 lib/briefing.ts 가 같은 조건으로 새 판 서식에 맞춰 만든다 — 둘이 어긋나면 안 나간다.
-      const v2 = process.env.ALIGO_BRIEFING_TPL_CODE_V2
-      const v2NoNote = process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE
-      const v3 = process.env.ALIGO_BRIEFING_TPL_CODE_V3
-      const v3NoNote = process.env.ALIGO_BRIEFING_TPL_CODE_V3_NONOTE
       // ★ 본문을 어느 판으로 만들었는지(brief)와 보내는 코드가 **반드시 같아야** 한다.
       //   어긋나면 에러도 없이 그냥 안 나간다. brief 가 고른 것을 그대로 따른다.
       const tplForThis = brief.dailyShown
-        ? (brief.template === 'nonote' ? (v3NoNote || v3!) : v3!)
+        ? (brief.template === 'nonote' ? (tpl.v3NoNote || tpl.v3!) : tpl.v3!)
         : brief.template === 'nonote'
-          ? (v2 ? (v2NoNote || v2) : (process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE || cfg!.tplCode))
-          : (v2 || cfg!.tplCode)
+          ? (tpl.v2 ? (tpl.v2NoNote || tpl.v2) : (tpl.v1NoNote || cfg!.tplCode))
+          : (tpl.v2 || cfg!.tplCode)
       const r = await sendAlimtalk({ ...cfg!, tplCode: tplForThis }, {
         to,
         name: student.name,

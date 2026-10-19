@@ -188,7 +188,7 @@ export default function TeacherLearningNotesPage() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   // 브리핑이 **어느 판으로** 나가는지. 템플릿 코드는 Vercel 환경변수에 있어 브라우저가 모른다.
   // 못 받아 오면 예전 판으로 그린다 — 미리보기가 안 뜨는 것보다 낫다.
-  const [briefMode, setBriefMode] = useState<any>({})
+  const [briefMode, setBriefMode] = useState<any>(null)   // null = 아직 못 물어봤다
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'today' | 'schedule' | 'progress'>('today')
 
@@ -455,8 +455,8 @@ export default function TeacherLearningNotesPage() {
   useEffect(() => {
     apiFetch('/api/kakao-briefing/mode')
       .then((r) => r.json())
-      .then((j) => { if (j && !j.error) setBriefMode(j) })
-      .catch(() => {})
+      .then((j) => setBriefMode(j && !j.error ? j : {}))
+      .catch(() => setBriefMode({}))
   }, [])
 
   async function loadMissing(date: string) {
@@ -1723,10 +1723,10 @@ ${e?.message ?? '연결 실패'}
         note: draftNote(null) as any,
         feedbacks: dayFbs as any,
         makeup: null,
-        noNoteTemplate: !!briefMode.noNoteTemplate,
-        noNoteTemplateV3: !!briefMode.noNoteTemplateV3,
-        useV2: !!briefMode.useV2,
-        useV3: !!briefMode.useV3,
+        noNoteTemplate: !!briefMode?.noNoteTemplate,
+        noNoteTemplateV3: !!briefMode?.noNoteTemplateV3,
+        useV2: !!briefMode?.useV2,
+        useV3: !!briefMode?.useV3,
       })
     } catch { return null }
   })()
@@ -1776,6 +1776,19 @@ ${e?.message ?? '연결 실패'}
           <p className="text-[10.5px]" style={{ color: '#B89550' }}>
             · 저장해야 실제로 나갑니다. 발송은 {kstDowLabel()} 입니다.
           </p>
+          {/* ★ 어느 판으로 나가는지 — 원장님만 본다.
+              새 템플릿을 승인받아 놓고도 예전 판으로 나가고 있던 적이 있다
+              (원장님 2026-10-19: 「과제 성취도로 바꾸기로 했는데 안바꼈네?」).
+              조용히 예전 판으로 그리면 그걸 알 수가 없어서, 판 이름을 적어 둔다. */}
+          {isAdmin() && (
+            <p className="text-[10.5px] font-semibold"
+              style={{ color: briefMode?.useV2 || briefMode?.useV3 ? '#B89550' : '#B91C1C' }}>
+              · 지금 판: {briefMode === null ? '확인 중…'
+                : briefMode.useV3 ? '데일리테스트'
+                : briefMode.useV2 ? '과제 성취도'
+                : '예전 판(지난 학습지) — 새 판이 아직 안 잡혔어요'}
+            </p>
+          )}
         </div>
       </div>
     )

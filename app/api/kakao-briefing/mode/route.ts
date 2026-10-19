@@ -12,6 +12,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
 
 export const runtime = 'nodejs'
 
@@ -19,15 +20,14 @@ export async function GET(req: NextRequest) {
   const deny = await denyIfNotStaff(req)
   if (deny) return deny
 
-  const v2 = !!process.env.ALIGO_BRIEFING_TPL_CODE_V2
-  const v3 = !!process.env.ALIGO_BRIEFING_TPL_CODE_V3
+  // ★ 발송 코드와 **같은 방법**으로 정한다 — 알리고에 물어보고, 없으면 환경변수.
+  //   여기서만 다르게 보면 미리보기와 실제가 어긋난다.
+  const tpl = pickCodes(await resolveBriefingTemplateCodes())
   return NextResponse.json({
-    useV2: v2,
-    useV3: v3,
-    // 「알림장 없는 판」은 **지금 쓰는 판에 맞는 코드가 있을 때만** 쓴다 — 발송 코드와 같은 규칙.
-    noNoteTemplate: v2
-      ? !!process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE
-      : !!process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE,
-    noNoteTemplateV3: !!process.env.ALIGO_BRIEFING_TPL_CODE_V3_NONOTE,
+    useV2: !!tpl.v2,
+    useV3: !!tpl.v3,
+    // 「알림장 없는 판」은 **지금 쓰는 판에 맞는 코드가 있을 때만** 쓴다.
+    noNoteTemplate: tpl.v2 ? !!tpl.v2NoNote : !!tpl.v1NoNote,
+    noNoteTemplateV3: !!tpl.v3NoNote,
   })
 }
