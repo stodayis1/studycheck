@@ -15,6 +15,7 @@ import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { splitTeachers } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
+import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 
 interface Student {
   id: string
@@ -185,6 +186,9 @@ export default function TeacherLearningNotesPage() {
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  // 브리핑이 **어느 판으로** 나가는지. 템플릿 코드는 Vercel 환경변수에 있어 브라우저가 모른다.
+  // 못 받아 오면 예전 판으로 그린다 — 미리보기가 안 뜨는 것보다 낫다.
+  const [briefMode, setBriefMode] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'today' | 'schedule' | 'progress'>('today')
 
@@ -445,6 +449,14 @@ export default function TeacherLearningNotesPage() {
       .then((d) => { if (alive && d?.moved) setMovedAway(d.moved) })
       .catch(() => {})   // 못 읽어도 화면은 돌아가야 한다
     return () => { alive = false }
+  }, [])
+
+  // 브리핑 판은 한 번만 물어보면 된다 (배포가 바뀌기 전엔 안 변한다).
+  useEffect(() => {
+    apiFetch('/api/kakao-briefing/mode')
+      .then((r) => r.json())
+      .then((j) => { if (j && !j.error) setBriefMode(j) })
+      .catch(() => {})
   }, [])
 
   async function loadMissing(date: string) {
@@ -1493,19 +1505,22 @@ ${e?.message ?? '연결 실패'}
     return { pageText, items }
   }
 
-  async function handleSaveNote() {
-    if (!noteStudent) return
-    if (noteStudent.on_leave) {
-      alert(`${noteStudent.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 학습일지를 작성할 수 없어요 (복귀 후 다시 확인해주세요).`)
-      return
-    }
-    if (noteAttendance !== '결석' && noteAttendance !== ATT_EXAM
-        && (noteAchievement == null || noteScorePct == null)) {
-      alert('「과제 달성률」과 「과제 성취도」를 직접 골라주세요.\n(수업내용 탭 아래쪽 — 100%여도 100을 눌러야 저장돼요)')
-      return
-    }
-    setSavingNote(true)
-    try {
+  /**
+   * 지금 화면에 적힌 것으로 **저장될 class_sessions 한 줄**을 만든다.
+   *
+   * 왜 함수로 빼나 (원장님 2026-10-19)
+   *   「학습일지를 입력하면서 옆에 학습브리핑에 어떻게 나갈지 띄워주면 어때?」
+   *   미리보기가 저장과 **다른 코드**로 글을 만들면 보이는 것과 나가는 것이 어긋난다.
+   *   그런 어긋남은 아무도 못 잡는다. 그래서 만드는 자리를 하나로 둔다.
+   */
+  /** 오늘 브리핑이 언제 나가는지 한마디로. 토요일만 오후 6시, 그 외는 다음 날 오전 11시. */
+  function kstDowLabel() {
+    const d = new Date(Date.now() + 9 * 3600_000).getUTCDay()
+    return d === 6 ? '오늘 오후 6시' : '다음 날 오전 11시'
+  }
+
+  function draftSession() {
+    if (!noteStudent) return null
     // 진도 텍스트 - "대단원번호-중단원번호 첫개념~마지막개념" 형식
     // 교재 진도를 안 나간 날(noteNoTextbook)은 교재 선택값이 남아있어도 무시하고, 메모칸(noteProgress)에
     // 수기로 적은 오늘 수업 내용을 그대로 "오늘 진도"로 저장한다.
@@ -1546,21 +1561,7 @@ ${e?.message ?? '연결 실패'}
       ? progressParts.join(' / ')
       : (noteNoTextbook ? (noteMemo || noteProgress) : noteProgress) || null
 
-    // ★ 진행중 학습지가 있는데 하나도 안 골랐으면 한 번 더 묻는다 (원장님 2026-10-16).
-    //   10/16 에 학습지가 배정돼 있는데 안 고른 채 저장된 학생이 다섯 명이었다 —
-    //   그 학생들은 학부모 브리핑에 학습지 과제가 **빠진 채** 나갔다.
-    if (noteStudent && hwSelectedWSIds.length === 0 && !hwWorksheetRange.trim()) {
-      const open = worksheets.filter((w) => w.student_id === noteStudent.id && w.status !== 'passed')
-      if (open.length > 0 && !confirm(
-        `${noteStudent.name} 학생에게 진행중인 학습지가 ${open.length}개 있는데 하나도 안 고르셨어요.\n` +
-        '이대로 저장하면 학부모님 브리핑에 학습지 과제가 안 나갑니다.\n\n' +
-        '학습지 과제 없이 저장할까요?')) return
-
-    }
-
-    // session 없으면 생성, 있으면 업데이트
-    let sessionId = noteSession?.id
-    const sessionData = {
+    return {
       student_id: noteStudent.id,
       session_date: noteDate || todayStr,   // ★ 선생님이 고른 '수업한 날'
       session_type: '정규',
@@ -1651,6 +1652,158 @@ ${e?.message ?? '연결 실패'}
       video_url: hwVideoUrls.filter((u) => u.trim()).join('\n') || null,
       created_by: currentUser?.name,
     }
+  }
+
+  /** 지금 화면에 적힌 것으로 **저장될 learning_notes 한 줄**을 만든다. 미리보기도 이걸 쓴다. */
+  function draftNote(sessionId: string | null) {
+    if (!noteStudent) return null
+    const memoText = [
+      noteExtraClass ? `추가수업 ${noteExtraTime}` : '',
+      noteMemo,
+    ].filter(Boolean).join(' ') || null
+
+    // 결석이면 화면에 남아있던 과제 달성률/성취도 기본값(100% 등)이 그대로 저장되지 않도록
+    // UI 비활성화와 별개로 저장 시점에도 한 번 더 강제로 "기록 없음" 처리.
+    // ★ 시험기간 결석도 똑같이 비워야 한다. 칸은 흐리게 막아 두지만 **state 는 그대로 남아서**,
+    //   「정시」로 100% 를 눌렀다가 시험기간 결석으로 바꾸면 100% 가 그대로 저장돼
+    //   과제달성률이 부풀어 오른다.
+    const isAbsent = noteAttendance === '결석'
+    const isExamAbsent = noteAttendance === ATT_EXAM
+    const noRecord = isAbsent || isExamAbsent
+
+    return {
+      student_id: noteStudent.id,
+      session_id: sessionId,
+      attendance: noteAttendance,
+      worksheet_submitted: noRecord ? false : noteAchievement > 0,
+      worksheet_score: noRecord ? null : noteScorePct,
+      textbook_submitted: noRecord ? false : noteAchievement > 0,
+      workbook_done: noRecord ? false : noteAchievement === 100,
+      achievement_pct: noRecord ? null : noteAchievement,
+      worksheet_unit: noRecord ? null : (noteWorksheetUnit.trim() || null),
+      worksheet_level: noRecord ? null : (noteWorksheetLevel.trim() || null),
+      memo: memoText,
+    }
+  }
+
+
+  /**
+   * 지금 적은 그대로 **학부모님께 나갈 글**을 만들어 본다 (원장님 2026-10-19
+   * 「학습일지를 입력하면서 옆에 학습브리핑에 어떻게 나갈지 띄워주면 어때?」).
+   *
+   * ★ 저장과 **같은 함수**(draftSession·draftNote)로 값을 만들고, 발송과 **같은 함수**
+   *   (lib/briefing.ts)로 글을 만든다. 미리보기용 코드를 따로 두면 보이는 것과 나가는 것이
+   *   어긋나고, 그 어긋남은 아무도 못 잡는다.
+   *
+   * 다만 **똑같지 않은 것이 하나** 있다 — 결석일 때 붙는 보강 안내다. 보강 일정은 수학OPS 에
+   * 있고 브라우저는 그 키를 못 쓴다. 그래서 미리보기에서는 보강을 모르는 채로 그린다
+   * (실제로는 잡힌 보강이 있으면 그 날짜가 들어간다). 그 경우만 아래에 한 줄로 알려 준다.
+   */
+  const noteBriefPreview = (() => {
+    if (!showNoteModal || !noteStudent) return null
+    const ses = draftSession()
+    if (!ses) return null
+    const day = noteDate || todayStr
+    // ★ created_at 은 UTC 다. 그냥 앞 10글자를 자르면 한국시간 오전 9시 이전에 쓴 알림장이
+    //   **하루 전 것**으로 잡힌다. 발송 쪽은 +09:00 범위로 거르니 거기에 맞춘다.
+    const kstDay = (t?: string | null) =>
+      t ? new Date(new Date(t).getTime() + 9 * 3600_000).toISOString().slice(0, 10) : ''
+    const dayFbs = feedbacks.filter((f) =>
+      f.student_id === noteStudent.id && kstDay(f.created_at) === day)
+    try {
+      return buildBriefing({
+        studentName: noteStudent.name,
+        studentGrade: noteStudent.grade,
+        session: ses as any,
+        note: draftNote(null) as any,
+        feedbacks: dayFbs as any,
+        makeup: null,
+        noNoteTemplate: !!briefMode.noNoteTemplate,
+        noNoteTemplateV3: !!briefMode.noNoteTemplateV3,
+        useV2: !!briefMode.useV2,
+        useV3: !!briefMode.useV3,
+      })
+    } catch { return null }
+  })()
+
+  /** 미리보기 상자 하나 — 넓은 화면에서는 옆에, 좁은 화면에서는 저장 버튼 위에 같은 것을 쓴다. */
+  function BriefingPreviewBox() {
+    if (!noteBriefPreview) return null
+    const 결석 = noteAttendance === '결석'
+    const 안보냄 = noteAttendance === ATT_EXAM
+    return (
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #FDE68A', background: '#FFFBEB' }}>
+        <div className="px-3.5 py-2.5 flex items-center justify-between" style={{ borderBottom: '1px solid #FDE68A' }}>
+          <span className="text-xs font-bold" style={{ color: '#92400E' }}>
+            <i className="ti ti-message-2 align-[-0.125em]" /> 학부모님께 이렇게 나갑니다
+          </span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+            style={{ background: noteBriefPreview.bodyLen > BODY_LIMIT ? '#FEE2E2' : '#FEF3C7',
+                     color: noteBriefPreview.bodyLen > BODY_LIMIT ? '#B91C1C' : '#A16207' }}>
+            {noteBriefPreview.bodyLen}자
+          </span>
+        </div>
+
+        {안보냄 ? (
+          <p className="px-3.5 py-4 text-xs leading-relaxed" style={{ color: '#92400E' }}>
+            <b>시험기간 결석은 브리핑을 보내지 않습니다.</b><br />
+            아래 글은 참고용이에요 — 실제로는 나가지 않아요.
+          </p>
+        ) : null}
+
+        <pre className="px-3.5 py-3 text-[11.5px] leading-[1.75] whitespace-pre-wrap font-sans"
+          style={{ color: '#3F2A12', opacity: 안보냄 ? 0.45 : 1 }}>{noteBriefPreview.body}</pre>
+
+        <div className="px-3.5 pb-3 space-y-1">
+          {결석 && (
+            <p className="text-[10.5px] leading-snug" style={{ color: '#A16207' }}>
+              · 보강이 이미 잡혀 있으면 그 날짜가 들어갑니다. 여기서는 수학OPS를 못 읽어 안 보여요.
+            </p>
+          )}
+          {noteBriefPreview.photoCount > 0 && (
+            <p className="text-[10.5px]" style={{ color: '#A16207' }}>· 사진 {noteBriefPreview.photoCount}장은 버튼 뒤 화면으로 갑니다.</p>
+          )}
+          {noteBriefPreview.bodyLen > BODY_LIMIT && (
+            <p className="text-[10.5px] font-bold" style={{ color: '#B91C1C' }}>
+              · 1,000자가 넘어 발송이 거부됩니다. 알림장이나 진도를 줄여 주세요.
+            </p>
+          )}
+          <p className="text-[10.5px]" style={{ color: '#B89550' }}>
+            · 저장해야 실제로 나갑니다. 발송은 {kstDowLabel()} 입니다.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  async function handleSaveNote() {
+    if (!noteStudent) return
+    if (noteStudent.on_leave) {
+      alert(`${noteStudent.name} 학생은 현재 휴원중이에요.\n휴원중인 학생은 학습일지를 작성할 수 없어요 (복귀 후 다시 확인해주세요).`)
+      return
+    }
+    if (noteAttendance !== '결석' && noteAttendance !== ATT_EXAM
+        && (noteAchievement == null || noteScorePct == null)) {
+      alert('「과제 달성률」과 「과제 성취도」를 직접 골라주세요.\n(수업내용 탭 아래쪽 — 100%여도 100을 눌러야 저장돼요)')
+      return
+    }
+    setSavingNote(true)
+    try {
+    // ★ 진행중 학습지가 있는데 하나도 안 골랐으면 한 번 더 묻는다 (원장님 2026-10-16).
+    //   10/16 에 학습지가 배정돼 있는데 안 고른 채 저장된 학생이 다섯 명이었다 —
+    //   그 학생들은 학부모 브리핑에 학습지 과제가 **빠진 채** 나갔다.
+    if (noteStudent && hwSelectedWSIds.length === 0 && !hwWorksheetRange.trim()) {
+      const open = worksheets.filter((w) => w.student_id === noteStudent.id && w.status !== 'passed')
+      if (open.length > 0 && !confirm(
+        `${noteStudent.name} 학생에게 진행중인 학습지가 ${open.length}개 있는데 하나도 안 고르셨어요.\n` +
+        '이대로 저장하면 학부모님 브리핑에 학습지 과제가 안 나갑니다.\n\n' +
+        '학습지 과제 없이 저장할까요?')) return
+
+    }
+
+    // session 없으면 생성, 있으면 업데이트
+    let sessionId = noteSession?.id
+    const sessionData = draftSession()!
 
     // 같은 학생 + 같은 날짜는 DB에서 하나로 강제되므로(unique 제약),
     // upsert로 한 번에 처리하면 "찾았는데 놓쳐서 새로 만들어버리는" 중복 생성이 원천적으로 불가능해진다.
@@ -1730,32 +1883,10 @@ ${e?.message ?? '연결 실패'}
       }
     }
 
-    const memoText = [
-      noteExtraClass ? `추가수업 ${noteExtraTime}` : '',
-      noteMemo,
-    ].filter(Boolean).join(' ') || null
-
-    // 결석이면 화면에 남아있던 과제 달성률/성취도 기본값(100% 등)이 그대로 저장되지 않도록
-    // UI 비활성화와 별개로 저장 시점에도 한 번 더 강제로 "기록 없음" 처리.
-    // ★ 시험기간 결석도 똑같이 비워야 한다. 칸은 흐리게 막아 두지만 **state 는 그대로 남아서**,
-    //   「정시」로 100% 를 눌렀다가 시험기간 결석으로 바꾸면 100% 가 그대로 저장돼
-    //   과제달성률이 부풀어 오른다.
     const isAbsent = noteAttendance === '결석'
     const isExamAbsent = noteAttendance === ATT_EXAM
     const noRecord = isAbsent || isExamAbsent
-    const noteData = {
-      student_id: noteStudent.id,
-      session_id: sessionId,
-      attendance: noteAttendance,
-      worksheet_submitted: noRecord ? false : noteAchievement > 0,
-      worksheet_score: noRecord ? null : noteScorePct,
-      textbook_submitted: noRecord ? false : noteAchievement > 0,
-      workbook_done: noRecord ? false : noteAchievement === 100,
-      achievement_pct: noRecord ? null : noteAchievement,
-      worksheet_unit: noRecord ? null : (noteWorksheetUnit.trim() || null),
-      worksheet_level: noRecord ? null : (noteWorksheetLevel.trim() || null),
-      memo: memoText,
-    }
+    const noteData = draftNote(sessionId)!
 
     const { error: noteError } = await supabase
       .from('learning_notes')
@@ -3153,8 +3284,9 @@ ${e?.message ?? '연결 실패'}
       {showNoteModal && noteStudent && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
           onClick={() => setShowNoteModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-2xl p-6 pb-8 max-h-[90vh] overflow-y-auto"
+          <div className="w-full md:w-auto lg:flex lg:items-start lg:gap-3 lg:justify-center"
             onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-full md:w-[32rem] mx-auto rounded-t-3xl md:rounded-2xl p-6 pb-8 max-h-[90vh] overflow-y-auto">
 
             {/* 헤더 */}
             <div className="flex items-center justify-between mb-4">
@@ -4353,6 +4485,10 @@ ${e?.message ?? '연결 실패'}
             )}
 
 
+            {/* 브리핑 미리보기 — 좁은 화면에서는 저장 버튼 바로 위에 둔다.
+                넓은 화면에서는 모달 옆에 따로 띄우므로 여기서는 숨긴다. */}
+            <div className="lg:hidden mt-4"><BriefingPreviewBox /></div>
+
             {/* 저장 버튼 - 모든 탭에서 표시 */}
             <button onClick={handleSaveNote} disabled={savingNote}
               className="w-full mt-4 py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
@@ -4361,6 +4497,12 @@ ${e?.message ?? '연결 실패'}
                 ? <><span className="w-4 h-4 border-2 border-[#712B13]/30 border-t-[#712B13] rounded-full animate-spin" />저장 중...</>
                 : <><i className="ti ti-device-floppy" style={{ fontSize: 17 }} /> 수업일지 저장</>}
             </button>
+          </div>
+
+          {/* 넓은 화면에서는 **옆에** 띄운다. 입력하면서 바로 보이라고 (원장님 2026-10-19). */}
+          <aside className="hidden lg:block w-[22rem] shrink-0 max-h-[90vh] overflow-y-auto">
+            <BriefingPreviewBox />
+          </aside>
           </div>
         </div>
       )}
