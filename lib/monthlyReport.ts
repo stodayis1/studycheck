@@ -25,7 +25,13 @@ export interface MonthlyReport {
   progress: string[]
   /** 데일리테스트 */
   daily: { date: string; score: number }[]
-  /** 초등 — 레벨학습지·단원별 평가 */
+  /**
+   * ★ 단원별로 **몇 레벨까지 올라갔는지** — 초·중·고 모두 (원장님 2026-10-20
+   *   「중요한건 그거 같아. 각 단원별 몇레벨까지 올라갔는지 보여주는거」).
+   *   이번 달만이 아니라 **지금까지 쌓인 도달점**이다. 한 달 안에 오른 폭은 gained 로 따로.
+   */
+  unitLevels: { course: string; unit: string; name: string; level: number; gained: number }[]
+  /** 이번 달에 푼 학습지 (점수) */
   worksheets: { unit: string; level: string; score: number | null; passed: boolean }[]
   worksheetSummary: { total: number; passed: number }
   /** 중·고 — 시험대비(이너프원) */
@@ -81,7 +87,8 @@ export async function buildMonthlyReport(
   const [{ data: notes }, { data: ws }, { data: tb }, { data: ep }, { data: vw }, { data: pf }, { data: fb }] =
     await Promise.all([
       db.from('learning_notes').select('*').in('session_id', ids.length ? ids : [noKey]),
-      db.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }).limit(60),
+      // ★ 단원별 도달 레벨은 **누적**이라 그 학생 것을 다 읽어야 한다(한 명이면 양이 적다).
+      db.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }).limit(1000),
       db.from('student_textbooks').select('*').eq('student_id', studentId).eq('status', 'assigned'),
       db.from('student_exam_prep').select('*, inner_enough(*)').eq('student_id', studentId).gte('exam_date', from),
       db.from('video_watch_logs').select('*').eq('student_id', studentId).in('session_id', ids.length ? ids : [noKey]),
@@ -112,6 +119,27 @@ export async function buildMonthlyReport(
   const 이번달ws = (ws ?? []).filter((w: any) => String(w.submitted_at ?? w.assigned_at ?? '') >= from)
   const main = 이번달ws.filter((w: any) => (w.worksheet_type ?? 'main') === 'main')
   const retriesRaw = 이번달ws.filter((w: any) => (w.worksheet_type ?? 'main') !== 'main')
+
+  // ── 단원별 도달 레벨 ────────────────────────────────────────────────
+  // 통과(passed)한 것 중 가장 높은 레벨이 그 단원의 도달점이다.
+  // 이번 달 안에서 오른 폭도 같이 낸다 — 「이번 달에 한 칸 올랐습니다」가 할 말이다.
+  const lv = new Map<string, { course: string; unit: string; name: string; level: number; before: number }>()
+  for (const w of (ws ?? []) as any[]) {
+    if (w.status !== 'passed') continue
+    const level = Number(w.current_level ?? 0)
+    if (!level) continue
+    const key = `${w.grade_level ?? ''}|${w.unit ?? ''}`
+    const cur = lv.get(key) ?? { course: w.grade_level ?? '', unit: w.unit ?? '', name: '', level: 0, before: 0 }
+    // 단원 이름은 비어 있는 줄이 많다 — 채워진 것을 쓴다.
+    if (!cur.name && (w.unit_name ?? '').trim()) cur.name = String(w.unit_name).trim()
+    cur.level = Math.max(cur.level, level)
+    const 낸날 = String(w.submitted_at ?? w.assigned_at ?? '')
+    if (낸날 && 낸날 < from) cur.before = Math.max(cur.before, level)
+    lv.set(key, cur)
+  }
+  const unitLevels = [...lv.values()]
+    .sort((a, b) => (a.course === b.course ? a.unit.localeCompare(b.unit, 'ko', { numeric: true }) : a.course.localeCompare(b.course, 'ko', { numeric: true })))
+    .map((x) => ({ course: x.course, unit: x.unit, name: x.name, level: x.level, gained: Math.max(0, Math.round((x.level - x.before) * 10) / 10) }))
 
   // 시험대비 — 단원별로 「끝낸 회차 / 배부된 회차」
   const byUnit = new Map<string, any[]>()
@@ -144,6 +172,7 @@ export async function buildMonthlyReport(
     textbooks: (tb ?? []).map((t: any) => textbookLabel(t, { withType: true })).filter(Boolean),
     progress: (ses ?? []).map((x: any) => x.progress_content).filter(Boolean).slice(0, 3),
     daily,
+    unitLevels,
     worksheets: main.slice(0, 8).map((w: any) => ({
       unit: w.unit ?? '', level: String(w.current_level ?? ''), score: w.score ?? null, passed: w.status === 'passed',
     })),

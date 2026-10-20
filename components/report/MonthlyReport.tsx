@@ -49,6 +49,13 @@ const CSS = `
 .mr .bf{height:100%;border-radius:3px}
 .mr .barrow b{width:44px;flex:0 0 auto;text-align:right;font-size:11.5px;color:#712B13}
 .mr .note{font-size:10px;color:#8C7B72;margin:9px 0 0}
+.mr .lvrow{display:flex;align-items:center;gap:10px;margin-top:10px}
+.mr .lvname{width:188px;flex:0 0 auto;min-width:0}
+.mr .lvname b{display:block;font-size:11.5px;color:#3A2A20}
+.mr .lvname span{display:block;font-size:10px;color:#8C7B72;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mr .lvval{width:72px;flex:0 0 auto;text-align:right}
+.mr .lvval b{font-size:11.5px;color:#712B13}
+.mr .lvval em{font-style:normal;display:inline-block;margin-left:4px;font-size:9.5px;font-weight:800;color:#0F6E56}
 .mr .none{font-size:11px;color:#B3A49B;margin:11px 0 0}
 .mr .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:11px}
 .mr .box{border:1px solid #EADFD6;border-radius:10px;padding:13px 14px;background:#FFFBF7}
@@ -72,6 +79,9 @@ const CSS = `
   .mr .cols{grid-template-columns:1fr}
   .mr .steps{grid-template-columns:1fr}
   .mr .bl{width:78px;font-size:10.5px}
+  .mr .lvrow{flex-wrap:wrap;gap:4px 8px}
+  .mr .lvname{width:calc(100% - 80px)}
+  .mr .bt{order:3;flex-basis:100%}
   .mr .ft{padding:12px 16px}
 }
 `
@@ -85,6 +95,23 @@ function Bar({ label, value, unit = '점' }: { label: string; value: number; uni
     </div>
   )
 }
+/** 단원 한 줄 — 「5-2 1단원 수의 범위와 어림하기」와 도달 레벨 막대. 레벨은 6을 꽉 찬 것으로 본다. */
+function UnitLevel({ course, unit, name, level, gained }: { course: string; unit: string; name: string; level: number; gained: number }) {
+  return (
+    <div className="lvrow">
+      <div className="lvname">
+        <b>{[course, unit].filter(Boolean).join(' ')}</b>
+        {name && <span>{name}</span>}
+      </div>
+      <div className="bt"><div className="bf" style={{ width: `${Math.min(100, (level / 6) * 100)}%`, background: col(Math.min(100, (level / 6) * 100)) }} /></div>
+      <div className="lvval">
+        <b>{level}레벨</b>
+        {gained > 0 && <em>▲{gained}</em>}
+      </div>
+    </div>
+  )
+}
+
 const Chip = ({ children, on }: { children: React.ReactNode; on?: boolean }) => (
   <span className={on ? 'chip on' : 'chip'}>{children}</span>
 )
@@ -149,52 +176,51 @@ export function MonthlyReportView({ d }: { d: Data }) {
             {d.progress.length > 0 && <Chips>{d.progress.map((p, i) => <Chip key={i}>{p.slice(0, 44)}</Chip>)}</Chips>}
           </Sec>
 
-          {d.tier === '초등' ? (
-            <>
-              <Sec no={nx()} title="레벨학습지" note={`이번 달 ${d.worksheetSummary.total}장 · 통과 ${d.worksheetSummary.passed}장`}>
-                {d.worksheets.filter((w) => w.score != null).length
-                  ? d.worksheets.filter((w) => w.score != null).map((w, i) => <Bar key={i} label={`${w.level}레벨`} value={w.score!} />)
-                  : <None>이번 달 학습지 기록이 없습니다.</None>}
-              </Sec>
-              <Sec no={nx()} title="단원별 평가" note="70점을 넘어야 단원 통과">
-                <Chips>
-                  {d.worksheets.length
-                    ? d.worksheets.map((w, i) => (
-                      <Chip key={i} on={w.passed}>{w.unit} · {w.level}레벨 {w.score != null ? `${w.score}점` : '채점 전'}{w.passed ? ' ✓' : ''}</Chip>))
-                    : <None>이번 달 평가 기록이 없습니다.</None>}
-                </Chips>
-              </Sec>
-            </>
-          ) : (
-            <>
-              <Sec no={nx()} title="시험대비 · 이너프원" note={`${d.examPrep.reduce((a, x) => a + x.total, 0)}회차 배부`}>
-                {d.examPrep.length
-                  ? <>{d.examPrep.map((x) => <Bar key={x.unit} label={x.unit} value={x.pct} unit="%" />)}
-                    <p className="note">진행률 = 끝낸 회차 ÷ 배부된 회차</p></>
-                  : <None>이번 달 시험대비 배부가 없습니다.</None>}
-              </Sec>
-              <Sec no={nx()} title={고등 ? '강의영상 · 증명 제출' : '강의영상'} note={`${d.videos.total}편 배부`}>
-                {d.videos.total ? (
-                  <>
-                    <Bar label="평균 시청률" value={d.videos.avgPct ?? 0} unit="%" />
-                    <Chips>
-                      <Chip on>완료 {d.videos.completed} / {d.videos.total}편</Chip>
-                      <Chip>90% 넘게 봐야 완료</Chip>
-                      {고등 && <Chip on={d.proofs > 0}>증명 제출 {d.proofs}건</Chip>}
-                    </Chips>
-                  </>
-                ) : <None>이번 달 영상 과제가 없습니다.{고등 ? ' (증명 제출도 없음)' : ''}</None>}
-              </Sec>
-              <Sec no={nx()} title="오답 재도전" note={`쌍둥이·유사 문제 ${d.retrySummary.total}장`}>
-                {d.retrySummary.total ? (
-                  <>
-                    <Bar label="재도전 통과율" value={Math.round((d.retrySummary.passed / d.retrySummary.total) * 100)} unit="%" />
-                    <Chips>{d.retries.map((r, i) => (
-                      <Chip key={i} on={r.passed}>{r.kind} · {r.unit}{r.score != null ? ` ${r.score}점` : ''}</Chip>))}</Chips>
-                  </>
-                ) : <None>이번 달 재도전 기록이 없습니다. (틀린 문제가 적었다는 뜻이기도 합니다)</None>}
-              </Sec>
-            </>
+          {/* ★ 핵심 — 단원별로 몇 레벨까지 올라갔는지. 초·중·고 모두 (원장님 2026-10-20) */}
+          {d.unitLevels.length > 0 && (
+            <Sec no={nx()} title="단원별 도달 레벨" note={`${d.unitLevels.length}단원 · 레벨 6이 끝`}>
+              {d.unitLevels.map((u, i) => <UnitLevel key={i} {...u} />)}
+              <p className="note">▲ 는 이번 달에 오른 칸입니다. 한 단원은 70점을 넘겨야 다음 레벨로 갑니다.</p>
+            </Sec>
+          )}
+
+          {/* 이번 달에 푼 학습지가 있을 때만 */}
+          {d.worksheetSummary.total > 0 && (
+            <Sec no={nx()} title="이번 달 학습지" note={`${d.worksheetSummary.total}장 · 통과 ${d.worksheetSummary.passed}장`}>
+              <Chips>
+                {d.worksheets.map((w, i) => (
+                  <Chip key={i} on={w.passed}>{w.unit} · {w.level}레벨 {w.score != null ? `${w.score}점` : '채점 전'}{w.passed ? ' ✓' : ''}</Chip>))}
+              </Chips>
+            </Sec>
+          )}
+
+          {/* ★ 없는 칸은 **아예 안 보여 준다** (원장님 2026-10-20
+              「중1, 중2는 아직 시험대비 이너프원 교재 배부 안됐거든. 강의영상도 마찬가지」).
+              「없습니다」가 줄줄이 적힌 리포트는 안 한 것처럼 읽힌다. */}
+          {d.examPrep.length > 0 && (
+            <Sec no={nx()} title="시험대비 · 이너프원" note={`${d.examPrep.reduce((a, x) => a + x.total, 0)}회차 배부`}>
+              {d.examPrep.map((x) => <Bar key={x.unit} label={x.unit} value={x.pct} unit="%" />)}
+              <p className="note">진행률 = 끝낸 회차 ÷ 배부된 회차</p>
+            </Sec>
+          )}
+
+          {d.videos.total > 0 && (
+            <Sec no={nx()} title={고등 ? '강의영상 · 증명 제출' : '강의영상'} note={`${d.videos.total}편 배부`}>
+              <Bar label="평균 시청률" value={d.videos.avgPct ?? 0} unit="%" />
+              <Chips>
+                <Chip on>완료 {d.videos.completed} / {d.videos.total}편</Chip>
+                <Chip>90% 넘게 봐야 완료</Chip>
+                {고등 && <Chip on={d.proofs > 0}>증명 제출 {d.proofs}건</Chip>}
+              </Chips>
+            </Sec>
+          )}
+
+          {d.retrySummary.total > 0 && (
+            <Sec no={nx()} title="오답 재도전" note={`쌍둥이·유사 문제 ${d.retrySummary.total}장`}>
+              <Bar label="재도전 통과율" value={Math.round((d.retrySummary.passed / d.retrySummary.total) * 100)} unit="%" />
+              <Chips>{d.retries.map((r, i) => (
+                <Chip key={i} on={r.passed}>{r.kind} · {r.unit}{r.score != null ? ` ${r.score}점` : ''}</Chip>))}</Chips>
+            </Sec>
           )}
 
           <Sec no={nx()} title="영역별 성취도" note="담당 선생님 기록 · 100점 기준">
