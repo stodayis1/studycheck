@@ -3238,7 +3238,10 @@ ${e?.message ?? '연결 실패'}
                     오늘 수업 없는 학생 {otherStudents.length}명
                     <span className="ml-1.5 font-normal text-gray-300">· 클릭하면 수업일지/진도 입력 가능</span>
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  {/* ★ 가로 4개로 줄 맞춰 세운다. flex-wrap 으로 흘려 두면 카드 너비가 제각각이라
+                      줄이 들쭉날쭉 밀린다 (원장님 2026-10-20 「칸반크기 일정하게, 가로 4」).
+                      좁은 화면에서는 2개 → 3개 → 4개로 줄여 잡는다. */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     {otherStudents.map((student) => {
                       // 최근 진도 확인
                       const recentSession = sessions
@@ -3255,20 +3258,21 @@ ${e?.message ?? '연결 실패'}
                         // 카드 안에 알림장 버튼을 따로 두어야 해서 바깥을 div로 바꿨다(button 안에 button은 못 넣는다).
                         <div key={student.id}
                           className={cx(
-                            'bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left transition-all w-full md:w-auto min-w-[140px]',
+                            // 높이를 고정한다 — 지금 크기가 딱 좋다고 하셔서 그대로 재어 맞췄다.
+                            'bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left transition-all h-[8.25rem] flex flex-col',
                             editable ? 'hover:border-blue-200 hover:shadow-md' : 'opacity-60'
                           )}>
                           <button
                             onClick={() => editable && openNoteModal(student)}
                             disabled={!editable}
-                            className={cx('w-full text-left', !editable && 'cursor-default')}>
+                            className={cx('w-full text-left flex-1 min-h-0 overflow-hidden', !editable && 'cursor-default')}>
                           <div className="flex items-center gap-2 mb-1.5">
                             <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
                               {student.name[0]}
                             </div>
-                            <div>
-                              <p className="text-xs font-bold text-gray-700">{student.name}</p>
-                              <p className="text-[10px] text-gray-400">{student.grade}{student.teacher_name ? ` · ${student.teacher_name} 선생님` : ''}</p>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-gray-700 truncate">{student.name}</p>
+                              <p className="text-[10px] text-gray-400 truncate">{student.grade}{student.teacher_name ? ` · ${mainTeacher(student.teacher_name)}` : ''}</p>
                             </div>
                           </div>
                           {/* 현재 진도 미리보기 */}
@@ -3294,7 +3298,7 @@ ${e?.message ?? '연결 실패'}
                               알림장 버튼이 없어서 그날이 지나면 학부모께 전달할 길이 없었다. */}
                           {editable && (
                             <button onClick={() => openFeedbackModal(student)}
-                              className="mt-2 w-full px-2.5 py-1 text-[11px] font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg hover:bg-purple-50">
+                              className="mt-2 shrink-0 w-full px-2.5 py-1 text-[11px] font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg hover:bg-purple-50">
                               <i className="ti ti-message-circle align-[-0.125em]" /> 알림장
                             </button>
                           )}
