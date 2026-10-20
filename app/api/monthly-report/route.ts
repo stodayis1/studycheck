@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * 링크 찍기 — 학생 여럿을 한 번에.
- * body: { studentIds: string[], year, month, talk?: Record<studentId, string> }
+ * body: { studentIds: string[], year, month, comment?: Record<studentId, string> }
  * ★ 보내지는 않는다. 주소만 돌려준다 — 보내는 것은 원장님이 보고 결정하신다.
  */
 export async function POST(req: NextRequest) {
@@ -59,9 +59,9 @@ export async function POST(req: NextRequest) {
   for (const id of ids) {
     const data = await buildMonthlyReport(supabase, id, year, month)
     if (!data) { out.push({ studentId: id, name: '?', url: null, error: '학생을 찾지 못했어요.' }); continue }
-    // 원장님이 적어 둔 「원장 Talk」 가 있으면 같이 박는다.
-    const talk = (b?.talk ?? {})[id]
-    if (talk) data.principalTalk = String(talk)
+    // 선생님이 적어 둔 한 줄 평이 있으면 같이 박는다.
+    const c = (b?.comment ?? {})[id]
+    if (c) data.comment = String(c)
 
     const token = randomBytes(16).toString('hex')
     const { error } = await supabase.from('report_links').insert({

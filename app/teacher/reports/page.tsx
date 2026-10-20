@@ -509,7 +509,7 @@ export default function TeacherReportsPage() {
       const r = await apiFetch(`/api/monthly-report?studentId=${studentId}&year=${year}&month=${month}`)
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '불러오지 못했어요.')
-      setMNew({ ...j.data, principalTalk: talk || null })
+      setMNew({ ...j.data, comment: talk || null })
     } catch (e: any) { alert(e.message); setMNew(null) }
     setMNewBusy(false)
   }
@@ -521,7 +521,7 @@ export default function TeacherReportsPage() {
     try {
       const r = await apiFetch('/api/monthly-report', {
         method: 'POST',
-        body: JSON.stringify({ studentIds: [mStudent.id], year: mYear, month: mMonth, talk: { [mStudent.id]: mComment } }),
+        body: JSON.stringify({ studentIds: [mStudent.id], year: mYear, month: mMonth, comment: { [mStudent.id]: mComment } }),
       })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '만들지 못했어요.')
@@ -947,7 +947,7 @@ export default function TeacherReportsPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-gray-400 mb-2">
-                      위 「선생님 한 줄 평」이 리포트 마지막 「원장 Talk」 칸에 그대로 들어갑니다.
+                      위 「선생님 한 줄 평」이 리포트의 「담당 선생님 코멘트」 칸에 그대로 들어갑니다.
                       <button onClick={() => mStudent && loadNewMonthly(mStudent.id, mYear, mMonth, mComment)}
                         className="ml-1.5 underline" style={{ color: '#712B13' }}>한 줄 평 반영하기</button>
                     </p>

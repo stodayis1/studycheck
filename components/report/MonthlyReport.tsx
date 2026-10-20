@@ -1,58 +1,100 @@
 // 월간 학습 리포트 **화면** — 선생님 미리보기와 학부모님이 보시는 화면이 **같은 것**을 쓴다.
 //
+// ★ 한 장으로 쭉 내려간다 (원장님 2026-10-20
+//   「어차피 링크로 나갈거라며 굳이 2장으로 나누지 않아도 될거 같은데. 그냥 스크롤로」).
+//   A4 두 장으로 자르면 폰에서 가운데가 끊기고, 종이 크기(794px)에 묶여 글씨가 작아진다.
 // ★ 클라이언트 JS 를 쓰지 않는다. 카카오톡 인앱 브라우저에서 JS 가 막히는 일이 있어서
 //   공개 리포트는 서버에서 그려 보낸다(app/report/[token] 과 같은 규칙).
-// ★ 색은 수학의지혜 — 브라운 머리, 민트 강조, 크림 바탕 (원장님 2026-10-20).
+//   그래서 폭에 따라 달라지는 것은 **CSS 미디어쿼리**로만 한다.
+// ★ 색은 수학의지혜 — 브라운 머리, 민트 강조, 크림 바탕.
 import type { MonthlyReport as Data } from '@/lib/monthlyReport'
 
 const INK = '#712B13'
 const MINT = '#9FE1CB'
-const DEEP = '#4A1C0C'
-const CREAM = '#FFFBF7'
-const LINE = '#EADFD6'
 const GRAY = '#8C7B72'
-const SOFT = '#F7EFE9'
 
 const col = (v: number) => (v >= 85 ? INK : v >= 70 ? '#C08B6B' : '#D9CFC7')
 
+const CSS = `
+.mr{background:#EDE6E0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;color:#3A2A20;padding:0 0 28px}
+.mr .sheet{max-width:794px;margin:0 auto;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.08)}
+.mr .hd{background:#712B13;color:#fff;padding:26px 24px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.mr .hd .kick{font-size:10.5px;letter-spacing:2.4px;color:#9FE1CB;margin-bottom:7px}
+.mr .hd .ttl{font-size:23px;font-weight:800;letter-spacing:-.5px;line-height:1.25}
+.mr .hd .sub{font-size:11.5px;opacity:.78;margin-top:6px}
+.mr .hd .br{text-align:right}
+.mr .hd .br .k{font-size:9.5px;letter-spacing:1.6px;color:#9FE1CB}
+.mr .hd .br .n{font-size:15px;font-weight:800;margin-top:4px}
+.mr .meta{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #EADFD6;background:#FFFBF7}
+.mr .meta>div{padding:12px 14px;border-right:1px solid #EADFD6}
+.mr .meta>div:last-child{border-right:0}
+.mr .meta .k{font-size:9.5px;color:#8C7B72;margin-bottom:5px}
+.mr .meta .v{font-size:12.5px;font-weight:700}
+.mr .body{padding:22px 24px 26px}
+.mr .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.mr .card{border:1px solid #EADFD6;border-radius:10px;padding:12px 13px;background:#FFFBF7}
+.mr .card .k{font-size:9.5px;color:#8C7B72}
+.mr .card .v{font-size:18px;font-weight:800;margin:6px 0 3px;color:#712B13}
+.mr .card .s{font-size:10px;color:#8C7B72}
+.mr h2{font-size:13.5px;margin:0 0 3px;display:flex;align-items:baseline;gap:9px;border-bottom:2px solid #712B13;padding-bottom:7px;flex-wrap:wrap}
+.mr h2 i{font-style:normal;font-size:10.5px;color:#fff;background:#712B13;border-radius:4px;padding:2px 6px;font-weight:700}
+.mr h2 em{font-style:normal;font-size:10px;color:#8C7B72;font-weight:400;margin-left:auto}
+.mr .sec{margin-bottom:22px}
+.mr .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.mr .chip{border:1px solid #EADFD6;border-radius:6px;padding:7px 10px;font-size:11px;color:#5B4639;background:#fff}
+.mr .chip.on{background:#9FE1CB33;border-color:#9FE1CB;color:#712B13;font-weight:700}
+.mr .barrow{display:flex;align-items:center;gap:10px;margin-top:9px}
+.mr .bl{width:104px;flex:0 0 auto;font-size:11px;color:#5B4639}
+.mr .bt{flex:1;height:11px;background:#F7EFE9;border-radius:3px;overflow:hidden}
+.mr .bf{height:100%;border-radius:3px}
+.mr .barrow b{width:44px;flex:0 0 auto;text-align:right;font-size:11.5px;color:#712B13}
+.mr .note{font-size:10px;color:#8C7B72;margin:9px 0 0}
+.mr .none{font-size:11px;color:#B3A49B;margin:11px 0 0}
+.mr .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:11px}
+.mr .box{border:1px solid #EADFD6;border-radius:10px;padding:13px 14px;background:#FFFBF7}
+.mr .box .t{font-size:11.5px;font-weight:800;margin-bottom:7px;display:flex;justify-content:space-between;gap:8px;color:#712B13}
+.mr .box .t span{font-size:9.5px;background:#9FE1CB44;border-radius:4px;padding:2px 7px;white-space:nowrap}
+.mr .box p{margin:0;font-size:11px;line-height:1.75;color:#5B4639;white-space:pre-wrap}
+.mr .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:11px}
+.mr .step{border:1px solid #EADFD6;border-radius:10px;padding:12px 13px}
+.mr .step .n{font-size:9.5px;color:#8C7B72;font-weight:800;letter-spacing:1px}
+.mr .step .t{font-size:12px;font-weight:800;margin:5px 0 6px;color:#712B13}
+.mr .step p{margin:0;font-size:10.5px;line-height:1.6;color:#6B5649}
+.mr .ft{background:#4A1C0C;color:#fff;font-size:9.5px;padding:12px 24px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+@media (max-width:560px){
+  .mr .hd{padding:20px 16px}
+  .mr .hd .ttl{font-size:19px}
+  .mr .meta{grid-template-columns:repeat(2,1fr)}
+  .mr .meta>div:nth-child(2n){border-right:0}
+  .mr .meta>div:nth-child(-n+2){border-bottom:1px solid #EADFD6}
+  .mr .body{padding:18px 16px 22px}
+  .mr .cards{grid-template-columns:repeat(2,1fr)}
+  .mr .cols{grid-template-columns:1fr}
+  .mr .steps{grid-template-columns:1fr}
+  .mr .bl{width:78px;font-size:10.5px}
+  .mr .ft{padding:12px 16px}
+}
+`
+
 function Bar({ label, value, unit = '점' }: { label: string; value: number; unit?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 9 }}>
-      <span style={{ width: 104, fontSize: 11, color: '#5B4639', flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 11, background: SOFT, borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ height: '100%', borderRadius: 3, width: `${Math.min(100, Math.max(0, value))}%`, background: col(value) }} />
-      </div>
-      <b style={{ width: 44, textAlign: 'right', fontSize: 11.5, color: INK }}>{value}{unit}</b>
+    <div className="barrow">
+      <span className="bl">{label}</span>
+      <div className="bt"><div className="bf" style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: col(value) }} /></div>
+      <b>{value}{unit}</b>
     </div>
   )
 }
-
 const Chip = ({ children, on }: { children: React.ReactNode; on?: boolean }) => (
-  <span style={{
-    border: `1px solid ${on ? MINT : LINE}`, borderRadius: 6, padding: '7px 11px', fontSize: 11,
-    color: on ? INK : '#5B4639', background: on ? `${MINT}33` : '#fff', fontWeight: on ? 700 : 400,
-  }}>{children}</span>
+  <span className={on ? 'chip on' : 'chip'}>{children}</span>
 )
-
-const Chips = ({ children }: { children: React.ReactNode }) => (
-  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 11 }}>{children}</div>
-)
-
-const None = ({ children }: { children: React.ReactNode }) => (
-  <p style={{ fontSize: 11, color: '#B3A49B', margin: '11px 0 0' }}>{children}</p>
-)
+const Chips = ({ children }: { children: React.ReactNode }) => <div className="chips">{children}</div>
+const None = ({ children }: { children: React.ReactNode }) => <p className="none">{children}</p>
 
 function Sec({ no, title, note, children }: { no: string; title: string; note?: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 22 }}>
-      <h2 style={{
-        fontSize: 13.5, margin: '0 0 3px', display: 'flex', alignItems: 'baseline', gap: 9,
-        borderBottom: `2px solid ${INK}`, paddingBottom: 7,
-      }}>
-        <i style={{ fontStyle: 'normal', fontSize: 10.5, color: '#fff', background: INK, borderRadius: 4, padding: '2px 6px', fontWeight: 700 }}>{no}</i>
-        {title}
-        {note && <em style={{ fontStyle: 'normal', fontSize: 10, color: GRAY, fontWeight: 400, marginLeft: 'auto' }}>{note}</em>}
-      </h2>
+    <div className="sec">
+      <h2><i>{no}</i>{title}{note && <em>{note}</em>}</h2>
       {children}
     </div>
   )
@@ -62,60 +104,42 @@ export function MonthlyReportView({ d }: { d: Data }) {
   const { student: s, lessons: L, homework: H } = d
   const 중고 = d.tier !== '초등'
   const 고등 = d.tier === '고등'
-
-  const page: React.CSSProperties = {
-    width: 794, minHeight: 1123, margin: '18px auto', background: '#fff',
-    boxShadow: '0 2px 14px rgba(0,0,0,.1)', display: 'flex', flexDirection: 'column',
-  }
-  const body: React.CSSProperties = { padding: '22px 34px 0', flex: 1 }
-  const ft: React.CSSProperties = {
-    background: DEEP, color: '#fff', fontSize: 9.5, padding: '11px 34px',
-    display: 'flex', justifyContent: 'space-between',
-  }
-  const card: React.CSSProperties = { border: `1px solid ${LINE}`, borderRadius: 10, padding: '13px 14px', background: CREAM }
-  const box: React.CSSProperties = { ...card }
-
   let no = 1
   const nx = () => String(no++).padStart(2, '0')
 
   return (
-    <div style={{ background: '#EDE6E0', fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", color: '#3A2A20', paddingBottom: 18 }}>
-      {/* ── 1장 ───────────────────────────────────────────── */}
-      <div style={page}>
-        <div style={{ background: INK, color: '#fff', padding: '26px 34px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+    <div className="mr">
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <div className="sheet">
+        <div className="hd">
           <div>
-            <div style={{ fontSize: 10.5, letterSpacing: 2.4, color: MINT, marginBottom: 7 }}>LEARNING REPORT · {d.period.dateLabel}</div>
-            <div style={{ fontSize: 25, fontWeight: 800, letterSpacing: -0.5 }}>{s.name} 학생 학습 리포트</div>
-            <div style={{ fontSize: 11.5, opacity: 0.78, marginTop: 5 }}>{d.period.label} 한 달 수업 태도 및 진도 안내</div>
+            <div className="kick">LEARNING REPORT · {d.period.dateLabel}</div>
+            <div className="ttl">{s.name} 학생 학습 리포트</div>
+            <div className="sub">{d.period.label} 한 달 수업 태도 및 진도 안내</div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9.5, letterSpacing: 1.6, color: MINT }}>{d.tier} 과정</div>
-            <div style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>수학의지혜</div>
+          <div className="br">
+            <div className="k">{d.tier} 과정</div>
+            <div className="n">수학의지혜</div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: `1px solid ${LINE}`, background: CREAM }}>
+        <div className="meta">
           {[['학생', s.name], ['학교 · 학년', `${s.school ?? '-'} ${s.grade}`], ['기간', d.period.label], ['담당 선생님', s.teacher ?? '-']]
-            .map(([k, v], i) => (
-              <div key={k} style={{ padding: '13px 16px', borderRight: i < 3 ? `1px solid ${LINE}` : undefined }}>
-                <div style={{ fontSize: 9.5, color: GRAY, marginBottom: 5 }}>{k}</div>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{v}</div>
-              </div>
+            .map(([k, v]) => (
+              <div key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
             ))}
         </div>
 
-        <div style={body}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 11, marginBottom: 24 }}>
+        <div className="body">
+          <div className="cards">
             {[
               ['이번 달 수업', `${L.total}회`, `정시 ${L.onTime} · 지각 ${L.late} · 결석 ${L.absent}`],
               ['출석률', `${L.rate}%`, L.absent ? `결석 ${L.absent}회` : '빠짐없이 등원'],
               ['과제 달성률', `${H.achievement ?? '-'}%`, '내준 과제를 해온 비율'],
               ['과제 성취도', `${H.score ?? '-'}%`, '해온 과제의 정확도'],
             ].map(([k, v, s2]) => (
-              <div key={k} style={card}>
-                <div style={{ fontSize: 9.5, color: GRAY }}>{k}</div>
-                <div style={{ fontSize: 18, fontWeight: 800, margin: '6px 0 3px', color: INK }}>{v}</div>
-                <div style={{ fontSize: 10, color: GRAY }}>{s2}</div>
+              <div className="card" key={k}>
+                <div className="k">{k}</div><div className="v">{v}</div><div className="s">{s2}</div>
               </div>
             ))}
           </div>
@@ -136,21 +160,17 @@ export function MonthlyReportView({ d }: { d: Data }) {
                 <Chips>
                   {d.worksheets.length
                     ? d.worksheets.map((w, i) => (
-                      <Chip key={i} on={w.passed}>
-                        {w.unit} · {w.level}레벨 {w.score != null ? `${w.score}점` : '채점 전'}{w.passed ? ' ✓' : ''}
-                      </Chip>))
+                      <Chip key={i} on={w.passed}>{w.unit} · {w.level}레벨 {w.score != null ? `${w.score}점` : '채점 전'}{w.passed ? ' ✓' : ''}</Chip>))
                     : <None>이번 달 평가 기록이 없습니다.</None>}
                 </Chips>
               </Sec>
             </>
           ) : (
             <>
-              <Sec no={nx()} title="시험대비 · 이너프원" note={`${d.examPrep.reduce((s2, x) => s2 + x.total, 0)}회차 배부`}>
+              <Sec no={nx()} title="시험대비 · 이너프원" note={`${d.examPrep.reduce((a, x) => a + x.total, 0)}회차 배부`}>
                 {d.examPrep.length
-                  ? <>
-                    {d.examPrep.map((x) => <Bar key={x.unit} label={x.unit} value={x.pct} unit="%" />)}
-                    <p style={{ fontSize: 10, color: GRAY, margin: '9px 0 0' }}>진행률 = 끝낸 회차 ÷ 배부된 회차</p>
-                  </>
+                  ? <>{d.examPrep.map((x) => <Bar key={x.unit} label={x.unit} value={x.pct} unit="%" />)}
+                    <p className="note">진행률 = 끝낸 회차 ÷ 배부된 회차</p></>
                   : <None>이번 달 시험대비 배부가 없습니다.</None>}
               </Sec>
               <Sec no={nx()} title={고등 ? '강의영상 · 증명 제출' : '강의영상'} note={`${d.videos.total}편 배부`}>
@@ -170,8 +190,7 @@ export function MonthlyReportView({ d }: { d: Data }) {
                   <>
                     <Bar label="재도전 통과율" value={Math.round((d.retrySummary.passed / d.retrySummary.total) * 100)} unit="%" />
                     <Chips>{d.retries.map((r, i) => (
-                      <Chip key={i} on={r.passed}>{r.kind} · {r.unit}{r.score != null ? ` ${r.score}점` : ''}</Chip>))}
-                    </Chips>
+                      <Chip key={i} on={r.passed}>{r.kind} · {r.unit}{r.score != null ? ` ${r.score}점` : ''}</Chip>))}</Chips>
                   </>
                 ) : <None>이번 달 재도전 기록이 없습니다. (틀린 문제가 적었다는 뜻이기도 합니다)</None>}
               </Sec>
@@ -181,44 +200,23 @@ export function MonthlyReportView({ d }: { d: Data }) {
           <Sec no={nx()} title="영역별 성취도" note="담당 선생님 기록 · 100점 기준">
             {d.areas.map((a) => <Bar key={a.label} label={a.label} value={a.value} />)}
           </Sec>
-        </div>
-        <div style={ft}><span>수학의지혜 수학학원</span><span>{d.period.dateLabel} · 1 / 2</span></div>
-      </div>
 
-      {/* ── 2장 ───────────────────────────────────────────── */}
-      <div style={page}>
-        <div style={{ background: INK, color: '#fff', padding: '18px 34px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
-            <div style={{ fontSize: 10.5, letterSpacing: 2.4, color: MINT, marginBottom: 7 }}>LEARNING REPORT</div>
-            <div style={{ fontSize: 19, fontWeight: 800 }}>{s.name} 학생 학습 리포트</div>
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 800 }}>수학의지혜</div>
-        </div>
-        <div style={body}>
           <Sec no={nx()} title="담당 선생님 코멘트">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 13, marginTop: 11 }}>
-              <div style={box}>
-                <div style={{ fontSize: 11.5, fontWeight: 800, marginBottom: 7, display: 'flex', justifyContent: 'space-between', color: INK }}>
-                  수업 태도<span style={{ fontSize: 9.5, background: `${MINT}44`, borderRadius: 4, padding: '2px 7px' }}>{L.absent ? '보강 필요' : '성실'}</span>
-                </div>
-                <p style={{ margin: 0, fontSize: 11, lineHeight: 1.72, color: '#5B4639' }}>
-                  {d.teacherNote?.slice(0, 165) || '이번 달 알림장에 남긴 말씀이 없습니다.'}
-                </p>
+            <div className="cols">
+              <div className="box">
+                <div className="t">수업 태도<span>{L.absent ? '보강 필요' : '성실'}</span></div>
+                {/* 선생님이 직접 쓴 한 줄 평이 먼저. 없으면 이번 달 알림장에서 가져온다. */}
+                <p>{d.comment?.trim() || d.teacherNote?.slice(0, 220) || '이번 달 알림장에 남긴 말씀이 없습니다.'}</p>
               </div>
-              <div style={box}>
-                <div style={{ fontSize: 11.5, fontWeight: 800, marginBottom: 7, display: 'flex', justifyContent: 'space-between', color: INK }}>
-                  과제 수행<span style={{ fontSize: 9.5, background: `${MINT}44`, borderRadius: 4, padding: '2px 7px' }}>달성률 {H.achievement ?? '-'}%</span>
-                </div>
-                <p style={{ margin: 0, fontSize: 11, lineHeight: 1.72, color: '#5B4639' }}>
-                  내준 과제를 {H.achievement ?? '-'}% 해왔고, 해온 과제의 정확도는 {H.score ?? '-'}% 입니다.{' '}
-                  {(H.score ?? 0) >= 85 ? '정확도가 높아 다음 단계로 넘어가도 좋습니다.' : '틀린 문제를 다시 풀어 보는 시간을 함께 가지겠습니다.'}
-                </p>
+              <div className="box">
+                <div className="t">과제 수행<span>달성률 {H.achievement ?? '-'}%</span></div>
+                <p>{`내준 과제를 ${H.achievement ?? '-'}% 해왔고, 해온 과제의 정확도는 ${H.score ?? '-'}% 입니다. ${(H.score ?? 0) >= 85 ? '정확도가 높아 다음 단계로 넘어가도 좋습니다.' : '틀린 문제를 다시 풀어 보는 시간을 함께 가지겠습니다.'}`}</p>
               </div>
             </div>
           </Sec>
 
           <Sec no={nx()} title="앞으로의 학습 방향">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 11, marginTop: 11 }}>
+            <div className="steps">
               {[
                 ['STEP 1', '지금 교재 마무리', `${d.textbooks[0]?.replace(/^(개념서|유형서|심화서|연산서)\s/, '') ?? '진행 교재'}를 끝까지 마칩니다.`],
                 ['STEP 2', 중고 ? '오답 다시 풀기' : '단원 다시 채우기',
@@ -226,31 +224,18 @@ export function MonthlyReportView({ d }: { d: Data }) {
                 ['STEP 3', 중고 ? '시험 범위 마무리' : '다음 단원 예습',
                   중고 ? '남은 이너프원 회차를 시험 전까지 끝냅니다.' : '다음 달 진도를 미리 한 번 훑습니다.'],
               ].map(([n, t, p]) => (
-                <div key={n} style={{ border: `1px solid ${LINE}`, borderRadius: 10, padding: '13px 14px' }}>
-                  <div style={{ fontSize: 9.5, color: GRAY, fontWeight: 800, letterSpacing: 1 }}>{n}</div>
-                  <div style={{ fontSize: 12, fontWeight: 800, margin: '5px 0 6px', color: INK }}>{t}</div>
-                  <p style={{ margin: 0, fontSize: 10.5, lineHeight: 1.6, color: '#6B5649' }}>{p}</p>
+                <div className="step" key={n}>
+                  <div className="n">{n}</div><div className="t">{t}</div><p>{p}</p>
                 </div>
               ))}
             </div>
           </Sec>
-
-          <Sec no={nx()} title="원장 Talk">
-            <div style={{ border: `1px solid ${LINE}`, borderRadius: 10, padding: '19px 21px', marginTop: 11, background: CREAM }}>
-              <h3 style={{ margin: '0 0 11px', fontSize: 12.5, color: INK }}>어머님께</h3>
-              {(d.principalTalk
-                ? d.principalTalk.split('\n').filter(Boolean)
-                : [`${s.name} 학생의 ${d.period.label} 한 달을 정리해 보내 드립니다. 이번 달은 ${L.total}번 수업했고 ${L.absent ? `${L.absent}번 결석이 있었습니다` : '한 번도 빠지지 않았습니다'}. 과제는 ${H.achievement ?? '-'}% 해왔습니다.`]
-              ).map((p, i) => (
-                <p key={i} style={{ margin: '0 0 11px', fontSize: 11.5, lineHeight: 1.85, color: '#4B3A2F' }}>{p}</p>
-              ))}
-              <div style={{ textAlign: 'right', fontSize: 11, color: GRAY, marginTop: 16 }}>
-                {d.period.dateLabel} · 수학의지혜 원장 드림
-              </div>
-            </div>
-          </Sec>
         </div>
-        <div style={ft}><span>고양시 덕양구 · 수학의지혜 수학학원</span><span>2 / 2</span></div>
+
+        <div className="ft">
+          <span>고양시 덕양구 · 수학의지혜 수학학원</span>
+          <span>{d.period.dateLabel}</span>
+        </div>
       </div>
     </div>
   )

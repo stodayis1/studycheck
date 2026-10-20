@@ -39,10 +39,14 @@ export interface MonthlyReport {
   retrySummary: { total: number; passed: number }
   /** 영역별 성취도 */
   areas: { label: string; value: number }[]
-  /** 선생님이 남긴 말 (알림장) */
+  /** 선생님이 남긴 말 (알림장에서 가져온다) */
   teacherNote: string | null
-  /** 원장님이 직접 쓰시는 칸 — 비어 있으면 화면에서 기본 문장을 쓴다 */
-  principalTalk: string | null
+  /**
+   * 선생님이 직접 쓰는 한 줄 평. 비어 있으면 화면이 알림장을 쓰고, 그것도 없으면 기본 문장.
+   * ★ 예전엔 「원장 Talk」였는데 원장님이 빼자고 하셨다 (2026-10-20
+   *   「마지막에 원장TALK는 없어도 될듯. 담당 선생님 코멘트 정도만 있으면 될듯해」).
+   */
+  comment: string | null
 }
 
 const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null)
@@ -154,6 +158,6 @@ export async function buildMonthlyReport(
     retrySummary: { total: retriesRaw.length, passed: retriesRaw.filter((w: any) => w.status === 'passed').length },
     areas,
     teacherNote: (fb ?? [])[0]?.content ?? null,
-    principalTalk: null,
+    comment: null,
   }
 }
