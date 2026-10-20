@@ -18,6 +18,7 @@ import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
 interface Student {
   id: string
@@ -270,6 +271,12 @@ export default function TeacherLearningNotesPage() {
   useEffect(() => {
     supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id').not('youtube_id', 'is', null)
       .then(({ data }) => setLessonByYt(Object.fromEntries(((data || []) as LessonVideo[]).map((v) => [v.youtube_id!, v]))))
+  }, [])
+  // 증명 강의 과제의 백지 제출 (사진은 칩을 누를 때 잠깐 열리는 주소로)
+  const [proofSubs, setProofSubs] = useState<ProofSubmission[]>([])
+  useEffect(() => {
+    fetchAllRows(() => supabase.from('proof_submissions').select('session_id, video_url, photo_paths, submitted_at'))
+      .then((rows) => setProofSubs((rows || []) as ProofSubmission[]))
   }, [])
   // 교재 과제 - 배정된 교재 기반 (다중 선택)
   const [hwSelectedTBIds, setHwSelectedTBIds] = useState<string[]>([])
@@ -1846,6 +1853,11 @@ ${e?.message ?? '연결 실패'}
                       {lostSec >= 60 ? ` · 딴짓 ${Math.round(lostSec / 60)}분` : ''}
                     </span>
                   )
+                })()}
+                {session.video_url && (() => {
+                  const proofUrls = session.video_url.split('\n').filter(Boolean).filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명')
+                  return <ProofSubmissionChip proofUrls={proofUrls} subs={proofSubs.filter((p) => p.session_id === session.id)}
+                    labelOf={(u) => lessonLabel(lessonByYt[youtubeId(u) || ''])} />
                 })()}
               {(session.progress_content || session.today_textbook_name) && (
                 <p className="text-[10.5px] text-gray-500 leading-snug w-full line-clamp-2">

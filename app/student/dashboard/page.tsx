@@ -112,6 +112,7 @@ export default function StudentDashboardPage() {
   // 영상 과제: 수지쌤 강의 이름(내게 과제로 들어온 것만 읽힘)과 내 시청 기록
   const [lessonByYt, setLessonByYt] = useState<Record<string, LessonVideo>>({})
   const [watchLogs, setWatchLogs] = useState<{ session_id: string; video_url: string; coverage_pct: number; completed_at: string | null }[]>([])
+  const [proofDone, setProofDone] = useState<Set<string>>(new Set())   // `${session_id}|${video_url}` — 증명 백지를 냈는지만
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
@@ -188,10 +189,12 @@ export default function StudentDashboardPage() {
       const { data: noteData } = await supabase
         .from('learning_notes').select('*').in('session_id', ids)
       if (noteData) setNotes(noteData)
-      const [{ data: wl }, { data: lv }] = await Promise.all([
+      const [{ data: wl }, { data: lv }, { data: ps }] = await Promise.all([
         supabase.from('video_watch_logs').select('session_id, video_url, coverage_pct, completed_at').eq('student_id', sid).in('session_id', ids),
         supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id'),
+        supabase.from('proof_submissions').select('session_id, video_url').eq('student_id', sid).in('session_id', ids),
       ])
+      if (ps) setProofDone(new Set(ps.map((p: any) => `${p.session_id}|${p.video_url}`)))
       if (wl) setWatchLogs(wl as any)
       if (lv) setLessonByYt(Object.fromEntries((lv as LessonVideo[]).map((v) => [v.youtube_id!, v])))
     }
@@ -684,6 +687,9 @@ export default function StudentDashboardPage() {
                               <p className="text-[10px] text-gray-400">
                                 {wl?.completed_at ? <span className="text-green-600 font-bold">시청 완료 ✓</span>
                                   : wl ? `${Math.round(Number(wl.coverage_pct))}% 봄` : '아직 안 봄'}
+                                {lesson?.kind === '증명' && (proofDone.has(`${selectedSession.id}|${url}`)
+                                  ? <span className="ml-1.5 text-green-600 font-bold">· 백지 증명 냄 ✓</span>
+                                  : <span className="ml-1.5 text-[#993C1D] font-bold">· 백지 증명 내야 해요</span>)}
                               </p>
                             )}
                           </div>
