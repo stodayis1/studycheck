@@ -9,9 +9,9 @@
 import argparse, glob, io, json, os, re, sys
 from PIL import Image, ImageDraw
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lesson_video import plain, font, has_glyph, penfont
+from lesson_video import plain, font, has_glyph, penfont, parse_say
 PENF = penfont(40)
-from proof_video import render_line, COLORS, NOTE
+from proof_video import render_line, COLORS, NOTE, QUIET
 
 GOTHIC = font(32, True)
 MAXW = (NOTE[2] - NOTE[0] - 8) - 130 - 40
@@ -25,7 +25,18 @@ def check(path, sheet_dir=None):
     total = 0; rows = []
     for i, st in enumerate(P.get('steps', []), 1):
         tag = f'단계{i}'
-        say = st.get('say', ''); p = plain(say); total += len(p)
+        say = st.get('say', ''); p = plain(say.replace(QUIET, ' ')); total += len(p)
+        ws = st.get('write', []); runs = sum(1 for j, w in enumerate(ws) if w.get('quiet') and (j == 0 or not ws[j - 1].get('quiet') or w.get('newrun')))
+        # 짧은 토막은 따로 읽혀서 억양이 기계 같다(「맞았어?」 원장님 피드백 2026-10-20) · [[쓰기]] 앞뒤는 문장이 끝나야 덜 끊긴다
+        for part in say.split(QUIET):
+            for it in parse_say(part):
+                if it[0] == 'speak' and len(it[1].replace(' ', '')) < 8:
+                    warns.append(f'{tag}: 짧은 토막 「{it[1]}」 — 앞뒤 말과 한 토막으로 (/ 나 {{강조}} 를 빼기)')
+        for part in say.split(QUIET)[:-1]:
+            tail = plain(part).rstrip()
+            if tail and tail[-1] not in '.?!~' and not tail.endswith(('다', '야', '돼', '죠', '지', '게', '자')):
+                warns.append(f'{tag}: [[쓰기]] 앞이 문장 중간 「…{tail[-10:]}」 — 문장을 끝내고 쉬기')
+        if runs != say.count(QUIET): errs.append(f'{tag}: [[쓰기]] {say.count(QUIET)}개인데 quiet 줄 묶음 {runs}개')
         if st.get('pose') not in ('A', 'B', 'C', 'D', 'E'): errs.append(f'{tag}: pose 는 A~E')
         if say.count('{') != say.count('}'): errs.append(f'{tag}: {{ }} 짝이 안 맞음')
         for m in re.findall(r'\{(\S+)', say):
@@ -38,7 +49,7 @@ def check(path, sheet_dir=None):
         norm = lambda s: re.sub(r'[\s,]', '', s)
         for j, w in enumerate(st.get('write', []), 1):
             wt = f'{tag} 줄{j}'
-            if norm(w.get('cue', '')) not in norm(p): errs.append(f'{wt}: cue 「{w.get("cue")}」가 말에 없음')
+            if not w.get('quiet') and norm(w.get('cue', '')) not in norm(p): errs.append(f'{wt}: cue 「{w.get("cue")}」가 말에 없음')
             if w.get('color', 'ink') not in COLORS: errs.append(f'{wt}: color 는 ink/red/blue')
             outside = re.sub(r'\$[^$]*\$', '', w.get('tex', ''))      # 수식 밖 글자는 손글씨 글꼴로만 그려진다
             miss = {c for c in outside if not c.isspace() and not has_glyph(PENF, c)}
