@@ -38,7 +38,8 @@ def markers(doc):
                      and abs(z['bbox'][1] - y0) < 22 and z['bbox'][0] > 140],
                     key=lambda z: (round(z['bbox'][1]), z['bbox'][0])))
                 ev.append(dict(k='ex', no=int(t), pg=i, y0=y0, y1=y1, title=ti.strip()))
-            elif t == '풀이' and f.startswith('RixRakSans'):
+            # 증명형 예제는 「풀이」 대신 「증명」 상자다 — 둘 다 모범답안 시작 (0106·1301~1303 이 다음 예제 풀이를 정답으로 잡던 것, 2026-10-20)
+            elif t in ('풀이', '증명') and f.startswith('RixRakSans'):
                 ev.append(dict(k='sol', pg=i, y0=y0, y1=y1))
             elif f.startswith('YDVYheadL') and 8.5 < s['size'] < 9.5 and re.fullmatch(r'\d{2}', t.replace(' ', '')):
                 ev.append(dict(k='pr', pg=i, y0=y0, y1=y1))

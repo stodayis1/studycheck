@@ -6,7 +6,7 @@ export type LessonScene = { start: number; end: number; label: string; kind: str
 export type LessonVideo = {
   id: string
   grade: string
-  kind: '개념' | '증명'
+  kind: '개념' | '증명' | '대표예제'          // 대표예제 = 필수예제 풀이 영상 (order_label 「01-풀이01」)
   concept_no: number
   order_label: string
   title: string

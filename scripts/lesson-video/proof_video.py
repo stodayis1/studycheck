@@ -9,6 +9,8 @@
                 "newpage": false,
                 "write": [ {"cue": "말 안의 글자", "tex": "손으로 쓸 줄 — $수식$ 과 한글 섞어서",
                             "color": "ink|red|blue", "indent": 0, "box": false, "underline": false} ] } ] }
+풀이 영상(필수예제)도 같은 도구로 만든다 — 대본에 "kind": "풀이", "label": "필수예제 01",
+  "problem": {"image": "문제 그림 경로", "crop": [..] (선택)} 을 넣으면 문제를 노트 위에 고정해 두고 그 아래 노트에 풀이를 쓴다.
 수지 자세: A 가리키기(입 움직임) · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅 — A 말고는 말소리에 맞춰 몸이 살짝 들썩인다.
 """
 import argparse, json, math, os, subprocess, sys
@@ -18,10 +20,11 @@ import matplotlib; matplotlib.use('Agg')
 from matplotlib import font_manager as fm, pyplot as plt, rcParams
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lesson_video import (synth_scene, cue_time, plain, pcm, mouth_track, pencil, font, penfont, wrap,
+from lesson_video import (synth_scene, cue_time, plain, sound, pcm, mouth_track, pencil, font, penfont, wrap,
                           W, H, FPS, BG, INK, SOFT, BRICK, CARD, LINE, PEN, HERE)
 
 GAP = 0.4
+QUIET = '[[쓰기]]'                          # 말을 멈추고 quiet 줄을 쓰는 자리
 COLORS = {'ink': (29, 43, 107), 'red': (215, 54, 44), 'blue': (47, 111, 176)}
 NOTE = (40, 118, 1450, 1050)                 # 노트 한 장
 PAPER = (253, 252, 247); GRID = (226, 233, 240); MARGIN = (240, 170, 170)
@@ -82,10 +85,14 @@ def paper():
     return im
 
 
+PROB = None                                   # 풀이 영상: 노트 위에 고정한 문제 그림 (main 에서 채움)
+
+
 def right_panel(im, P, step):
     d = ImageDraw.Draw(im)
-    d.text((44, 30), f"증명  {P['title']}", font=font(40, True), fill=INK)
-    tw = d.textlength(f"증명  {P['title']}", font=font(40, True))
+    head = f"{P.get('label', '증명')}  {P['title']}"
+    d.text((44, 30), head, font=font(40, True), fill=INK)
+    tw = d.textlength(head, font=font(40, True))
     d.text((44 + tw + 22, 46), f"공통수학2 · {P['sub_chapter']}", font=font(22), fill=SOFT)
     R0, RW = 1484, 410
     bf = font(32, True); bl = wrap(d, step['bubble'], bf, RW - 50)[:4]
@@ -94,6 +101,10 @@ def right_panel(im, P, step):
     d.polygon([(R0 + 250, by0 + bh - 2), (R0 + 300, by0 + bh - 2), (R0 + 290, by0 + bh + 34)], fill=CARD)
     d.line([(R0 + 250, by0 + bh), (R0 + 290, by0 + bh + 34), (R0 + 300, by0 + bh)], fill=LINE, width=3)
     for k, ln in enumerate(bl): d.text((R0 + 24, by0 + 18 + k * 48), ln, font=bf, fill=INK)
+    if PROB is not None:                      # 문제 카드 (흰 바탕 · 연한 테두리)
+        px0, py0 = NOTE[0], 100
+        d.rounded_rectangle((px0, py0, px0 + PROB.width + 40, py0 + PROB.height + 30), 16, fill=(255, 255, 255), outline=LINE, width=2)
+        im.paste(PROB, (px0 + 20, py0 + 15))
     return by0 + bh + 40
 
 
@@ -117,28 +128,20 @@ def main():
     ap.add_argument('--cuts', default=None, help='교재 토막 폴더(concept_cuts.py 결과). figure.image 는 이 폴더 기준 상대 경로')
     a = ap.parse_args()
     P = json.load(open(a.proof, encoding='utf-8'))
+    global NOTE, PROB
+    if P.get('problem'):
+        fp = P['problem']['image']
+        if not os.path.isabs(fp): fp = os.path.join(a.cuts or os.path.dirname(os.path.abspath(a.proof)), fp)
+        pg = Image.open(fp).convert('RGB')
+        if P['problem'].get('crop'): pg = pg.crop(P['problem']['crop'])
+        s = min((NOTE[2] - NOTE[0] - 40) / pg.width, 230 / pg.height)
+        PROB = pg.resize((int(pg.width * s), int(pg.height * s)), Image.LANCZOS)
+        NOTE = (NOTE[0], 100 + PROB.height + 30 + 22, NOTE[2], NOTE[3])
     cache = a.cache or os.path.join(os.path.dirname(a.out), 'tts_cache')
     tmp = a.out + '.parts'; os.makedirs(tmp, exist_ok=True)
-    steps = P['steps']; says = [s['say'] for s in steps]
+    steps = P['steps']; says = [s['say'].replace(QUIET, ' ') for s in steps]
 
-    # 1) 음성: 단계마다 읽혀 하나로 잇는다 (단계 사이 GAP 초)
-    sr = 16000; audio = []; offs = []; als = []; t = 0.0
-    for k, st in enumerate(steps):
-        wav, al = synth_scene(st['say'], a.voice, a.model, cache, plain(says[k - 1]) if k else '',
-                              plain(says[k + 1]) if k + 1 < len(says) else '', os.path.join(tmp, f's{k + 1:02d}.wav'))
-        x = pcm(wav); offs.append(t); als.append(al)
-        audio.append(x); audio.append(np.zeros(int(GAP * sr), np.float32)); t += len(x) / sr + GAP
-    total = t; n = int(math.ceil(total * FPS))
-    y = np.concatenate(audio); full = os.path.join(tmp, 'all.wav')
-    import wave
-    with wave.open(full, 'wb') as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
-    mouths = mouth_track(y, n)
-    hop = sr / FPS
-    loud = np.array([np.sqrt(np.mean(y[int(i * hop):int((i + 1) * hop)] ** 2)) if int(i * hop) < len(y) else 0 for i in range(n)])
-    loud = np.convolve(loud / (np.percentile(loud[loud > 0], 90) if (loud > 0).any() else 1), np.ones(5) / 5, 'same')
-
-    # 2) 쓸 줄들: 자리(쪽·좌표)와 시작 시각
+    # 0) 쓸 줄들의 자리(쪽·좌표)와 그림 — 조용히 쓰는 줄은 쓰는 데 걸리는 시간만큼 말을 쉬어야 해서 먼저 정한다
     # 노트는 쪽을 넘기지 않고 위로 밀어 올린다(앞 줄이 계속 보이게). "newpage": true 일 때만 새 장.
     x0, y0, x1, y1 = NOTE
     VX0, VY0, VX1, VY1 = x0 + 4, y0 + 4, x1 - 4, y1 - 4        # 노트 안쪽 창
@@ -151,21 +154,74 @@ def main():
         fg = Image.open(fp).convert('RGB')
         if P['figure'].get('crop'): fg = fg.crop(P['figure']['crop'])
         s = min(460 / fg.width, 400 / fg.height); fig_im = fg.resize((int(fg.width * s), int(fg.height * s)), Image.LANCZOS)
+    step_lines = []
     for k, st in enumerate(steps):
         if st.get('newpage') and lines: page += 1; cy = 46
-        last = offs[k]
+        mine = []
         for wr in st.get('write', []):
             img = render_line(wr['tex'], COLORS[wr.get('color', 'ink')], wr.get('size', 60))
             beside_fig = fig_im is not None and page == 0 and cy < fig_im.height + 60
             maxw = (VX1 - VX0) - 130 - 40 - (fig_im.width + 30 if beside_fig else 0)
             if img.width > maxw:
                 img = img.resize((maxw, int(img.height * maxw / img.width)), Image.LANCZOS)
-            t0 = offs[k] + cue_time(als[k], st['say'], wr['cue'], last - offs[k]) if wr.get('cue') else last
-            last = t0
             dur = max(0.8, min(3.6, img.width / 480))
-            lines.append(dict(img=img, page=page, x=130 + 70 * wr.get('indent', 0), y=cy, t0=t0, dur=dur,
-                              box=wr.get('box'), underline=wr.get('underline')))
+            ln = dict(img=img, page=page, x=130 + 70 * wr.get('indent', 0), y=cy, t0=0.0, dur=dur,
+                      box=wr.get('box'), underline=wr.get('underline'), wr=wr)
+            lines.append(ln); mine.append(ln)
             cy += img.height + wr.get('gap', 26)
+        step_lines.append(mine)
+
+    # 1) 음성: 단계마다 읽혀 하나로 잇는다 (단계 사이 GAP 초).
+    # 말 안의 [[쓰기]] 자리에서는 말을 멈추고, "quiet": true 줄들을 차례로 쓴다 (풀이 영상: 계산은 읽지 않고 보여만 준다).
+    # [[쓰기]] 가 n 개면 quiet 줄 묶음(이어진 quiet 줄)도 n 개 — k 번째 묶음이 k 번째 쉼에 써진다.
+    sr = 16000; audio = []; offs = []; t = 0.0
+    norm = lambda s: ''.join(c for c in s if c not in ' ,')
+    for k, st in enumerate(steps):
+        parts = st['say'].split(QUIET)
+        runs, cur = [], None
+        for ln in step_lines[k]:
+            if ln['wr'].get('quiet'):
+                if cur is None or ln['wr'].get('newrun'): cur = []; runs.append(cur)   # newrun: 앞 묶음과 끊기
+                cur.append(ln)
+            else: cur = None
+        if len(runs) != len(parts) - 1:
+            sys.exit(f"단계 {k + 1}: [[쓰기]] {len(parts) - 1}개인데 quiet 줄 묶음은 {len(runs)}개")
+        offs.append(t); st_t = 0.0; part_at, part_al = [], []
+        for j, part in enumerate(parts):
+            prev = parts[j - 1] if j else (says[k - 1] if k else '')
+            nxt = parts[j + 1] if j + 1 < len(parts) else (says[k + 1] if k + 1 < len(says) else '')
+            wav, al = synth_scene(part, a.voice, a.model, cache, plain(prev), plain(nxt),
+                                  os.path.join(tmp, f's{k + 1:02d}_{j}.wav'))
+            x = pcm(wav); part_at.append(st_t); part_al.append(al)
+            audio.append(x); st_t += len(x) / sr
+            if j < len(runs):                                   # 말 멈추고 쓰기
+                c = st_t + 0.35
+                for ln in runs[j]:
+                    ln['t0'] = t + c; c += ln['dur'] + 0.2
+                pad = c + 0.25 - st_t
+                audio.append(np.zeros(int(pad * sr), np.float32)); st_t += pad
+        # 말에 맞춰 쓰는 줄: cue 가 있는 조각을 앞에서부터 찾는다
+        q, last = 0, t
+        for ln in step_lines[k]:
+            wr = ln['wr']
+            if wr.get('quiet'):
+                last = ln['t0']; q = next(j + 1 for j, r in enumerate(runs) if ln in r); continue
+            if not wr.get('cue'): ln['t0'] = last; continue
+            hit = next((j for j in range(q, len(parts)) if norm(sound(wr['cue'])) in norm(sound(plain(parts[j])))), q)
+            after = max(0.0, last - t - part_at[hit])
+            ln['t0'] = t + part_at[hit] + cue_time(part_al[hit], parts[hit], wr['cue'], after)
+            last = ln['t0']; q = hit
+        audio.append(np.zeros(int(GAP * sr), np.float32)); t += st_t + GAP
+    total = t; n = int(math.ceil(total * FPS))
+    y = np.concatenate(audio); full = os.path.join(tmp, 'all.wav')
+    import wave
+    with wave.open(full, 'wb') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
+    mouths = mouth_track(y, n)
+    hop = sr / FPS
+    loud = np.array([np.sqrt(np.mean(y[int(i * hop):int((i + 1) * hop)] ** 2)) if int(i * hop) < len(y) else 0 for i in range(n)])
+    loud = np.convolve(loud / (np.percentile(loud[loud > 0], 90) if (loud > 0).any() else 1), np.ones(5) / 5, 'same')
+    for ln in lines: ln.pop('wr', None)
     # 줄마다 그 줄이 보이도록 하는 밀어 올림 양, 앞 줄 쓰기 직전 0.5초 동안 부드럽게 옮긴다
     prev_t = {}
     for ln in lines:
@@ -246,7 +302,7 @@ def main():
     ff.stdin.close(); ff.wait()
 
     # 4) 단계별 구간 (개념 영상의 .구간.json 과 같은 꼴)
-    seg = dict(id=P['id'], kind='증명', title=P['title'], concept_no=P.get('concept_no'), chapter=P.get('chapter'),
+    seg = dict(id=P['id'], kind=P.get('kind', '증명'), label=P.get('label'), type_code=P.get('type_code'), title=P['title'], concept_no=P.get('concept_no'), chapter=P.get('chapter'),
                sub_chapter=P.get('sub_chapter'), book_page=P.get('book_page'), duration=round(total, 3),
                steps=[dict(step=i + 1, start=round(offs[i], 3), end=round(offs[i + 1] if i + 1 < len(offs) else total, 3),
                            pose=s.get('pose', 'A'), bubble=s['bubble'],

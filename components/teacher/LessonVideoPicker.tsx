@@ -31,7 +31,7 @@ export function LessonVideoPicker({ picked, onPick, onClose }: {
     (!q.trim() || `${v.order_label} ${v.title} ${v.chapter} ${v.sub_chapter}`.includes(q.trim())))
   const pickedIds = new Set(picked.map((u) => u.match(/([\w-]{11})\s*$/)?.[1]).filter(Boolean))
 
-  // 대단원 › 소단원으로 묶는다 (개념 아래에 그 개념의 증명이 이어서 온다 — order_label 순)
+  // 대단원 › 소단원으로 묶는다 (개념 아래에 그 개념의 증명, 그다음 필수예제 풀이가 이어서 온다 — order_label 순)
   const groups: { head: string; items: LessonVideo[] }[] = []
   for (const v of shown) {
     const head = `${v.chapter ?? ''} › ${v.sub_chapter ?? ''}`
@@ -72,8 +72,10 @@ export function LessonVideoPicker({ picked, onPick, onClose }: {
                       className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-xl border text-sm transition-all ${
                         on ? 'border-green-200 bg-green-50 text-gray-400' : 'border-gray-100 hover:border-green-300 hover:bg-green-50/40'}`}>
                       <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-md ${
-                        v.kind === '증명' ? 'bg-amber-50 text-amber-700 ml-4' : 'bg-green-50 text-green-700'}`}>
-                        {v.kind === '증명' ? `증명 ${v.order_label.split('증명')[1]}` : v.order_label}
+                        v.kind === '증명' ? 'bg-amber-50 text-amber-700 ml-4'
+                        : v.kind === '대표예제' ? 'bg-sky-50 text-sky-700 ml-4' : 'bg-green-50 text-green-700'}`}>
+                        {v.kind === '증명' ? `증명 ${v.order_label.split('증명')[1]}`
+                          : v.kind === '대표예제' ? `풀이 ${v.order_label.split('풀이')[1]}` : v.order_label}
                       </span>
                       <span className="flex-1 min-w-0 truncate text-gray-800">{v.title}</span>
                       <span className="shrink-0 text-[11px] text-gray-400 tabular-nums">{fmtDuration(v.duration_seconds)}</span>

@@ -4,6 +4,7 @@
 
 · 개념: 연두 파스텔(#DDF5E6). 영상 폴더의 NN_개념_….구간.json 마다, GPT 썸네일(큰 파일)이 이미 있으면 건너뛴다.
 · 증명(--proofs): 한 단계 진한 초록 바탕(원장님 2026-10-20) — 개념 썸네일과 목록에서 구분된다.
+· 풀이(--solutions, <영상 폴더>/풀이영상): 민트 초록 바탕 · 배지 「예제 01」 · 수지 자세는 편마다 돌아가며.
 · 수지 자세는 대본의 thumb_pose (A 가리키기 · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅). 증명은 D.
 · 크기는 GPT 썸네일과 같은 1672×941.
 """
@@ -22,6 +23,8 @@ THEME = {
                     label=(24, 52, 34), title=(17, 33, 52)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
+    'solution': dict(bg=(204, 236, 228), grid=(188, 224, 213), badge=(18, 80, 70), pill=(176, 222, 208),
+                    label=(16, 52, 46), title=(12, 28, 44)),
 }
 
 
@@ -139,6 +142,17 @@ def make(kind, no_label, chapter, title, bubble, pose):
 def main():
     a = sys.argv[1:]
     folder = a[0]; force = '--force' in a; proofs = '--proofs' in a
+    if '--solutions' in a:
+        made = []
+        for k, g in enumerate(sorted(glob.glob(os.path.join(folder, '*_풀이*.구간.json')))):
+            base = g[:-len('.구간.json')]
+            if os.path.exists(base + '.jpg') and not force: continue
+            G = json.load(open(g, encoding='utf-8'))
+            bub = next((st['bubble'] for st in G['steps'][2:] if st.get('lines')), G['steps'][-1]['bubble'])
+            make('solution', G['label'].replace('필수예제', '예제'), '문제풀이', G['title'], bub,
+                 'ABCD'[k % 4]).save(base + '.jpg', quality=93)
+            made.append(os.path.basename(base))
+        print(len(made), '장'); [print(' ', m) for m in made]; return
     only = set(a[a.index('--only') + 1].split(',')) if '--only' in a else None
     scripts = {}
     for f in glob.glob(os.path.join(REPO, 'docs', '대본', '공통수학2', '*.json')):

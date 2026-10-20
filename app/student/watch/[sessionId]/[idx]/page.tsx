@@ -8,7 +8,7 @@ import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
-import { nameCallText, nameCallUrl, type NameCallKey } from '@/lib/nameCalls'
+import { nameCallText, nameCallUrl, type NameCallKey, SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey } from '@/lib/nameCalls'
 import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
 declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => void } }
@@ -48,6 +48,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   const [sessionDate, setSessionDate] = useState('')
   const [allUrls, setAllUrls] = useState<string[]>([])
   const [lesson, setLesson] = useState<LessonVideo | null>(null)
+  const lessonRef = useRef<LessonVideo | null>(null)          // 유튜브·화면 이벤트(처음 만든 함수)에서 지금 강의를 읽으려고
+  lessonRef.current = lesson
   const [log, setLog] = useState<Log | null>(null)
   const [duration, setDuration] = useState(0)
   const [now, setNow] = useState(0)
@@ -68,6 +70,9 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   // 브라우저는 「이 페이지를 누른 뒤」에만 소리를 틀게 한다. 유튜브 화면 안을 누른 건 안 쳐 준다
   // → 「강의 시작」을 한 번 누르게 해서 그때 소리 상자를 열어 두고, 이름 부르기는 그 상자로 튼다 (아이폰도 이래야 난다)
   const [started, setStarted] = useState(false)
+  // 풀이 영상: 「먼저 풀어 봐」 다음에 영상을 멈춰 두고, 학생이 「다 풀었어요」를 누르면 이어서 튼다
+  const [waitTry, setWaitTry] = useState(false)
+  const isSol = lesson?.kind === '대표예제'
 
   // 1) 과제·강의·지난 기록 읽기
   useEffect(() => {
@@ -112,7 +117,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
           onStateChange: (e: any) => {
             if (e.data !== 1) { lastT.current = null; saveRef.current() }
             pausedSince.current = e.data === 2 ? Date.now() : null
-            if (e.data === 0) callName('end')
+            if (e.data === 0) { if (lessonRef.current?.kind === '대표예제') callSol('end'); else callName('end') }
           },
         },
       })
@@ -159,6 +164,14 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   function cue(cur: number, state: number) {
     const sc = lesson?.scenes ?? []
     const justBefore = (x?: { start: number }) => !!x && cur >= x.start - 0.42 && cur < x.start + 0.05
+    if (isSol) {
+      // 장면 2 = 「먼저 혼자 풀어 봐」 → 그 장면이 끝나는 쉼에서 멈추고 이름을 부른 뒤 멈춘 채로 기다린다
+      if (state === 1 && sc.length > 3 && justBefore(sc[2])) callSol('try', { hold: true })
+      // 마지막 장면(정리) 직전 = 답이 다 나온 뒤 → 「답 맞았어?」
+      if (state === 1 && sc.length > 3 && justBefore(sc[sc.length - 1])) callSol('answer')
+      if (state === 2 && !waitTry && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callSol('idle')
+      return
+    }
     if (state === 1) {
       const firstConcept = sc.find((x) => x.kind === '개념')
       if (justBefore(firstConcept)) callName('important')
@@ -191,6 +204,43 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     a.play().catch(() => { setBubble(nameCallText(key, studentName)); setTimeout(done, 2200) })  // 소리가 막혀도 말풍선은 띄운다
   }
 
+  // 풀이 영상용: 학생 이름(말투 하나) → 0.12초 → 여럿이 같이 쓰는 문장. 문장은 그때그때 고르고 바로 전에 쓴 것은 피한다
+  const lastLine = useRef<Record<string, number>>({})
+  function callSol(key: SolCallKey, opt: { again?: boolean; hold?: boolean; after?: () => void } = {}) {
+    if (!studentId || !studentName) { opt.after?.(); return }
+    const tag = 'sol:' + key
+    if (!opt.again && fired.current.has(tag)) { opt.after?.(); return }
+    fired.current.add(tag)
+    const p = player.current
+    const wasPlaying = p?.getPlayerState?.() === 1
+    if (wasPlaying || opt.hold) p?.pauseVideo?.()
+    const { tone, lines } = SOL_LINES[key]
+    let prev = lastLine.current[key]
+    try { if (prev == null) prev = Number(localStorage.getItem('sc_sol_' + key) ?? -1) } catch {}
+    let n = Math.floor(Math.random() * lines.length)
+    if (lines.length > 1 && n === prev) n = (n + 1) % lines.length
+    lastLine.current[key] = n
+    try { localStorage.setItem('sc_sol_' + key, String(n)) } catch {}
+    const text = solCallText(key, n, studentName)
+    const a = voice.current ?? (voice.current = new Audio())
+    a.pause()
+    const done = () => {
+      setTimeout(() => setBubble(null), 900)
+      if (opt.hold) setWaitTry(true)
+      else if (wasPlaying) p?.playVideo?.()
+      opt.after?.()
+    }
+    let part = 0
+    a.onplay = () => setBubble(text)
+    a.onerror = () => { if (part === 0) { part = 1; a.src = solLineUrl(key, n); a.play().catch(done) } else done() }
+    a.onended = () => {
+      if (part === 0) { part = 1; setTimeout(() => { a.src = solLineUrl(key, n); a.play().catch(done) }, 120) }
+      else done()
+    }
+    a.src = nameToneUrl(studentId, tone)
+    a.play().catch(() => { setBubble(text); setTimeout(done, 2600) })
+  }
+
   // 장면 경계를 놓치지 않게 0.2초마다 본다 (쉼이 0.45초라 1초 간격이면 지나친다)
   useEffect(() => {
     const t = setInterval(() => {
@@ -199,7 +249,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       cue(p.getCurrentTime?.() ?? 0, p.getPlayerState())
     }, 200)
     return () => clearInterval(t)
-  }, [lesson, studentId, studentName, started])
+  }, [lesson, studentId, studentName, started, waitTry])
 
   // 다른 앱·탭에 8초 넘게 갔다 돌아오면 (재생 중이었을 때만, 최대 3번)
   useEffect(() => {
@@ -207,7 +257,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       const playing = player.current?.getPlayerState?.() === 1
       if (document.hidden) { if (playing) hiddenSince.current = Date.now(); return }
       if (hiddenSince.current && Date.now() - hiddenSince.current > 8000 && awayCount.current < 3) {
-        awayCount.current++; callName('away', true)
+        awayCount.current++; if (lessonRef.current?.kind === '대표예제') callSol('away', { again: true }); else callName('away', true)
       }
       hiddenSince.current = null
     }
@@ -261,7 +311,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     a.play().catch(() => {})
     setStarted(true)
     // 시작 인사를 먼저 하고 영상을 튼다 (증명 영상은 「노트 펴고 같이 써야지」)
-    callName(lesson?.kind === '증명' ? 'proof' : 'start', false, () => player.current?.playVideo?.())
+    if (isSol) callSol('start', { after: () => player.current?.playVideo?.() })
+    else callName(lesson?.kind === '증명' ? 'proof' : 'start', false, () => player.current?.playVideo?.())
   }
 
   const seek = (s: number) => { player.current?.seekTo?.(s, true); player.current?.playVideo?.() }
@@ -277,7 +328,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       <div>
         <p className="text-[11px] text-gray-400">{sessionDate} 영상 과제{lesson ? ` · ${lesson.grade} ${lesson.chapter ?? ''} › ${lesson.sub_chapter ?? ''}` : ''}</p>
         <h1 className="text-lg font-bold text-gray-900">
-          {lesson ? `${lesson.order_label}. ${lesson.title}${lesson.kind === '증명' ? ' (증명)' : ''}` : '영상 과제'}
+          {lesson ? `${lesson.order_label}. ${lesson.title}${lesson.kind === '증명' ? ' (증명)' : lesson.kind === '대표예제' ? ' (문제풀이)' : ''}` : '영상 과제'}
         </h1>
       </div>
 
@@ -290,6 +341,14 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
             <span className="text-sm font-bold">강의 시작</span>
             <span className="text-[11px] text-white/70">소리를 켜고 들어 주세요</span>
           </button>
+        )}
+        {waitTry && !bubble && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white px-6 text-center">
+            <p className="text-sm font-bold">✏️ 연습장에 먼저 풀어 보세요</p>
+            <p className="text-[11px] text-white/70">다 풀었으면 아래를 눌러 풀이를 이어서 봐요</p>
+            <button onClick={() => { setWaitTry(false); pausedSince.current = null; callSol('back', { after: () => player.current?.playVideo?.() }) }}
+              className="px-5 py-2.5 rounded-xl bg-[#E2703A] text-white text-sm font-bold">다 풀었어요 · 풀이 보기</button>
+          </div>
         )}
         {bubble && (
           <div className="absolute left-3 bottom-12 flex items-end gap-2 pointer-events-none">
