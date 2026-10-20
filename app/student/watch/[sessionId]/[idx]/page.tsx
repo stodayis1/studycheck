@@ -8,6 +8,7 @@ import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
+import { nameCallText, nameCallUrl, type NameCallKey } from '@/lib/nameCalls'
 
 declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => void } }
 
@@ -44,6 +45,15 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   const logRef = useRef<Log | null>(null)
   const lastT = useRef<number | null>(null)
   const dirty = useRef(false)
+  const saveRef = useRef<(force?: boolean) => void>(() => {})
+  // 이름 부르기: 정해 둔 순간에 영상 소리를 줄이고 원장님 목소리로 「○○아, …」 (한 번 본 말은 다시 안 함)
+  const [studentName, setStudentName] = useState('')
+  const [bubble, setBubble] = useState<string | null>(null)
+  const fired = useRef<Set<string>>(new Set())
+  const awayCount = useRef(0)
+  const hiddenSince = useRef<number | null>(null)
+  const pausedSince = useRef<number | null>(null)
+  const voice = useRef<HTMLAudioElement | null>(null)
 
   // 1) 과제·강의·지난 기록 읽기
   useEffect(() => {
@@ -51,6 +61,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     if (!stored) { router.push('/auth/login'); return }
     const sid = JSON.parse(stored).id as string
     setStudentId(sid)
+    setStudentName(JSON.parse(stored).name || '')
     ;(async () => {
       const { data: s } = await supabase.from('class_sessions').select('id, session_date, video_url, student_id')
         .eq('id', sessionId).eq('student_id', sid).single()
@@ -84,7 +95,11 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
         videoId: youtubeId(url), playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
         events: {
           onReady: (e: any) => setDuration(e.target.getDuration() || lesson?.duration_seconds || 0),
-          onStateChange: (e: any) => { if (e.data !== 1) { lastT.current = null; save() } },
+          onStateChange: (e: any) => {
+            if (e.data !== 1) { lastT.current = null; saveRef.current() }
+            pausedSince.current = e.data === 2 ? Date.now() : null
+            if (e.data === 0) callName('end')
+          },
         },
       })
     })
@@ -98,6 +113,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       if (!p?.getPlayerState || !l) return
       const cur = p.getCurrentTime?.() ?? 0
       setNow(cur)
+      cue(cur, p.getPlayerState())
       if (p.getPlayerState() !== 1) { lastT.current = null; return }
       const prev = lastT.current
       lastT.current = cur
@@ -124,6 +140,49 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     return () => { clearInterval(t); clearInterval(s); window.removeEventListener('pagehide', bye); document.removeEventListener('visibilitychange', bye); save(true) }
   }, [lesson, duration, studentId, url])
 
+  // 이름 부르기 — 언제 무슨 말을 할지
+  function cue(cur: number, state: number) {
+    const sc = lesson?.scenes ?? []
+    if (state === 1) {
+      if (cur > 1.5) callName(lesson?.kind === '증명' ? 'proof' : 'start')
+      const firstConcept = sc.find((x) => x.kind === '개념')
+      if (firstConcept && cur > (firstConcept.start + firstConcept.end) / 2) callName('important')
+      const check = sc.find((x) => x.kind === 'check')
+      if (check && cur > check.start + 1 && cur < check.end) callName('check')
+      const ex = sc.find((x) => x.kind === 'examples')
+      if (check && ex && cur > ex.start + 0.5) callName('answer')
+    }
+    // 멈춘 채 2분 넘게 화면만 켜 두면
+    if (state === 2 && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callName('idle')
+  }
+
+  function callName(key: NameCallKey, again = false) {
+    if (!studentId || !studentName) return
+    if (!again && fired.current.has(key)) return
+    fired.current.add(key)
+    const p = player.current
+    const vol = p?.getVolume?.() ?? 100
+    const a = new Audio(nameCallUrl(studentId, key))
+    voice.current?.pause(); voice.current = a
+    a.onplay = () => { p?.setVolume?.(Math.max(10, Math.round(vol * 0.25))); setBubble(nameCallText(key, studentName)) }
+    a.onended = a.onerror = () => { p?.setVolume?.(vol); setTimeout(() => setBubble(null), 1200) }
+    a.play().catch(() => setBubble(nameCallText(key, studentName)))  // 소리가 막혀도 말풍선은 띄운다
+  }
+
+  // 다른 앱·탭에 8초 넘게 갔다 돌아오면 (재생 중이었을 때만, 최대 3번)
+  useEffect(() => {
+    const onVis = () => {
+      const playing = player.current?.getPlayerState?.() === 1
+      if (document.hidden) { if (playing) hiddenSince.current = Date.now(); return }
+      if (hiddenSince.current && Date.now() - hiddenSince.current > 8000 && awayCount.current < 3) {
+        awayCount.current++; callName('away', true)
+      }
+      hiddenSince.current = null
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [studentId, studentName])
+
   // 4) 저장 — 같은 날 같은 영상은 한 줄 (student_id, session_id, video_url)
   async function save(force = false) {
     const l = logRef.current
@@ -147,6 +206,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     if (data?.id) l.id = data.id
     if (done) { setLog({ ...l }); await markNote(nowIso) }
   }
+
+  saveRef.current = save
 
   // 그날 영상 과제를 다 봤으면 학습일지에도 완료 (학습일지가 있을 때만 — 출석을 대신 만들지 않는다)
   async function markNote(nowIso: string) {
@@ -180,6 +241,12 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
 
       <div className="relative w-full overflow-hidden rounded-2xl bg-black" style={{ aspectRatio: '16 / 9' }}>
         <div id="yt-player" className="absolute inset-0 w-full h-full" />
+        {bubble && (
+          <div className="absolute left-3 bottom-12 flex items-end gap-2 pointer-events-none">
+            <img src="/exam-blog/suji_uniform_fighting.jpg" alt="" className="w-11 h-11 rounded-full object-cover object-top border-2 border-white shadow" />
+            <div className="bg-white/95 text-gray-900 text-sm font-bold px-3 py-2 rounded-2xl rounded-bl-sm shadow-lg max-w-[70vw]">{bubble}</div>
+          </div>
+        )}
       </div>
 
       {/* 시청 진행 — 본 구간을 막대에 칠한다 */}
