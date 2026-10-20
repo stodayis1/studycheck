@@ -10,6 +10,7 @@ import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { getSsenbSubChapterForConceptOrder, type SsenbProblem } from '@/lib/ssenbSteps'
+import { youtubeId, type LessonVideo } from '@/lib/lessonVideos'
 
 interface StudentInfo {
   id: string
@@ -108,6 +109,9 @@ export default function StudentDashboardPage() {
   const [todayNote, setTodayNote] = useState<LearningNote | null>(null)
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
+  // 영상 과제: 수지쌤 강의 이름(내게 과제로 들어온 것만 읽힘)과 내 시청 기록
+  const [lessonByYt, setLessonByYt] = useState<Record<string, LessonVideo>>({})
+  const [watchLogs, setWatchLogs] = useState<{ session_id: string; video_url: string; coverage_pct: number; completed_at: string | null }[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
@@ -184,6 +188,12 @@ export default function StudentDashboardPage() {
       const { data: noteData } = await supabase
         .from('learning_notes').select('*').in('session_id', ids)
       if (noteData) setNotes(noteData)
+      const [{ data: wl }, { data: lv }] = await Promise.all([
+        supabase.from('video_watch_logs').select('session_id, video_url, coverage_pct, completed_at').eq('student_id', sid).in('session_id', ids),
+        supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id'),
+      ])
+      if (wl) setWatchLogs(wl as any)
+      if (lv) setLessonByYt(Object.fromEntries((lv as LessonVideo[]).map((v) => [v.youtube_id!, v])))
     }
     if (wsData) setWorksheets(wsData)
     if (tbData) setTextbooks(tbData)
@@ -657,18 +667,34 @@ export default function StudentDashboardPage() {
                 <div className="px-4 py-3">
                   <p className="text-[10px] text-gray-400 mb-2">영상 과제 {videoUrls.length}개</p>
                   <div className="space-y-2">
-                    {videoUrls.map((url, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                          style={{ background: '#FAECE7', color: '#993C1D' }}>{idx + 1}</div>
-                        <p className="text-xs text-gray-400 flex-1 truncate">{url}</p>
-                        <button onClick={() => handleVideoOpen(url, idx)}
-                          className="px-3 py-1 rounded-lg text-xs font-bold shrink-0"
-                          style={{ background: '#F5C4B3', color: '#712B13' }}>보기</button>
-                      </div>
-                    ))}
+                    {videoUrls.map((url, idx) => {
+                      // 유튜브 영상은 스터디체크 안에서 본다 → 실제로 본 초를 센다
+                      const yt = youtubeId(url)
+                      const lesson = yt ? lessonByYt[yt] : null
+                      const wl = watchLogs.find((w) => w.session_id === selectedSession.id && w.video_url === url)
+                      return (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                            style={{ background: '#FAECE7', color: '#993C1D' }}>{idx + 1}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs truncate ${lesson ? 'text-gray-700 font-semibold' : 'text-gray-400'}`}>
+                              {lesson ? `수지쌤 강의 ${lesson.order_label}. ${lesson.title}` : url}
+                            </p>
+                            {yt && (
+                              <p className="text-[10px] text-gray-400">
+                                {wl?.completed_at ? <span className="text-green-600 font-bold">시청 완료 ✓</span>
+                                  : wl ? `${Math.round(Number(wl.coverage_pct))}% 봄` : '아직 안 봄'}
+                              </p>
+                            )}
+                          </div>
+                          <button onClick={() => yt ? router.push(`/student/watch/${selectedSession.id}/${idx}`) : handleVideoOpen(url, idx)}
+                            className="px-3 py-1 rounded-lg text-xs font-bold shrink-0"
+                            style={{ background: '#F5C4B3', color: '#712B13' }}>{wl && !wl.completed_at ? '이어 보기' : '보기'}</button>
+                        </div>
+                      )
+                    })}
                   </div>
-                  {isToday && todayNote?.video_started_at && (
+                  {isToday && todayNote?.video_started_at && videoUrls.some((u) => !youtubeId(u)) && (
                     <div className="mt-2 flex justify-end">
                       {!todayNote.video_completed_at ? (
                         <button onClick={handleVideoComplete}
