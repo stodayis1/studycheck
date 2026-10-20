@@ -4484,7 +4484,14 @@ ${e?.message ?? '연결 실패'}
                   )
                 })()}
 
-                {/* 영상 과제 */}
+                {/* 영상 과제
+                    ★ 지금은 **원장님께만** 보인다 (원장님 2026-10-20 「다른 강사들한테는 안보이게,
+                      나한테만 보여야돼 테스트 중이니까」).
+                      · 숨기는 것은 **이 칸뿐**이다. 이미 배부된 영상은 그대로 나가고, 학생도 그대로 본다.
+                        저장할 때도 화면에 안 보일 뿐 들고 있던 값을 그대로 다시 쓴다 — 지워지지 않는다.
+                      · 학생 시청 현황·증명 제출 칩은 담당 강사가 봐야 하므로 그대로 둔다.
+                      테스트가 끝나면 이 isAdmin() 한 줄만 지우면 모두에게 열린다. */}
+                {isAdmin() && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700">영상 과제 링크</label>
@@ -4544,7 +4551,11 @@ ${e?.message ?? '연결 실패'}
                       영상 {hwVideoUrls.filter((u) => u.trim()).length}개 · 학생 시청 시간이 선생님에게만 표시돼요
                     </p>
                   )}
+                  <p className="text-[11px] mt-1" style={{ color: '#B45309' }}>
+                    <i className="ti ti-flask align-[-0.125em]" /> 지금은 원장님께만 보입니다 (테스트 중)
+                  </p>
                 </div>
+                )}
 
                 {/* 시험대비 과제 - 시험배정 자동연동 */}
                 {(() => {
