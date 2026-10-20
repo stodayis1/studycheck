@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
 interface ClassSession {
   id: string
@@ -57,6 +59,8 @@ function formatSeconds(sec: number): string {
 export default function ParentAssignmentsPage() {
   const router = useRouter()
   const [studentName, setStudentName] = useState('')
+  const [lessonByYt, setLessonByYt] = useState<Record<string, LessonVideo>>({})
+  const [proofSubs, setProofSubs] = useState<ProofSubmission[]>([])
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
@@ -95,6 +99,13 @@ export default function ParentAssignmentsPage() {
           supabase.from('video_watch_logs').select('*')
             .eq('student_id', s.id),
         ])
+        // 수지쌤 강의 이름 · 증명 백지 제출 (학부모는 사진도 본다)
+        const [{ data: lvData }, { data: psData }] = await Promise.all([
+          supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id').not('youtube_id', 'is', null),
+          supabase.from('proof_submissions').select('session_id, video_url, photo_paths, submitted_at').eq('student_id', s.id),
+        ])
+        setLessonByYt(Object.fromEntries(((lvData || []) as LessonVideo[]).map((v) => [v.youtube_id!, v])))
+        setProofSubs((psData || []) as ProofSubmission[])
 
         if (ssData) {
           setSessions(ssData)
@@ -316,6 +327,12 @@ export default function ParentAssignmentsPage() {
                         <i className="ti ti-player-play" style={{ fontSize: 13, color: '#993C1D' }} />
                         <span className="text-[10px] font-semibold" style={{ color: '#993C1D' }}>영상 과제</span>
                         <span className="text-[10px] text-gray-400">{videoUrls.length}개</span>
+                        <span className="ml-auto">
+                          <ProofSubmissionChip
+                            proofUrls={videoUrls.filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명')}
+                            subs={proofSubs.filter((p) => p.session_id === session.id)}
+                            labelOf={(u) => lessonLabel(lessonByYt[youtubeId(u) || ''])} />
+                        </span>
                       </div>
                       <div className="space-y-2">
                         {videoUrls.map((url, idx) => {
@@ -328,7 +345,7 @@ export default function ParentAssignmentsPage() {
                                 style={{ background: '#FAECE7', color: '#993C1D' }}>
                                 {idx + 1}
                               </div>
-                              <p className="text-xs text-gray-500 flex-1 truncate">{url}</p>
+                              <p className="text-xs text-gray-500 flex-1 truncate">{lessonByYt[youtubeId(url) || ''] ? lessonLabel(lessonByYt[youtubeId(url) || '']) : url}</p>
                               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
                                 style={{
                                   background: watched > 0 ? '#EAF3DE' : '#f3f4f6',

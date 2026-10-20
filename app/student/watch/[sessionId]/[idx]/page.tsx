@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
 import { nameCallText, nameCallUrl, type NameCallKey } from '@/lib/nameCalls'
+import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
 declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => void } }
 
@@ -317,6 +318,11 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
         )}
         <p className="text-[11px] text-gray-400">건너뛴 부분은 시청 시간에 안 들어가요. 영상 속 문제는 멈추고 연습장에 풀어 보세요.</p>
       </div>
+
+      {/* 증명 영상: 다 본 뒤 백지에 써서 사진 제출 (채점 없음) */}
+      {lesson?.kind === '증명' && studentId && url && (
+        <ProofSubmitBox studentId={studentId} sessionId={sessionId} videoUrl={url} watched={!!log?.completed_at} />
+      )}
 
       {/* 장면 목차 */}
       {lesson?.scenes?.length ? (
