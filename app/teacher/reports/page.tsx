@@ -10,6 +10,7 @@ import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { isExamAbsence } from '@/lib/attendance'
 import { splitTeachers } from '@/lib/teachers'
+import { MonthlyReportView } from '@/components/report/MonthlyReport'
 
 // 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
 function laTierColor(v: number | null, good = 85, mid = 70) {
@@ -162,6 +163,14 @@ export default function TeacherReportsPage() {
   const [mData, setMData] = useState<any>(null)
   const [mLoading, setMLoading] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
+  // ★ 월간 보고서 양식 — 새 양식(링크로 보내는 2장짜리) / 예전 양식(이미지로 저장)
+  //   원장님 2026-10-20: 「왜 굳이 메뉴를 새로 만들어? 보고서 메뉴에 월간보고서가 있는데
+  //   거기에 올리면 되지」 — 맞는 말씀이라 따로 만든 메뉴를 없애고 이 탭 안으로 들였다.
+  //   예전 양식도 지우지 않았다. 이미지로 보내시던 길이 살아 있어야 한다.
+  const [mStyle, setMStyle] = useState<'new' | 'old'>('new')
+  const [mNew, setMNew] = useState<any>(null)
+  const [mNewBusy, setMNewBusy] = useState(false)
+  const [mLink, setMLink] = useState<string | null>(null)
 
   // 성적표(코어테스트+학습지) 상태
   const [gStudent, setGStudent] = useState<Student | null>(null)
@@ -492,6 +501,35 @@ export default function TeacherReportsPage() {
   const middleUnitGroups = selectedStudent && isMiddleOrHigh ? getMiddleUnitGroups(selectedStudent.id) : []
   const twinGroups = selectedStudent ? getTwinGroups(selectedStudent.id) : []
 
+
+  // ── 새 양식(링크) ── 선생님 미리보기와 학부모님 화면이 같은 컴포넌트를 쓴다
+  async function loadNewMonthly(studentId: string, year: number, month: number, talk?: string) {
+    setMNewBusy(true); setMLink(null)
+    try {
+      const r = await apiFetch(`/api/monthly-report?studentId=${studentId}&year=${year}&month=${month}`)
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? '불러오지 못했어요.')
+      setMNew({ ...j.data, principalTalk: talk || null })
+    } catch (e: any) { alert(e.message); setMNew(null) }
+    setMNewBusy(false)
+  }
+  async function makeMonthlyLink() {
+    if (!mStudent) return
+    if (!confirm(`${mStudent.name} 학생의 ${mYear}년 ${mMonth}월 리포트 링크를 만들까요?
+만들기만 하고 보내지는 않습니다.`)) return
+    setMNewBusy(true)
+    try {
+      const r = await apiFetch('/api/monthly-report', {
+        method: 'POST',
+        body: JSON.stringify({ studentIds: [mStudent.id], year: mYear, month: mMonth, talk: { [mStudent.id]: mComment } }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? '만들지 못했어요.')
+      setMLink(j.links?.[0]?.url ?? null)
+      if (j.links?.[0]?.error) alert(j.links[0].error)
+    } catch (e: any) { alert(e.message) }
+    setMNewBusy(false)
+  }
 
   // ── 월간보고서 데이터 로딩 ──
   async function loadMonthlyData(student: Student, year: number, month: number) {
@@ -851,7 +889,7 @@ export default function TeacherReportsPage() {
                   style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
                   {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
                 </select>
-                <button onClick={() => mStudent && loadMonthlyData(mStudent, mYear, mMonth)}
+                <button onClick={() => { if (!mStudent) return; loadMonthlyData(mStudent, mYear, mMonth); loadNewMonthly(mStudent.id, mYear, mMonth) }}
                   disabled={!mStudent || mLoading}
                   className="px-4 py-2 rounded-xl text-sm font-bold"
                   style={{ background: mStudent ? '#1a1a2e' : '#e5e7eb', color: mStudent ? 'white' : '#9ca3af' }}>
@@ -880,6 +918,47 @@ export default function TeacherReportsPage() {
 
             {mData && (
               <>
+                {/* 양식 고르기 — 새 양식(링크) / 예전 양식(이미지) */}
+                <div className="flex items-center gap-1.5 mb-3">
+                  {([['new', '새 양식 · 링크'], ['old', '예전 양식 · 이미지']] as const).map(([k, label]) => (
+                    <button key={k} onClick={() => setMStyle(k)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-xl"
+                      style={mStyle === k ? { background: '#712B13', color: '#fff' } : { background: '#f3f4f6', color: '#6b7280' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {mStyle === 'new' && (
+                  <div className="mb-4">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <button onClick={makeMonthlyLink} disabled={mNewBusy || !mNew}
+                        className="px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+                        style={{ background: '#9FE1CB', color: '#712B13' }}>
+                        {mNewBusy ? '만드는 중…' : '링크 만들기'}
+                      </button>
+                      <span className="text-[11px] text-gray-400">만들기만 합니다. 보내지는 않아요.</span>
+                      {mLink && (
+                        <>
+                          <a href={mLink} target="_blank" rel="noreferrer" className="text-xs underline" style={{ color: '#712B13' }}>{mLink}</a>
+                          <button onClick={() => navigator.clipboard.writeText(mLink)}
+                            className="text-xs px-2.5 py-1 rounded-lg border">복사</button>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mb-2">
+                      위 「선생님 한 줄 평」이 리포트 마지막 「원장 Talk」 칸에 그대로 들어갑니다.
+                      <button onClick={() => mStudent && loadNewMonthly(mStudent.id, mYear, mMonth, mComment)}
+                        className="ml-1.5 underline" style={{ color: '#712B13' }}>한 줄 평 반영하기</button>
+                    </p>
+                    <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: '#e5e7eb' }}>
+                      {mNew ? <MonthlyReportView d={mNew} />
+                        : <p className="py-16 text-center text-sm text-gray-400">{mNewBusy ? '불러오는 중…' : '「불러오기」를 눌러 주세요.'}</p>}
+                    </div>
+                  </div>
+                )}
+
+                {mStyle === 'old' && (<>
                 {/* 미입력 경고 (전송 전 확인용, 캡처 이미지에는 포함 안 됨) */}
                 {mData.attendanceDetail?.some((a: any) => a.status === '미입력') && (
                   <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
@@ -1169,6 +1248,7 @@ export default function TeacherReportsPage() {
                   <i className="ti ti-download" style={{ fontSize: 16 }} />
                   이미지 저장 (카카오톡 전송용)
                 </button>
+                </>)}
               </>
             )}
           </div>
