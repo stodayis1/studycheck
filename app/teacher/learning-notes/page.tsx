@@ -16,6 +16,8 @@ import { findMissingNotes } from '@/lib/missingNotes'
 import { splitTeachers } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
+import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
+import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
 
 interface Student {
   id: string
@@ -262,6 +264,13 @@ export default function TeacherLearningNotesPage() {
   const [hwTextbookPage, setHwTextbookPage] = useState('')
   const [hwWorksheetRange, setHwWorksheetRange] = useState('')
   const [hwVideoUrls, setHwVideoUrls] = useState<string[]>([''])
+  const [showVideoPicker, setShowVideoPicker] = useState(false)
+  // 과제 링크가 수지쌤 강의면 이름을 붙여 보여 준다 (youtube_id → 강의)
+  const [lessonByYt, setLessonByYt] = useState<Record<string, LessonVideo>>({})
+  useEffect(() => {
+    supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id').not('youtube_id', 'is', null)
+      .then(({ data }) => setLessonByYt(Object.fromEntries(((data || []) as LessonVideo[]).map((v) => [v.youtube_id!, v]))))
+  }, [])
   // 교재 과제 - 배정된 교재 기반 (다중 선택)
   const [hwSelectedTBIds, setHwSelectedTBIds] = useState<string[]>([])
   const [hwSelectedEPIds, setHwSelectedEPIds] = useState<string[]>([])  // 시험대비 선택
@@ -1882,16 +1891,29 @@ ${e?.message ?? '연결 실패'}
                               const totalMin = Math.floor(totalSec / 60)
                               const remainSec = totalSec % 60
                               const timeStr = totalSec === 0 ? '' : totalMin > 0 ? ` · ${totalMin}분${remainSec > 0 ? ` ${remainSec}초` : ''}` : ` · ${totalSec}초`
-                              const watchedCount = logs.filter((v) => (v.watch_seconds ?? 0) > 0).length
+                              // 유튜브 영상은 스터디체크 안에서 봐서 「실제로 본 비율」이 있다 → 90% 넘게 본 것만 완료.
+                              // 예전처럼 새 창으로 연 링크는 창을 연 시간만 있어서 그대로 센다.
+                              const logOf = (u: string) => logs.find((v) => v.video_url === u)
+                              const doneOf = (u: string) => { const l = logOf(u); return !!l && (youtubeId(u) ? !!l.completed_at : (l.watch_seconds ?? 0) > 0) }
+                              const watchedCount = urls.filter(doneOf).length
+                              const touched = urls.filter((u) => (logOf(u)?.watch_seconds ?? 0) > 0 || Number(logOf(u)?.coverage_pct ?? 0) > 0).length
+                              const ytUrls = urls.filter((u) => youtubeId(u))
+                              const avgPct = ytUrls.length ? Math.round(ytUrls.reduce((s, u) => s + Number(logOf(u)?.coverage_pct ?? 0), 0) / ytUrls.length) : null
+                              const lostSec = logs.reduce((s, v) => s + (v.focus_lost_seconds ?? 0), 0)
+                              const tip = urls.map((u, i) => {
+                                const l = logOf(u); const v = lessonByYt[youtubeId(u) || '']
+                                return `${i + 1}. ${v ? lessonLabel(v) : u} — ${l ? `${Math.round(Number(l.coverage_pct ?? 0))}% 봄${l.completed_at ? ' (완료)' : ''}${l.focus_lost_seconds ? `, 딴짓 ${l.focus_lost_seconds}초` : ''}` : '안 봄'}`
+                              }).join(String.fromCharCode(10))
                               return (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                                  style={watchedCount === 0
-                                    ? { background: '#fee2e2', color: '#991b1b' }
-                                    : watchedCount < urls.length
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" title={tip}
+                                  style={watchedCount === urls.length
+                                    ? { background: '#EAF3DE', color: '#27500A' }
+                                    : touched > 0
                                     ? { background: '#FAEEDA', color: '#633806' }
-                                    : { background: '#EAF3DE', color: '#27500A' }}>
-                                  영상 {watchedCount}/{urls.length}개{timeStr}
-                                  {watchedCount === 0 ? ' 미시청' : watchedCount < urls.length ? ' 일부시청' : ' 완료'}
+                                    : { background: '#fee2e2', color: '#991b1b' }}>
+                                  영상 {watchedCount}/{urls.length}개{avgPct != null ? ` · ${avgPct}% 봄` : timeStr}
+                                  {watchedCount === urls.length ? ' 완료' : touched > 0 ? ' 일부시청' : ' 미시청'}
+                                  {lostSec >= 60 ? ` · 딴짓 ${Math.round(lostSec / 60)}분` : ''}
                                 </span>
                               )
                             })()}
@@ -4445,12 +4467,27 @@ ${e?.message ?? '연결 실패'}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700">영상 과제 링크</label>
-                    <button onClick={() => setHwVideoUrls((prev) => [...prev, ''])}
-                      className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
-                      style={{ background: '#ffffff', color: '#4b5563', border: '1px solid #9FE1CB60' }}>
-                      + 추가
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setShowVideoPicker(true)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
+                        style={{ background: '#EAF3DE', color: '#3B6D11', border: '1px solid #9FE1CB' }}>
+                        수지쌤 강의 고르기
+                      </button>
+                      <button onClick={() => setHwVideoUrls((prev) => [...prev, ''])}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
+                        style={{ background: '#ffffff', color: '#4b5563', border: '1px solid #9FE1CB60' }}>
+                        + 추가
+                      </button>
+                    </div>
                   </div>
+                  {showVideoPicker && (
+                    <LessonVideoPicker picked={hwVideoUrls}
+                      onPick={(url) => setHwVideoUrls((prev) => {
+                        const kept = prev.filter((u) => u.trim())
+                        return [...kept, url]
+                      })}
+                      onClose={() => setShowVideoPicker(false)} />
+                  )}
                   <div className="space-y-2">
                     {hwVideoUrls.map((url, idx) => (
                       <div key={idx} className="flex gap-2 items-center">
@@ -4468,6 +4505,18 @@ ${e?.message ?? '연결 실패'}
                         )}
                       </div>
                     ))}
+                    {hwVideoUrls.map((url) => lessonByYt[youtubeId(url) || '']).some(Boolean) && (
+                      <div className="flex flex-wrap gap-1">
+                        {hwVideoUrls.map((url, i) => {
+                          const v = lessonByYt[youtubeId(url) || '']
+                          return v ? (
+                            <span key={i} className="text-[11px] px-2 py-0.5 rounded-md bg-green-50 text-green-700">
+                              {v.grade} {lessonLabel(v)}
+                            </span>
+                          ) : null
+                        })}
+                      </div>
+                    )}
                   </div>
                   {hwVideoUrls.some((u) => u.trim()) && (
                     <p className="text-xs mt-1" style={{ color: '#639922' }}>
