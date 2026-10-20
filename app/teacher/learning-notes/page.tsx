@@ -1748,183 +1748,188 @@ ${e?.message ?? '연결 실패'}
    *   칸마다 카드를 따로 그리면 한쪽만 고쳐져 금세 달라진다. 카드는 한 벌만 둔다.
    */
   function NoteCard({ student, schedule }: { student: Student; schedule: any }) {
-                    const note = getTodayNote(student.id)
-                    const session = getTodaySession(student.id)
-                    const isComplete = isTodayComplete(student.id)
-                    return (
-                      <div key={student.id} className={cx(
-                        'bg-white rounded-2xl border-2 shadow-sm overflow-hidden mb-3',
-                        isComplete ? 'border-green-200' : note ? 'border-orange-200' : 'border-blue-100'
-                      )}>
-                        <div className={cx('px-4 py-3 flex items-center gap-3', isComplete ? 'bg-green-50' : note ? 'bg-orange-50' : 'bg-blue-50')}>
-                          <div className="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
-                            {student.name[0]}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-gray-900">{student.name}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <p className="text-xs text-gray-500">{student.grade}</p>
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                                {schedule!.start_time.slice(0,5)} · {schedule!.periods}교시
-                              </span>
-                              {student.wise_step && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full">
-                                  {student.wise_step}단계
-                                </span>
-                              )}
-                              {student.teacher_name && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">
-                                  {student.teacher_name} 선생님
-                                </span>
-                              )}
-                              {isComplete ? (
-                                <span className="text-[10px] font-bold text-green-600">✓ 작성완료</span>
-                              ) : note && (
-                                <span className="text-[10px] font-bold text-orange-500"><i className="ti ti-pencil align-[-0.125em]" /> 입력중 (수업내용/과제배부 확인)</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-1.5 flex-wrap justify-end">
-                            {isEditable(student) ? (
-                              <>
-                                <button onClick={() => openFeedbackModal(student)}
-                                  className="px-2.5 py-1 text-xs font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg">
-                                  <i className="ti ti-message-circle align-[-0.125em]" /> 알림장
-                                </button>
-                                {note && session ? (() => {
-                                  const editable = canEditNote(session.session_date, student.id)
-                                  return (
-                                    <>
-                                      {isComplete && isAdmin() && (
-                                        <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id, session.session_date)}
-                                          disabled={sendingKakao === session.id}
-                                          className="px-2.5 py-1 text-xs font-semibold rounded-lg text-[#3C1E1E] disabled:opacity-50"
-                                          style={{ background: '#FEE500' }}>
-                                          {sendingKakao === session.id ? '보내는 중...' : <><i className="ti ti-send align-[-0.125em]" /> 카톡 발송</>}
-                                        </button>
-                                      )}
-                                      <button onClick={() => editable ? openNoteModal(student) : alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
-                                        className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
-                                          editable ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100 cursor-not-allowed')}>
-                                        {editable ? '수정' : <><i className="ti ti-lock align-[-0.125em]" /> 수정</>}
-                                      </button>
-                                      <button onClick={() => editable ? handleDeleteNote(session.id, session.session_date, student.id) : alert('수업 당일과 다음 수업일 오후 2시까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
-                                        className={cx('px-2.5 py-1 text-xs font-semibold rounded-lg',
-                                          editable ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100 cursor-not-allowed')}>
-                                        {editable ? '삭제' : <><i className="ti ti-lock align-[-0.125em]" /> 삭제</>}
-                                      </button>
-                                    </>
-                                  )
-                                })() : (
-                                  <>
-                                    <button onClick={() => openNoteModal(student)}
-                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg text-white bg-[#9FE1CB]">
-                                      <i className="ti ti-pencil align-[-0.125em]" /> 입력
-                                    </button>
-                                    <button onClick={() => quickMarkAbsent(student)}
-                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg text-red-500 bg-red-50 border border-red-100">
-                                      <i className="ti ti-user-x align-[-0.125em]" /> 결석
-                                    </button>
-                                  </>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-gray-300">보기 전용</span>
-                            )}
-                          </div>
-                        </div>
+    const note = getTodayNote(student.id)
+    const session = getTodaySession(student.id)
+    const isComplete = isTodayComplete(student.id)
+    const editable = isEditable(student)
+    const canEdit = session ? canEditNote(session.session_date, student.id) : true
+    const 테두리 = isComplete ? '#BBF7D0' : note ? '#FED7AA' : '#DBEAFE'
+    const 머리 = isComplete ? '#F0FDF4' : note ? '#FFF7ED' : '#EFF6FF'
+    const 칩 = 'text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0'
+    const 단추 = 'flex-1 min-w-0 py-1.5 text-[11px] font-bold rounded-lg whitespace-nowrap'
+    const 교재들 = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
+    const 지난수업 = sessions
+      .filter((x) => x.student_id === student.id && x.session_date < todayStr)
+      .sort((x, y) => y.session_date.localeCompare(x.session_date))[0]
+    return (
+      // ★ 높이를 **고정**한다. 내용에 따라 들쭉날쭉하면 칸반이 오히려 더 정신없다
+      //   (원장님 2026-10-20 「비뚤빼뚤하면 더 정신없지… 보드크기가 일정하게」).
+      //   머리와 단추는 자리를 지키고, 가운데만 남는 만큼 쓰다가 넘치면 잘린다.
+      <div className="bg-white rounded-2xl shadow-sm mb-2.5 h-[14.5rem] flex flex-col overflow-hidden"
+        style={{ border: `2px solid ${테두리}` }}>
 
-                        {/* 배정 교재 + 진도 미리보기 (수업일지 없을 때) */}
-                        {!note && (() => {
-                          const myTBs = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
-                          if (myTBs.length === 0) return null
-                          const recentSession = sessions
-                            .filter((s) => s.student_id === student.id && s.session_date < todayStr)
-                            .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
-                          return (
-                            <div className="px-4 py-2 flex flex-wrap gap-1.5">
-                              {myTBs.map((tb) => (
-                                <span key={tb.id} className={cx('text-[10px] font-semibold px-2 py-1 rounded-full',
-                                  tb.textbook_type === '개념서' ? 'bg-yellow-50 text-yellow-700' :
-                                  tb.textbook_type === '유형서' ? 'bg-green-50 text-green-700' :
-                                  tb.textbook_type === '심화서' ? 'bg-orange-50 text-orange-700' :
-                                  'bg-purple-50 text-purple-700')}>
-                                  {tb.textbook_type} {tb.textbook_name}
-                                  {tb.grade ? ` · ${tb.grade} ${tb.semester}학기` : ''}
-                                </span>
-                              ))}
-                              {recentSession?.progress_content && (
-                                <span className="text-[10px] text-blue-500 w-full">
-                                  <i className="ti ti-book align-[-0.125em]" /> 지난 수업: {recentSession.progress_content}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })()}
+        {/* 머리 — 이름과 상태. 칩은 줄바꿈하되 글자가 세로로 쪼개지지 않게 nowrap 으로 묶는다 */}
+        <div className="px-3 pt-2.5 pb-2 shrink-0" style={{ background: 머리 }}>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-white/70 flex items-center justify-center text-xs font-bold text-gray-600 shrink-0">
+              {student.name[0]}
+            </div>
+            <p className="text-sm font-bold text-gray-900 truncate flex-1 min-w-0">{student.name}</p>
+            {isComplete ? (
+              <span className="text-[10px] font-bold text-green-600 shrink-0">✓ 완료</span>
+            ) : note ? (
+              <span className="text-[10px] font-bold text-orange-500 shrink-0">쓰는 중</span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-1 mt-1.5">
+            <span className={cx(칩, 'bg-white/80 text-gray-500')}>{student.grade}</span>
+            <span className={cx(칩, 'bg-blue-100 text-blue-700')}>
+              {schedule!.start_time.slice(0, 5)} · {schedule!.periods}교시
+            </span>
+            {student.wise_step && (
+              <span className={cx(칩, 'bg-purple-100 text-purple-700')}>{student.wise_step}단계</span>
+            )}
+            {student.teacher_name && (
+              <span className={cx(칩, 'bg-white/80 text-gray-500')}>{mainTeacher(student.teacher_name)}</span>
+            )}
+          </div>
+        </div>
 
-                        {/* 수업일지 요약 */}
-                        {note && session && (
-                          <div className="px-4 py-2.5 flex flex-wrap gap-2">
-                            {(session.progress_content || session.today_textbook_name) && (
-                              <span className="text-[10px] text-gray-500"><i className="ti ti-book align-[-0.125em]" /> {session.progress_content || session.today_textbook_name}</span>
-                            )}
-                            <span className={cx('text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                              note.attendance === '결석' ? 'bg-red-100 text-red-600' :
-                              note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
-                              'bg-green-100 text-green-600')}>
-                              {note.attendance}
-                            </span>
-                            <span className="text-[10px] text-gray-500">
-                              과제달성률 {note.achievement_pct != null ? `${note.achievement_pct}%` : note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
-                            </span>
-                            {note.worksheet_score != null && (
-                              <span className={cx('text-[10px] font-bold', note.worksheet_score >= 85 ? 'text-green-600' : note.worksheet_score >= 70 ? 'text-gray-800' : 'text-red-500')}>
-                                과제성취도 {note.worksheet_score}점
-                              </span>
-                            )}
-                            {/* 영상 시청 시간 (선생님만 표시) */}
-                            {session.video_url && (() => {
-                              const urls = session.video_url.split('\n').filter(Boolean)
-                              const logs = videoWatchLogs.filter((v) => v.session_id === session.id)
-                              if (urls.length === 0) return null
-                              const totalSec = logs.reduce((sum, v) => sum + (v.watch_seconds ?? 0), 0)
-                              const totalMin = Math.floor(totalSec / 60)
-                              const remainSec = totalSec % 60
-                              const timeStr = totalSec === 0 ? '' : totalMin > 0 ? ` · ${totalMin}분${remainSec > 0 ? ` ${remainSec}초` : ''}` : ` · ${totalSec}초`
-                              // 유튜브 영상은 스터디체크 안에서 봐서 「실제로 본 비율」이 있다 → 90% 넘게 본 것만 완료.
-                              // 예전처럼 새 창으로 연 링크는 창을 연 시간만 있어서 그대로 센다.
-                              const logOf = (u: string) => logs.find((v) => v.video_url === u)
-                              const doneOf = (u: string) => { const l = logOf(u); return !!l && (youtubeId(u) ? !!l.completed_at : (l.watch_seconds ?? 0) > 0) }
-                              const watchedCount = urls.filter(doneOf).length
-                              const touched = urls.filter((u) => (logOf(u)?.watch_seconds ?? 0) > 0 || Number(logOf(u)?.coverage_pct ?? 0) > 0).length
-                              const ytUrls = urls.filter((u) => youtubeId(u))
-                              const avgPct = ytUrls.length ? Math.round(ytUrls.reduce((s, u) => s + Number(logOf(u)?.coverage_pct ?? 0), 0) / ytUrls.length) : null
-                              const lostSec = logs.reduce((s, v) => s + (v.focus_lost_seconds ?? 0), 0)
-                              const tip = urls.map((u, i) => {
-                                const l = logOf(u); const v = lessonByYt[youtubeId(u) || '']
-                                return `${i + 1}. ${v ? lessonLabel(v) : u} — ${l ? `${Math.round(Number(l.coverage_pct ?? 0))}% 봄${l.completed_at ? ' (완료)' : ''}${l.focus_lost_seconds ? `, 딴짓 ${l.focus_lost_seconds}초` : ''}` : '안 봄'}`
-                              }).join(String.fromCharCode(10))
-                              return (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" title={tip}
-                                  style={watchedCount === urls.length
-                                    ? { background: '#EAF3DE', color: '#27500A' }
-                                    : touched > 0
-                                    ? { background: '#FAEEDA', color: '#633806' }
-                                    : { background: '#fee2e2', color: '#991b1b' }}>
-                                  영상 {watchedCount}/{urls.length}개{avgPct != null ? ` · ${avgPct}% 봄` : timeStr}
-                                  {watchedCount === urls.length ? ' 완료' : touched > 0 ? ' 일부시청' : ' 미시청'}
-                                  {lostSec >= 60 ? ` · 딴짓 ${Math.round(lostSec / 60)}분` : ''}
-                                </span>
-                              )
-                            })()}
-                            {note.memo && <span className="text-[10px] text-gray-400"><i className="ti ti-note align-[-0.125em]" /> {note.memo}</span>}
-                            {!canEditNote(session.session_date, student.id) && (
-                              <span className="text-[10px] text-gray-300 w-full mt-1"><i className="ti ti-lock align-[-0.125em]" /> 수정기간 종료 · 관리자 문의</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
+        {/* 가운데 — 남는 만큼만. 넘치면 잘린다(자세한 것은 눌러서 본다) */}
+        <div className="flex-1 min-h-0 overflow-hidden px-3 py-2">
+          {note && session ? (
+            <div className="flex flex-wrap gap-1.5">
+              <span className={cx(칩,
+                note.attendance === '결석' ? 'bg-red-100 text-red-600' :
+                note.attendance === '지각' ? 'bg-yellow-100 text-yellow-600' :
+                'bg-green-100 text-green-600')}>{note.attendance}</span>
+              <span className={cx(칩, 'bg-gray-100 text-gray-500')}>
+                달성률 {note.achievement_pct != null ? `${note.achievement_pct}%` : note.workbook_done ? '100%' : note.worksheet_submitted ? '70%' : '0%'}
+              </span>
+              {note.worksheet_score != null && (
+                <span className={cx(칩, note.worksheet_score >= 85 ? 'bg-green-50 text-green-700'
+                  : note.worksheet_score >= 70 ? 'bg-gray-100 text-gray-700' : 'bg-red-50 text-red-600')}>
+                  성취도 {note.worksheet_score}%
+                </span>
+              )}
+                {/* 영상 시청 시간 (선생님만 표시) */}
+                {session.video_url && (() => {
+                  const urls = session.video_url.split('\n').filter(Boolean)
+                  const logs = videoWatchLogs.filter((v) => v.session_id === session.id)
+                  if (urls.length === 0) return null
+                  const totalSec = logs.reduce((sum, v) => sum + (v.watch_seconds ?? 0), 0)
+                  const totalMin = Math.floor(totalSec / 60)
+                  const remainSec = totalSec % 60
+                  const timeStr = totalSec === 0 ? '' : totalMin > 0 ? ` · ${totalMin}분${remainSec > 0 ? ` ${remainSec}초` : ''}` : ` · ${totalSec}초`
+                  // 유튜브 영상은 스터디체크 안에서 봐서 「실제로 본 비율」이 있다 → 90% 넘게 본 것만 완료.
+                  // 예전처럼 새 창으로 연 링크는 창을 연 시간만 있어서 그대로 센다.
+                  const logOf = (u: string) => logs.find((v) => v.video_url === u)
+                  const doneOf = (u: string) => { const l = logOf(u); return !!l && (youtubeId(u) ? !!l.completed_at : (l.watch_seconds ?? 0) > 0) }
+                  const watchedCount = urls.filter(doneOf).length
+                  const touched = urls.filter((u) => (logOf(u)?.watch_seconds ?? 0) > 0 || Number(logOf(u)?.coverage_pct ?? 0) > 0).length
+                  const ytUrls = urls.filter((u) => youtubeId(u))
+                  const avgPct = ytUrls.length ? Math.round(ytUrls.reduce((s, u) => s + Number(logOf(u)?.coverage_pct ?? 0), 0) / ytUrls.length) : null
+                  const lostSec = logs.reduce((s, v) => s + (v.focus_lost_seconds ?? 0), 0)
+                  const tip = urls.map((u, i) => {
+                    const l = logOf(u); const v = lessonByYt[youtubeId(u) || '']
+                    return `${i + 1}. ${v ? lessonLabel(v) : u} — ${l ? `${Math.round(Number(l.coverage_pct ?? 0))}% 봄${l.completed_at ? ' (완료)' : ''}${l.focus_lost_seconds ? `, 딴짓 ${l.focus_lost_seconds}초` : ''}` : '안 봄'}`
+                  }).join(String.fromCharCode(10))
+                  return (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" title={tip}
+                      style={watchedCount === urls.length
+                        ? { background: '#EAF3DE', color: '#27500A' }
+                        : touched > 0
+                        ? { background: '#FAEEDA', color: '#633806' }
+                        : { background: '#fee2e2', color: '#991b1b' }}>
+                      영상 {watchedCount}/{urls.length}개{avgPct != null ? ` · ${avgPct}% 봄` : timeStr}
+                      {watchedCount === urls.length ? ' 완료' : touched > 0 ? ' 일부시청' : ' 미시청'}
+                      {lostSec >= 60 ? ` · 딴짓 ${Math.round(lostSec / 60)}분` : ''}
+                    </span>
+                  )
+                })()}
+              {(session.progress_content || session.today_textbook_name) && (
+                <p className="text-[10.5px] text-gray-500 leading-snug w-full line-clamp-2">
+                  <i className="ti ti-book align-[-0.125em]" /> {session.progress_content || session.today_textbook_name}
+                </p>
+              )}
+              {note.memo && (
+                <p className="text-[10.5px] text-gray-400 leading-snug w-full line-clamp-1">
+                  <i className="ti ti-note align-[-0.125em]" /> {note.memo}
+                </p>
+              )}
+              {!canEdit && (
+                <span className="text-[10px] text-gray-300 w-full">
+                  <i className="ti ti-lock align-[-0.125em]" /> 수정기간 종료 · 관리자 문의
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {교재들.slice(0, 4).map((tb) => (
+                <span key={tb.id} className={cx(칩,
+                  tb.textbook_type === '개념서' ? 'bg-yellow-50 text-yellow-700' :
+                  tb.textbook_type === '유형서' ? 'bg-green-50 text-green-700' :
+                  tb.textbook_type === '심화서' ? 'bg-orange-50 text-orange-700' :
+                  'bg-purple-50 text-purple-700')}>
+                  {tb.textbook_name}{tb.grade ? ` ${tb.grade}` : ''}
+                </span>
+              ))}
+              {교재들.length > 4 && (
+                <span className={cx(칩, 'bg-gray-100 text-gray-400')}>외 {교재들.length - 4}</span>
+              )}
+              {지난수업?.progress_content && (
+                <p className="text-[10.5px] text-blue-500 leading-snug w-full line-clamp-2">
+                  <i className="ti ti-book align-[-0.125em]" /> 지난 수업: {지난수업.progress_content}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 단추 — 맨 아래 한 줄. 너비를 똑같이 나눠 카드마다 같은 자리에 있게 한다 */}
+        <div className="shrink-0 px-3 pb-2.5 pt-1.5 border-t border-gray-100">
+          {!editable ? (
+            <p className="text-[10.5px] text-gray-300 text-center py-1">보기 전용</p>
+          ) : (
+            <>
+              {note && session && isComplete && isAdmin() && (
+                <button onClick={() => handleSendKakao(session.id, student.name, student.parent_phone, student.id, session.session_date)}
+                  disabled={sendingKakao === session.id}
+                  className="w-full mb-1.5 py-1.5 text-[11px] font-bold rounded-lg text-[#3C1E1E] disabled:opacity-50"
+                  style={{ background: '#FEE500' }}>
+                  {sendingKakao === session.id ? '보내는 중…' : <><i className="ti ti-send align-[-0.125em]" /> 카톡 발송</>}
+                </button>
+              )}
+              <div className="flex gap-1.5">
+                <button onClick={() => openFeedbackModal(student)}
+                  className={cx(단추, 'text-[#712B13] bg-white border border-purple-200')}>알림장</button>
+                {note && session ? (
+                  <>
+                    <button onClick={() => canEdit ? openNoteModal(student) : alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 관리자에게 문의해주세요.')}
+                      className={cx(단추, canEdit ? 'text-gray-600 bg-white border border-gray-200' : 'text-gray-400 bg-white border border-gray-100')}>
+                      {canEdit ? '수정' : <><i className="ti ti-lock align-[-0.125em]" /> 수정</>}
+                    </button>
+                    <button onClick={() => canEdit ? handleDeleteNote(session.id, session.session_date, student.id) : alert('수업 당일과 다음 수업일 오후 2시까지만 삭제할 수 있어요. 관리자에게 문의해주세요.')}
+                      className={cx(단추, canEdit ? 'text-red-500 bg-red-50 border border-red-100' : 'text-gray-300 bg-white border border-gray-100')}>
+                      {canEdit ? '삭제' : <><i className="ti ti-lock align-[-0.125em]" /> 삭제</>}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => openNoteModal(student)}
+                      className={cx(단추, 'text-white bg-[#9FE1CB]')}>
+                      <i className="ti ti-pencil align-[-0.125em]" /> 입력
+                    </button>
+                    <button onClick={() => quickMarkAbsent(student)}
+                      className={cx(단추, 'text-red-500 bg-red-50 border border-red-100')}>결석</button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
   }
 
   /** 미리보기 상자 하나 — 넓은 화면에서는 옆에, 좁은 화면에서는 저장 버튼 위에 같은 것을 쓴다. */
