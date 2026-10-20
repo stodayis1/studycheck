@@ -166,3 +166,32 @@ export function formatWorksheetScope(
   if (chaps.length === 1 && subs.length <= 3) return `${subs[0]} ~ ${subs[subs.length - 1]}`
   return ''                                // 대단원 이름만 남긴다
 }
+
+/**
+ * 교재 이름에 **학년·학기**를 붙인다 (원장님 2026-10-20).
+ *
+ *   「유형서, 개념서, 심화서 몇학년 몇학기인지 정보가 없어.
+ *     학습브리핑에도 그렇고 보고서에도 그렇고 다 그렇더라고. 이거 학년학기 다 표기해줘」
+ *
+ * 같은 「쎈B」라도 중1-2 를 푸는 아이와 중2-2 를 푸는 아이가 다르다. 학부모님은 그걸
+ * 모르신 채 「쎈B 45~50쪽」만 받으셨다. 한 학년 아래 교재를 푸는 아이도 있어서
+ * **그 정보가 빠지면 오히려 오해를 산다.**
+ *
+ *   textbookLabel({textbook_name:'쎈B', grade:'중2', semester:2})          → '쎈B 중2-2'
+ *   textbookLabel({...}, { withType: true })                               → '유형서 쎈B 중2-2'
+ *
+ * 학년이 비어 있으면 이름만 돌려준다 — 없는 것을 지어내지 않는다.
+ */
+export function textbookLabel(
+  tb: { textbook_name?: string | null; textbook_type?: string | null; grade?: string | null; semester?: number | null } | null | undefined,
+  opt?: { withType?: boolean },
+): string {
+  if (!tb) return ''
+  const name = (tb.textbook_name ?? '').trim()
+  if (!name) return ''
+  const g = (tb.grade ?? '').trim()
+  // ★ 학기를 붙이는 것은 **초·중등**뿐이다. 고등은 과정 이름 자체가 한 학기다
+  //   (공통수학2 는 「공통수학2-1」이 아니다).
+  const course = g ? (tb.semester && /^[초중]\d/.test(g) ? `${g}-${tb.semester}` : g) : ''
+  return [opt?.withType ? (tb.textbook_type ?? '').trim() : '', name, course].filter(Boolean).join(' ')
+}

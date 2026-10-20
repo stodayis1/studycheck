@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
 import { loadHolidays, type Holiday } from '@/lib/holidays'
-import { cx, fetchAllRows, formatDailyTestUnitLabel, formatWorksheetScope } from '@/lib/utils'
+import { cx, fetchAllRows, formatDailyTestUnitLabel, formatWorksheetScope, textbookLabel } from '@/lib/utils'
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
@@ -1568,7 +1568,10 @@ ${e?.message ?? '연결 실패'}
         }
         // 형식: [유형서] 3-1+2 일차함수와 그 그래프~일차방정식
         const subStr = subNums.length > 0 ? `-${subNums.join('+')}` : ''
-        return `[${tb.textbook_type}] ${chNum}${subStr}${conceptRange}`
+        // ★ 학년·학기를 같이 적는다. 같은 「유형서」라도 중1-2 를 푸는 아이와 중2-2 를
+        //   푸는 아이가 다르다 (원장님 2026-10-20).
+        const 과정 = tb.grade ? (tb.semester ? `${tb.grade}-${tb.semester}` : tb.grade) : ''
+        return `[${[tb.textbook_type, 과정].filter(Boolean).join(' ')}] ${chNum}${subStr}${conceptRange}`
       }).filter(Boolean)
     // noteMemo(메모칸)가 비어있으면 예전에 저장돼 있던 progress_content(noteProgress)를 그대로 유지 -
     // 메모가 progress_content랑 다른 필드(학습일지 memo)라서, 토글만 켜고 아무것도 안 적은 채 저장해도
@@ -1610,7 +1613,7 @@ ${e?.message ?? '연결 실패'}
         // 선택값이 있어도 무시한다(교재 관련 항목은 통째로 뺀다). 학습지/시험대비/메모는 그대로 반영.
         const tbNames = noteNoHomework ? [] : hwSelectedTBIds.map((id) => {
           const tb = studentTextbooks.find((t) => t.id === id)
-          return tb ? tb.textbook_name : ''
+          return textbookLabel(tb)
         }).filter(Boolean)
         const epNames = hwSelectedEPIds.map((id) => {
           const ep = examPreps.find((e) => e.id === id)
@@ -1631,7 +1634,7 @@ ${e?.message ?? '연결 실패'}
           const ch = hwTBChapters[id] || ''
           const sub = hwTBSubChapters[id] || ''
           const page = hwTBPages[id] || ''
-          return [tb?.textbook_name, ch, sub, page].filter(Boolean).join(' · ')
+          return [textbookLabel(tb), ch, sub, page].filter(Boolean).join(' · ')
         }).filter(Boolean)
         const epParts = hwSelectedEPIds.map((id) => {
           const ep = examPreps.find((e) => e.id === id)
@@ -1883,7 +1886,7 @@ ${e?.message ?? '연결 실패'}
                   tb.textbook_type === '유형서' ? 'bg-green-50 text-green-700' :
                   tb.textbook_type === '심화서' ? 'bg-orange-50 text-orange-700' :
                   'bg-purple-50 text-purple-700')}>
-                  {tb.textbook_name}{tb.grade ? ` ${tb.grade}` : ''}
+                  {textbookLabel(tb)}
                 </span>
               ))}
               {교재들.length > 4 && (
@@ -3290,7 +3293,7 @@ ${e?.message ?? '연결 실패'}
                           {/* 현재 진도 미리보기 */}
                           {mainTB && (
                             <div className="text-[10px] text-gray-400 truncate">
-                              <i className="ti ti-books align-[-0.125em]" /> {mainTB.textbook_type} · {mainTB.textbook_name}
+                              <i className="ti ti-books align-[-0.125em]" /> {textbookLabel(mainTB, { withType: true })}
                             </div>
                           )}
                           {recentSession?.progress_content && (
