@@ -17,6 +17,16 @@ type Log = {
   focus_lost_seconds: number; scene_seconds: Record<string, number>; watched_ranges: [number, number][]; completed_at: string | null
 }
 
+// 0.1초짜리 무음 WAV — 「강의 시작」 누를 때 한 번 틀어서 소리 재생을 열어 둔다
+function silentWav(): string {
+  const n = 800, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf)
+  const w = (o: number, t: string) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)) }
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true)
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 16000, true)
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true)
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }))
+}
+
 function loadYouTubeApi(): Promise<any> {
   return new Promise((resolve) => {
     if (window.YT?.Player) return resolve(window.YT)
@@ -54,6 +64,9 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   const hiddenSince = useRef<number | null>(null)
   const pausedSince = useRef<number | null>(null)
   const voice = useRef<HTMLAudioElement | null>(null)
+  // 브라우저는 「이 페이지를 누른 뒤」에만 소리를 틀게 한다. 유튜브 화면 안을 누른 건 안 쳐 준다
+  // → 「강의 시작」을 한 번 누르게 해서 그때 소리 상자를 열어 두고, 이름 부르기는 그 상자로 튼다 (아이폰도 이래야 난다)
+  const [started, setStarted] = useState(false)
 
   // 1) 과제·강의·지난 기록 읽기
   useEffect(() => {
@@ -162,11 +175,12 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     fired.current.add(key)
     const p = player.current
     const vol = p?.getVolume?.() ?? 100
-    const a = new Audio(nameCallUrl(studentId, key))
-    voice.current?.pause(); voice.current = a
+    const a = voice.current ?? (voice.current = new Audio())
+    a.pause()
     a.onplay = () => { p?.setVolume?.(Math.max(10, Math.round(vol * 0.25))); setBubble(nameCallText(key, studentName)) }
     a.onended = a.onerror = () => { p?.setVolume?.(vol); setTimeout(() => setBubble(null), 1200) }
-    a.play().catch(() => setBubble(nameCallText(key, studentName)))  // 소리가 막혀도 말풍선은 띄운다
+    a.src = nameCallUrl(studentId, key)
+    a.play().catch(() => { setBubble(nameCallText(key, studentName)); setTimeout(() => setBubble(null), 3500) })  // 소리가 막혀도 말풍선은 띄운다
   }
 
   // 다른 앱·탭에 8초 넘게 갔다 돌아오면 (재생 중이었을 때만, 최대 3번)
@@ -222,6 +236,15 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     }).eq('id', note.id)
   }
 
+  // 「강의 시작」: 이 누름으로 소리 상자를 연다 (무음을 한 번 틀어 둠) → 그다음 영상 재생
+  function start() {
+    const a = voice.current ?? (voice.current = new Audio())
+    a.src = silentWav()
+    a.play().catch(() => {})
+    setStarted(true)
+    player.current?.playVideo?.()
+  }
+
   const seek = (s: number) => { player.current?.seekTo?.(s, true); player.current?.playVideo?.() }
   const dur = duration || lesson?.duration_seconds || 0
   const pct = log?.coverage_pct ?? 0
@@ -241,6 +264,14 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
 
       <div className="relative w-full overflow-hidden rounded-2xl bg-black" style={{ aspectRatio: '16 / 9' }}>
         <div id="yt-player" className="absolute inset-0 w-full h-full" />
+        {!started && (
+          <button onClick={start}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55 text-white">
+            <span className="w-16 h-16 rounded-full bg-[#E2703A] flex items-center justify-center text-3xl pl-1">▶</span>
+            <span className="text-sm font-bold">강의 시작</span>
+            <span className="text-[11px] text-white/70">소리를 켜고 들어 주세요</span>
+          </button>
+        )}
         {bubble && (
           <div className="absolute left-3 bottom-12 flex items-end gap-2 pointer-events-none">
             <img src="/exam-blog/suji_uniform_fighting.jpg" alt="" className="w-11 h-11 rounded-full object-cover object-top border-2 border-white shadow" />
