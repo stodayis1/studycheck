@@ -126,7 +126,6 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       if (!p?.getPlayerState || !l) return
       const cur = p.getCurrentTime?.() ?? 0
       setNow(cur)
-      cue(cur, p.getPlayerState())
       if (p.getPlayerState() !== 1) { lastT.current = null; return }
       const prev = lastT.current
       lastT.current = cur
@@ -153,35 +152,53 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     return () => { clearInterval(t); clearInterval(s); window.removeEventListener('pagehide', bye); document.removeEventListener('visibilitychange', bye); save(true) }
   }, [lesson, duration, studentId, url])
 
-  // 이름 부르기 — 언제 무슨 말을 할지
+  // 이름 부르기 — 언제 무슨 말을 할지.
+  // 설명과 겹치지 않게: 장면이 바뀌기 직전 쉼(장면 끝 0.45초 무음) 안에서 영상을 멈추고, 말이 끝나면 이어서 재생한다.
+  // (원장님 확인 2026-10-20: 설명 중간에 겹쳐 나왔다)
   function cue(cur: number, state: number) {
     const sc = lesson?.scenes ?? []
+    const justBefore = (x?: { start: number }) => !!x && cur >= x.start - 0.42 && cur < x.start + 0.05
     if (state === 1) {
-      if (cur > 1.5) callName(lesson?.kind === '증명' ? 'proof' : 'start')
       const firstConcept = sc.find((x) => x.kind === '개념')
-      if (firstConcept && cur > (firstConcept.start + firstConcept.end) / 2) callName('important')
+      if (justBefore(firstConcept)) callName('important')
       const check = sc.find((x) => x.kind === 'check')
-      if (check && cur > check.start + 1 && cur < check.end) callName('check')
+      if (justBefore(check)) callName('check')
       const ex = sc.find((x) => x.kind === 'examples')
-      if (check && ex && cur > ex.start + 0.5) callName('answer')
+      if (check && justBefore(ex)) callName('answer')
     }
     // 멈춘 채 2분 넘게 화면만 켜 두면
     if (state === 2 && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callName('idle')
   }
 
-  function callName(key: NameCallKey, again = false) {
-    if (!studentId || !studentName) return
-    if (!again && fired.current.has(key)) return
+  function callName(key: NameCallKey, again = false, after?: () => void) {
+    if (!studentId || !studentName) { after?.(); return }
+    if (!again && fired.current.has(key)) { after?.(); return }
     fired.current.add(key)
     const p = player.current
-    const vol = p?.getVolume?.() ?? 100
+    const wasPlaying = p?.getPlayerState?.() === 1
+    if (wasPlaying) p.pauseVideo()                      // 설명과 안 겹치게 멈춘다
     const a = voice.current ?? (voice.current = new Audio())
     a.pause()
-    a.onplay = () => { p?.setVolume?.(Math.max(10, Math.round(vol * 0.25))); setBubble(nameCallText(key, studentName)) }
-    a.onended = a.onerror = () => { p?.setVolume?.(vol); setTimeout(() => setBubble(null), 1200) }
+    const done = () => {
+      setTimeout(() => setBubble(null), 900)
+      if (wasPlaying) p?.playVideo?.()                  // 말이 끝나면 이어서
+      after?.()
+    }
+    a.onplay = () => setBubble(nameCallText(key, studentName))
+    a.onended = a.onerror = done
     a.src = nameCallUrl(studentId, key)
-    a.play().catch(() => { setBubble(nameCallText(key, studentName)); setTimeout(() => setBubble(null), 3500) })  // 소리가 막혀도 말풍선은 띄운다
+    a.play().catch(() => { setBubble(nameCallText(key, studentName)); setTimeout(done, 2200) })  // 소리가 막혀도 말풍선은 띄운다
   }
+
+  // 장면 경계를 놓치지 않게 0.2초마다 본다 (쉼이 0.45초라 1초 간격이면 지나친다)
+  useEffect(() => {
+    const t = setInterval(() => {
+      const p = player.current
+      if (!p?.getPlayerState || !started) return
+      cue(p.getCurrentTime?.() ?? 0, p.getPlayerState())
+    }, 200)
+    return () => clearInterval(t)
+  }, [lesson, studentId, studentName, started])
 
   // 다른 앱·탭에 8초 넘게 갔다 돌아오면 (재생 중이었을 때만, 최대 3번)
   useEffect(() => {
@@ -242,7 +259,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     a.src = silentWav()
     a.play().catch(() => {})
     setStarted(true)
-    player.current?.playVideo?.()
+    // 시작 인사를 먼저 하고 영상을 튼다 (증명 영상은 「노트 펴고 같이 써야지」)
+    callName(lesson?.kind === '증명' ? 'proof' : 'start', false, () => player.current?.playVideo?.())
   }
 
   const seek = (s: number) => { player.current?.seekTo?.(s, true); player.current?.playVideo?.() }
