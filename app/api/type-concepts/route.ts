@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   if (!grade || !semester)
     return NextResponse.json({ error: '과정을 골라 주세요.' }, { status: 400 })
 
-  const [types, probs, concepts, assets] = await Promise.all([
+  const [types, probs, concepts, assets, videos] = await Promise.all([
     fetchAll<any>((f, t) =>
       supabase.from('standard_types')
         .select('code, chapter_no, chapter_title, sub_chapter_no, sub_chapter_title, type_no, type_title')
@@ -54,12 +54,31 @@ export async function GET(req: Request) {
       supabase.from('type_learning_assets')
         .select('type_code, concept_id, video_url, start_seconds, end_seconds, problem_id, title')
         .eq('asset_type', 'concept').order('type_code').range(f, t)),
+    // ★ 수지쌤 강의영상(lesson_videos)은 **이미 유형코드를 들고 있다**.
+    //   개념영상 01번이 공수2-01-01~06 여섯 유형을 덮는 식이다 — 그게 그 개념의 대표예제들이다.
+    //   여기서 따로 또 적지 않고 그대로 읽어 보여 준다. 두 곳에 적으면 반드시 어긋난다.
+    //   lesson_videos 에는 학기 칸이 없다(과정 이름 자체가 공통수학2 처럼 한 학기다).
+    fetchAll<any>((f, t) =>
+      supabase.from('lesson_videos')
+        .select('kind, order_label, title, youtube_id, duration_seconds, type_codes')
+        .eq('grade', grade).eq('is_active', true).order('order_label').range(f, t)),
   ])
 
   const count = new Map<string, number>()
   for (const p of probs) count.set(p.type_code, (count.get(p.type_code) ?? 0) + 1)
   const linked = new Map<string, any>()
   for (const a of assets) linked.set(a.type_code, a)
+  // 유형코드 → 그 유형을 덮는 강의영상들
+  const vidsOf = new Map<string, any[]>()
+  for (const v of videos) {
+    for (const code of (v.type_codes ?? [])) {
+      if (!vidsOf.has(code)) vidsOf.set(code, [])
+      vidsOf.get(code)!.push({
+        kind: v.kind, label: v.order_label, title: v.title,
+        youtubeId: v.youtube_id, seconds: v.duration_seconds,
+      })
+    }
+  }
 
   const rows = types.map((t) => {
     const a = linked.get(t.code)
@@ -74,9 +93,11 @@ export async function GET(req: Request) {
       startSeconds: a?.start_seconds ?? null,
       endSeconds: a?.end_seconds ?? null,
       problemId: a?.problem_id ?? null,
+      videos: vidsOf.get(t.code) ?? [],
     }
   })
   const doneTypes = rows.filter((r) => r.conceptId || r.videoUrl)
+  const has = (r: any, kind: string) => r.videos.some((v: any) => v.kind === kind)
   return NextResponse.json({
     types: rows,
     concepts: concepts.map((c) => ({
@@ -88,6 +109,9 @@ export async function GET(req: Request) {
       linkedTypes: doneTypes.length,
       problems: rows.reduce((s, r) => s + r.problems, 0),
       linkedProblems: doneTypes.reduce((s, r) => s + r.problems, 0),
+      // 강의영상이 유형을 얼마나 덮었나 — 대표예제 영상을 어디까지 만들었는지 한눈에
+      conceptVideoTypes: rows.filter((r) => has(r, '개념')).length,
+      exampleVideoTypes: rows.filter((r) => has(r, '대표예제')).length,
     },
   })
 }

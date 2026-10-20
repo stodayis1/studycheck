@@ -27,6 +27,8 @@ type Row = {
   startSeconds: number | null
   endSeconds: number | null
   problemId: number | null
+  /** 이 유형을 덮는 수지쌤 강의영상들 (lesson_videos.type_codes 에서 온다) */
+  videos: { kind: string; label: string; title: string; youtubeId: string | null; seconds: number | null }[]
 }
 type Concept = { id: string; chapter: string | null; subChapter: string | null; name: string }
 
@@ -45,6 +47,7 @@ export default function TypeConceptsPage() {
   const [err, setErr] = useState('')
   const [q, setQ] = useState('')
   const [onlyEmpty, setOnlyEmpty] = useState(false)
+  const [onlyNoExample, setOnlyNoExample] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
 
   const load = async () => {
@@ -94,8 +97,9 @@ export default function TypeConceptsPage() {
     const k = q.trim()
     return rows.filter((r) =>
       (!onlyEmpty || !(r.conceptId || r.videoUrl)) &&
+      (!onlyNoExample || !(r.videos ?? []).some((v) => v.kind === '대표예제')) &&
       (!k || r.typeTitle.includes(k) || r.subTitle.includes(k) || r.code.includes(k)))
-  }, [rows, q, onlyEmpty])
+  }, [rows, q, onlyEmpty, onlyNoExample])
 
   // 소단원으로 묶어 보여 준다
   const groups = useMemo(() => {
@@ -138,6 +142,15 @@ export default function TypeConceptsPage() {
                 문항 <b style={{ color: GREEN }}>{summary.linkedProblems.toLocaleString()}</b>
                 <span className="text-gray-400"> / {summary.problems.toLocaleString()} 덮임</span>
               </span>
+              {/* 강의영상이 유형을 얼마나 덮었나 — 대표예제를 어디까지 만들었는지 (원장님 2026-10-20) */}
+              <span>
+                개념영상 <b style={{ color: NAVY }}>{summary.conceptVideoTypes ?? 0}</b>
+                <span className="text-gray-400"> / {summary.types} 유형</span>
+              </span>
+              <span>
+                대표예제 영상 <b style={{ color: '#B45309' }}>{summary.exampleVideoTypes ?? 0}</b>
+                <span className="text-gray-400"> / {summary.types} 유형</span>
+              </span>
               <span className="text-xs text-gray-400">
                 유형 하나를 걸면 그 유형의 문항이 전부 따라옵니다
               </span>
@@ -157,6 +170,10 @@ export default function TypeConceptsPage() {
           <label className="flex items-center gap-1.5 text-sm text-gray-600">
             <input type="checkbox" checked={onlyEmpty} onChange={(e) => setOnlyEmpty(e.target.checked)} />
             아직 안 건 것만
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
+            <input type="checkbox" checked={onlyNoExample} onChange={(e) => setOnlyNoExample(e.target.checked)} />
+            대표예제 영상 없는 것만
           </label>
         </div>
 
@@ -179,6 +196,33 @@ export default function TypeConceptsPage() {
                         {saving === r.code && <span className="text-xs text-gray-400">저장 중…</span>}
                         {(r.conceptId || r.videoUrl) && saving !== r.code && (
                           <span className="text-xs" style={{ color: GREEN }}>연결됨</span>
+                        )}
+                      </div>
+
+                      {/* ★ 이 유형을 덮는 강의영상. lesson_videos 를 그대로 읽어 보여 줄 뿐
+                          여기서 따로 적지 않는다 — 두 곳에 적으면 반드시 어긋난다.
+                          개념영상 한 편이 여러 유형을 덮고, 대표예제는 유형마다 따로 붙는다. */}
+                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                        {(r.videos ?? []).length === 0 ? (
+                          <span className="text-xs text-gray-300">강의영상 없음</span>
+                        ) : (r.videos ?? []).map((v, i) => {
+                          const c = v.kind === '대표예제' ? { bg: '#FEF3C7', fg: '#B45309' }
+                            : v.kind === '증명' ? { bg: '#EDE9FE', fg: '#6D28D9' }
+                            : { bg: '#DBEAFE', fg: '#1D4ED8' }
+                          const chip = (
+                            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                              style={{ background: c.bg, color: c.fg }}
+                              title={`${v.label} · ${v.title}`}>
+                              {v.kind} {v.label}
+                              {v.youtubeId ? '' : ' (안 올림)'}
+                            </span>
+                          )
+                          return v.youtubeId
+                            ? <a key={i} href={`https://youtu.be/${v.youtubeId}`} target="_blank" rel="noreferrer">{chip}</a>
+                            : <span key={i}>{chip}</span>
+                        })}
+                        {!(r.videos ?? []).some((v) => v.kind === '대표예제') && (r.videos ?? []).length > 0 && (
+                          <span className="text-[11px]" style={{ color: '#B45309' }}>· 대표예제 영상 아직</span>
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -221,7 +265,7 @@ const P = ({ children }: { children: React.ReactNode }) => (
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="대표개념 연결" subtitle="유형마다 개념과 개념 동영상을 걸어 둡니다" showBack />
+      <Header title="대표개념 연결" subtitle="유형마다 개념을 걸고, 걸린 강의영상(개념·증명·대표예제)을 함께 봅니다" showBack />
       <div className="mx-auto max-w-[1100px]">{children}</div>
     </div>
   )
