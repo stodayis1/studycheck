@@ -237,13 +237,15 @@ export async function GET(req: Request) {
       //   날짜로 거니 **다음 시험 때 저절로 다시 뜬다** — 시험지를 올리면서 마감일을 잡으시면
       //   그날까지 선생님들께 보이고, 지나면 다시 내려간다. 사람이 껐다 켤 일이 없다.
       //   · 마감이 안 잡힌 묶음은 예전처럼 보인다(안전한 쪽).
-      //   · 원장님께는 늘 보인다 — 남은 일을 보셔야 하니까. overdue 로 「마감 지남」을 알린다.
-      //   · 메뉴(시험지 분석)는 그대로다. 대시보드 맨 위에서만 내려간다.
+      //   · 메뉴(과제·평가 → 시험지 분석)는 그대로다. 대시보드 맨 위에서만 내려간다.
+      //
+      //   ★ 원장님께도 내린다. 처음엔 「남은 일을 보셔야 하니」 원장님께만 남겼는데,
+      //     「나만 보면 되니」는 **메뉴에서 보시겠다**는 뜻이었다 (원장님 2026-10-21
+      //     「아직 대시보드 상단에 뜨는데?」). 대시보드는 비운다.
       const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
-      const overdue = !!due && due < today
-      if (overdue && u?.role !== 'admin') return NextResponse.json({ show: false, papers: [] })
+      if (due && due < today) return NextResponse.json({ show: false, papers: [] })
 
-      return NextResponse.json({ show: true, due, overdue, papers })
+      return NextResponse.json({ show: true, due, papers })
     }
 
     // ?print=<paperId> → 수학의지혜 시험지 양식 인쇄 화면이 쓸 문항 그림 (번호 순서)
