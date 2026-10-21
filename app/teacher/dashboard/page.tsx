@@ -11,6 +11,7 @@ import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { fetchAllRows } from '@/lib/utils'
 import { ExamAnalysisNotice } from '@/components/exam-analysis/ExamAnalysisNotice'
+import { OpsTaskNotice } from '@/components/teacher/OpsTaskNotice'
 import { DailyFlow } from '@/components/teacher/DailyFlow'
 import { splitTeachers } from '@/lib/teachers'
 
@@ -416,6 +417,9 @@ export default function TeacherDashboardPage() {
             매뉴얼 안에만 있으면 새로 오신 선생님이 찾아 들어가지 않는다.
             매뉴얼과 **같은 내용**을 쓴다(components/teacher/DailyFlow). */}
         <DailyFlow withManualLink />
+
+        {/* 수학OPS 업무메모·전달사항 — 선생님들은 OPS 를 자주 안 열어서 여기에도 띄운다 */}
+        <OpsTaskNotice />
 
         {/* 기출분석 알림 — 중등 선생님에게만, 남은 일이 있을 때만 뜬다 */}
         <ExamAnalysisNotice />
