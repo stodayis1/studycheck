@@ -8,7 +8,7 @@ import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
-import { nameCallText, nameCallUrl, type NameCallKey, SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey } from '@/lib/nameCalls'
+import { nameCallText, nameCallUrl, type NameCallKey, SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, CALL_REPLIES, type CallResponse } from '@/lib/nameCalls'
 import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
 declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => void } }
@@ -16,6 +16,7 @@ declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => voi
 type Log = {
   id?: string; watch_seconds: number; covered_seconds: number; coverage_pct: number; played_seconds: number
   focus_lost_seconds: number; scene_seconds: Record<string, number>; watched_ranges: [number, number][]; completed_at: string | null
+  call_responses: CallResponse[]
 }
 
 // 0.1초짜리 무음 WAV — 「강의 시작」 누를 때 한 번 틀어서 소리 재생을 열어 둔다
@@ -70,8 +71,12 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   // 브라우저는 「이 페이지를 누른 뒤」에만 소리를 틀게 한다. 유튜브 화면 안을 누른 건 안 쳐 준다
   // → 「강의 시작」을 한 번 누르게 해서 그때 소리 상자를 열어 두고, 이름 부르기는 그 상자로 튼다 (아이폰도 이래야 난다)
   const [started, setStarted] = useState(false)
-  // 풀이 영상: 「먼저 풀어 봐」 다음에 영상을 멈춰 두고, 학생이 「다 풀었어요」를 누르면 이어서 튼다
-  const [waitTry, setWaitTry] = useState(false)
+  // 이름을 부르면 대답 버튼을 띄우고, 누를 때까지 영상은 멈춰 둔다 (원장님 2026-10-21)
+  // 풀이 영상의 「먼저 풀어 봐」도 여기서 「다 풀었어요」를 눌러야 풀이가 이어진다
+  type Ask = { tag: string; replies: string[]; askedAt: number; at: number; resume: () => void }
+  const [ask, setAsk] = useState<Ask | null>(null)
+  const askRef = useRef<Ask | null>(null)
+  const [nudge, setNudge] = useState(false)
   const isSol = lesson?.kind === '대표예제'
 
   // 1) 과제·강의·지난 기록 읽기
@@ -99,6 +104,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
         coverage_pct: Number(lg?.coverage_pct ?? 0), played_seconds: lg?.played_seconds ?? 0,
         focus_lost_seconds: lg?.focus_lost_seconds ?? 0, scene_seconds: lg?.scene_seconds ?? {},
         watched_ranges: lg?.watched_ranges ?? [], completed_at: lg?.completed_at ?? null,
+        call_responses: lg?.call_responses ?? [],
       }
       logRef.current = l; setLog(l)
     })()
@@ -169,7 +175,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       if (state === 1 && sc.length > 3 && justBefore(sc[2])) callSol('try', { hold: true })
       // 마지막 장면(정리) 직전 = 답이 다 나온 뒤 → 「답 맞았어?」
       if (state === 1 && sc.length > 3 && justBefore(sc[sc.length - 1])) callSol('answer')
-      if (state === 2 && !waitTry && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callSol('idle')
+      if (state === 2 && !askRef.current && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callSol('idle')
       return
     }
     if (state === 1) {
@@ -181,7 +187,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       if (check && justBefore(ex)) callName('answer')
     }
     // 멈춘 채 2분 넘게 화면만 켜 두면
-    if (state === 2 && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callName('idle')
+    if (state === 2 && !askRef.current && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callName('idle')
   }
 
   function callName(key: NameCallKey, again = false, after?: () => void) {
@@ -193,11 +199,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     if (wasPlaying) p.pauseVideo()                      // 설명과 안 겹치게 멈춘다
     const a = voice.current ?? (voice.current = new Audio())
     a.pause()
-    const done = () => {
-      setTimeout(() => setBubble(null), 900)
-      if (wasPlaying) p?.playVideo?.()                  // 말이 끝나면 이어서
-      after?.()
-    }
+    // 말이 끝나면 대답을 기다렸다가(버튼) 이어서 튼다
+    const done = () => openAsk(key, () => { if (wasPlaying) p?.playVideo?.(); after?.() })
     a.onplay = () => setBubble(nameCallText(key, studentName))
     a.onended = a.onerror = done
     a.src = nameCallUrl(studentId, key)
@@ -224,12 +227,12 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     const text = solCallText(key, n, studentName)
     const a = voice.current ?? (voice.current = new Audio())
     a.pause()
-    const done = () => {
-      setTimeout(() => setBubble(null), 900)
-      if (opt.hold) setWaitTry(true)
+    // 「먼저 풀어 봐」(hold)는 「다 풀었어요」를 누르면 「같이 맞춰 보자」 하고 풀이를 튼다
+    const done = () => openAsk(tag, () => {
+      if (opt.hold) callSol('back', { again: true, after: () => player.current?.playVideo?.() })
       else if (wasPlaying) p?.playVideo?.()
       opt.after?.()
-    }
+    })
     let part = 0
     a.onplay = () => setBubble(text)
     a.onerror = () => { if (part === 0) { part = 1; a.src = solLineUrl(key, n); a.play().catch(done) } else done() }
@@ -241,6 +244,28 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     a.play().catch(() => { setBubble(text); setTimeout(done, 2600) })
   }
 
+  function pushResp(r: CallResponse) {
+    const l = logRef.current; if (!l) return
+    l.call_responses = [...(l.call_responses ?? []), r]
+    dirty.current = true; saveRef.current(true)
+  }
+  function openAsk(tag: string, resume: () => void) {
+    const replies = CALL_REPLIES[tag]
+    if (!replies) { setTimeout(() => setBubble(null), 900); resume(); return }
+    const a: Ask = { tag, replies, askedAt: Date.now(), at: Math.round((player.current?.getCurrentTime?.() ?? 0) * 10) / 10, resume }
+    askRef.current = a; setAsk(a); setNudge(false)
+    setTimeout(() => {                                  // 15초 안에 안 누르면 무응답으로 한 번 적고 말풍선을 흔든다
+      if (askRef.current !== a) return
+      pushResp({ key: tag, at: a.at, answer: null, noanswer: true, ts: new Date().toISOString() }); setNudge(true)
+    }, 15000)
+  }
+  function reply(answer: string) {
+    const a = askRef.current; if (!a) return
+    pushResp({ key: a.tag, at: a.at, answer, ms: Date.now() - a.askedAt, ts: new Date().toISOString() })
+    askRef.current = null; setAsk(null); setNudge(false); setBubble(null); pausedSince.current = null
+    a.resume()
+  }
+
   // 장면 경계를 놓치지 않게 0.2초마다 본다 (쉼이 0.45초라 1초 간격이면 지나친다)
   useEffect(() => {
     const t = setInterval(() => {
@@ -249,7 +274,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       cue(p.getCurrentTime?.() ?? 0, p.getPlayerState())
     }, 200)
     return () => clearInterval(t)
-  }, [lesson, studentId, studentName, started, waitTry])
+  }, [lesson, studentId, studentName, started])
 
   // 다른 앱·탭에 8초 넘게 갔다 돌아오면 (재생 중이었을 때만, 최대 3번)
   useEffect(() => {
@@ -280,7 +305,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       covered_seconds: l.covered_seconds, coverage_pct: l.coverage_pct, played_seconds: Math.round(l.played_seconds),
       focus_lost_seconds: Math.round(l.focus_lost_seconds), scene_seconds: l.scene_seconds,
       watched_ranges: l.watched_ranges.map(([a, b]) => [Math.round(a * 10) / 10, Math.round(b * 10) / 10]),
-      completed_at: l.completed_at, last_active_at: nowIso,
+      completed_at: l.completed_at, last_active_at: nowIso, call_responses: l.call_responses ?? [],
     }
     const { data } = await supabase.from('video_watch_logs')
       .upsert({ ...row, ...(l.id ? {} : { started_at: nowIso }) }, { onConflict: 'student_id,session_id,video_url' })
@@ -342,16 +367,18 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
             <span className="text-[11px] text-white/70">소리를 켜고 들어 주세요</span>
           </button>
         )}
-        {waitTry && !bubble && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white px-6 text-center">
-            <p className="text-sm font-bold">✏️ 연습장에 먼저 풀어 보세요</p>
-            <p className="text-[11px] text-white/70">다 풀었으면 아래를 눌러 풀이를 이어서 봐요</p>
-            <button onClick={() => { setWaitTry(false); pausedSince.current = null; callSol('back', { after: () => player.current?.playVideo?.() }) }}
-              className="px-5 py-2.5 rounded-xl bg-[#E2703A] text-white text-sm font-bold">다 풀었어요 · 풀이 보기</button>
+        {ask && (
+          <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 p-3 bg-gradient-to-t from-black/70 to-transparent">
+            {ask.replies.map((r) => (
+              <button key={r} onClick={() => reply(r)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg ${r === '틀렸어요' ? 'bg-white text-gray-800' : 'bg-[#E2703A] text-white'} ${nudge ? 'animate-bounce' : ''}`}>
+                {r}
+              </button>
+            ))}
           </div>
         )}
         {bubble && (
-          <div className="absolute left-3 bottom-12 flex items-end gap-2 pointer-events-none">
+          <div className={`absolute left-3 ${ask ? 'bottom-20' : 'bottom-12'} flex items-end gap-2 pointer-events-none ${nudge ? 'animate-pulse' : ''}`}>
             <img src="/exam-blog/suji_uniform_fighting.jpg" alt="" className="w-11 h-11 rounded-full object-cover object-top border-2 border-white shadow" />
             <div className="bg-white/95 text-gray-900 text-sm font-bold px-3 py-2 rounded-2xl rounded-bl-sm shadow-lg max-w-[70vw]">{bubble}</div>
           </div>

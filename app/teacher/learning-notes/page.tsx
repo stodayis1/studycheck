@@ -18,6 +18,7 @@ import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { summarizeResponses } from '@/lib/nameCalls'
 import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
 interface Student {
@@ -1840,9 +1841,13 @@ ${e?.message ?? '연결 실패'}
                   const ytUrls = urls.filter((u) => youtubeId(u))
                   const avgPct = ytUrls.length ? Math.round(ytUrls.reduce((s, u) => s + Number(logOf(u)?.coverage_pct ?? 0), 0) / ytUrls.length) : null
                   const lostSec = logs.reduce((s, v) => s + (v.focus_lost_seconds ?? 0), 0)
+                  // 이름 부르기에 버튼으로 대답한 것 (영상 여러 개를 합쳐서)
+                  const rs = summarizeResponses(logs.flatMap((v: any) => v.call_responses ?? []))
                   const tip = urls.map((u, i) => {
                     const l = logOf(u); const v = lessonByYt[youtubeId(u) || '']
-                    return `${i + 1}. ${v ? lessonLabel(v) : u} — ${l ? `${Math.round(Number(l.coverage_pct ?? 0))}% 봄${l.completed_at ? ' (완료)' : ''}${l.focus_lost_seconds ? `, 딴짓 ${l.focus_lost_seconds}초` : ''}` : '안 봄'}`
+                    const r = summarizeResponses((l as any)?.call_responses)
+                    const rTxt = r.asked ? `, 대답 ${r.answered}/${r.asked}${r.avgSec != null ? ` (평균 ${r.avgSec}초)` : ''}${r.noanswer ? ` 무응답 ${r.noanswer}` : ''}${r.selfGraded ? `, 스스로 맞힘 ${r.selfRight}/${r.selfGraded}` : ''}` : ''
+                    return `${i + 1}. ${v ? lessonLabel(v) : u} — ${l ? `${Math.round(Number(l.coverage_pct ?? 0))}% 봄${l.completed_at ? ' (완료)' : ''}${l.focus_lost_seconds ? `, 딴짓 ${l.focus_lost_seconds}초` : ''}${rTxt}` : '안 봄'}`
                   }).join(String.fromCharCode(10))
                   return (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" title={tip}
@@ -1854,6 +1859,8 @@ ${e?.message ?? '연결 실패'}
                       영상 {watchedCount}/{urls.length}개{avgPct != null ? ` · ${avgPct}% 봄` : timeStr}
                       {watchedCount === urls.length ? ' 완료' : touched > 0 ? ' 일부시청' : ' 미시청'}
                       {lostSec >= 60 ? ` · 딴짓 ${Math.round(lostSec / 60)}분` : ''}
+                      {rs.asked ? ` · 대답 ${rs.answered}/${rs.asked}` : ''}
+                      {rs.selfGraded ? ` · 맞힘 ${rs.selfRight}/${rs.selfGraded}` : ''}
                     </span>
                   )
                 })()}
