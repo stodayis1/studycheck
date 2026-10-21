@@ -4,7 +4,7 @@
 
 · 개념: 연두 파스텔(#DDF5E6). 영상 폴더의 NN_개념_….구간.json 마다, GPT 썸네일(큰 파일)이 이미 있으면 건너뛴다.
 · 증명(--proofs): 한 단계 진한 초록 바탕(원장님 2026-10-20) — 개념 썸네일과 목록에서 구분된다.
-· 풀이(--solutions, <영상 폴더>/풀이영상): 민트 초록 바탕 · 배지 「예제 01」 · 수지 자세는 편마다 돌아가며.
+· 풀이(--solutions, <영상 폴더>/풀이영상): 민트 초록 바탕 · 배지 「필수예제 01」 + 「개념+유형 9쪽」 · 수지 자세는 편마다 돌아가며.
 · 수지 자세는 대본의 thumb_pose (A 가리키기 · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅). 증명은 D.
 · 크기는 GPT 썸네일과 같은 1672×941.
 """
@@ -87,7 +87,7 @@ def split_title(d, title, f, width):
     return None
 
 
-def make(kind, no_label, chapter, title, bubble, pose):
+def make(kind, no_label, chapter, title, bubble, pose, pill=None):
     T = THEME[kind]
     im = Image.new('RGB', (W, H), T['bg']); d = ImageDraw.Draw(im)
     for x in range(0, W, 46): d.line([(x, 0), (x, H)], fill=T['grid'], width=2)
@@ -96,7 +96,7 @@ def make(kind, no_label, chapter, title, bubble, pose):
     bf = malgun(64); bw = d.textlength(no_label, font=bf) + 56
     d.rounded_rectangle((70, 60, 70 + bw, 160), 26, fill=T['badge'])
     d.text((70 + bw / 2, 110), no_label, font=bf, fill=(255, 255, 255), anchor='mm')
-    lf = malgun(46); lab = f'공통수학2 · {chapter}'; lw = d.textlength(lab, font=lf)
+    lf = malgun(46); lab = pill or f'공통수학2 · {chapter}'; lw = d.textlength(lab, font=lf)
     d.rounded_rectangle((70 + bw + 22, 72, 70 + bw + 22 + lw + 52, 148), 38, fill=T['pill'])
     d.text((70 + bw + 48, 110), lab, font=lf, fill=T['label'], anchor='lm')
     # 수지 자리를 먼저 잡는다 (지시봉처럼 옆으로 뻗은 자세도 제목을 덮지 않게)
@@ -149,8 +149,9 @@ def main():
             if os.path.exists(base + '.jpg') and not force: continue
             G = json.load(open(g, encoding='utf-8'))
             bub = next((st['bubble'] for st in G['steps'][2:] if st.get('lines')), G['steps'][-1]['bubble'])
-            make('solution', G['label'].replace('필수예제', '예제'), '문제풀이', G['title'], bub,
-                 'ABCD'[k % 4]).save(base + '.jpg', quality=93)
+            # 원장님 2026-10-21: 썸네일에 교재 쪽과 문제 번호가 꼭 있어야 한다 → 배지 「필수예제 05」, 옆에 「개념+유형 60쪽」
+            make('solution', G['label'], '', G['title'], bub, 'ABCD'[k % 4],
+                 pill=f"개념+유형 {G['book_page']}쪽").save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
         print(len(made), '장'); [print(' ', m) for m in made]; return
     only = set(a[a.index('--only') + 1].split(',')) if '--only' in a else None
