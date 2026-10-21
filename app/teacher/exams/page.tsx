@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { compressRangeLabels } from '@/lib/utils'
+import { compressRangeLabels, fetchAllRows } from '@/lib/utils'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
@@ -176,12 +176,18 @@ export default function TeacherExamsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: eData }, { data: cData }, { data: tbData }] = await Promise.all([
+    // ★ Supabase 는 한 번에 **1000행만** 준다. exams 가 1,355행이 되면서 오래된 355행이
+    //   조용히 잘렸고, 그래서 6~7월 학교시험이 없는 셈이 됐다 — 지난 점수가 없으니
+    //   등락(▲▼)도 안 떴다 (원장님 2026-10-21 「지난 점수와의 등락이 보여졌거든 근데 안보이네」).
+    //   기능을 뺀 적이 없다. **데이터가 늘어서** 생긴 일이라 더 조용했다.
+    //   concepts(876) · student_textbooks(860) 도 곧 1000을 넘는다. 같이 끝까지 읽는다.
+    const [sRes, eData, cData, tbData] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
-      supabase.from('exams').select('*').order('exam_date', { ascending: false }),
-      supabase.from('concepts').select('*').order('grade').order('concept_order'),
-      supabase.from('student_textbooks').select('*'),
+      fetchAllRows<any>(() => supabase.from('exams').select('*').order('exam_date', { ascending: false }).order('id')),
+      fetchAllRows<any>(() => supabase.from('concepts').select('*').order('grade').order('concept_order').order('id')),
+      fetchAllRows<any>(() => supabase.from('student_textbooks').select('*').order('id')),
     ])
+    const sData = sRes.data
     if (sData) setStudents(sData)
     if (eData) setExams(eData)
     if (cData) setConcepts(cData)
@@ -766,9 +772,15 @@ export default function TeacherExamsPage() {
               const isExpanded = selectedStudent?.id === student.id
               const lastExam = sExams[sExams.length - 1]
               const firstExam = sExams[0]
-              const trend = sExams.length >= 2
-                ? pct(sExams[sExams.length-1].score!, sExams[sExams.length-1].total_score)
-                  - pct(sExams[0].score!, sExams[0].total_score)
+              // ★ 「지난 점수와의 등락」은 **직전** 기록과 견주는 것이다.
+              //   예전엔 맨 처음 기록과 견줬다 — 기록이 셋 이상이면 엉뚱한 수가 나왔다.
+              //   (강동연 코어테스트 8/12 80 → 8/28 95 → 10/16 90 이면
+              //    첫 기록 대비 ▲10 이지만, 실제로는 직전보다 ▼5 다)
+              //   점수가 비어 있는 기록은 건너뛰고 그 앞의 것과 견준다.
+              const scored = sExams.filter((e) => e.score != null && e.total_score)
+              const trend = scored.length >= 2
+                ? pct(scored[scored.length - 1].score!, scored[scored.length - 1].total_score)
+                  - pct(scored[scored.length - 2].score!, scored[scored.length - 2].total_score)
                 : null
 
               // 입학테스트: 이미 있는 학생은 표시 다르게
