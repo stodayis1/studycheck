@@ -63,3 +63,28 @@ export const nameToneUrl = (studentId: string, tone: NameTone) => `${base2()}/na
 export const solLineUrl = (key: SolCallKey, n: number) => `${base2()}/line/${key}/${n}.mp3`
 export const solCallText = (key: SolCallKey, n: number, fullName: string) =>
   `${vocative(callName(fullName))}, ${SOL_LINES[key].lines[n]}`
+
+// ── 이름을 부르면 학생이 버튼으로 대답한다 (원장님 2026-10-21) ─────────────────────
+// 누를 때까지 영상은 멈춰 있다. 대답은 video_watch_logs.call_responses 에 쌓인다 (응답 시간·무응답·스스로 맞혔는지).
+// 키: 개념·증명 영상은 NameCallKey 그대로, 풀이 영상은 'sol:' + SolCallKey. 여기 없는 키(sol:back)는 대답 없이 지나간다.
+export const CALL_REPLIES: Record<string, string[]> = {
+  start: ['네! 준비됐어요'], important: ['네, 볼게요'], check: ['다 풀었어요'], answer: ['맞았어요', '틀렸어요'],
+  proof: ['네, 펼쳤어요'], away: ['집중할게요!'], idle: ['집중할게요!'], end: ['감사합니다!'],
+  'sol:start': ['네! 준비됐어요'], 'sol:try': ['다 풀었어요'], 'sol:answer': ['맞았어요', '틀렸어요'],
+  'sol:away': ['집중할게요!'], 'sol:idle': ['집중할게요!'], 'sol:end': ['감사합니다!'],
+}
+export type CallResponse = { key: string; at: number; answer: string | null; ms?: number; noanswer?: boolean; ts: string }
+
+/** 선생님 화면 요약: 대답 몇 번 중 몇 번, 평균 응답 초, 무응답, 스스로 맞힘 */
+export function summarizeResponses(rs: CallResponse[] | null | undefined) {
+  const list = rs ?? []
+  const answered = list.filter((r) => r.answer)
+  const asked = new Set(list.map((r) => r.key + '@' + r.at)).size
+  const ms = answered.map((r) => r.ms ?? 0).filter((x) => x > 0)
+  const graded = answered.filter((r) => r.key.endsWith('answer'))
+  return {
+    asked, answered: answered.length, noanswer: list.filter((r) => r.noanswer).length,
+    avgSec: ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length / 100) / 10 : null,
+    selfRight: graded.filter((r) => r.answer === '맞았어요').length, selfGraded: graded.length,
+  }
+}
