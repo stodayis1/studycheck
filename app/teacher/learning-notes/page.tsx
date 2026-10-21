@@ -1743,6 +1743,13 @@ ${e?.message ?? '연결 실패'}
         note: draftNote(null) as any,
         feedbacks: dayFbs as any,
         makeup: null,
+        // 영상 과제 — 화면이 들고 있는 강의 목록(lessonByYt)으로 증명 편수까지 센다.
+        //   발송 쪽은 lesson_videos 를 직접 읽는다. 두 곳이 같은 수를 내야 한다.
+        videos: (() => {
+          const urls = hwVideoUrls.map((u) => u.trim()).filter((u) => /^https?:\/\//.test(u))
+          const proof = urls.filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명').length
+          return { total: urls.length, proof }
+        })(),
         noNoteTemplate: !!briefMode?.noNoteTemplate,
         noNoteTemplateV3: !!briefMode?.noNoteTemplateV3,
         useV2: !!briefMode?.useV2,

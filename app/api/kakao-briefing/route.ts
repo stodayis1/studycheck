@@ -133,6 +133,25 @@ async function run(opts: {
 
   const studentBy = new Map((students ?? []).map((s: any) => [s.id, s]))
 
+  // ★ 영상 과제를 브리핑의 「다음 시간까지 과제」에 적으려면 **몇 편이고 그중 증명이 몇 편인지**를
+  //   알아야 한다. 어떤 영상이 증명인지는 lesson_videos 만 안다 — 그날치를 한 번에 읽어 둔다
+  //   (학생마다 부르면 60번 왕복한다).
+  const ytId = (u: string) => u.trim().match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1] ?? null
+  const allYt = [...new Set(sessions.flatMap((x: any) =>
+    String(x.video_url ?? '').split(/\r?\n/).map((u: string) => ytId(u)).filter(Boolean)))] as string[]
+  const kindOf = new Map<string, string>()
+  if (allYt.length) {
+    const { data: lv } = await db.from('lesson_videos').select('youtube_id, kind').in('youtube_id', allYt)
+    for (const v of (lv ?? []) as any[]) kindOf.set(v.youtube_id, v.kind)
+  }
+  const videosOf = (x: any) => {
+    // 주소가 아닌 글이 들어 있는 옛 기록은 세지 않는다(「도형의 성질 Lv. 3.5」 2026-07-24).
+    const urls = String(x.video_url ?? '').split(/\r?\n/)
+      .map((u: string) => u.trim()).filter((u: string) => /^https?:\/\//.test(u))
+    const proof = urls.filter((u) => kindOf.get(ytId(u) ?? '') === '증명').length
+    return { total: urls.length, proof }
+  }
+
   // ★ 결석한 날 학부모가 가장 알고 싶은 것은 「보강이 언제인가」다.
   //   보강은 OPS 가 들고 있다. 학생 전체 것을 **한 번에** 읽어 둔다
   //   (학생마다 부르면 60번 왕복한다).
@@ -182,6 +201,7 @@ async function run(opts: {
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({
       studentName: student.name, studentGrade: student.grade, session: ses, note, feedbacks: dayFbs,
+      videos: videosOf(ses),
       makeup: makeupFor(student),
       // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
       // ★ 「알림장 없는 판」은 **쓰는 판에 맞는 코드가 있을 때만** 쓴다.

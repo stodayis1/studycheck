@@ -211,6 +211,18 @@ export interface BriefingSession {
   hw_textbook_name?: string | null
   hw_textbook_page?: string | null
   hw_worksheet_range?: string | null
+  /** 그날 내준 영상 과제 (줄바꿈으로 이어 붙인 유튜브 주소) */
+  video_url?: string | null
+}
+
+/**
+ * 영상 과제 안내. 몇 편인지와 **증명 강의가 섞였는지**를 부르는 쪽이 알려 준다
+ * (이 함수는 DB 를 못 본다 — 어떤 영상이 증명인지는 lesson_videos 가 안다).
+ */
+export interface BriefingVideos {
+  total: number
+  /** 그중 증명 강의 편수 — 하나라도 있으면 「증명 올리기」까지 안내한다 */
+  proof: number
 }
 
 export interface BriefingNote {
@@ -243,7 +255,7 @@ export function fbImages(aiMessage?: string | null): string[] {
 }
 
 /** 과제 배부 — 「교재 · 페이지」 조각을 교재 이름과 짝지어 읽는다. app/parent/dashboard 와 같은 규칙. */
-export function hwLines(ses: BriefingSession): string[] {
+export function hwLines(ses: BriefingSession, videos?: BriefingVideos): string[] {
   const pageParts = (ses.hw_textbook_page ?? '').split(' / ')
   const out: string[] = []
   for (const raw of (ses.hw_textbook_name ?? '').split(',')) {
@@ -259,6 +271,18 @@ export function hwLines(ses: BriefingSession): string[] {
   // 교재를 안 고르고 메모만 남긴 과제는 "📝 ..." 조각으로 들어 있다.
   const memo = pageParts.find((p) => p.trim().startsWith('📝 '))
   if (memo) out.push(`· ${memo.slice(2).trim()}`)
+
+  // ★ 영상 과제도 **과제다** (원장님 2026-10-21
+  //   「영상과제가 나가면 과제부분에 영상과제가 추가되어야 하거든… 영상과제 x개 시청 후
+  //     증명 올리기 뭐 이런식으로」).
+  //   예전에는 링크만 학생 앱으로 나가고 브리핑의 「다음 시간까지 과제」에는 안 적혔다 —
+  //   학부모님은 영상 과제가 있는 줄도 모르셨다.
+  const n = videos?.total ?? 0
+  if (n > 0) {
+    out.push(videos!.proof > 0
+      ? `· 영상과제 ${n}개 시청 후 증명 올리기`
+      : `· 영상과제 ${n}개 시청`)
+  }
   return out
 }
 
@@ -345,6 +369,8 @@ export function buildBriefing(args: {
   useV3?: boolean
   /** V3 중 알림장 없는 판까지 심사를 통과했는가 (V3 로 갈 때의 noNoteTemplate). */
   noNoteTemplateV3?: boolean
+  /** 그날 영상 과제 (편수·증명 편수). 부르는 쪽이 lesson_videos 를 보고 넣는다. */
+  videos?: BriefingVideos
 }): BriefingResult {
   const { studentName, session: ses, note } = args
   // ★ 결석한 날은 진도도 과제도 **안 적는 것이 정상**이다(10/7 결석 17명 전원 비어 있었다).
@@ -386,7 +412,7 @@ export function buildBriefing(args: {
         .filter((t, i, arr) => t && arr.indexOf(t) === i)
         .join(' / ') || '기록 없음')
 
-  const hw = hwLines(ses)
+  const hw = hwLines(ses, args.videos)
   const 과제배부 = 결석
     ? '보강 때 함께 안내드립니다.'
     : (hw.length > 0 ? hw.join('\n') : '오늘은 따로 낸 과제가 없어요.')

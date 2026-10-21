@@ -15,6 +15,26 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토']
 /** 이 날짜 앞의 기록은 학부모 화면에 내보내지 않는다 (원장님 지시 2026-10-08). */
 export const DATA_FROM = '2026-08-01'
 
+const ytId = (u: string) => u.trim().match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1] ?? null
+
+/**
+ * 그날 영상 과제 편수와 그중 증명 편수.
+ * ★ 알림장 화면의 과제 칸도 카톡 본문과 **같은 글**이어야 한다 — 그래서 여기서도 센다
+ *   (한 학생 것이라 질의 하나로 끝난다).
+ */
+async function videosOf(db: SupabaseClient, ses: any) {
+  // ★ 주소가 아닌 글이 들어 있는 옛 기록이 있다(「도형의 성질 Lv. 3.5」 2026-07-24).
+  //   그런 글까지 「영상과제 1개」로 세면 거짓말이 된다 — 주소만 센다.
+  const urls = String(ses?.video_url ?? '').split(/\r?\n/)
+    .map((u: string) => u.trim()).filter((u: string) => /^https?:\/\//.test(u))
+  if (!urls.length) return { total: 0, proof: 0 }
+  const ids = [...new Set(urls.map(ytId).filter(Boolean))] as string[]
+  if (!ids.length) return { total: urls.length, proof: 0 }
+  const { data } = await db.from('lesson_videos').select('youtube_id, kind').in('youtube_id', ids)
+  const proofIds = new Set((data ?? []).filter((v: any) => v.kind === '증명').map((v: any) => v.youtube_id))
+  return { total: urls.length, proof: urls.filter((u) => proofIds.has(ytId(u) ?? '')).length }
+}
+
 export async function snapshots(db: SupabaseClient, student: any, date: string, ses: any, note: any, fbs: any[]) {
   const sixMonthsAgo = new Date(Date.parse(date) - 183 * 86400_000).toISOString().slice(0, 10)
   // 월별 탭으로 넘겨 보므로 출결도 학습지와 같은 6개월치를 담는다.
@@ -188,7 +208,7 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     progress: [ses.progress_content, ses.today_textbook_name, ses.today_chapter]
       .map((t: any) => (t ?? '').trim())
       .filter((t: string, i: number, arr: string[]) => t && arr.indexOf(t) === i),
-    homework: hwLines(ses),
+    homework: hwLines(ses, await videosOf(db, ses)),
     attendance: note?.attendance ?? null,
     achievementPct: note?.achievement_pct ?? null,
     memo: note?.memo ?? null,
