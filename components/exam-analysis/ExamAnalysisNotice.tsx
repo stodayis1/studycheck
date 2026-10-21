@@ -3,6 +3,8 @@
 // 올라온 시험지마다 무엇이 남았는지(변별 · 손풀이 · 총평 · 다음 시험 대비) 한 줄씩 보여 준다.
 // 정답은 선생님 일이 아니다 — 원장이 한글 파일에 넣어 올린다 (루트 · 분수를 앱에 칠 수 없어서. 2026-10-08)
 // 전부 「완료」로 체크되면 사라진다.
+// ★ 마감이 지나면 **선생님 화면에서는 내려간다**(원장님께만 남는다) — 2026-10-20.
+//   메뉴(시험지 분석)로는 그대로 들어가신다. 다음 시험에 마감일을 새로 잡으면 저절로 다시 뜬다.
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/apiFetch'
@@ -38,7 +40,13 @@ export function ExamAnalysisNotice() {
       <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: GREEN, color: '#fff' }}>
         <i className="ti ti-file-analytics" style={{ fontSize: 15 }} />
         <span className="text-sm font-bold">기출분석 — 노션에서 스터디체크로 옮겼습니다</span>
-        {data.due && <span className="ml-auto text-[11px] font-semibold opacity-90">마감 {data.due.slice(5).replace('-', '/')}</span>}
+        {data.due && (
+          <span className="ml-auto text-[11px] font-semibold opacity-90">
+            마감 {data.due.slice(5).replace('-', '/')}
+            {/* 마감이 지난 뒤에는 원장님께만 보인다 — 그 사실을 적어 둔다 */}
+            {data.overdue && <span className="ml-1.5 rounded-full px-1.5 py-0.5" style={{ background: '#fff', color: GREEN }}>지남 · 원장님만</span>}
+          </span>
+        )}
       </div>
       <div className="px-4 py-3">
         <p className="text-xs text-gray-600 leading-relaxed">
