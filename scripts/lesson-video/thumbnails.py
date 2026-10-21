@@ -4,7 +4,7 @@
 
 · 개념: 연두 파스텔(#DDF5E6). 영상 폴더의 NN_개념_….구간.json 마다, GPT 썸네일(큰 파일)이 이미 있으면 건너뛴다.
 · 증명(--proofs): 한 단계 진한 초록 바탕(원장님 2026-10-20) — 개념 썸네일과 목록에서 구분된다.
-· 풀이(--solutions, <영상 폴더>/풀이영상): 민트 초록 바탕 · 배지 「필수예제 01」 + 「개념+유형 9쪽」 · 수지 자세는 편마다 돌아가며.
+· 풀이(--solutions, <영상 폴더>/풀이영상): 증명보다 한 단계 더 진한 초록 바탕 · 배지 「필수예제 01」 + 「개념+유형 9쪽」 · 수지 자세는 편마다 돌아가며.
 · 수지 자세는 대본의 thumb_pose (A 가리키기 · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅). 증명은 D.
 · 크기는 GPT 썸네일과 같은 1672×941.
 """
@@ -23,8 +23,9 @@ THEME = {
                     label=(24, 52, 34), title=(17, 33, 52)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
-    'solution': dict(bg=(204, 236, 228), grid=(188, 224, 213), badge=(18, 80, 70), pill=(176, 222, 208),
-                    label=(16, 52, 46), title=(12, 28, 44)),
+    # 풀이: 개념(연한 연두) → 증명(진한 초록) 보다 한 단계 더 진한 초록 (원장님 2026-10-21)
+    'solution': dict(bg=(84, 158, 110), grid=(74, 146, 98), badge=(10, 46, 26), pill=(205, 236, 214),
+                    label=(12, 40, 24), title=(8, 24, 16), foot=(226, 242, 230)),
 }
 
 
@@ -131,7 +132,7 @@ def make(kind, no_label, chapter, title, bubble, pose, pill=None):
     tx = 60 + kw + 110
     d.polygon([(tx - 70, by + 18), (tx + 40, by - 18), (tx - 20, by + 60)], fill=(255, 255, 255))
     d.text((115, by + 55), bubble, font=kf, fill=(20, 24, 30), anchor='lm')
-    d.text((70, 880), '수학의지혜 수지쌤', font=malgun(34), fill=(70, 90, 80), anchor='lm')
+    d.text((70, 880), '수학의지혜 수지쌤', font=malgun(34), fill=T.get('foot', (70, 90, 80)), anchor='lm')
     # 수지
     shadow = sj.split()[-1].point(lambda v: v * 0.22).filter(ImageFilter.GaussianBlur(14))
     im.paste((40, 60, 50), (x + 14, H - th + 18), shadow)
