@@ -63,6 +63,13 @@ do {
   for (const it of j.items) { const m = it.snippet.title.match(/공통수학2\]\s*(\d{2}-풀이\d{2})\./); if (m) idBy[m[1]] = it.contentDetails.videoId }
   tok = j.nextPageToken
 } while (tok)
+// 재생목록이 일부만 돌려줄 때가 있다(2026-10-21: 125편 → 30편) → 강의 목록(lesson_videos)의 youtube_id 로 채운다
+{
+  const { createClient } = await import('@supabase/supabase-js')
+  const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  const { data } = await db.from('lesson_videos').select('order_label, youtube_id').eq('kind', '대표예제').not('youtube_id', 'is', null)
+  for (const r of data || []) if (!idBy[r.order_label]) idBy[r.order_label] = r.youtube_id
+}
 
 const jobs = fs.readdirSync(dir).filter((f) => /^\d\d_풀이\d\d_.*\.jpg$/.test(f)).map((f) => {
   const [, a, b] = f.match(/^(\d\d)_풀이(\d\d)_/); return { key: `${a}-풀이${b}`, file: path.join(dir, f) }
@@ -75,16 +82,19 @@ for (const j of jobs) {
   if (dry) { console.log('dry', j.key, vid); continue }
   const body = fs.readFileSync(j.file)
   let done = false, last = ''
-  for (let i = 0; i < 6 && !done; i++) {
+  for (let i = 0; i < 3 && !done; i++) {
     const r = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${vid}&uploadType=media`, {
       method: 'POST', headers: { ...H, 'Content-Type': 'image/jpeg' }, body })
     if (r.ok) { ok++; done = true; break }
     last = `${r.status} ${(await r.text()).slice(0, 160)}`
-    if (r.status === 429 || r.status >= 500) { await sleep(5000 * (i + 1)); continue }
+    if (r.status === 403 && last.includes('quota')) { fail.push(`${j.key} 하루 사용량 초과`); break }
+    // 너무 자주 보내면 429 — 실패한 요청도 할당량(50)을 먹으니 길게 쉬고 몇 번만 다시 (2026-10-21 이걸로 하루치를 다 썼다)
+    if (r.status === 429 || r.status >= 500) { await sleep(60000); if (i >= 1) break; continue }
     break
   }
   if (!done) fail.push(`${j.key} ${last}`)          // 여러 번 막힌 것도 실패로 센다
-  await sleep(1500)                                 // 한꺼번에 몰아 보내면 막힌다
+  if (fail.at(-1)?.includes('하루 사용량')) break     // 오늘은 더 해도 안 된다
+  await sleep(10000)                                // 한꺼번에 몰아 보내면 막힌다 — 10초 간격
   if (ok % 20 === 0) console.log(`  ${ok}장…`)
 }
 console.log(`\n바꿈 ${ok}장 · 재생목록에 없음 ${miss.length}${miss.length ? ' (' + miss.join(', ') + ')' : ''} · 실패 ${fail.length}`)
