@@ -100,6 +100,10 @@ export default function TeacherExamsPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<ExamType>('입학테스트')
   const [gradeGroup, setGradeGroup] = useState('전체')
+  // 학교급 안에서 **학년 하나만** 보고 싶을 때 (원장님 2026-10-21
+  //   「전체 초등 중등 고등으로 나뉘어져 있긴한데 그 안에서도 학년별로 볼수있도록」).
+  //   학교급을 바꾸면 비운다 — 「중등 + 초3」 같은 빈 조합이 남지 않게.
+  const [gradeOne, setGradeOne] = useState('')
   const [searchText, setSearchText] = useState('')
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [concepts, setConcepts] = useState<any[]>([])
@@ -250,10 +254,11 @@ export default function TeacherExamsPage() {
   }, [showCoreModal, coreGrade, coreTitle])
 
   const filteredStudents = myStudents.filter((s) => {
-    const matchGrade = gradeGroup === '전체' || (gradeGroup === '초등' && s.grade.includes('초')) ||
+    const matchGroup = gradeGroup === '전체' || (gradeGroup === '초등' && s.grade.includes('초')) ||
       (gradeGroup === '중등' && s.grade.includes('중')) || (gradeGroup === '고등' && s.grade.includes('고'))
+    const matchOne = !gradeOne || s.grade === gradeOne
     const matchSearch = !searchText || s.name.includes(searchText) || s.school?.includes(searchText)
-    return matchGrade && matchSearch
+    return matchGroup && matchOne && matchSearch
   })
 
   // ── 초등 단원평가 현황판 ────────────────────────────────────────────────
@@ -571,7 +576,7 @@ export default function TeacherExamsPage() {
         {/* 필터 */}
         <div className="flex gap-2 flex-wrap">
           {['전체','초등','중등','고등'].map((g) => (
-            <button key={g} onClick={() => setGradeGroup(g)}
+            <button key={g} onClick={() => { setGradeGroup(g); setGradeOne('') }}
               className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
               style={gradeGroup === g
                 ? { background: '#9FE1CB', color: '#085041', borderColor: '#9FE1CB' }
@@ -584,6 +589,41 @@ export default function TeacherExamsPage() {
             className="flex-1 min-w-32 px-3 py-1.5 rounded-xl border border-gray-200 text-xs focus:outline-none"
             style={{ background: 'white' }} />
         </div>
+
+        {/* 학년 고르기 — 지금 보이는 학생들의 학년만 띄운다.
+            없는 학년을 띄워 봐야 눌러도 빈 화면이라, 있는 것만 교육과정 순서로 보여 준다. */}
+        {(() => {
+          const ORDER = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+          const 있는학년 = [...new Set(myStudents
+            .filter((s) => gradeGroup === '전체'
+              || (gradeGroup === '초등' && s.grade.includes('초'))
+              || (gradeGroup === '중등' && s.grade.includes('중'))
+              || (gradeGroup === '고등' && s.grade.includes('고')))
+            .map((s) => s.grade))]
+            .sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b))
+          if (있는학년.length <= 1) return null
+          const 수 = (g: string) => myStudents.filter((s) => s.grade === g).length
+          return (
+            <div className="flex gap-1.5 flex-wrap">
+              <button onClick={() => setGradeOne('')}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all"
+                style={!gradeOne
+                  ? { background: '#085041', color: 'white', borderColor: '#085041' }
+                  : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                학년 전체
+              </button>
+              {있는학년.map((g) => (
+                <button key={g} onClick={() => setGradeOne(gradeOne === g ? '' : g)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all"
+                  style={gradeOne === g
+                    ? { background: '#085041', color: 'white', borderColor: '#085041' }
+                    : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                  {g} <span style={{ opacity: 0.55 }}>{수(g)}</span>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* 입학테스트 안내 */}
         {tab === '입학테스트' && (
