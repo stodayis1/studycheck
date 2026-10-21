@@ -48,7 +48,8 @@ def main():
             '',
             '#공통수학2 #문제풀이 #고1수학 #수학의지혜',
         ])
-        open(out, 'w', encoding='utf-8').write(f'제목:\n{title}\n\n설명:\n{desc}\n'); made += 1
+        fw = lambda t: t.replace('<', '＜').replace('>', '＞')     # 유튜브는 제목·설명에 < > 를 안 받는다
+        open(out, 'w', encoding='utf-8').write(f'제목:\n{fw(title)}\n\n설명:\n{fw(desc)}\n'); made += 1
     print(made, '편')
 
 
