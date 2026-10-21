@@ -1,11 +1,16 @@
 'use client'
 
-// 대표개념 연결 — 유형마다 '이건 무슨 개념인지'와 개념 동영상을 걸어 둔다 (원장 전용)
+// 대표개념 연결 — 유형마다 걸린 강의영상을 **개념 → 증명 → 대표예제** 순서로 본다 (원장 전용)
+//
+// ★ 고르는 화면이 아니라 **보는 화면**이다 (원장님 2026-10-21
+//   「여기서 내가 대표개념을 고를 필요가 있나? 정해져있는건데?
+//     그냥 대표개념-증명(있을경우)-관련 필수예제 이렇게 목록이 띄워져 있는게 낫지」).
+//   유형마다 어떤 개념·증명·대표예제인지는 강의영상(lesson_videos.type_codes)이 이미 들고 있다.
+//   같은 것을 손으로 또 고르면 두 벌이 되고, 두 벌은 반드시 어긋난다.
 //
 // 왜 유형에 거나
 //   문항 27,359개(99.9%)가 유형코드를 갖고 있다. 유형에 한 번 걸면 그 유형의 문항이
 //   전부 따라온다. 문항마다 거는 건 사람이 할 수 있는 양이 아니다.
-//   특정 문항만 다르게 하고 싶으면 나중에 그 문항만 따로 덮어쓰면 된다.
 
 import { useEffect, useMemo, useState } from 'react'
 import { Header } from '@/components/common/Header'
@@ -30,7 +35,6 @@ type Row = {
   /** 이 유형을 덮는 수지쌤 강의영상들 (lesson_videos.type_codes 에서 온다) */
   videos: { kind: string; label: string; title: string; youtubeId: string | null; seconds: number | null }[]
 }
-type Concept = { id: string; chapter: string | null; subChapter: string | null; name: string }
 
 const COURSES: [string, number][] = [
   ['중1', 1], ['중1', 2], ['중2', 1], ['중2', 2], ['중3', 1], ['중3', 2],
@@ -41,14 +45,12 @@ export default function TypeConceptsPage() {
   const { isAdmin, loading: authLoading } = useAuth()
   const [course, setCourse] = useState<[string, number]>(['중1', 1])
   const [rows, setRows] = useState<Row[]>([])
-  const [concepts, setConcepts] = useState<Concept[]>([])
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [q, setQ] = useState('')
   const [onlyEmpty, setOnlyEmpty] = useState(false)
   const [onlyNoExample, setOnlyNoExample] = useState(false)
-  const [saving, setSaving] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true); setErr('')
@@ -56,47 +58,16 @@ export default function TypeConceptsPage() {
       const r = await apiFetch(`/api/type-concepts?grade=${encodeURIComponent(course[0])}&semester=${course[1]}`)
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '불러오지 못했습니다.')
-      setRows(j.types ?? []); setConcepts(j.concepts ?? []); setSummary(j.summary ?? null)
+      setRows(j.types ?? []); setSummary(j.summary ?? null)
     } catch (e: any) { setErr(e.message) }
     setLoading(false)
   }
   useEffect(() => { load() }, [course[0], course[1]])
 
-  const save = async (code: string, patch: Partial<Row>) => {
-    const cur = rows.find((r) => r.code === code)
-    if (!cur) return
-    const next = { ...cur, ...patch }
-    setRows((rs) => rs.map((r) => (r.code === code ? next : r)))
-    setSaving(code)
-    try {
-      const r = await apiFetch('/api/type-concepts', {
-        method: 'POST',
-        body: JSON.stringify({
-          typeCode: code, conceptId: next.conceptId, videoUrl: next.videoUrl,
-          startSeconds: next.startSeconds, endSeconds: next.endSeconds, problemId: next.problemId,
-        }),
-      })
-      const j = await r.json()
-      if (!r.ok) throw new Error(j.error ?? '저장하지 못했습니다.')
-      setSummary((s: any) => {
-        if (!s) return s
-        const was = !!(cur.conceptId || cur.videoUrl)
-        const now = !!(next.conceptId || next.videoUrl)
-        if (was === now) return s
-        const d = now ? 1 : -1
-        return { ...s, linkedTypes: s.linkedTypes + d, linkedProblems: s.linkedProblems + d * next.problems }
-      })
-    } catch (e: any) {
-      setErr(e.message)
-      setRows((rs) => rs.map((r) => (r.code === code ? cur : r)))
-    }
-    setSaving(null)
-  }
-
   const shown = useMemo(() => {
     const k = q.trim()
     return rows.filter((r) =>
-      (!onlyEmpty || !(r.conceptId || r.videoUrl)) &&
+      (!onlyEmpty || (r.videos ?? []).length === 0) &&
       (!onlyNoExample || !(r.videos ?? []).some((v) => v.kind === '대표예제')) &&
       (!k || r.typeTitle.includes(k) || r.subTitle.includes(k) || r.code.includes(k)))
   }, [rows, q, onlyEmpty, onlyNoExample])
@@ -152,7 +123,7 @@ export default function TypeConceptsPage() {
                 <span className="text-gray-400"> / {summary.types} 유형</span>
               </span>
               <span className="text-xs text-gray-400">
-                유형 하나를 걸면 그 유형의 문항이 전부 따라옵니다
+                유형 하나에 영상이 걸리면 그 유형의 문항이 전부 따라옵니다
               </span>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded bg-gray-100">
@@ -169,7 +140,7 @@ export default function TypeConceptsPage() {
             className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none" />
           <label className="flex items-center gap-1.5 text-sm text-gray-600">
             <input type="checkbox" checked={onlyEmpty} onChange={(e) => setOnlyEmpty(e.target.checked)} />
-            아직 안 건 것만
+            강의영상 없는 것만
           </label>
           <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
             <input type="checkbox" checked={onlyNoExample} onChange={(e) => setOnlyNoExample(e.target.checked)} />
@@ -193,59 +164,55 @@ export default function TypeConceptsPage() {
                         <span className="text-sm font-semibold">유형 {r.typeNo}</span>
                         <span className="text-sm">{r.typeTitle}</span>
                         <span className="text-xs text-gray-400">{r.problems}문항</span>
-                        {saving === r.code && <span className="text-xs text-gray-400">저장 중…</span>}
-                        {(r.conceptId || r.videoUrl) && saving !== r.code && (
-                          <span className="text-xs" style={{ color: GREEN }}>연결됨</span>
+                        {(r.videos ?? []).length > 0 && (
+                          <span className="text-xs" style={{ color: GREEN }}>영상 {(r.videos ?? []).length}편</span>
                         )}
                       </div>
 
-                      {/* ★ 이 유형을 덮는 강의영상. lesson_videos 를 그대로 읽어 보여 줄 뿐
-                          여기서 따로 적지 않는다 — 두 곳에 적으면 반드시 어긋난다.
-                          개념영상 한 편이 여러 유형을 덮고, 대표예제는 유형마다 따로 붙는다. */}
-                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                        {(r.videos ?? []).length === 0 ? (
-                          <span className="text-xs text-gray-300">강의영상 없음</span>
-                        ) : (r.videos ?? []).map((v, i) => {
-                          const c = v.kind === '대표예제' ? { bg: '#FEF3C7', fg: '#B45309' }
-                            : v.kind === '증명' ? { bg: '#EDE9FE', fg: '#6D28D9' }
-                            : { bg: '#DBEAFE', fg: '#1D4ED8' }
-                          const chip = (
-                            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                              style={{ background: c.bg, color: c.fg }}
-                              title={`${v.label} · ${v.title}`}>
-                              {v.kind} {v.label}
-                              {v.youtubeId ? '' : ' (안 올림)'}
-                            </span>
-                          )
-                          return v.youtubeId
-                            ? <a key={i} href={`https://youtu.be/${v.youtubeId}`} target="_blank" rel="noreferrer">{chip}</a>
-                            : <span key={i}>{chip}</span>
-                        })}
-                        {!(r.videos ?? []).some((v) => v.kind === '대표예제') && (r.videos ?? []).length > 0 && (
-                          <span className="text-[11px]" style={{ color: '#B45309' }}>· 대표예제 영상 아직</span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={r.conceptId ?? ''}
-                          onChange={(e) => save(r.code, { conceptId: e.target.value || null })}
-                          className="min-w-[16rem] flex-1 rounded-lg border px-2 py-1.5 text-sm">
-                          <option value="">— 대표개념 고르기 —</option>
-                          {concepts.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {[c.chapter, c.subChapter].filter(Boolean).join(' · ')} — {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          defaultValue={r.videoUrl ?? ''}
-                          onBlur={(e) => {
-                            if ((e.target.value || '') !== (r.videoUrl ?? ''))
-                              save(r.code, { videoUrl: e.target.value || null })
-                          }}
-                          placeholder="개념 동영상 주소 (나중에 넣어도 됩니다)"
-                          className="min-w-[14rem] flex-1 rounded-lg border px-2 py-1.5 text-sm" />
-                      </div>
+                      {/* ★ 유형마다 걸린 강의영상을 **개념 → 증명 → 대표예제** 순서로 늘어놓는다.
+                          고르는 칸은 없앴다 — 어느 개념인지는 영상이 이미 알고 있다
+                          (원장님 2026-10-21 「정해져있는건데?」). */}
+                      {(() => {
+                        const ORDER = ['개념', '증명', '대표예제'] as const
+                        const COLOR: Record<string, { bg: string; fg: string }> = {
+                          개념: { bg: '#DBEAFE', fg: '#1D4ED8' },
+                          증명: { bg: '#EDE9FE', fg: '#6D28D9' },
+                          대표예제: { bg: '#FEF3C7', fg: '#B45309' },
+                        }
+                        const vids = [...(r.videos ?? [])].sort((a, b) =>
+                          (ORDER.indexOf(a.kind as any) - ORDER.indexOf(b.kind as any))
+                          || a.label.localeCompare(b.label, 'ko', { numeric: true }))
+                        if (!vids.length) {
+                          return <p className="mt-1 text-xs text-gray-300">강의영상이 아직 없습니다.</p>
+                        }
+                        return (
+                          <div className="mt-1.5 divide-y rounded-lg border">
+                            {vids.map((v, i) => {
+                              const c = COLOR[v.kind] ?? COLOR.개념
+                              const inner = (
+                                <div className="flex items-center gap-2 px-3 py-2">
+                                  <span className="w-[4.5rem] shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-bold"
+                                    style={{ background: c.bg, color: c.fg }}>{v.kind}</span>
+                                  <span className="w-12 shrink-0 text-xs font-bold text-gray-500">{v.label}</span>
+                                  <span className="flex-1 truncate text-sm">{v.title}</span>
+                                  {v.youtubeId
+                                    ? <span className="shrink-0 text-xs" style={{ color: GREEN }}>▶ 보기</span>
+                                    : <span className="shrink-0 text-xs text-gray-300">안 올림</span>}
+                                </div>
+                              )
+                              return v.youtubeId
+                                ? <a key={i} href={`https://youtu.be/${v.youtubeId}`} target="_blank" rel="noreferrer"
+                                    className="block hover:bg-gray-50">{inner}</a>
+                                : <div key={i}>{inner}</div>
+                            })}
+                            {!vids.some((v) => v.kind === '대표예제') && (
+                              <p className="px-3 py-1.5 text-[11px]" style={{ color: '#B45309' }}>
+                                대표예제 영상은 아직 없습니다.
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>

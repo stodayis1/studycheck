@@ -104,15 +104,33 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     if (u.signedUrl && !u.error) signed.set(u.path, u.signedUrl)
   })
 
-  // 유형에 걸린 대표개념·개념영상 (「대표개념 연결」 화면에서 원장이 걸어 둔 것).
-  // 유형코드로 묶여 있어 한 번 걸면 그 유형의 문항이 전부 따라온다.
+  // 유형에 걸린 **개념영상**. 유형코드로 묶여 있어 한 번 걸면 그 유형의 문항이 전부 따라온다.
+  //
+  // ★ 예전에는 「대표개념 연결」 화면에서 원장님이 손으로 고른 것(type_learning_assets)을 읽었다.
+  //   그런데 그 표는 한 줄도 채워진 적이 없어서 학생 화면도 늘 비어 있었다.
+  //   유형마다 어느 개념인지는 **강의영상(lesson_videos.type_codes)** 이 이미 들고 있다 —
+  //   그걸 그대로 읽는다. 손으로 고르는 화면은 없앴다 (원장님 2026-10-21).
+  //   손으로 걸어 둔 것이 남아 있으면 그쪽을 먼저 쓴다(옛 기록을 버리지 않는다).
   const typeCodes = [...new Set((rows ?? []).map((r: any) => r.problems?.type_code).filter(Boolean))] as string[]
   const concept = new Map<string, any>()
   if (typeCodes.length) {
-    const { data: tla } = await supabase
-      .from('type_learning_assets')
-      .select('type_code, video_url, start_seconds, concepts(concept_name)')
-      .eq('asset_type', 'concept').eq('is_active', true).in('type_code', typeCodes)
+    const [{ data: tla }, { data: lv }] = await Promise.all([
+      supabase.from('type_learning_assets')
+        .select('type_code, video_url, start_seconds, concepts(concept_name)')
+        .eq('asset_type', 'concept').eq('is_active', true).in('type_code', typeCodes),
+      supabase.from('lesson_videos')
+        .select('title, youtube_id, type_codes')
+        .eq('kind', '개념').eq('is_active', true).not('youtube_id', 'is', null)
+        .overlaps('type_codes', typeCodes),
+    ])
+    // 먼저 강의영상으로 채우고
+    for (const v of (lv ?? []) as any[]) {
+      for (const code of (v.type_codes ?? [])) {
+        if (!typeCodes.includes(code) || concept.has(code)) continue
+        concept.set(code, { name: v.title ?? null, videoUrl: `https://youtu.be/${v.youtube_id}`, startSeconds: null })
+      }
+    }
+    // 손으로 걸어 둔 것이 있으면 그걸로 덮는다
     for (const a of (tla ?? []) as any[]) {
       // supabase-js 는 조인 결과를 배열로도 객체로도 준다 — 둘 다 받는다
       const c = Array.isArray(a.concepts) ? a.concepts[0] : a.concepts

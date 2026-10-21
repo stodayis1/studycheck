@@ -2,7 +2,7 @@
 //
 //   GET  /api/type-concepts?grade=중1&semester=2
 //        → 그 과정의 유형 목록(문항 수 포함) · 지금 걸린 대표개념 · 고를 수 있는 개념 목록
-//   POST /api/type-concepts
+//   (저장은 없앴다 — 이제 보는 화면이다. 아래 주석 참고)
 //        → { typeCode, conceptId, videoUrl, startSeconds, endSeconds, problemId }
 //          conceptId 와 videoUrl 이 둘 다 비면 연결을 지운다
 //
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   if (!grade || !semester)
     return NextResponse.json({ error: '과정을 골라 주세요.' }, { status: 400 })
 
-  const [types, probs, concepts, assets, videos] = await Promise.all([
+  const [types, probs, assets, videos] = await Promise.all([
     fetchAll<any>((f, t) =>
       supabase.from('standard_types')
         .select('code, chapter_no, chapter_title, sub_chapter_no, sub_chapter_title, type_no, type_title')
@@ -45,11 +45,6 @@ export async function GET(req: Request) {
       supabase.from('problems').select('type_code')
         .eq('grade', grade).eq('semester', semester)
         .not('type_code', 'is', null).order('id').range(f, t)),
-    fetchAll<any>((f, t) =>
-      supabase.from('concepts')
-        .select('id, chapter, sub_chapter, concept_name, concept_order')
-        .eq('grade', grade).eq('semester', semester)
-        .order('chapter').order('concept_order').range(f, t)),
     fetchAll<any>((f, t) =>
       supabase.from('type_learning_assets')
         .select('type_code, concept_id, video_url, start_seconds, end_seconds, problem_id, title')
@@ -96,19 +91,16 @@ export async function GET(req: Request) {
       videos: vidsOf.get(t.code) ?? [],
     }
   })
-  const doneTypes = rows.filter((r) => r.conceptId || r.videoUrl)
   const has = (r: any, kind: string) => r.videos.some((v: any) => v.kind === kind)
   return NextResponse.json({
     types: rows,
-    concepts: concepts.map((c) => ({
-      id: c.id, chapter: c.chapter, subChapter: c.sub_chapter, name: c.concept_name,
-    })),
-    // 「몇 개 걸었나」보다 「문항 몇 개가 덮였나」가 중요하다
+    // 「몇 개 걸었나」보다 「문항 몇 개가 덮였나」가 중요하다.
+    // 이제 「걸렸다」의 기준은 **강의영상이 붙었는가**다 — 손으로 고르던 것을 없앴다.
     summary: {
       types: rows.length,
-      linkedTypes: doneTypes.length,
+      linkedTypes: rows.filter((r) => r.videos.length > 0).length,
       problems: rows.reduce((s, r) => s + r.problems, 0),
-      linkedProblems: doneTypes.reduce((s, r) => s + r.problems, 0),
+      linkedProblems: rows.filter((r) => r.videos.length > 0).reduce((s, r) => s + r.problems, 0),
       // 강의영상이 유형을 얼마나 덮었나 — 대표예제 영상을 어디까지 만들었는지 한눈에
       conceptVideoTypes: rows.filter((r) => has(r, '개념')).length,
       exampleVideoTypes: rows.filter((r) => has(r, '대표예제')).length,
@@ -116,46 +108,9 @@ export async function GET(req: Request) {
   })
 }
 
-export async function POST(req: Request) {
-  const deny = await denyIfNotStaff(req, { adminOnly: true })
-  if (deny) return deny
-  const supabase = db()
-  const b = await req.json().catch((): any => null)
-  if (!b?.typeCode) return NextResponse.json({ error: '유형을 골라 주세요.' }, { status: 400 })
-
-  const conceptId = b.conceptId || null
-  const videoUrl = (b.videoUrl || '').trim() || null
-
-  if (!conceptId && !videoUrl) {
-    const { error } = await supabase.from('type_learning_assets')
-      .delete().eq('type_code', b.typeCode).eq('asset_type', 'concept')
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, cleared: true })
-  }
-
-  const row = {
-    type_code: b.typeCode,
-    asset_type: 'concept',
-    concept_id: conceptId,
-    video_url: videoUrl,
-    start_seconds: b.startSeconds ?? null,
-    end_seconds: b.endSeconds ?? null,
-    problem_id: b.problemId ?? null,
-    title: (b.title || '').trim() || null,
-    is_active: true,
-    // 학생 쪽 정책(tla_read_active)이 is_active + review_status='approved' 를 본다.
-    // 원장이 직접 거는 것이므로 바로 승인으로 둔다 — 안 그러면 걸어도 학생에게 안 보인다
-    review_status: 'approved',
-    updated_at: new Date().toISOString(),
-  }
-  const { error } = await supabase.from('type_learning_assets')
-    .upsert(row, { onConflict: 'type_code', ignoreDuplicates: false })
-  if (error) {
-    // 부분 고유색인(asset_type='concept')이라 onConflict 가 안 먹는 경우 — 지우고 넣는다
-    await supabase.from('type_learning_assets')
-      .delete().eq('type_code', b.typeCode).eq('asset_type', 'concept')
-    const { error: e2 } = await supabase.from('type_learning_assets').insert(row)
-    if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
-  }
-  return NextResponse.json({ ok: true })
-}
+// ★ 저장(POST)은 없앴다 (원장님 2026-10-21
+//   「여기서 내가 대표개념을 고를 필요가 있나? 정해져있는건데?
+//     그냥 대표개념-증명(있을경우)-관련 필수예제 이렇게 목록이 띄워져 있는게 낫지」).
+//   유형마다 어떤 개념·증명·대표예제인지는 강의영상(lesson_videos.type_codes)이 이미 들고 있다.
+//   같은 것을 손으로 또 고르면 두 벌이 되고, 두 벌은 반드시 어긋난다.
+//   이 화면은 이제 **보는 화면**이다.
