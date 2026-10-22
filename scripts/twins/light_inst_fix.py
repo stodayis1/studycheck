@@ -34,7 +34,9 @@ def page(doc, pi):
 
 def wide_color_lines(a, x0, x1, minw=108):
     x = a[:, x0:x1].astype(int)
-    m = ((x.max(2) - x.min(2)) >= 50) & (x.min(2) < 200)
+    # 형광펜 띠도 넓은 색 덩어리라 지시문으로 잡힌다 (0176·0624).
+    # 지시문은 **진한 글자**(가장 어두운 채널 150 미만)이고 형광펜은 밝다 → 그걸로 가른다.
+    m = ((x.max(2) - x.min(2)) >= 50) & (x.min(2) < 150)
     lab, n = ndimage.label(ndimage.binary_dilation(m, structure=np.ones((3, 13))))
     out = []
     for i, sl in enumerate(ndimage.find_objects(lab)):
@@ -48,6 +50,59 @@ def wide_color_lines(a, x0, x1, minw=108):
 def trim(a, pad=8):
     ys = np.where((a.min(2) < 185).any(1))[0]
     return a[max(0, ys[0] - pad):ys[-1] + pad + 1] if len(ys) else None
+
+
+def half_span(a, rows, pg, half):
+    W = a.shape[1]
+    same = [q for q in rows if q['pg'] == pg and q['half'] == half]
+    if not same:
+        return None
+    hx0 = max(30, min(q['x0'] for q in same) - 16)
+    hx1 = (W // 2 - 20) if half == 0 else W - 34
+    return hx0, hx1
+
+
+def find_band(doc, rows, r, cache):
+    """그 문항을 거느리는 묶음 지시문 띠.
+
+    같은 반쪽 위에 없으면 **읽기 순서로 거슬러** 앞 칸·앞 쪽을 본다 —
+    묶음이 칸을 넘어 이어지는 자리가 있다 (0004·0005 는 왼쪽 칸에서 시작한 묶음이다).
+    """
+    spots = [(r['pg'], r['half'], r['y0'])]
+    pg, half = r['pg'], r['half']
+    for _ in range(4):
+        half -= 1
+        if half < 0:
+            pg -= 1
+            half = 1
+        if pg < 0:
+            break
+        spots.append((pg, half, None))
+    for pg, half, ylimit in spots:
+        if pg not in cache:
+            cache[pg] = page(doc, pg)
+        a = cache[pg]
+        sp = half_span(a, rows, pg, half)
+        if sp is None:
+            continue
+        hx0, hx1 = sp
+        lines = wide_color_lines(a, hx0, hx1)
+        # 쪽 맨 위의 개념 상자에도 넓은 색 글자가 있다 (0176·0624 가 그걸 물었다).
+        # 지시문은 **첫 문항보다 위로 멀리 가지 않는다** → 그 선 위쪽은 버린다.
+        ptop = min([q['y0'] for q in rows if q['pg'] == pg] or [0]) - 120
+        lines = [L for L in lines if L[0] > ptop]
+        if ylimit is not None:
+            lines = [L for L in lines if L[1] < ylimit - 10]
+        if not lines:
+            continue
+        b = lines[-1]
+        same = [q for q in rows if q['pg'] == pg and q['half'] == half]
+        nxt = [q['y0'] for q in same if q['y0'] > b[1]]
+        first = min(nxt) if nxt else (b[1] + 320)
+        band = trim(a[max(0, b[0] - 10): max(b[1] + 6, first - 12), hx0:hx1])
+        if band is not None and band.shape[0] >= 16:
+            return band, f'pg{pg} half{half} y{b[0]}'
+    return None, '못 찾음'
 
 
 def main():
@@ -67,20 +122,9 @@ def main():
             continue
         if r['pg'] not in pages:
             pages[r['pg']] = page(doc, r['pg'])
-        a = pages[r['pg']]
-        W = a.shape[1]
-        same = [q for q in rows if q['pg'] == r['pg'] and q['half'] == r['half']]
-        hx0 = max(30, min(q['x0'] for q in same) - 16)
-        hx1 = (W // 2 - 20) if r['half'] == 0 else W - 34
-        lines = [L for L in wide_color_lines(a, hx0, hx1) if L[1] < r['y0'] - 10]
-        if not lines:
-            miss.append((c['local_no'], '지시문 없음'))
-            continue
-        b = lines[-1]
-        first = min([q['y0'] for q in same if q['y0'] > b[1]] or [r['y0']])
-        band = trim(a[max(0, b[0] - 10): max(b[1] + 6, first - 12), hx0:hx1])
-        if band is None or band.shape[0] < 16:
-            miss.append((c['local_no'], '띠 비었음'))
+        band, where = find_band(doc, rows, r, pages)
+        if band is None:
+            miss.append((c['local_no'], where))
             continue
         q = np.array(Image.open(os.path.join(work, 'cur', f"{c['id']}.png")).convert('RGB'))
         w = max(band.shape[1], q.shape[1])
