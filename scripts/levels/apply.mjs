@@ -20,20 +20,25 @@ const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABA
   { auth: { persistSession: false } })
 const WRITE = process.argv.includes('--write')
 const R = JSON.parse(fs.readFileSync(path.join(HERE, 'rules.json'), 'utf8'))
-const BASIC = new Set(R['기초교재'])
 
+// 규칙은 [교재, 구간, 난이도, 레벨] 줄의 목록. 위에서부터 먼저 걸리는 줄을 쓴다.
+// 구간이나 난이도가 null 이면 「아무거나」라는 뜻이다.
 function levelOf(p) {
-  const tier = BASIC.has(p.book) ? '기초' : '표준'
-  if (p.difficulty && R['난이도'][p.difficulty]) return R['난이도'][p.difficulty][tier]
-  if (p.step && R['구간'][`${p.book}|${p.step}`] !== undefined) return R['구간'][`${p.book}|${p.step}`]
-  if (R['교재기본'][p.book] !== undefined) return R['교재기본'][p.book]
+  for (const [book, step, diff, lv] of R['규칙']) {
+    if (book !== p.book) continue
+    if (step !== null && step !== p.step) continue
+    if (diff !== null && diff !== p.difficulty) continue
+    // 일품의 「교과서 속 창의유형」만 최심화로 올린다
+    if (R['창의유형은6'] && p.is_creative && lv >= 5) return 6
+    return lv
+  }
   return null
 }
 
 let rows = []
 for (let from = 0; ; from += 1000) {
   const { data, error } = await db.from('problems')
-    .select('id, book, difficulty, step, level').order('id').range(from, from + 999)
+    .select('id, book, difficulty, step, level, is_creative').order('id').range(from, from + 999)
   if (error) throw error
   rows.push(...data)
   if (data.length < 1000) break
