@@ -178,9 +178,13 @@ def main():
     P = json.load(open(a.script, encoding='utf-8')); S = P['scenes']
     cache = a.cache or os.path.join(os.path.dirname(a.out), 'tts_cache')
     tmp = tempfile.mkdtemp(); sr = 16000
-    says = [s['say'] for s in S]; audio, offs, lens, als = [], [], [], []; t = 0.0
+    audio, offs, lens, als = [], [], [], []; t = 0.0
+    # 홍보는 억양을 살린 목소리 설정(대본의 voice) + 장면을 끊지 않고 한 번에 읽힌다 — // 는 자막만 나눈다
+    import lesson_video as LV
+    if P.get('voice'): LV.MODES['보통'] = dict(LV.MODES['보통'], **P['voice'])
+    says = [s['say'].replace(' // ', ' ').replace('//', ' ') for s in S]
     for k, sc in enumerate(S):
-        wav, al = synth_scene(sc['say'], a.voice, a.model, cache, plain(says[k - 1]) if k else '',
+        wav, al = synth_scene(says[k], a.voice, a.model, cache, plain(says[k - 1]) if k else '',
                               plain(says[k + 1]) if k + 1 < len(S) else '', os.path.join(tmp, f'{k}.wav'))
         x = pcm(wav); offs.append(t); lens.append(len(x) / sr + GAP); als.append(al)
         audio += [x, np.zeros(int(GAP * sr), np.float32)]; t += len(x) / sr + GAP
