@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { consultCycleDays, CONSULT_CYCLE_LABEL } from '@/lib/consultCycle'
 
 interface Student {
   id: string
@@ -24,12 +25,7 @@ interface Consultation {
   created_at: string
 }
 
-// 상담 주기 — 초등은 6주(42일), 중·고등은 3개월(90일)
-const OVERDUE_DAYS_ELEM = 42
-const OVERDUE_DAYS_SECONDARY = 90
-function overdueDaysFor(grade?: string) {
-  return (grade || '').startsWith('초') ? OVERDUE_DAYS_ELEM : OVERDUE_DAYS_SECONDARY
-}
+// 상담 주기는 lib/consultCycle.ts 한 곳에서만 정한다 — 화면마다 숫자를 들고 있으면 어긋난다.
 
 // 강사가 '이 학생은 원장님이 상담해 주세요'라고 올린 요청
 interface ConsultRequest {
@@ -110,14 +106,14 @@ export default function ConsultationsPage() {
     return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
   }
 
-  // 상담 필요 판단 — 초등 42일(6주), 중·고 90일(3개월) 초과.
+  // 상담 필요 판단 — 주기는 lib/consultCycle.ts (초등 2개월 · 중·고 3개월).
   // 상담기록이 아예 없는 학생도 "상담 필요"로 본다 (2026-10-08 원장님 지시로 변경.
   // 그 전에는 기록이 없으면 기준 날짜가 없다는 이유로 제외했었음)
   function isOverdue(studentId: string) {
     const student = students.find((s) => s.id === studentId)
     const last = lastConsultByStudent.get(studentId)
     if (!last) return true
-    return daysSince(last.consulted_at) > overdueDaysFor(student?.grade)
+    return daysSince(last.consulted_at) > consultCycleDays(student?.grade)
   }
 
   const overdueStudents = myStudents.filter((s) => isOverdue(s.id))
@@ -269,7 +265,7 @@ export default function ConsultationsPage() {
             <div className="flex items-center gap-2 mb-1">
               <i className="ti ti-phone" style={{ fontSize: 16 }} />
               <p className="text-sm font-bold" style={{ color: '#9a3412' }}>
-                상담 필요 학생 {overdueStudents.length}명 · 초등 6주 / 중·고 3개월 초과 (기록 없는 학생 포함)
+                상담 필요 학생 {overdueStudents.length}명 · {CONSULT_CYCLE_LABEL} 초과 (기록 없는 학생 포함)
               </p>
             </div>
             <p className="text-xs" style={{ color: '#B45309' }}>
@@ -318,7 +314,7 @@ export default function ConsultationsPage() {
                       </div>
                       <p className="text-xs mt-0.5" style={{ color: overdue ? '#c2410c' : '#9ca3af' }}>
                         {last
-                          ? `마지막 상담 ${last.consulted_at} (${daysSince(last.consulted_at)}일 전 · 기준 ${overdueDaysFor(s.grade)}일)`
+                          ? `마지막 상담 ${last.consulted_at} (${daysSince(last.consulted_at)}일 전 · 기준 ${consultCycleDays(s.grade)}일)`
                           : '상담기록 없음 · 상담 필요'}
                       </p>
                     </div>

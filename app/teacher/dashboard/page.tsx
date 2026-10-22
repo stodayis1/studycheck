@@ -10,6 +10,7 @@ import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { fetchAllRows } from '@/lib/utils'
+import { consultCycleDays, CONSULT_CYCLE_LABEL } from '@/lib/consultCycle'
 import { ExamAnalysisNotice } from '@/components/exam-analysis/ExamAnalysisNotice'
 import { OpsTaskNotice } from '@/components/teacher/OpsTaskNotice'
 import { DailyFlow } from '@/components/teacher/DailyFlow'
@@ -127,7 +128,9 @@ export default function TeacherDashboardPage() {
       .update({ is_read: true, read_at: new Date().toISOString() }).eq('id', id)
   }
 
-  // 상담 주기 초과 알림 — 초등 42일(6주), 중·고 90일(3개월). 상담기록이 아예 없는 학생도 '상담 필요'로 본다.
+  // 상담 주기 초과 알림 — 주기는 lib/consultCycle.ts (초등 2개월 · 중·고 3개월).
+  // ★ 예전에는 여기에 숫자(42 : 90)를 그대로 적어 두어 상담내역 화면과 따로 놀 수 있었다.
+  // 상담기록이 아예 없는 학생도 '상담 필요'로 본다.
   // (2026-10-08 원장님 지시로 변경. 그 전에는 "기록이 없으면 기준 날짜가 없으니 제외
   //  했었음 — 2026-09-17 원칙)
   async function fetchOverdueConsults() {
@@ -147,7 +150,7 @@ export default function TeacherDashboardPage() {
       const last = lastByStudent.get(s.id)
       if (!last) return true
       const days = Math.floor((todayMs - new Date(last + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
-      return days > (String(s.grade || '').startsWith('초') ? 42 : 90)
+      return days > consultCycleDays(s.grade)
     }).map((s: any) => s.name)
     setOverdueConsultNames(overdue)
   }
@@ -709,7 +712,7 @@ export default function TeacherDashboardPage() {
               <Link href="/teacher/consultations" className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFF7ED' }}>
                 <i className="ti ti-phone" style={{ fontSize: 13, color: '#9a3412' }} />
                 <p style={{ color: '#9a3412' }}>
-                  상담 필요 {overdueConsultNames.length}명 · 초등 6주 / 중·고 3개월 초과 ({overdueConsultNames.slice(0, 3).join(', ')}{overdueConsultNames.length > 3 ? ' 외' : ''})
+                  상담 필요 {overdueConsultNames.length}명 · {CONSULT_CYCLE_LABEL} 초과 ({overdueConsultNames.slice(0, 3).join(', ')}{overdueConsultNames.length > 3 ? ' 외' : ''})
                 </p>
               </Link>
             )}
