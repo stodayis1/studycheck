@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lesson_video import plain, font, has_glyph, penfont, parse_say
 PENF = penfont(40)
+import suji_pose
 from proof_video import render_line, COLORS, NOTE, QUIET
 
 GOTHIC = font(32, True)
@@ -37,7 +38,7 @@ def check(path, sheet_dir=None):
             if tail and tail[-1] not in '.?!~' and not tail.endswith(('다', '야', '돼', '죠', '지', '게', '자')):
                 warns.append(f'{tag}: [[쓰기]] 앞이 문장 중간 「…{tail[-10:]}」 — 문장을 끝내고 쉬기')
         if runs != say.count(QUIET): errs.append(f'{tag}: [[쓰기]] {say.count(QUIET)}개인데 quiet 줄 묶음 {runs}개')
-        if st.get('pose') not in ('A', 'B', 'C', 'D', 'E'): errs.append(f'{tag}: pose 는 A~E')
+        if st.get('pose') not in suji_pose.NAMES and st.get('pose') not in suji_pose.ALL: errs.append(f'{tag}: pose 는 A~I 또는 자세 이름')
         if say.count('{') != say.count('}'): errs.append(f'{tag}: {{ }} 짝이 안 맞음')
         for m in re.findall(r'\{(\S+)', say):
             if m not in ('빠르게', '강조', '천천히'): errs.append(f'{tag}: 모르는 표시 {{{m}')

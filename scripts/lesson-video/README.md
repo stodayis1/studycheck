@@ -44,3 +44,14 @@ python scripts/lesson-video/proof_video.py <증명 대본.json> --cuts <토막�
 - ElevenLabs 는 동시에 많이 보내면 429 → 영상은 3편씩만 동시에 만든다(재시도 들어 있음).
 - 셸 heredoc 으로 JSON·파이썬을 쓰면 역슬래시가 깨진다 → 파일은 편집기(Write)로.
 - 썸네일·캐릭터 그림은 GPT 프롬프트로 만든다(직접 그리지 않음). 과정별 파스텔 바탕색.
+
+## 클바 강의영상 도구를 보고 더한 것 (2026-10-22) — 수지쌤 스타일은 그대로
+| 기능 | 쓰는 법 |
+|---|---|
+| 발음 사전 | `docs/대본/발음사전.json` 에 「표기」: 「읽는 말」 을 더하면 모든 영상에 적용(화면 글자는 그대로). 긴 표기부터 바꾼다 |
+| 읽는 글자 확인표 + 예상 크레딧 | `python credit_check.py <대본 또는 폴더> --cache <음성 캐시> --table 확인표.md` — 저장본(캐시)에 있는 조각은 0 으로 센다 |
+| 형광 마커 | 증명·풀이 노트의 write 줄에 `"highlight": true` (개념 영상은 marks 의 `type: "highlight"` 가 원래 있음) |
+| 진행 막대 + 장면 눈금 | 만들 때 `--bar`, 이미 만든 영상은 `python progress_bar.py <영상.mp4>` (같은 이름 .구간.json 필요). 유튜브에 올린 영상은 다시 올리면 주소가 바뀌니 새 영상부터 |
+| 짧은 판 | 장면·단계에 `"short": false` 를 붙이고 `--version short`. ★뺀 단계 앞뒤 조각은 문맥이 달라져 목소리를 새로 받는다(크레딧) — credit_check 로 먼저 확인 |
+| 격자 그림 | `python grid.py <그림.png> [--crop x0,y0,x1,y1]` — 문제 crop · 풀이 figure · 필기 자리 좌표를 눈금으로 읽는다 |
+| 수지 자세·입 | `suji_pose.py` — `suji/poses/<자세>_closed/open.png` 두 장이 있으면 그 자세에서도 입이 움직인다. 자세: A point · B remember · C wonder · D pointer · E cheer · F write · G idea · H book · I thumb. 그릴 그림 목록: `python suji_pose.py`, 프롬프트: `docs/대본/수지_자세_GPT프롬프트.md` |
