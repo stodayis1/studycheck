@@ -400,7 +400,7 @@ export default function TeacherGradingsPage() {
                           disabled={busy !== null}
                           className="rounded-lg border py-2 text-xs font-medium disabled:opacity-40"
                           style={{ borderColor: NAVY, color: NAVY }}
-                          title="쎈↔쎈B의 짝 문제 — 문장은 같고 숫자만 다릅니다"
+                          title="문장은 같고 숫자만 다른 문제 — 아직 없는 문항은 쌍둥이 만들기 요청이 자동으로 남습니다"
                         >
                           {busy === `${g.id}:twin` ? '만드는 중…' : '쌍둥이 문제'}
                         </button>

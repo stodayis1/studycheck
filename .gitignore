@@ -46,3 +46,7 @@ scripts/page-map/_footer.png
 # 강의영상 파일럿 (슬라이드·음성 — 저장소에 넣지 않는다)
 /pilot/
 upload_stage/
+
+# 쌍둥이 생성 — 받은 그림·구운 그림·미리보기 (저장소에 넣지 않는다)
+scripts/twin-gen/work/
+scripts/twin-gen/out/

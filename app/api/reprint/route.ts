@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import { sourceLabel } from '@/lib/problemSource'
+import { requestTwins } from '@/lib/twinRequests'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -116,7 +117,16 @@ export async function POST(req: Request) {
       const pick = (g ? mates.get(g) ?? [] : []).find((id) => !used.has(id))
       if (pick) { problemIds.push(pick); used.add(pick); got++ }
     }
-    if (!got) notes.push('쌍둥이 문제가 없습니다 (아직 짝을 찾아 두지 않은 문항이에요)')
+    // 숫자만 바꾼 쌍둥이(book='쌍둥이')가 아직 없는 문항은 만들기 요청을 남겨 둔다 — 다음엔 뽑힌다.
+    // 요청이 실패해도 재출제는 그대로 진행한다
+    let asked = 0
+    try {
+      asked = (await requestTwins(supabase, wrong.map((w) => w.problem_id as number), { source: 'reprint' })).added
+    } catch { /* 요청 줄이 없어도 재출제는 된다 */ }
+    if (!got) notes.push(
+      '쌍둥이 문제가 없습니다' +
+      (asked ? ` — ${asked}문항 쌍둥이 만들기를 요청해 두었어요` : ' (아직 짝을 찾아 두지 않은 문항이에요)'),
+    )
   }
   if (parts.includes('similar')) {
     // 유사문제 — 같은 유형에서, 원래 시험지에 있던 문제와 이 학생이 이미 본 문제는 빼고 뽑는다
