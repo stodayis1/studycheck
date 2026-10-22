@@ -118,7 +118,7 @@ def suji(pose, mouth, top):
     if key not in _SUJI:
         f = suji_pose.image(pose, mouth)            # 자세별 입 다문/벌린 그림 (suji/poses)
         sj = Image.open(f).convert('RGBA'); sj = sj.crop(sj.getbbox())
-        th = min(620, H - top); s = th / sj.height
+        th = min(620, H - top); s = th / sj.height * suji_pose.scale(pose)
         if pose == 'E': s *= 0.92
         _SUJI[key] = sj.resize((int(sj.width * s), int(sj.height * s)), Image.LANCZOS)
     return _SUJI[key]

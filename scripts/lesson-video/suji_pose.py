@@ -13,6 +13,12 @@ DIR = os.path.join(HERE, 'suji', 'poses')
 NAMES = {'A': 'point', 'B': 'remember', 'C': 'wonder', 'D': 'pointer', 'E': 'cheer',
          'F': 'write', 'G': 'idea', 'H': 'book', 'I': 'thumb'}
 ALL = list(NAMES.values())
+# 그림마다 몸이 보이는 만큼이 달라서(쓰기는 다리가 덜 보인다) 같은 키로 맞추면 커 보인다 → 자세별 크기 보정
+SCALE = {'write': 0.92}
+
+
+def scale(pose):
+    return SCALE.get(name_of(pose), 1.0)
 
 
 def name_of(pose):

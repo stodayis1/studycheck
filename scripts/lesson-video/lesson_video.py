@@ -319,7 +319,7 @@ def base_frame(L, sc, book, mouth):
     import suji_pose                            # 자세별 입 다문/벌린 그림 (suji/poses) — pose 를 안 쓰면 가리키기
     f = suji_pose.image(sc.get('pose', 'point'), mouth)
     sj = Image.open(f).convert('RGBA'); sj = sj.crop(sj.getbbox())
-    th = min(560, H - (by0 + bh + 44))
+    th = int(min(560, H - (by0 + bh + 44)) * suji_pose.scale(sc.get('pose', 'point')))
     s = th / sj.height; sj = sj.resize((int(sj.width * s), th), Image.LANCZOS)
     im.paste(sj, (R0 + RW // 2 - sj.width // 2 + 10, H - th), sj)
     return im

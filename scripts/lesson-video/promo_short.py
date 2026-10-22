@@ -158,7 +158,7 @@ def suji(pose, mouth):
     k = (pose, mouth)
     if k not in _SJ:
         sj = Image.open(suji_pose.image(pose, mouth)).convert('RGBA'); sj = sj.crop(sj.getbbox())
-        th = 640; _SJ[k] = sj.resize((int(sj.width * th / sj.height), th), Image.LANCZOS)
+        th = int(640 * suji_pose.scale(pose)); _SJ[k] = sj.resize((int(sj.width * th / sj.height), th), Image.LANCZOS)
     return _SJ[k]
 
 
