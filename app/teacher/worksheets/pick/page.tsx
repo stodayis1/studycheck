@@ -132,7 +132,7 @@ export default function PickPage() {
       })
       const d = await r.json()
       if (!r.ok) { setErr(d.error ?? '만들지 못했습니다.'); return }
-      router.push(`/teacher/gradings/print?code=${d.code}`)
+      router.push(`/teacher/gradings/print?code=${d.code}&new=1`)
     } finally { setBusy(false) }
   }
 

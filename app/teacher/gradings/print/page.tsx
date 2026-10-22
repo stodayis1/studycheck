@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
+import { SendSheetModal } from '@/components/teacher/SendSheetModal'
 
 const NAVY = '#0f3460'
 const GOLD = '#c8992e'
@@ -52,6 +53,10 @@ export default function PrintPage() {
 function PrintInner() {
   const sp = useSearchParams()
   const code = sp.get('code')
+  // ★ 방금 만든 학습지면 **배정 창을 바로 띄운다** (원장님 2026-10-22
+  //   「학습지 만들기를 누르고 나서 바로 다음에 학생 누구한테 배정할 것인지가 떠야 편해」).
+  //   예전에는 인쇄 화면만 떠서, 배정하려면 출제한 학습지 목록으로 다시 들어가 찾아야 했다.
+  const [assign, setAssign] = useState(sp.get('new') === '1')
   const [data, setData] = useState<Data | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [showSource, setShowSource] = useState(false)
@@ -257,6 +262,15 @@ function PrintInner() {
         >
           답지·해설
         </a>
+        {/* 학생 앱에 띄우기 — 종이로 안 뽑고 폰으로 답만 넣게 할 때 */}
+        <button
+          onClick={() => setAssign(true)}
+          className="rounded-lg border px-3 py-2 font-medium"
+          style={{ borderColor: '#0F6E56', color: '#0F6E56' }}
+          title="이 학습지를 학생 앱에 띄웁니다"
+        >
+          <i className="ti ti-user-plus align-[-0.125em]" /> 학생 배정
+        </button>
         <button
           onClick={() => window.print()}
           className="rounded-lg px-4 py-2 font-medium text-white"
@@ -265,6 +279,10 @@ function PrintInner() {
           인쇄 / PDF 저장
         </button>
       </div>
+
+      {assign && data && (
+        <SendSheetModal code={data.sheet.code} onClose={() => setAssign(false)} />
+      )}
 
       {/* 표의 tfoot은 인쇄할 때 매 쪽마다 반복된다 → 쪽마다 하단 띠(.foot) 높이만큼 자리를 비워
           문제가 띠 밑으로 들어가 가려지지 않게 한다 */}

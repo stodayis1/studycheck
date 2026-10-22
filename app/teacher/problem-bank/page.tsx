@@ -169,7 +169,7 @@ export default function ProblemBankPage() {
       })
       const d = await r.json()
       if (!r.ok) { setErr(d.error ?? '출제에 실패했습니다.'); return }
-      router.push(`/teacher/gradings/print?code=${d.code}`)
+      router.push(`/teacher/gradings/print?code=${d.code}&new=1`)
     } catch {
       setErr('출제에 실패했습니다.')
     } finally { setBusy(false) }

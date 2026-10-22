@@ -121,7 +121,7 @@ export default function WeeklyPage() {
       })
       const d = await r.json()
       if (!r.ok) { setMsg(d.error ?? '출제에 실패했습니다.'); return }
-      router.push(`/teacher/gradings/print?code=${d.code}`)
+      router.push(`/teacher/gradings/print?code=${d.code}&new=1`)
     } finally { setBusy('') }
   }
 
