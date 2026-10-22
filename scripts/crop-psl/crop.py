@@ -1,3 +1,4 @@
+import io
 import pymupdf, json, re
 import numpy as np
 from PIL import Image
@@ -22,10 +23,10 @@ for pi,p in enumerate(q):
     div=divx(p,pi); sp=spans(p)
     for s in sp:
         t=s['text'].strip(); col=int(s['bbox'][0]>div); y=s['bbox'][1]
-        if s['font']=='Jalnan' and s['size']>13.5 and re.fullmatch(r'\d{2,3}',t):
+        if s['font'].startswith('Jalnan') and s['size']>13.5 and re.fullmatch(r'\d{2,3}',t):
             tags=[z['text'].strip() for z in sp if abs(z['bbox'][1]-y-6)<6 and 0<z['bbox'][0]-s['bbox'][2]<120 and z['size']<9]
             ev.append(dict(k='num',t=t,pg=pi,col=col,y0=y,y1=s['bbox'][3],tags=tags))
-        elif s['font']=='Jalnan' and 11.5<s['size']<13 and re.fullmatch(r'\d{2}',t) and s['color']==0xffffff:
+        elif s['font'].startswith('Jalnan') and 11.5<s['size']<13 and re.fullmatch(r'\d{2}',t) and s['color']==0xffffff:
             title=' '.join(z['text'].strip() for z in sp if abs(z['bbox'][1]-y)<5 and z['bbox'][0]>s['bbox'][2] and z['bbox'][0]<s['bbox'][2]+220 and z['size']>8)
             ev.append(dict(k='type',t=int(t),title=title,pg=pi,col=col,y0=y-6,y1=y))
 ev.sort(key=lambda e:(e['pg'],e['col'],e['y0']))
@@ -45,8 +46,13 @@ for i,e in enumerate(ev):
     body=trim(render(e['pg'],pymupdf.Rect(x0,e['y1']+2,x1,nxt)))
     no=int(e["t"]); lno=f"{ch:02d}-S{no:02d}" if ex else f"{ch:02d}-{no:03d}"
     Image.fromarray(pad(body)).save(f"out/q/{lno}.png")
-    out.append(dict(l=lno,no=no,ch=ch,sec='연습' if ex else '기본',btype=None if ex else btype,tags=e['tags'],pg=e['pg'],h=int(body.shape[0])))
-json.dump(out,open('q_meta.json','w'),ensure_ascii=False)
+    # 연습문제는 유형 배지가 없다 → 나중에 글을 보고 유형을 정하려고 본문 글자도 담아 둔다
+    rect=pymupdf.Rect(x0,e['y1']+2,x1,nxt)
+    txt=' '.join(sp2['text'] for sp2 in spans(q[e['pg']])
+                 if pymupdf.Rect(sp2['bbox']).intersects(rect))[:300]
+    out.append(dict(l=lno,no=no,ch=ch,sec='연습' if ex else '기본',btype=None if ex else btype,
+                    tags=e['tags'],pg=e['pg'],h=int(body.shape[0]),txt=txt))
+json.dump(out,io.open('q_meta.json','w',encoding='utf8'),ensure_ascii=False)
 from collections import Counter
 print(len(out),Counter(o['sec'] for o in out),'chapters',sorted(Counter(o['ch'] for o in out).items()))
 b=[o['no'] for o in out if o['sec']=='기본']; print('basic',b[0],b[-1],'gaps',[n for n in range(1,b[-1]+1) if n not in b],'dups',[n for n in set(b) if b.count(n)>1])

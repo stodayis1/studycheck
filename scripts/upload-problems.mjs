@@ -55,7 +55,8 @@ if (!fs.existsSync(DATA_FILE)) { console.error(`✗ ${DATA_FILE} 이 없습니�
 const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
 // 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
-const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1' };
+const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1', '공통수학2': 'hc2' };
+// ※ 공통수학2 가 빠져 있던 동안 올라간 개념+유형 두 종은 경로가 x-1/… 이다. 그대로 두면 잘 돈다.
 const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '일품': 'ilpum', '기출단계별': 'step', '핵심유형': 'core', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh', '개념+유형 유형편 라이트': 'ky_mid', '라이트쎈': 'light' };
 const key = (r, kind) =>
   `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
@@ -66,7 +67,7 @@ const INDEX = new Map();               // "학기/교재/소단원/파일명" �
 // 번호 앞의 글자는 교재마다 다르다 — 베이직쎈은 a·b·c·d 네 단계를 쓴다.
 // 예전에는 [ac] 만 받아서 b·d 시리즈 898장이 색인에 안 들어가 조용히 안 올라갔다(2026-09-15).
 // 번호 가운데에 글자가 들어가는 교재도 있다 — 개념+유형 중등의 기출·마무리는 01E001 꼴이다.
-const IMG = /^[A-Za-z]?\d+([a-z]\d+)?\)?\.(png|jpg)$/i;   // 일품 대단원마무리는 M12 꼴   // 01S03 처럼 번호에 S(연습문제)가 들어가는 교재도 있다
+const IMG = /^[A-Za-z]?\d+([A-Za-z]\d+)?\)?\.(png|jpg)$/i;   // 일품 대단원마무리는 M12 꼴   // 01S03 처럼 번호에 S(연습문제)가 들어가는 교재도 있다
 
 function scan(dir, depth = 0) {
   if (depth > 6) return;
