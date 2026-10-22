@@ -88,18 +88,35 @@ export async function POST(req: Request) {
     problemIds.push(...wrong.map((w) => w.problem_id as number))
   }
   if (parts.includes('twin')) {
-    // 쌍둥이 문제 — 쎈↔쎈B는 숫자만 다른 같은 문제라, 제대로 이해했는지 확인하기 좋다
+    // 쌍둥이 문제 — 숫자만 다른 같은 문제라, 제대로 이해했는지 확인하기 좋다.
+    // 같은 문제가 교재 서너 권에 실리므로 **묶음**(twin_group)으로 찾는다.
     const { data: tw } = await supabase
       .from('problems')
-      .select('id, twin_id')
+      .select('id, twin_group')
       .in('id', wrong.map((w) => w.problem_id))
-    const twinOf = new Map<number, number | null>((tw ?? []).map((t: any) => [t.id, t.twin_id]))
+    const groupOf = new Map<number, number | null>((tw ?? []).map((t: any) => [t.id, t.twin_group]))
+    const groups = Array.from(new Set(Array.from(groupOf.values()).filter(Boolean))) as number[]
+    const mates = new Map<number, number[]>()
+    if (groups.length) {
+      const { data: all } = await supabase
+        .from('problems')
+        .select('id, twin_group')
+        .in('twin_group', groups)
+        .limit(5000)
+      ;(all ?? []).forEach((p: any) => {
+        const arr = mates.get(p.twin_group) ?? []
+        arr.push(p.id)
+        mates.set(p.twin_group, arr)
+      })
+    }
+    const used = new Set<number>(wrong.map((w) => w.problem_id as number))
     let got = 0
     for (const w of wrong) {
-      const t = twinOf.get(w.problem_id as number)
-      if (t) { problemIds.push(t); got++ }
+      const g = groupOf.get(w.problem_id as number)
+      const pick = (g ? mates.get(g) ?? [] : []).find((id) => !used.has(id))
+      if (pick) { problemIds.push(pick); used.add(pick); got++ }
     }
-    if (!got) notes.push('쌍둥이 문제가 없습니다 (쎈·쎈B 문항만 짝이 있어요)')
+    if (!got) notes.push('쌍둥이 문제가 없습니다 (아직 짝을 찾아 두지 않은 문항이에요)')
   }
   if (parts.includes('similar')) {
     // 유사문제 — 같은 유형에서, 원래 시험지에 있던 문제와 이 학생이 이미 본 문제는 빼고 뽑는다
@@ -125,16 +142,24 @@ export async function POST(req: Request) {
       }
     }
     const base = [...(onSheet ?? []).map((r: any) => r.problem_id), ...seen].filter(Boolean)
-    // 쎈↔쎈B 쌍둥이(숫자만 다른 같은 문제)도 같이 제외한다
+    // 쌍둥이(숫자만 다른 같은 문제)도 같이 제외한다 — 이미 푼 문제를 그대로 또 주는 꼴이 된다
     let twins: number[] = []
     if (base.length) {
       const { data: tw } = await supabase
         .from('problems')
-        .select('twin_id')
+        .select('twin_group')
         .in('id', Array.from(new Set(base)))
-        .not('twin_id', 'is', null)
+        .not('twin_group', 'is', null)
         .limit(20000)
-      twins = (tw ?? []).map((t: any) => t.twin_id)
+      const gs = Array.from(new Set((tw ?? []).map((t: any) => t.twin_group)))
+      if (gs.length) {
+        const { data: mates } = await supabase
+          .from('problems')
+          .select('id')
+          .in('twin_group', gs)
+          .limit(20000)
+        twins = (mates ?? []).map((m: any) => m.id)
+      }
     }
     const exclude = new Set<number>([...base, ...twins])
 

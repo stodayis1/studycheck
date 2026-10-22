@@ -198,7 +198,8 @@ def main():
         else:
             wav, al = synth_scene(says[k], a.voice, a.model, cache, plain(says[k - 1]) if k else '',
                                   plain(says[k + 1]) if k + 1 < len(S) else '', os.path.join(tmp, f'{k}.wav'))
-            x = pcm(wav); offs.append(t); lens.append(len(x) / sr + GAP); als.append(al)
+            x = pcm(wav)
+        offs.append(t); lens.append(len(x) / sr + GAP); als.append(al)
         audio += [x, np.zeros(int(GAP * sr), np.float32)]; t += len(x) / sr + GAP
     total = t + 0.6; n = int(math.ceil(total * FPS))
     y = np.concatenate(audio + [np.zeros(int(0.6 * sr), np.float32)]); full = os.path.join(tmp, 'all.wav')

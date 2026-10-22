@@ -43,23 +43,25 @@ export async function GET(req: Request) {
   const { data: rows } = await s
     .from('exam_sheet_problems')
     .select(
-      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_text, answer_image_path, solution_image_path, is_essay, twin_id)'
+      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_text, answer_image_path, solution_image_path, is_essay, twin_group)'
     )
     .eq('sheet_id', sheet.id)
     .order('no')
   const list = (rows ?? []) as any[]
 
-  // 풀이가 없는 문항은 쌍둥이의 풀이를 빌린다
-  const twinIds = list
-    .filter((r) => r.problems && !r.problems.solution_image_path && r.problems.twin_id)
-    .map((r) => r.problems.twin_id)
-  const twins: Record<number, any> = {}
-  if (twinIds.length) {
+  // 풀이가 없는 문항은 **같은 쌍둥이 묶음** 안에서 풀이가 있는 문항의 것을 빌린다
+  const groups = Array.from(new Set(list
+    .filter((r) => r.problems && !r.problems.solution_image_path && r.problems.twin_group)
+    .map((r) => r.problems.twin_group)))
+  const twins: Record<number, any> = {}      // 묶음번호 → 빌려 올 문항
+  if (groups.length) {
     const { data: tw } = await s
       .from('problems')
-      .select('id, book, grade, semester, page_no, local_no, solution_image_path, answer_text')
-      .in('id', Array.from(new Set(twinIds)))
-    ;(tw ?? []).forEach((t: any) => (twins[t.id] = t))
+      .select('id, twin_group, book, grade, semester, page_no, local_no, solution_image_path, answer_text')
+      .in('twin_group', groups)
+      .not('solution_image_path', 'is', null)
+      .limit(5000)
+    ;(tw ?? []).forEach((t: any) => { if (!twins[t.twin_group]) twins[t.twin_group] = t })
   }
 
   const codes = Array.from(new Set(list.map((r) => r.problems?.type_code).filter(Boolean)))
@@ -75,7 +77,7 @@ export async function GET(req: Request) {
     const p = r.problems
     if (!p) continue
     const own = p.solution_image_path
-    const borrowed = !own && p.twin_id ? twins[p.twin_id]?.solution_image_path : null
+    const borrowed = !own && p.twin_group ? twins[p.twin_group]?.solution_image_path : null
     if (own || borrowed) paths.push(own || borrowed)
     if (!p.answer_text && p.answer_image_path) paths.push(p.answer_image_path)
   }
@@ -89,7 +91,7 @@ export async function GET(req: Request) {
 
   const problems = list.map((r) => {
     const p = r.problems
-    const twin = p?.twin_id ? twins[p.twin_id] : null
+    const twin = p?.twin_group ? twins[p.twin_group] : null
     const own = p?.solution_image_path
     const borrowed = !own && twin?.solution_image_path ? twin.solution_image_path : null
     return {

@@ -36,7 +36,7 @@ function db() {
 
 const COLS =
   'id, book, grade, semester, sub_chapter_no, sub_chapter_title, page_no, local_no, ' +
-  'type_code, level, step, answer_kind, is_essay, twin_id, image_path'
+  'type_code, level, step, answer_kind, is_essay, twin_id, twin_group, image_path'
 
 // 문항 번호를 정렬·비교할 수 있는 값으로. '0277' → 277, '2_8' → 2008 처럼 섞여 있어도 순서가 유지된다
 function numOf(localNo: string | number | null) {
@@ -144,7 +144,7 @@ export async function GET(req: Request) {
     problems: withUrl.map((r: any) => ({
       id: r.id, localNo: r.local_no, pageNo: r.page_no, typeCode: r.type_code,
       level: r.level, step: r.step, answerKind: r.answer_kind, isEssay: r.is_essay,
-      hasTwin: !!r.twin_id, image: r.image, source: sourceLabel(r),
+      hasTwin: !!r.twin_group, image: r.image, source: sourceLabel(r),
     })),
   })
 }
@@ -189,9 +189,24 @@ export async function POST(req: Request) {
       )
     : []
 
-  // 고른 문항과 그 쌍둥이는 유사 후보에서 뺀다
+  // 같은 문제가 교재 서너 권에 실리므로 쌍둥이는 **묶음**(twin_group)으로 찾는다
+  const tgs = Array.from(new Set(order.map((r: any) => r.twin_group).filter(Boolean))) as number[]
+  const mates = new Map<number, any[]>()
+  if (tgs.length) {
+    const { data: tw } = await supabase.from('problems').select(COLS).in('twin_group', tgs).limit(5000)
+    for (const p of tw ?? []) {
+      const arr = mates.get((p as any).twin_group) ?? []
+      arr.push(p)
+      mates.set((p as any).twin_group, arr)
+    }
+  }
+
+  // 고른 문항과 그 쌍둥이는 유사 후보에서 뺀다 (이미 푼 문제를 또 주는 꼴이 된다)
   const exclude = new Set<number>()
-  for (const r of order) { exclude.add(r.id); if (r.twin_id) exclude.add(r.twin_id) }
+  for (const r of order) {
+    exclude.add(r.id)
+    for (const m of (r.twin_group ? mates.get(r.twin_group) ?? [] : [])) exclude.add(m.id)
+  }
 
   const wantLevel = (lv: number | null) =>
     similarLevel === 'easier' ? (lv ?? 0) - 1 : similarLevel === 'harder' ? (lv ?? 0) + 1 : (lv ?? 0)
@@ -205,9 +220,14 @@ export async function POST(req: Request) {
   for (const s of order) {
     if (keepOriginal) { out.push({ id: s.id, tag: '원문항' }); used.add(s.id) }
 
-    // 쌍둥이 — 쎈↔쎈B는 숫자만 다른 같은 문제
-    if (twin > 0 && s.twin_id && !used.has(s.twin_id)) {
-      out.push({ id: s.twin_id, tag: '쌍둥이' }); used.add(s.twin_id)
+    // 쌍둥이 — 숫자만 다른 같은 문제. 묶음에 여러 권이 있으면 요청한 개수만큼 붙인다
+    if (twin > 0 && s.twin_group) {
+      let added = 0
+      for (const m of mates.get(s.twin_group) ?? []) {
+        if (added >= twin) break
+        if (m.id === s.id || used.has(m.id)) continue
+        out.push({ id: m.id, tag: '쌍둥이' }); used.add(m.id); added++
+      }
     }
 
     if (similar > 0) {
