@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import ModeToggle from '@/components/teacher/ModeToggle'
 
 export function Header({ title, subtitle, showBack=false, action }: {
   title: string; subtitle?: string; showBack?: boolean; action?: React.ReactNode
@@ -26,7 +27,12 @@ export function Header({ title, subtitle, showBack=false, action }: {
         <h1 className="text-base font-bold truncate" style={{ color: '#085041' }}>{title}</h1>
         {subtitle && <p className="text-xs truncate" style={{ color: '#0F6E56' }}>{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {/* 오른쪽 — 모드 단추(모바일만)와 화면별 단추를 **한 줄에** 늘어놓는다.
+          모드 단추는 예전엔 화면 위에 떠서 알림 종을 덮었다 (원장님 2026-10-22). */}
+      <div className="shrink-0 flex items-center gap-2">
+        <ModeToggle className="md:hidden print:hidden" />
+        {action}
+      </div>
     </header>
   )
 }

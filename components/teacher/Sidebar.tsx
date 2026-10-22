@@ -118,9 +118,11 @@ export function TeacherSidebar() {
               className="w-full text-xs py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-1.5"
               style={supervisorMode
                 ? { background: '#1D4ED8', color: 'white' }
-                : { background: '#EFF4FF', color: '#1D4ED8' }}>
-              <i className={supervisorMode ? 'ti ti-eye' : 'ti ti-user'} style={{ fontSize: 13 }} />
-              {supervisorMode ? `${supervisorLabel()} 모드` : '강사 모드'}
+                : { background: 'white', color: '#9ca3af', border: '1px solid #e5e7eb' }}>
+              {/* ★ 꺼졌을 때도 「주임」이라고 적는다. 예전엔 「강사 모드」라고 적어서
+                  바로 위 관리자 단추가 꺼졌을 때와 글자가 똑같았다. */}
+              <i className={supervisorMode ? 'ti ti-eye' : 'ti ti-eye-off'} style={{ fontSize: 13 }} />
+              {`${supervisorLabel()} 모드`}{supervisorMode ? '' : ' 꺼짐'}
             </button>
           </div>
         )}
@@ -196,33 +198,12 @@ export function TeacherSidebar() {
         </div>
       </aside>
 
-      {/* 모바일 관리자 토글 - 상단 고정 */}
-      {currentUser?.role === 'admin' && (
-        <div className="md:hidden print:hidden fixed top-3 right-3 z-50">
-          <button onClick={toggleAdminMode}
-            className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
-            style={adminMode
-              ? { background: '#085041', color: 'white', border: '1px solid #085041' }
-              : { background: '#F5C4B3', color: '#712B13', border: '1px solid #F5C4B3' }}>
-            <i className={adminMode ? 'ti ti-crown' : 'ti ti-user'} style={{ fontSize: 11 }} />
-            {adminMode ? '관리자' : '강사'}
-          </button>
-        </div>
-      )}
-
-      {/* 모바일 주임 토글 - 상단 고정 */}
-      {isSupervisorAccount() && (
-        <div className="md:hidden print:hidden fixed top-3 right-3 z-50">
-          <button onClick={toggleSupervisorMode}
-            className="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1"
-            style={supervisorMode
-              ? { background: '#1D4ED8', color: 'white', border: '1px solid #1D4ED8' }
-              : { background: '#EFF4FF', color: '#1D4ED8', border: '1px solid #BFD3FA' }}>
-            <i className={supervisorMode ? 'ti ti-eye' : 'ti ti-user'} style={{ fontSize: 11 }} />
-            {supervisorMode ? supervisorLabel() : '강사'}
-          </button>
-        </div>
-      )}
+      {/* ★ 모바일 모드 단추는 여기서 **떠 있지 않다**.
+          예전에는 관리자 단추와 주임 단추가 둘 다 `fixed top-3 right-3` 이었다.
+          원장님은 admin 이라 두 조건을 다 만족해서 같은 자리에 겹쳐 그려졌고,
+          나중에 그려지는 주임 단추가 덮어 관리자 단추는 아예 눌리지 않았다
+          (원장님 2026-10-22 「관리자모드 변환이 안된다 … 버튼이 겹쳐져서 눌려」).
+          지금은 화면 머리글 줄 안(components/common/Header.tsx → ModeToggle)에 들어간다. */}
 
       {/* 모바일 더보기 시트 */}
       {moreOpen && (
