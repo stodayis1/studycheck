@@ -30,11 +30,19 @@ type Chapter = { no: number; title: string; subs: Sub[]; total: number }
 const FALLBACK_COURSES: Course[] = [
   { grade: '중1', semester: 1, label: '중1-1', level: '중등' },
 ]
-// 학원 공통 난이도. 1=쎈A / 2=개념서 대표·확인 / 3=쎈B / 4=쎈B상·쎈C / 5=올림포스 고난도 / 6=고쟁이 최심화
+// 학원 공통 레벨 1~6. **3 = 쎈 B단계 · 4 = 쎈 C단계** 가 기준점이다 (원장님 기준).
+//   교재에 찍힌 하·중·상은 그 교재 구간 안에서의 상대 난이도라, 교재·구간·난이도를
+//   함께 보고 절대 레벨로 옮긴다. 규칙과 되돌리기는 scripts/levels/ 에 있다.
 const LEVELS = [1, 2, 3, 4, 5, 6]
 const LEVEL_HINT: Record<number, string> = {
-  1: '기본 (쎈 A)', 2: '개념 확인', 3: '유형 (쎈 B)', 4: '심화 (쎈 B상·C)', 5: '고난도', 6: '최심화',
+  1: '개념·기본 (쎈 A·베이직쎈 A)',
+  2: '기본 다지기 (베이직쎈 T·라이트쎈 B)',
+  3: '유형 표준 (쎈 B단계)',
+  4: '심화 (쎈 C단계·쎈 B상)',
+  5: '고난도 (일품·RPM 실력UP)',
+  6: '최심화',
 }
+// 과정에 문항이 하나도 없을 때만 쓰는 예비 목록
 const BOOKS = ['쎈', '쎈B', '베이직쎈', '풍산자 필수유형', '풍산자 라이트유형', '유형만렙', 'RPM', '개념+유형 개념편', '개념+유형 유형편', '라이트쎈']
 const COUNT_PRESETS = [10, 20, 25, 30, 50]
 
@@ -119,6 +127,15 @@ export default function ProblemBankPage() {
   )
   const pickedTypes = useMemo(() => allTypes.filter((t) => picked.has(t.code)), [allTypes, picked])
   const pool = pickedTypes.reduce((a, t) => a + t.count, 0)
+  // 교재 칩은 **이 과정에 실제로 들어 있는 교재**에서 뽑는다 (문항 많은 순).
+  // 예전에는 손으로 적은 목록이라 새 교재(기출단계별·핵심유형·일품 …)가 칩에 안 떴다.
+  const courseBooks = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const t of allTypes)
+      for (const [b, n] of Object.entries(t.byBook ?? {})) m[b] = (m[b] ?? 0) + (n as number)
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([b]) => b)
+  }, [allTypes])
+
   // 고른 유형들의 레벨별 문항 수 (칩에 숫자로 띄운다)
   const levelPool = useMemo(() => {
     const m: Record<number, number> = {}
@@ -305,7 +322,8 @@ export default function ProblemBankPage() {
             </Field>
 
             <Field label="교재">
-              <Chips all="전체" values={BOOKS} on={books} set={(v) => toggleArr(v, books, setBooks)} clear={() => setBooks([])} />
+              <Chips all="전체" values={courseBooks.length ? courseBooks : BOOKS} on={books}
+                set={(v) => toggleArr(v, books, setBooks)} clear={() => setBooks([])} />
             </Field>
 
             <Field label="답안 형태">

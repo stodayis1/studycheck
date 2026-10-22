@@ -8,10 +8,13 @@
     "steps": [ {"pose": "A|B|C|D|E", "bubble": "...", "say": "... (lesson_video 와 같은 표시 / // {강조 …})",
                 "newpage": false,
                 "write": [ {"cue": "말 안의 글자", "tex": "손으로 쓸 줄 — $수식$ 과 한글 섞어서",
-                            "color": "ink|red|blue", "indent": 0, "box": false, "underline": false} ] } ] }
+                            "color": "ink|red|blue", "indent": 0, "box": false, "underline": false,
+                            "highlight": false (형광 마커)} ],
+                "short": true (false 면 --version short 에서 뺀다) } ] }
 풀이 영상(필수예제)도 같은 도구로 만든다 — 대본에 "kind": "풀이", "label": "필수예제 01",
   "problem": {"image": "문제 그림 경로", "crop": [..] (선택)} 을 넣으면 문제를 노트 위에 고정해 두고 그 아래 노트에 풀이를 쓴다.
-수지 자세: A 가리키기(입 움직임) · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅 — A 말고는 말소리에 맞춰 몸이 살짝 들썩인다.
+수지 자세(suji_pose.py): A~I 또는 이름 — 입 그림 두 장이 있는 자세는 입이 움직이고, 없으면 몸이 들썩인다.
+  예전 설명: A 가리키기(입 움직임) · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅 — A 말고는 말소리에 맞춰 몸이 살짝 들썩인다.
 """
 import argparse, json, math, os, subprocess, sys
 import numpy as np
@@ -20,6 +23,7 @@ import matplotlib; matplotlib.use('Agg')
 from matplotlib import font_manager as fm, pyplot as plt, rcParams
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import suji_pose
 from lesson_video import (synth_scene, cue_time, plain, sound, pcm, mouth_track, pencil, font, penfont, wrap,
                           W, H, FPS, BG, INK, SOFT, BRICK, CARD, LINE, PEN, HERE)
 
@@ -112,9 +116,9 @@ _SUJI = {}
 def suji(pose, mouth, top):
     key = (pose, mouth, top)
     if key not in _SUJI:
-        f = os.path.join(HERE, 'suji', (mouth + '.png') if pose == 'A' else POSE_FILE[pose])
+        f = suji_pose.image(pose, mouth)            # 자세별 입 다문/벌린 그림 (suji/poses)
         sj = Image.open(f).convert('RGBA'); sj = sj.crop(sj.getbbox())
-        th = min(620, H - top); s = th / sj.height
+        th = min(620, H - top); s = th / sj.height * suji_pose.scale(pose)
         if pose == 'E': s *= 0.92
         _SUJI[key] = sj.resize((int(sj.width * s), int(sj.height * s)), Image.LANCZOS)
     return _SUJI[key]
@@ -125,6 +129,8 @@ def main():
     ap.add_argument('proof'); ap.add_argument('--out', required=True)
     ap.add_argument('--cache', default=None); ap.add_argument('--voice', default='mbwQpKqHamJOPuXJoCPc')
     ap.add_argument('--model', default='eleven_multilingual_v2')
+    ap.add_argument('--version', default='full', choices=['full', 'short'], help='short: "short": false 인 단계를 빼고 만든다(같은 대본·같은 저장 목소리)')
+    ap.add_argument('--bar', action='store_true', help='영상 맨 아래에 진행 막대 + 단계 눈금')
     ap.add_argument('--cuts', default=None, help='교재 토막 폴더(concept_cuts.py 결과). figure.image 는 이 폴더 기준 상대 경로')
     a = ap.parse_args()
     P = json.load(open(a.proof, encoding='utf-8'))
@@ -139,6 +145,8 @@ def main():
         NOTE = (NOTE[0], 100 + PROB.height + 30 + 22, NOTE[2], NOTE[3])
     cache = a.cache or os.path.join(os.path.dirname(a.out), 'tts_cache')
     tmp = a.out + '.parts'; os.makedirs(tmp, exist_ok=True)
+    if a.version == 'short':                        # 짧은 판: 단계에 "short": false 를 붙인 것은 뺀다
+        P['steps'] = [s for s in P['steps'] if s.get('short', True) is not False]
     steps = P['steps']; says = [s['say'].replace(QUIET, ' ') for s in steps]
 
     # 0) 쓸 줄들의 자리(쪽·좌표)와 그림 — 조용히 쓰는 줄은 쓰는 데 걸리는 시간만큼 말을 쉬어야 해서 먼저 정한다
@@ -166,7 +174,7 @@ def main():
                 img = img.resize((maxw, int(img.height * maxw / img.width)), Image.LANCZOS)
             dur = max(0.8, min(3.6, img.width / 480))
             ln = dict(img=img, page=page, x=130 + 70 * wr.get('indent', 0), y=cy, t0=0.0, dur=dur,
-                      box=wr.get('box'), underline=wr.get('underline'), wr=wr)
+                      box=wr.get('box'), underline=wr.get('underline'), hl=wr.get('highlight'), wr=wr)
             lines.append(ln); mine.append(ln)
             cy += img.height + wr.get('gap', 26)
         step_lines.append(mine)
@@ -252,6 +260,9 @@ def main():
                 L.paste(fig_im, (cw - fig_im.width - 30, 30))
             for ln in lines[:upto]:
                 if ln['page'] != pg: continue
+                if ln.get('hl'):                    # 형광 마커: 글씨 아래쪽 반을 노랗게 (글씨가 위에 오게 먼저 칠한다)
+                    hl = Image.new('RGBA', (ln['img'].width + 20, int(ln['img'].height * 0.62)), (255, 222, 70, 135))
+                    L.alpha_composite(hl, (int(ln['x']) - 10, int(ln['y'] + ln['img'].height * 0.42)))
                 L.alpha_composite(ln['img'], (int(ln['x']), int(ln['y'])))
                 bx = (ln['x'] - 14, ln['y'] - 10, ln['x'] + ln['img'].width + 14, ln['y'] + ln['img'].height + 10)
                 if ln['box']: d.rounded_rectangle(bx, 14, outline=PEN + (235,), width=6)
@@ -270,8 +281,9 @@ def main():
         upto = (max(done) + 1) if done else 0
         writing = [i for i, ln in enumerate(lines) if ln['t0'] <= tt < ln['t0'] + ln['dur'] + 0.15]
         cur_page, off = view(tt)
-        pose = st.get('pose', 'A'); mouth = mouths[f] if pose == 'A' else 'closed'
-        bob = 0 if pose == 'A' else int(min(1.0, loud[f]) * 3) * 3          # 말할 때 3단계로 들썩
+        pose = st.get('pose', 'A'); talk = suji_pose.talks(pose)
+        mouth = mouths[f] if talk else 'closed'
+        bob = 0 if talk else int(min(1.0, loud[f]) * 3) * 3          # 입 그림이 한 장뿐인 자세는 말할 때 3단계로 들썩
         prog = tuple((i, round(min(1, (tt - lines[i]['t0']) / lines[i]['dur']), 3)) for i in writing)
         key = (k, cur_page, off, upto, pose, mouth, bob, prog)
         if key == prev_key:
@@ -311,6 +323,8 @@ def main():
                       for i, s in enumerate(steps)])
     json.dump(seg, open(os.path.splitext(a.out)[0] + '.구간.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     import shutil; shutil.rmtree(tmp, ignore_errors=True)
+    if a.bar:                                       # 진행 막대 + 단계 눈금 (progress_bar.py)
+        subprocess.run([sys.executable, os.path.join(HERE, 'progress_bar.py'), a.out], check=True)
     print('ok', a.out, f'{total / 60:.1f}분, 줄 {len(lines)}개, 장 {page + 1}')
 
 

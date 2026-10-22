@@ -85,8 +85,12 @@ PAUSE = {'/': 0.2, '//': 0.55}
 # 읽기 고침 — 대본은 맞춤법대로 쓰고, 소리 내기 직전에만 바꾼다 (원장님 2026-10-15)
 #  · 「원점」은 [원쩜]으로 소리 난다. 글자대로 「원점」이라 읽으면 어색하다
 #  · 「점 에이」를 띄어 쓰면 「…오와 점 / 에이」처럼 「점」 뒤에서 끊어 읽는다 → 「점에이」로 붙인다
-SOUND = [('꼭짓점', '꼭찌쩜'), ('원점', '원쩜'), ('교점', '교쩜'), ('중점', '중쩜'), ('내분점', '내분쩜'),
-         ('외분점', '외분쩜'), ('접점', '접쩜'), ('정점', '정쩜'), ('끝점', '끝쩜')]
+#  · 고칠 말은 docs/대본/발음사전.json 에 원장님이 직접 더한다(「표기」: 「읽는 말」). 긴 표기부터 바꾼다.
+_DICT = os.path.join(HERE, '..', '..', 'docs', '대본', '발음사전.json')
+def _sound_pairs():
+    d = json.load(open(_DICT, encoding='utf-8')) if os.path.exists(_DICT) else {}
+    return sorted(((k, v) for k, v in d.items() if not k.startswith('_')), key=lambda kv: -len(kv[0]))
+SOUND = _sound_pairs()
 LETTERS = '에이|비|씨|디|이|에프|지|에이치|아이|제이|케이|엠|엔|오|피|큐|알|에스|티|유|브이|더블유|엑스|와이|제트'
 
 
@@ -312,9 +316,10 @@ def base_frame(L, sc, book, mouth):
     d.line([(R0 + 230, by0 + bh), (R0 + 270, by0 + bh + 36), (R0 + 280, by0 + bh)], fill=LINE, width=3)
     for k, ln in enumerate(bl):
         d.text((R0 + 26, by0 + 20 + k * 50), ln, font=bf, fill=INK)
-    f = os.path.join(HERE, 'suji', ('cheer' if sc.get('pose') == 'cheer' else mouth) + '.png')
+    import suji_pose                            # 자세별 입 다문/벌린 그림 (suji/poses) — pose 를 안 쓰면 가리키기
+    f = suji_pose.image(sc.get('pose', 'point'), mouth)
     sj = Image.open(f).convert('RGBA'); sj = sj.crop(sj.getbbox())
-    th = min(560, H - (by0 + bh + 44))
+    th = int(min(560, H - (by0 + bh + 44)) * suji_pose.scale(sc.get('pose', 'point')))
     s = th / sj.height; sj = sj.resize((int(sj.width * s), th), Image.LANCZOS)
     im.paste(sj, (R0 + RW // 2 - sj.width // 2 + 10, H - th), sj)
     return im
@@ -475,8 +480,11 @@ def main():
     ap.add_argument('--out', required=True); ap.add_argument('--model', default='eleven_multilingual_v2')
     ap.add_argument('--voice', default='mbwQpKqHamJOPuXJoCPc'); ap.add_argument('--cache', default=None)
     ap.add_argument('--stability', type=float, default=0.6)
+    ap.add_argument('--bar', action='store_true', help='영상 맨 아래에 진행 막대 + 장면 눈금')
+    ap.add_argument('--version', default='full', choices=['full', 'short'], help='short: "short": false 인 장면을 빼고 만든다')
     a = ap.parse_args()
     L = json.load(open(a.lesson, encoding='utf-8'))
+    if a.version == 'short': L['scenes'] = [sc for sc in L['scenes'] if sc.get('short', True) is not False]
     cuts = {c['file'].split('/')[-1][:-4]: c for c in json.load(open(os.path.join(a.cuts, '..', 'cuts.json'), encoding='utf-8'))[L['no'] - 1]['cuts']} \
         if os.path.exists(os.path.join(a.cuts, '..', 'cuts.json')) else {}
     doc = pymupdf.open(a.pdf)
@@ -494,14 +502,16 @@ def main():
             part = cuts[sc['show']]['parts'][0]
             book = Book(os.path.join(a.cuts, sc['show'] + '.png'), part, sc.get('clip'))
             page = doc[part['page'] - 1]
-        bases = {m: base_frame(L, sc, book, m) for m in (['closed'] if sc.get('pose') == 'cheer' else ['closed', 'half', 'open', 'blink'])}
+        import suji_pose
+        talk = suji_pose.talks(sc.get('pose', 'point'))
+        bases = {m: base_frame(L, sc, book, m) for m in (['closed', 'half', 'open', 'blink'] if talk else ['closed'])}
         marks = []; last_cue = 0.0
         for i, m in enumerate(sc.get('marks', [])):
             t0 = cue_time(al, says[k], m['cue'], last_cue) + m.get('delay', 0); last_cue = t0 - m.get('delay', 0)
             dur_m = m.get('dur', 0.6 if m['type'] != 'note' else 0.4 + 0.07 * len(m.get('text', '')))
             marks.append((m, mark_geom(m, page, book) if book else (0, 0, 0, 0), t0, dur_m, 1000 * k + i))
         seq = mouth_track(x, n)
-        if sc.get('pose') == 'cheer': seq = ['closed'] * n
+        if not talk: seq = ['closed'] * n
         seg = os.path.join(tmp, f's{k + 1:02d}.mp4')
         ff = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS),
                                '-i', '-', '-i', mp3, '-af', f'apad=whole_dur={n / FPS:.4f}', '-t', f'{n / FPS:.4f}',
@@ -562,6 +572,7 @@ def main():
                     examples=L.get('example_codes') or L.get('examples'), scenes=timeline)
     json.dump(seg_info, open(os.path.splitext(a.out)[0] + '.구간.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     import shutil; shutil.rmtree(tmp, ignore_errors=True)       # 장면 조각·wav 는 다 쓰면 지운다
+    if a.bar: subprocess.run([sys.executable, os.path.join(HERE, 'progress_bar.py'), a.out], check=True)
     print('ok', a.out, f'{t_acc / 60:.1f}분')
 
 

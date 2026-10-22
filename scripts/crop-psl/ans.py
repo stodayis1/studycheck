@@ -1,3 +1,4 @@
+import io
 import pymupdf, re, json, numpy as np
 from PIL import Image
 s=pymupdf.open('sol.pdf'); ev=[]
@@ -9,19 +10,21 @@ for pi,p in enumerate(s):
     for b in p.get_text('dict')['blocks']:
         for l in b.get('lines',[]):
             sp=[z for z in l['spans'] if z['text'].strip()] or l['spans']; t=''.join(z['text'] for z in sp).strip(); bb=l['bbox']; col=int(bb[0]>div)
-            if sp and sp[0]['font']=='Jalnan' and re.fullmatch(r'\d{2,3}',t): ev.append(dict(pg=pi,col=col,y=bb[1],k='n',t=t))
+            if sp and sp[0]['font'].startswith('Jalnan') and re.fullmatch(r'\d{2,3}',t): ev.append(dict(pg=pi,col=col,y=bb[1],k='n',t=t))
             elif sp and sp[0]['text'].strip()=='답' and sp[0]['size']<7.5:
                 rest=[z for z in sp[1:] if z['text'].strip()]
                 core=[z['bbox'] for z in sp if z['text'].strip() and z['text'].strip()!="'"]
                 bb=(bb[0],min(c[1] for c in core),bb[2],max(c[3] for c in core))
                 ev.append(dict(pg=pi,col=col,y=bb[1],k='a',t=''.join(z['text'] for z in sp[1:]).strip(),bb=bb,ax=rest[0]['bbox'][0] if rest else bb[2],div=div))
 ev.sort(key=lambda e:(e['pg'],e['col'],e['y']))
-A={}; cur=None; ch=1; inex=False
+# 해설의 번호 차례는 문제 차례와 똑같다(공수2에서 659=659 확인).
+# 단원을 다시 추측하면 어긋난다 — 연습문제 번호가 본문은 두 자리, 해설은 세 자리라서다.
+QL=[m['l'] for m in json.load(io.open('q_meta.json',encoding='utf8'))]
+A={}; cur=None; qi=-1
 for i,e in enumerate(ev):
     if e['k']=='n':
-        ex=len(e['t'])==2
-        if not ex and inex: ch+=1
-        inex=ex; no=int(e['t']); cur=f"{ch:02d}-S{no:02d}" if ex else f"{ch:02d}-{no:03d}"; continue
+        qi+=1; cur=QL[qi] if qi<len(QL) else None; continue
+    if cur is None or cur in A: continue   # 한 문제에 「답」이 여러 번 찍힌 경우 첫 것만
     bb=e['bb']; z=3.0
     # group text spans around the answer line: to the right of the '답' mark, touching vertically (<4pt)
     SP=SPANS[e['pg']]
@@ -62,6 +65,6 @@ for i,e in enumerate(ev):
     Image.fromarray(can).save(f'out/a/{cur}_a.png')
     if cur in A: print('dup',cur)
     A[cur]=dict(t=e['t'],h=h)
-Q=[o['l'] for o in json.load(open('q_meta.json'))]
+Q=[o['l'] for o in json.load(io.open('q_meta.json',encoding='utf8'))]
 print('answers',len(A),'missing',[x for x in Q if x not in A],'extra',[x for x in A if x not in Q])
-json.dump(A,open('a_meta.json','w'),ensure_ascii=False)
+json.dump(A,io.open('a_meta.json','w',encoding='utf8'),ensure_ascii=False)
