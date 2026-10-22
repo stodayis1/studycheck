@@ -175,6 +175,27 @@ export default function ProblemBankPage() {
     } finally { setBusy(false) }
   }
 
+  // 고른 유형의 문항들을 「쌍둥이 만들기」 요청 줄에 올린다. 만드는 건 Claude(「요청 처리해줘」)
+  const [twinBusy, setTwinBusy] = useState(false)
+  const [twinMsg, setTwinMsg] = useState('')
+  const askTwins = async () => {
+    setTwinMsg(''); setTwinBusy(true)
+    try {
+      const r = await apiFetch('/api/twin-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ typeCodes: [...picked] }),
+      })
+      const d = await r.json()
+      if (!r.ok) { setTwinMsg(d.error ?? '요청을 남기지 못했습니다.'); return }
+      setTwinMsg(d.added
+        ? `${d.added}문항 요청했습니다. Claude 에게 「요청 처리해줘」라고 하시면 만들어서 확인받고 넣습니다.`
+        : '새로 요청할 문항이 없습니다 (이미 쌍둥이가 있거나 요청이 걸려 있어요).')
+    } catch {
+      setTwinMsg('요청을 남기지 못했습니다.')
+    } finally { setTwinBusy(false) }
+  }
+
   if (authLoading) return <Shell><div className="p-10 text-center text-gray-400">불러오는 중…</div></Shell>
   if (!isAdmin()) return <Shell><div className="p-10 text-center text-gray-500">관리자만 접근할 수 있습니다.</div></Shell>
 
@@ -372,6 +393,15 @@ export default function ProblemBankPage() {
               style={{ background: GOLD }}>
               {busy ? '출제하는 중…' : '학습지 출제하기'}
             </button>
+
+            <button onClick={askTwins} disabled={twinBusy || picked.size === 0}
+              title="고른 유형의 문항을 숫자만 바꾼 쌍둥이로 만들어 달라고 요청합니다"
+              className="w-full py-2 rounded-xl border text-sm font-medium disabled:opacity-40"
+              style={{ borderColor: NAVY, color: NAVY }}>
+              <i className="ti ti-copy mr-1" />
+              {twinBusy ? '요청하는 중…' : '고른 유형 쌍둥이 만들기 요청'}
+            </button>
+            {twinMsg && <div className="text-xs text-gray-600">{twinMsg}</div>}
           </div>
         </Col>
       </div>
