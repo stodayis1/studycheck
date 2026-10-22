@@ -328,6 +328,9 @@ export default function TeacherLearningNotesPage() {
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
   // 담당 강사에게 본인 글 한 통씩 — 자기가 쓴 글이 학부모님께 어떻게 가는지 볼 수 있어야 한다.
   const [sampleResult, setSampleResult] = useState<any>(null)
+  // 미리보기 목록에서 학생 찾기 — 하루에 100명이 넘어 눈으로 훑을 수가 없다
+  // (원장님 2026-10-22 「어떻게 쓰여졌는지 혹은 내가 첨삭할 필요있을 때 빨리 검색이 필요하거든」).
+  const [briefQ, setBriefQ] = useState('')
   // 「선생님께 보내기」로 고르는 중인 학생. null 이면 창이 닫혀 있다.
   const [pickTo, setPickTo] = useState<
     { studentId: string; name: string; options: { name: string; why: string }[]; chosen: string[] } | null>(null)
@@ -1049,15 +1052,23 @@ export default function TeacherLearningNotesPage() {
       return
     }
     // 기존 세션이 있고 편집 권한 체크
+    //
+    // ★ 오늘 것이 없으면 **기본 날짜(가장 가까운 수업일)에 이미 저장된 기록**을 찾아서 연다.
+    //   예전에는 오늘 것만 보고 없으면 빈 칸으로 열었다. 그런데 저장은 (학생, 날짜) 기준
+    //   upsert 라, 어제 다 적어 둔 수업일지를 빈 칸인 채로 덮어쓸 수 있었다
+    //   (원장님 2026-10-22 — 어제 적은 지훈이 과제가 빈 칸으로 보이던 화면이 이것이다).
+    const guessed = guessClassDate(student)
     const session = targetSession ?? getTodaySession(student.id)
+      ?? sessions.find((s) => s.student_id === student.id && s.session_date === guessed)
     // 수업한 날 기본값 — 이미 있는 기록이면 그 날짜, 아니면 **시간표 기준 가장 가까운 수업일**.
     // (오늘이 그 학생 수업 요일이면 오늘, 아니면 바로 지난 수업 요일)
-    setNoteDate(session?.session_date ?? guessClassDate(student))
+    setNoteDate(session?.session_date ?? guessed)
     if (session && !canEditNote(session.session_date, student.id)) {
       alert('수업 당일과 다음 수업일 오후 2시까지만 수정할 수 있어요. 그 이후 수정은 관리자에게 문의해주세요.')
       return
     }
-    const note = getTodayNote(student.id)
+    // 알림장·출결도 **그 세션의 것**을 쓴다. 오늘 것만 보면 지난 수업을 열었을 때 빈 칸이 된다.
+    const note = session ? notes.find((n) => n.session_id === session.id) ?? null : null
     // 이전 수업 (오늘 제외 최근 1개)
     const prevSession = sessions
       .filter((s) => s.student_id === student.id && s.session_date < todayStr)
@@ -2058,6 +2069,23 @@ ${e?.message ?? '연결 실패'}
     let sessionId = noteSession?.id
     const sessionData = draftSession()!
 
+    // ★ 「새로 쓰는 중」인데 그 날짜에 **이미 저장된 수업일지가 있으면** 멈춘다.
+    //   아래 upsert 는 (학생, 날짜) 로 덮어쓰기 때문에, 그대로 두면 이미 적어 둔
+    //   진도·교재·학습지·영상이 빈 칸으로 날아간다. 날짜를 바꿔서 쓰거나, 화면을
+    //   새로 고쳐 그 기록을 열고 고쳐야 한다. (원장님 2026-10-22에 한 걸음 앞까지 갔던 일)
+    if (!noteSession) {
+      const { data: dup } = await supabase.from('class_sessions')
+        .select('id').eq('student_id', noteStudent.id).eq('session_date', noteDate).maybeSingle()
+      if (dup) {
+        setSavingNote(false)
+        alert(`${noteStudent.name} 학생은 ${noteDate} 수업일지가 이미 저장돼 있어요.\n`
+          + '이대로 저장하면 그 기록이 빈 칸으로 덮어쓰입니다.\n\n'
+          + '창을 닫고 화면을 새로 고친 뒤, 그 날짜의 기록을 열어 고쳐 주세요.\n'
+          + '(다른 날 수업을 쓰시는 중이면 「수업한 날」을 바꿔 주세요.)')
+        return
+      }
+    }
+
     // 같은 학생 + 같은 날짜는 DB에서 하나로 강제되므로(unique 제약),
     // upsert로 한 번에 처리하면 "찾았는데 놓쳐서 새로 만들어버리는" 중복 생성이 원천적으로 불가능해진다.
     const { data: savedSession, error: sessionError } = await supabase
@@ -2835,41 +2863,92 @@ ${e?.message ?? '연결 실패'}
                   </div>
                 )}
                 {/* 한 사람씩 — 어떤 글이 어디로 가는지 보고, 원하면 그 사람만 보낸다 */}
-                {(briefPreview.previews ?? []).length > 0 && (
-                  <div className="mt-2 space-y-1.5">
-                    {briefPreview.previews.map((p: any) => (
-                      <details key={p.studentId} className="bg-white border border-gray-200 rounded-lg">
-                        <summary className="cursor-pointer px-2.5 py-1.5 flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-gray-800">{p.name}</span>
-                          <span className="text-gray-500">{p.phone}</span>
-                          <span className="text-gray-400">{p.bodyLen}자</span>
-                          {p.alreadySent && (
-                            <span className="px-1.5 py-0.5 rounded-md font-bold"
-                              style={{ background: '#EAF3DE', color: '#27500A' }}>이미 보냄</span>
+                {(briefPreview.previews ?? []).length > 0 && (() => {
+                  // ★ 하루 100명이 넘어 눈으로 훑을 수가 없다 (원장님 2026-10-22).
+                  //   이름·전화번호 뒷자리로 찾고, 몇 명 안 남으면 글을 **펼친 채로** 보여 준다 —
+                  //   찾는 목적이 「어떻게 쓰여졌는지」 보는 것이라 한 번 더 누르게 하면 헛걸음이다.
+                  const q = briefQ.trim().toLowerCase()
+                  const all = briefPreview.previews as any[]
+                  const shown = q
+                    ? all.filter((p) => String(p.name).toLowerCase().includes(q)
+                        || String(p.phone).replace(/\D/g, '').includes(q.replace(/\D/g, '') || '\u0000'))
+                    : all
+                  const autoOpen = !!q && shown.length > 0 && shown.length <= 3
+                  return (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="relative flex-1 min-w-[10rem]">
+                          <i className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                            style={{ fontSize: 13 }} />
+                          <input value={briefQ} onChange={(e) => setBriefQ(e.target.value)}
+                            placeholder="학생 이름이나 전화 뒷자리로 찾기"
+                            className="w-full pl-7 pr-7 py-1.5 text-[11px] bg-white border border-gray-200 rounded-lg" />
+                          {briefQ && (
+                            <button onClick={() => setBriefQ('')} title="지우기"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                              <i className="ti ti-x" style={{ fontSize: 13 }} />
+                            </button>
                           )}
-                          <button
-                            onClick={(e) => { e.preventDefault(); openSendToTeachers(p) }}
-                            disabled={briefBusy}
-                            title="이 학생 글을 고른 선생님께만 보냅니다. 학부모님께는 안 갑니다."
-                            className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-md border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
-                            선생님께 보내기
-                          </button>
-                          <button
-                            onClick={(e) => { e.preventDefault(); sendOne(p) }}
-                            disabled={briefBusy || p.alreadySent}
-                            title={p.alreadySent ? '이미 학부모님께 나간 날이에요' : undefined}
-                            className="px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
-                            style={{ background: '#FEE500' }}>
-                            이 학생만 보내기
-                          </button>
-                        </summary>
-                        <pre className="mx-2.5 mb-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
-                          {p.body}
-                        </pre>
-                      </details>
-                    ))}
-                  </div>
-                )}
+                        </div>
+                        <span className="text-[10.5px] text-gray-500 shrink-0">
+                          {q ? `${all.length}명 중 ${shown.length}명` : `${all.length}명`}
+                        </span>
+                      </div>
+                      {q && shown.length === 0 && (
+                        <p className="text-[11px] text-gray-400 px-1 py-2">
+                          「{briefQ}」로 찾은 학생이 없어요. 그 날 수업 기록이 없거나 이름이 다를 수 있어요.
+                        </p>
+                      )}
+                      {shown.map((p: any) => (
+                        <details key={`${p.studentId}:${autoOpen}`} open={autoOpen}
+                          className="bg-white border border-gray-200 rounded-lg">
+                          <summary className="cursor-pointer px-2.5 py-1.5 flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-gray-800">{p.name}</span>
+                            <span className="text-gray-500">{p.phone}</span>
+                            <span className="text-gray-400">{p.bodyLen}자</span>
+                            {p.alreadySent && (
+                              <span className="px-1.5 py-0.5 rounded-md font-bold"
+                                style={{ background: '#EAF3DE', color: '#27500A' }}>이미 보냄</span>
+                            )}
+                            {/* ★ 글을 보고 바로 고칠 수 있어야 한다 (원장님 2026-10-22 「내가 첨삭할 필요있을 때」).
+                                그 날짜의 수업일지를 **찾아서 넘겨** 연다 — 안 넘기면 빈 칸으로 열린다. */}
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                const st = students.find((s) => s.id === p.studentId)
+                                if (!st) { alert('학생을 찾지 못했어요. 목록을 새로 고쳐 주세요.'); return }
+                                const ses = sessions.find((s) => s.student_id === p.studentId && s.session_date === briefDate)
+                                if (!ses) { alert(`${p.name} 학생의 ${briefDate} 수업일지를 찾지 못했어요.`); return }
+                                openNoteModal(st, ses)
+                              }}
+                              title="이 날짜의 수업일지를 열어 고칩니다"
+                              className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-md border border-gray-200 bg-white text-gray-700">
+                              <i className="ti ti-pencil align-[-0.125em]" /> 고치기
+                            </button>
+                            <button
+                              onClick={(e) => { e.preventDefault(); openSendToTeachers(p) }}
+                              disabled={briefBusy}
+                              title="이 학생 글을 고른 선생님께만 보냅니다. 학부모님께는 안 갑니다."
+                              className="px-2 py-0.5 text-[10px] font-bold rounded-md border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                              선생님께 보내기
+                            </button>
+                            <button
+                              onClick={(e) => { e.preventDefault(); sendOne(p) }}
+                              disabled={briefBusy || p.alreadySent}
+                              title={p.alreadySent ? '이미 학부모님께 나간 날이에요' : undefined}
+                              className="px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
+                              style={{ background: '#FEE500' }}>
+                              이 학생만 보내기
+                            </button>
+                          </summary>
+                          <pre className="mx-2.5 mb-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
+                            {p.body}
+                          </pre>
+                        </details>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
