@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Header } from '@/components/common/Header'
+import { WorksheetTabs } from '@/components/teacher/WorksheetTabs'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, formatConceptRangeLabel, fetchAllRows } from '@/lib/utils'
@@ -877,6 +878,8 @@ export default function TeacherAssignmentsPage() {
           ) : undefined
         }
       />
+      {/* 학습지 메뉴에서 탭으로 들어오는 화면이기도 하다 — 원장님께만 보인다 */}
+      <WorksheetTabs />
 
       <div className="px-4 py-4 space-y-3 md:px-6">
 

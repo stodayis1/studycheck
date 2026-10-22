@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
+import { WorksheetTabs } from '@/components/teacher/WorksheetTabs'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
@@ -383,6 +384,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header title="학습현황" subtitle="요일별 학습 기록 · 배지를 누르면 점수와 재출제" />
+      {/* 학습지 메뉴에서 탭으로 들어오는 화면이기도 하다 — 원장님께만 보인다 */}
+      <WorksheetTabs />
       <div className="max-w-[1600px] mx-auto">{children}</div>
     </div>
   )

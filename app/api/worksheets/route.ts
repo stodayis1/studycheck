@@ -43,7 +43,7 @@ export async function GET(req: Request) {
   const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 500)
   const { data: sheets } = await s
     .from('exam_sheets')
-    .select('id, code, title, grade, semester, note, created_at, kind')
+    .select('id, code, title, grade, semester, note, created_at, kind, created_by, created_by_name')
     .order('created_at', { ascending: false })
     .limit(limit)
   const list = sheets ?? []

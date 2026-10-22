@@ -13,7 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { fetchAll } from '@/lib/fetchAll'
 import { sourceLabel } from '@/lib/problemSource'
 
@@ -152,8 +152,9 @@ export async function GET(req: Request) {
 // ───────────────────────── POST ─────────────────────────
 // 고른 문항 + 쌍둥이/유사 문제를 붙여 시험지를 만든다
 export async function POST(req: Request) {
-  const deny = await denyIfNotStaff(req, { adminOnly: true })
-  if (deny) return deny
+  // ★ 누가 만들었는지도 함께 받는다 — 목록을 강사별로 갈라 보기 위해 (원장님 2026-10-22).
+  const who = await staffOrDeny(req, { adminOnly: true })
+  if (who.deny) return who.deny
   const supabase = db()
   const b = await req.json().catch((): any => null)
   if (!b) return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
@@ -278,6 +279,7 @@ export async function POST(req: Request) {
     code,
     title: title || `${order[0].book} ${grade}-${semester} 지정문항 ${out.length}문항`,
     grade, semester, kind: 'main', show_source: false, show_difficulty: false,
+    created_by: who.id || null, created_by_name: who.name || null,
   }).select('id, code').single()
   if (e1 || !sheet) return NextResponse.json({ error: e1?.message ?? '시험지 저장 실패' }, { status: 500 })
 

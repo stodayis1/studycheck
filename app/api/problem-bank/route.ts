@@ -3,7 +3,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { fetchAll } from '@/lib/fetchAll'
 
 export const dynamic = 'force-dynamic'
@@ -175,8 +175,9 @@ export async function GET(req: Request) {
 // ───────────────────────── POST ─────────────────────────
 // 조건에 맞게 문항을 뽑아 시험지를 만든다
 export async function POST(req: Request) {
-  const deny = await denyIfNotStaff(req, { adminOnly: true })
-  if (deny) return deny
+  // ★ 누가 만들었는지도 함께 받는다 (원장님 2026-10-22).
+  const who = await staffOrDeny(req, { adminOnly: true })
+  if (who.deny) return who.deny
   const supabase = db()
   const b = await req.json().catch((): any => null)
   if (!b) return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
@@ -302,6 +303,8 @@ export async function POST(req: Request) {
       kind: 'main',
       show_source: false,
       show_difficulty: false,
+      created_by: who.id || null,
+      created_by_name: who.name || null,
     })
     .select('id, code')
     .single()

@@ -31,8 +31,10 @@ const ITEM = {
   examAnalysis:  { href: '/teacher/exam-analysis',  label: '시험지 분석',  icon: 'ti-file-analytics' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
-  worksheets:    { href: '/teacher/worksheets',     label: '학습지출제',   icon: 'ti-file-plus' },
-  sheetList:     { href: '/teacher/worksheets/list', label: '출제한 학습지', icon: 'ti-files' },
+  // ★ 「학습지출제」와 「출제한 학습지」를 한 메뉴로 합쳤다 (원장님 2026-10-22).
+  //   안에서 탭으로 간다 — 내 학습지 / 개별과제 / 학습지 현황 / 새 학습지 만들기
+  //   (components/teacher/WorksheetTabs.tsx).
+  worksheets:    { href: '/teacher/worksheets',     label: '학습지',       icon: 'ti-files' },
   typeConcepts:  { href: '/teacher/type-concepts',  label: '대표개념 연결', icon: 'ti-bulb' },
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
@@ -52,7 +54,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.attendance, ITEM.importRecords] },
   ]
-  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.sheetList, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.changeLog, ITEM.settings] })
+  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.changeLog, ITEM.settings] })
   return groups
 }
 
