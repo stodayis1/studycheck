@@ -2,6 +2,7 @@
 
   python scripts/lesson-video/promo_short.py docs/대본/홍보/윤쌤_홍보쇼츠.json --videos "<강의영상 폴더>" --out "<쇼츠.mp4>" [--cache <음성 캐시>]
 
+장면에 "audio": "녹음 파일 경로" 를 주면 합성 대신 원장님 녹음을 쓴다(무음 자르고 크기 맞춤).
 장면 종류(kind): hello 인사 카드 · flow 학원→집 카드 · clips 강의 영상 맛보기 · call 이름 부르기+대답 버튼 ·
                check 확인 목록 · end 마무리. 바탕은 공통수학 연두 파스텔(썸네일과 같은 계열), 글씨는 수지쌤 벽돌·남색.
 """
@@ -162,6 +163,14 @@ def suji(pose, mouth):
     return _SJ[k]
 
 
+def own_audio(path, sr):
+    """녹음 파일 → 16kHz 모노, 앞뒤 무음 자르고, 원장님 목소리 합성분과 비슷한 크기(-16 LUFS 근처)로"""
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', path, '-af',
+                          'silenceremove=start_periods=1:start_threshold=-40dB,areverse,silenceremove=start_periods=1:start_threshold=-40dB,areverse,loudnorm=I=-16:TP=-1.5',
+                          '-ac', '1', '-ar', str(sr), '-f', 's16le', '-'], capture_output=True, check=True).stdout
+    return np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+
+
 def grab(videos, kind, start, dur, tmp):
     f = glob.glob(os.path.join(videos, CLIPS[kind]))[0]
     out = os.path.join(tmp, kind); os.makedirs(out, exist_ok=True)
@@ -184,9 +193,12 @@ def main():
     if P.get('voice'): LV.MODES['보통'] = dict(LV.MODES['보통'], **P['voice'])
     says = [s['say'].replace(' // ', ' ').replace('//', ' ') for s in S]
     for k, sc in enumerate(S):
-        wav, al = synth_scene(says[k], a.voice, a.model, cache, plain(says[k - 1]) if k else '',
-                              plain(says[k + 1]) if k + 1 < len(S) else '', os.path.join(tmp, f'{k}.wav'))
-        x = pcm(wav); offs.append(t); lens.append(len(x) / sr + GAP); als.append(al)
+        if sc.get('audio'):                         # 원장님이 직접 녹음한 소리 — 앞뒤 무음을 자르고 크기를 맞춰 그대로 쓴다
+            x = own_audio(sc['audio'], sr); al = None
+        else:
+            wav, al = synth_scene(says[k], a.voice, a.model, cache, plain(says[k - 1]) if k else '',
+                                  plain(says[k + 1]) if k + 1 < len(S) else '', os.path.join(tmp, f'{k}.wav'))
+            x = pcm(wav); offs.append(t); lens.append(len(x) / sr + GAP); als.append(al)
         audio += [x, np.zeros(int(GAP * sr), np.float32)]; t += len(x) / sr + GAP
     total = t + 0.6; n = int(math.ceil(total * FPS))
     y = np.concatenate(audio + [np.zeros(int(0.6 * sr), np.float32)]); full = os.path.join(tmp, 'all.wav')
@@ -197,8 +209,14 @@ def main():
     # 자막: 장면 대본을 // 마다 끊어, 그 말이 시작하는 시각부터 띄운다
     subs = []
     for k, sc in enumerate(S):
+        phs = [x.strip() for x in sc['say'].split('//') if x.strip()]
+        if als[k] is None:                           # 녹음한 장면: 시각 정보가 없으니 글자 수 비율로 나눈다
+            tot = sum(len(plain(x)) for x in phs); acc = 0
+            for ph in phs:
+                subs.append((offs[k] + (lens[k] - GAP) * acc / tot, plain(ph))); acc += len(plain(ph))
+            continue
         last = 0.0
-        for ph in [x.strip() for x in sc['say'].split('//') if x.strip()]:
+        for ph in phs:
             tt = cue_time(als[k], ph, plain(ph)[:6], last); last = tt; subs.append((offs[k] + tt, plain(ph)))
     frames = {}
     for k, sc in enumerate(S):
