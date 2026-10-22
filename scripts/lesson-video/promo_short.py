@@ -219,7 +219,7 @@ def main():
         pose = sc.get('pose', 'point'); talk = suji_pose.talks(pose)
         sj = suji(pose, mouths[f] if talk else 'closed')
         bob = 0 if talk else int(abs(math.sin(tt * 6)) * 8)
-        fr.alpha_composite(sj, (W - sj.width + 80, H - sj.height + 10 - bob))
+        fr.alpha_composite(sj, (W - sj.width + 20, H - sj.height + 10 - bob))
         sub = [s for s in subs if s[0] <= tt + 0.05]
         if sub: subtitle(ImageDraw.Draw(fr), sub[-1][1])
         ff.stdin.write(fr.convert('RGB').tobytes())

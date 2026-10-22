@@ -27,7 +27,7 @@
   },
   {
    "kind": "clips",
-   "pose": "point",
+   "pose": "book",
    "head": "직접 쓰고, 증명하고,\n먼저 풀게 해요",
    "clips": [
     [
@@ -58,7 +58,7 @@
   },
   {
    "kind": "check",
-   "pose": "point",
+   "pose": "write",
    "head": "선생님이\n꼼꼼하게 확인해요",
    "items": [
     [
@@ -78,7 +78,7 @@
   },
   {
    "kind": "end",
-   "pose": "cheer",
+   "pose": "thumb",
    "head": "학원에서 한 번,\n집에서 또 한 번",
    "say": "학원에서 한 번, 집에서 또 한 번. // 지금까지 수학의지혜 윤쌤이었습니다."
   }
