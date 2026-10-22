@@ -75,6 +75,8 @@ export interface BriefingSummary {
   skippedNoRecord: { name: string }[]
   /** 시험기간 결석이라 일부러 안 보낸 학생 */
   skippedExam: { name: string }[]
+  /** 저녁 8시에 「출결만 찍혀 있어」 다음 날 오전 11시로 미룬 학생 */
+  skippedThin: { name: string }[]
   /** 어느 판으로 나가는지 — 「예전 판」이면 새 템플릿이 아직 안 잡힌 것이다 */
   template?: string
   errors: { name: string; error: string }[]
@@ -85,6 +87,8 @@ export interface BriefingSummary {
     teacherName?: string | null
     /** 학부모님께 이미 나간 학생. 보낼 대상 수에는 안 들어가지만 목록에는 보인다. */
     alreadySent?: boolean
+    /** 출결 말고 적힌 것이 없는 건 — 저녁 8시 자동 발송에서는 다음 날 11시로 미뤄진다. */
+    thin?: boolean
   }[]
   /** 「선생님께 보내기」에서 고를 수 있는 분 — 원장·주임 (담당 강사는 줄마다 따로) */
   staffOptions?: { admins: string[]; supervisors: string[] }
@@ -99,6 +103,16 @@ async function run(opts: {
   /** 'elementary' 면 초등부만, 'secondary' 면 중·고등부만. 안 주면 전원. */
   only?: 'elementary' | 'secondary'
   /**
+   * 저녁 8시 1차인가. 1차에서는 **출결만 찍힌 껍데기**를 보내지 않고 다음 날 오전 11시로 미룬다.
+   * ★ 선생님들은 출결을 먼저 찍고 진도·과제·알림장을 나중에 채우신다. 그 사이에 8시가 지나면
+   *   「진도 기록 없음 / 따로 낸 과제가 없어요」만 적힌 글이 학부모님께 가 버리고, 뒤에 채운
+   *   내용은 영영 안 나간다 (2026-10-21 이지훈·최다윤 153자 — 지금 값으로는 519·540자다.
+   *   10월 들어 같은 모양이 45건). 원장님 2026-10-22 결정: 출결뿐이면 미룬다.
+   * ★ 2차(오전 11시)는 **마지막 기회**라 이 기준을 쓰지 않는다. 안 그러면 진도·과제 칸을
+   *   잘 안 쓰시는 고등부가 아예 한 통도 못 나간다.
+   */
+  eveningRun?: boolean
+  /**
    * ★ 이미 보낸 학생도 **포함**해서 글을 만든다 (미리보기 전용).
    *   담당강사 샘플은 「학부모님께 이렇게 나갔습니다」를 보여 주는 것이라, 이미 나간
    *   학생이 오히려 대상이다. 그런데 이미 보낸 사람을 걸러 버려서, 학부모 발송이 끝난
@@ -111,7 +125,7 @@ async function run(opts: {
   const { date, dryRun } = opts
   const out: BriefingSummary = {
     date, dryRun, sent: 0, failed: 0, skippedAlreadySent: 0,
-    skippedNoPhone: [], skippedNoRecord: [], skippedExam: [], errors: [], previews: [],
+    skippedNoPhone: [], skippedNoRecord: [], skippedExam: [], skippedThin: [], errors: [], previews: [],
   }
 
   let q = db.from('class_sessions').select('*').eq('session_date', date)
@@ -191,6 +205,18 @@ async function run(opts: {
     //   중·고등은 시험기간에 학원을 안 나와도 봐주시는데, 그걸 「결석」으로 통보하면
     //   학부모도 아는 상황을 굳이 들춰 보는 꼴이 된다. 보낼 내용도 없다.
     if (isExamAbsence(note.attendance)) { out.skippedExam.push({ name: student.name }); continue }
+
+    // ★ 저녁 8시 1차 — 출결 말고 **적힌 것이 하나라도** 있어야 보낸다.
+    //   결석은 그 자체가 할 말이라(보강 안내가 붙는다) 이 기준을 쓰지 않는다.
+    const 껍데기 = note.attendance !== '결석'
+      && !([ses.progress_content, ses.today_textbook_name, ses.today_chapter,
+            ses.hw_textbook_name, ses.hw_textbook_page, ses.hw_worksheet_range,
+            ses.video_url, note.memo, note.makeup_note,
+           ].some((t: any) => String(t ?? '').trim())
+        || ses.daily_test_score != null
+        || (fbs ?? []).some((f: any) => f.student_id === student.id && String(f.content ?? '').trim()))
+    if (opts.eveningRun && 껍데기) { out.skippedThin.push({ name: student.name }); continue }
+
     if (!student.parent_phone) { out.skippedNoPhone.push({ name: student.name }); continue }
     // ★ 미리보기에서는 **이미 보낸 학생도 보여 준다.** 원장님이 그 줄에서 「선생님께 보내기」를
     //   하시기 때문이다. 예전에는 빼 버려서, 학부모 발송이 끝난 학생은 목록에서 사라졌다
@@ -226,6 +252,8 @@ async function run(opts: {
         bodyLen: brief.bodyLen,
         body: brief.body,
         alreadySent: already,
+        // 출결 말고는 아무것도 안 적힌 건 — 저녁 8시 자동 발송에서는 다음 날로 미뤄진다.
+        thin: 껍데기,
       })
       if (already) out.skippedAlreadySent++
       else out.sent++
@@ -352,7 +380,7 @@ export async function GET(req: NextRequest) {
     // ★ 1차를 초등부만 보내던 것을 **학년 구분 없이** 바꿨다(원장님 2026-10-12).
     //   기준이 학년이 아니라 「그 시각까지 작성이 끝났나」다. 밤 8시에 끝난 것은 그날 나가고,
     //   못 끝낸 것은 다음 날 오전 11시에 나간다. 중복은 briefing_sends 가 막는다.
-    const summary = await run({ date, dryRun: false })
+    const summary = await run({ date, dryRun: false, eveningRun: phase === 1 })
     summary.phase = phase
     // 만료된 링크를 치운다 — 쌓이면 표가 무거워지고, 만료된 링크를 남길 이유도 없다.
     const { count } = await admin().from('report_links').delete({ count: 'exact' })

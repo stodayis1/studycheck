@@ -2856,6 +2856,17 @@ ${e?.message ?? '연결 실패'}
                     보호자 번호 없음 {briefPreview.skippedNoPhone.length}명 — {briefPreview.skippedNoPhone.map((x: any) => x.name).join(', ')}
                   </div>
                 )}
+                {/* 출결만 찍힌 건 — 저녁 8시 자동 발송에서는 미뤄진다 (원장님 2026-10-22) */}
+                {(() => {
+                  const thin = (briefPreview.previews ?? []).filter((p: any) => p.thin && !p.alreadySent)
+                  if (!thin.length) return null
+                  return (
+                    <div style={{ color: '#92400E' }}>
+                      아직 출결만 적힌 {thin.length}명 — {thin.map((x: any) => x.name).join(', ')}
+                      <span className="text-gray-500"> (저녁 8시 자동 발송에서 빠지고 다음 날 오전 11시로 미뤄져요)</span>
+                    </div>
+                  )
+                })()}
                 {/* 시험기간 결석은 일부러 안 보낸다. 사유를 안 적으면 「왜 빠졌지」가 남는다. */}
                 {briefPreview.skippedExam?.length > 0 && (
                   <div className="text-gray-500">
@@ -2909,6 +2920,12 @@ ${e?.message ?? '연결 실패'}
                             {p.alreadySent && (
                               <span className="px-1.5 py-0.5 rounded-md font-bold"
                                 style={{ background: '#EAF3DE', color: '#27500A' }}>이미 보냄</span>
+                            )}
+                            {/* 출결만 찍혀 있으면 저녁 8시 자동 발송에서 다음 날로 미뤄진다 */}
+                            {p.thin && (
+                              <span className="px-1.5 py-0.5 rounded-md font-bold"
+                                title="진도·과제·알림장이 하나도 없어요. 저녁 8시 자동 발송에서는 빠지고 다음 날 오전 11시로 미뤄집니다."
+                                style={{ background: '#FEF3C7', color: '#92400E' }}>출결만 적힘</span>
                             )}
                             {/* ★ 글을 보고 바로 고칠 수 있어야 한다 (원장님 2026-10-22 「내가 첨삭할 필요있을 때」).
                                 그 날짜의 수업일지를 **찾아서 넘겨** 연다 — 안 넘기면 빈 칸으로 열린다. */}
