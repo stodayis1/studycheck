@@ -25,8 +25,23 @@ export interface ReminderItem {
   error?: string
 }
 
-/** 선생님별로 보낼 문구까지 만들어 돌려준다. 보내지는 않는다. */
-export async function buildTeacherReminders(db: SupabaseClient, date: string, opts?: { when?: string }) {
+/**
+ * 선생님별로 보낼 문구까지 만들어 돌려준다. 보내지는 않는다.
+ *
+ * opts.when
+ *   'evening'    저녁 8시 — **초등만** 본다. 중·고등은 수업이 늦게 끝나 그 시각에 덜 쓴 것이
+ *                당연하고, 어차피 브리핑이 다음 날 오전 11시에 나간다. 그때까지 챙기면 된다.
+ *                ★ 예전에는 저녁에 전원을 보냈다. 김은수 선생님이 매일 저녁 15~20건짜리
+ *                  문자를 받으셨고, 그 대부분이 「아직 안 쓴 게 당연한」 중·고등이라 묻혔다.
+ *                  그래서 10/21 장서윤 학생처럼 **진짜로 빠진 한 건**을 못 보셨다
+ *                  (원장님 2026-10-22 「정작 강사 본인은 모르고 있었어」).
+ *   'premorning' 다음 날 오전 10시 30분 — 11시 발송 **직전**이라, 지금 채우면 아직 나간다.
+ *                학년을 가리지 않는다.
+ *   'morning'    (예전) 발송이 끝난 뒤
+ */
+export async function buildTeacherReminders(
+  db: SupabaseClient, date: string, opts?: { when?: 'evening' | 'premorning' | 'morning' },
+) {
   const { data: sessions } = await db.from('class_sessions')
     .select('id, student_id, session_type, progress_content, today_textbook_name, hw_textbook_name, hw_textbook_page, hw_worksheet_range')
     .eq('session_date', date)
@@ -50,10 +65,16 @@ export async function buildTeacherReminders(db: SupabaseClient, date: string, op
   ])
 
   // ★ 원장님 화면의 「학습일지 미작성 보기」와 같은 함수다(lib/missingNotes.ts).
-  const missing = findMissingNotes({
+  let missing = findMissingNotes({
     sessions: (sessions ?? []) as any, notes: (notes ?? []) as any, students: (students ?? []) as any,
     expected: expected.ids, skipNote: expected.skipNote,
   })
+  // 저녁에는 초등만 — 위 설명 참고.
+  if (opts?.when === 'evening') missing = missing.filter((m) => String(m.grade ?? '').startsWith('초'))
+  if (!missing.length) {
+    return { items: [] as ReminderItem[], noTeacher: [] as string[],
+      note: opts?.when === 'evening' ? '초등은 다 채워졌어요.' : '다 채워졌어요.' }
+  }
 
   const byTeacher = new Map<string, typeof missing>()
   const noTeacher: typeof missing = []
@@ -66,12 +87,17 @@ export async function buildTeacherReminders(db: SupabaseClient, date: string, op
   const items: ReminderItem[] = []
   for (const [teacher, rows] of [...byTeacher].sort((a, b) => a[0].localeCompare(b[0], 'ko'))) {
     const lines = rows.map((r) => `· ${r.name} ${r.grade} — ${r.why}`).join('\n')
-    const tail = opts?.when === 'morning'
-      ? '오늘 오전까지 안 채워지면 그 학생은 브리핑이 못 나갑니다.'
-      : '채워 주셔야 학부모님 브리핑이 나갑니다.'
+    const tail = opts?.when === 'premorning'
+      // ★ 11시 발송 **직전**이다. 지금 채우면 아직 나간다 — 그 말을 분명히 적는다.
+      ?  '오전 11시에 학부모님 브리핑이 나갑니다. 그 전에 채우시면 같이 나가요.'
+      : opts?.when === 'morning'
+        ? '오늘 오전까지 안 채워지면 그 학생은 브리핑이 못 나갑니다.'
+        : '채워 주셔야 학부모님 브리핑이 나갑니다.'
+    const head = opts?.when === 'premorning'
+      ? `${dayLabel(date)} 수업일지 ${rows.length}건이 아직 비어 있어요.`
+      : `${dayLabel(date)} 수업일지 ${rows.length}건이 아직 덜 채워졌어요.`
     const text =
-      `[수학의지혜] ${teacher} 선생님,\n` +
-      `${dayLabel(date)} 수업일지 ${rows.length}건이 아직 덜 채워졌어요.\n\n` +
+      `[수학의지혜] ${teacher} 선생님,\n${head}\n\n` +
       `${lines}\n\n${tail}\n${APP_URL}/teacher/learning-notes`
     items.push({
       teacher, count: rows.length,

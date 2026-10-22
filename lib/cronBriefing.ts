@@ -174,12 +174,16 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   // ── ③ 담당 강사 알림 ────────────────────────────────────────────────────
   // 발송 **뒤에** 본다. 그래야 「지금 이 시각에도 덜 된 것」이 정확히 잡힌다.
   //
-  // ★ **저녁에 한 번만** 보낸다 (원장님 2026-10-17).
-  //   오전 11시 알림은 이미 두 번의 발송이 끝난 뒤라, 받아도 그 학생 브리핑은 못 나간
-  //   뒤다. 저녁에 받으시면 밤에 쓰셔서 다음 날 11시에 나간다. 두 번 보내면 그냥
-  //   재촉이 한 번 더 늘 뿐이다.
+  // ★ 발송이 **끝난 뒤**에 보내는 알림은 쓸모가 없다 — 그 학생 브리핑은 이미 못 나갔다.
+  //   그래서 2차(오전 11시)에는 안 보낸다. 대신 11시 **30분 전**에 따로 보낸다
+  //   (runRemindCron · /api/cron/briefing/remind).
+  //
+  // ★ 저녁 8시 알림은 **초등만** 간다 (원장님 2026-10-22). 중·고등은 수업이 늦게
+  //   끝나 그 시각에 덜 쓴 것이 당연하고 브리핑도 다음 날 11시에 나간다. 전원을
+  //   보내던 때는 김은수 선생님이 매일 15~20건짜리 문자를 받으셔서, 정작 진짜로
+  //   빠진 한 건(10/21 장서윤)이 그 속에 묻혔다.
   if (phase === 2) {
-    out.remind = { 건너뜀: '알림 문자는 저녁에 한 번만 보냅니다' }
+    out.remind = { 건너뜀: '발송 30분 전(오전 10:30)에 따로 보냅니다' }
   } else {
     try {
       const { items, noTeacher } = await buildTeacherReminders(db, date, { when: 'evening' })
@@ -219,5 +223,75 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
     } catch { /* 기록이 안 남아도 발송은 끝났다 */ }
   }
 
+  return NextResponse.json(out)
+}
+
+/**
+ * 오전 10시 30분 — **발송 직전** 미작성 알림만 보낸다. 학부모에게는 아무것도 안 간다.
+ *
+ * 원장님 2026-10-22
+ *   「오후 8시에 초등학생 학습브리핑이 나갈때 굳이 중고등 강사에게는 학습일지 미작성
+ *     안내를 안내보내도 될 거 같아. 어차피 대부분 다음날 오전 11시에 학습브리핑이 나가니까.
+ *     차라리 오전 11시 전 한 10시 30분경에 학습일지 미작성 상태인 알림을 주면
+ *     학습브리핑 발송 직전에 혹시 놓친 학습일지가 있더라도 얼렁 작성할 수 있잖아.」
+ *
+ * 그래서 알림은 두 번으로 나뉜다.
+ *   · 저녁 8시 — 그날 브리핑이 나가는 **초등만**
+ *   · 오전 10시 30분 — 전날 것 중 아직 빈 것 **전부** (11시 발송 30분 전)
+ *
+ * ★ 예약은 늦게 깨울 수 있으므로 10분마다 깨우고 여기서 10:30 전과 「오늘 이미 돎」을 막는다.
+ *   11시 발송보다 **늦게** 돌면 아무 쓸모가 없으니 10:55 를 넘으면 그냥 건너뛴다.
+ */
+export async function runRemindCron(req: NextRequest) {
+  const secret = process.env.CRON_SECRET
+  const auth = req.headers.get('authorization') ?? ''
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return NextResponse.json(
+      { error: '권한이 없어요.', secretSet: Boolean(secret), authHeaderSent: Boolean(auth) },
+      { status: 401 },
+    )
+  }
+  const q = new URL(req.url).searchParams
+  const force = q.get('force') === '1'
+  const date = q.get('date') ?? kstDate(-1)          // 전날 수업
+  const now = kstHhmm()
+  const out: any = { phase: 'premorning', date, startedAt: new Date().toISOString() }
+
+  if (!force && now < '10:30') {
+    return NextResponse.json({ ...out, skipped: `아직 10:30 전이에요 (지금 ${now})` })
+  }
+  // 11시 발송을 지나서 보내면 「고치세요」가 아니라 「이미 늦었습니다」가 된다 — 차라리 안 보낸다.
+  if (!force && now > '10:55') {
+    return NextResponse.json({ ...out, skipped: `11시 발송에 너무 가까워요 (지금 ${now})` })
+  }
+
+  const db = admin()
+  if (!force) {
+    const { data: claimed } = await db.from('cron_runs')
+      .upsert({ phase: 'premorning', run_date: kstDate(0) }, { onConflict: 'phase,run_date', ignoreDuplicates: true })
+      .select('id')
+    if (!claimed?.length) return NextResponse.json({ ...out, skipped: '오늘은 이미 돌았어요' })
+    out.runId = claimed[0].id
+  }
+
+  try {
+    const { items, noTeacher, note } = await buildTeacherReminders(db, date, { when: 'premorning' })
+    const sent = items.length ? await sendTeacherReminders(items) : 0
+    out.remind = {
+      보냄: sent,
+      선생님: items.map((i) => `${i.teacher}(${i.count}건${i.ok === false ? ` · ${i.error}` : ''})`),
+      담당없는학생: noTeacher.length ? noTeacher : undefined,
+      note,
+    }
+  } catch (e: any) {
+    out.remind = { error: e?.message ?? '알림 실패' }
+  }
+
+  out.finishedAt = new Date().toISOString()
+  if (out.runId) {
+    try {
+      await db.from('cron_runs').update({ finished_at: out.finishedAt, result: out }).eq('id', out.runId)
+    } catch { /* 기록이 안 남아도 문자는 나갔다 */ }
+  }
   return NextResponse.json(out)
 }
