@@ -15,7 +15,7 @@ const NAVY = '#0f3460'
 const GOLD = '#c8992e'
 
 type Badge = {
-  kind: 'book' | 'sheet' | 'test' | 'exam' | 'attend'
+  kind: 'book' | 'sheet' | 'test' | 'exam' | 'attend' | 'video' | 'proof'
   label: string
   value: number | null
   unit?: string
@@ -37,6 +37,13 @@ const mondayOf = (d: Date) => { const x = new Date(d); const g = (x.getDay() + 6
 // 점수대별 색 — 한눈에 잘한 날/못한 날이 보이게
 function tone(kind: Badge['kind'], v: number | null) {
   if (kind === 'attend') return { bg: '#f1f5f9', fg: '#64748b', bd: '#cbd5e1' }
+  // 영상·증명은 「몇 개 중 몇 개」다. 다 하면 초록, 하나도 안 했으면 빨강,
+  // 하다 만 것은 보라 — 점수 배지와 섞이지 않게 중간색을 따로 쓴다.
+  if (kind === 'video' || kind === 'proof') {
+    if (v === 100) return { bg: '#dcfce7', fg: '#15803d', bd: '#86efac' }
+    if (!v) return { bg: '#fee2e2', fg: '#b91c1c', bd: '#fca5a5' }
+    return { bg: '#ede9fe', fg: '#6d28d9', bd: '#c4b5fd' }
+  }
   if (v == null) return { bg: '#f8fafc', fg: '#475569', bd: '#e2e8f0' }
   if (v >= 90) return { bg: '#dcfce7', fg: '#15803d', bd: '#86efac' }
   if (v >= 70) return { bg: '#e0f2fe', fg: '#0369a1', bd: '#7dd3fc' }
@@ -45,6 +52,7 @@ function tone(kind: Badge['kind'], v: number | null) {
 }
 const KIND_LABEL: Record<Badge['kind'], string> = {
   book: '과제 달성', sheet: '과제 성취', test: '테스트', exam: '시험지', attend: '출결',
+  video: '영상 과제', proof: '증명 제출',
 }
 
 export default function WeeklyPage() {
