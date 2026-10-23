@@ -102,53 +102,6 @@ export async function GET(req: Request) {
   const ytId = (u: string) =>
     u.trim().match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1] ?? null
 
-  for (const x of withVideo) {
-    // 주소가 아닌 글이 들어 있는 옛 기록은 세지 않는다
-    const urls = String(x.video_url ?? '').split(/\r?\n/)
-      .map((u: string) => u.trim()).filter((u: string) => /^https?:\/\//.test(u))
-    if (!urls.length) continue
-    const logs = watchRows.filter((v) => v.session_id === x.id)
-    const subs = proofRows.filter((p) => p.session_id === x.id)
-    const logOf = (u: string) => logs.find((v) => v.video_url === u)
-    // 유튜브 영상은 앱 안에서 봐서 「실제로 본 비율」이 있다 → 90% 넘게 본 것만 완료.
-    // 새 창으로 연 링크는 연 시간만 있어서 그대로 센다 (학습관리 카드와 같은 규칙).
-    const doneOf = (u: string) => {
-      const l = logOf(u)
-      return !!l && (ytId(u) ? !!l.completed_at : (l.watch_seconds ?? 0) > 0)
-    }
-    const done = urls.filter(doneOf).length
-    // 학습관리 화면과 같은 이름 꼴 (lib/lessonVideos.ts · lessonLabel)
-    const nameOf = (u: string) => {
-      const v = lv.get(ytId(u) ?? '')
-      return v ? `${v.order_label} · ${v.title}` : u
-    }
-    push(x.student_id, x.session_date, {
-      kind: 'video',
-      label: `영상 ${done}/${urls.length}`,
-      value: Math.round((done / urls.length) * 100),
-      unit: '%',
-      title: urls.map((u, i) => {
-        const l = logOf(u)
-        const pct = l ? Math.round(Number(l.coverage_pct ?? 0)) : 0
-        return `${i + 1}. ${nameOf(u)} — ${l ? `${pct}% 봄${l.completed_at ? ' (완료)' : ''}` : '안 봄'}`
-      }).join('\n'),
-    })
-
-    // 증명 영상이 섞인 날만 — 증명을 안 내준 날에 「증명 0/0」이 뜨면 잔소리가 된다
-    const proofUrls = urls.filter((u) => lv.get(ytId(u) ?? '')?.kind === '증명')
-    if (proofUrls.length) {
-      const got = proofUrls.filter((u) => subs.some((p) => p.video_url === u)).length
-      push(x.student_id, x.session_date, {
-        kind: 'proof',
-        label: `증명 ${got}/${proofUrls.length}`,
-        value: Math.round((got / proofUrls.length) * 100),
-        unit: '%',
-        title: proofUrls.map((u, i) =>
-          `${i + 1}. ${nameOf(u)} — ${subs.some((p) => p.video_url === u) ? '올림' : '안 올림'}`).join('\n'),
-      })
-    }
-  }
-
   // 4) 같은 기간의 QR 채점 기록 (문제은행 시험지) — 여기서만 오답/유사 재출제가 가능하다
   const gradings = await fetchAll<any>((f, t) =>
     supabase
@@ -203,6 +156,53 @@ export async function GET(req: Request) {
         label: s.daily_test_unit ? `테스트 ${s.daily_test_unit}` : '테스트',
         value: s.daily_test_score ?? null,
         unit: '점',
+      })
+    }
+  }
+
+  for (const x of withVideo) {
+    // 주소가 아닌 글이 들어 있는 옛 기록은 세지 않는다
+    const urls = String(x.video_url ?? '').split(/\r?\n/)
+      .map((u: string) => u.trim()).filter((u: string) => /^https?:\/\//.test(u))
+    if (!urls.length) continue
+    const logs = watchRows.filter((v) => v.session_id === x.id)
+    const subs = proofRows.filter((p) => p.session_id === x.id)
+    const logOf = (u: string) => logs.find((v) => v.video_url === u)
+    // 유튜브 영상은 앱 안에서 봐서 「실제로 본 비율」이 있다 → 90% 넘게 본 것만 완료.
+    // 새 창으로 연 링크는 연 시간만 있어서 그대로 센다 (학습관리 카드와 같은 규칙).
+    const doneOf = (u: string) => {
+      const l = logOf(u)
+      return !!l && (ytId(u) ? !!l.completed_at : (l.watch_seconds ?? 0) > 0)
+    }
+    const done = urls.filter(doneOf).length
+    // 학습관리 화면과 같은 이름 꼴 (lib/lessonVideos.ts · lessonLabel)
+    const nameOf = (u: string) => {
+      const v = lv.get(ytId(u) ?? '')
+      return v ? `${v.order_label} · ${v.title}` : u
+    }
+    push(x.student_id, x.session_date, {
+      kind: 'video',
+      label: `영상 ${done}/${urls.length}`,
+      value: Math.round((done / urls.length) * 100),
+      unit: '%',
+      title: urls.map((u, i) => {
+        const l = logOf(u)
+        const pct = l ? Math.round(Number(l.coverage_pct ?? 0)) : 0
+        return `${i + 1}. ${nameOf(u)} — ${l ? `${pct}% 봄${l.completed_at ? ' (완료)' : ''}` : '안 봄'}`
+      }).join('\n'),
+    })
+
+    // 증명 영상이 섞인 날만 — 증명을 안 내준 날에 「증명 0/0」이 뜨면 잔소리가 된다
+    const proofUrls = urls.filter((u) => lv.get(ytId(u) ?? '')?.kind === '증명')
+    if (proofUrls.length) {
+      const got = proofUrls.filter((u) => subs.some((p) => p.video_url === u)).length
+      push(x.student_id, x.session_date, {
+        kind: 'proof',
+        label: `증명 ${got}/${proofUrls.length}`,
+        value: Math.round((got / proofUrls.length) * 100),
+        unit: '%',
+        title: proofUrls.map((u, i) =>
+          `${i + 1}. ${nameOf(u)} — ${subs.some((p) => p.video_url === u) ? '올림' : '안 올림'}`).join('\n'),
       })
     }
   }
