@@ -60,8 +60,19 @@ for (const g of groups) {
   const { error: e } = await db.from('problems').update({ twin_group: g.gid }).in('id', g.ids)
   if (e) { console.error('✗', g.code, e.message); process.exit(1) }
 }
-for (const r of retype) {
-  const { error: e } = await db.from('problems').update({ type_code: r.to }).eq('id', r.id)
-  if (e) { console.error('✗ 유형고침', r.id, e.message); process.exit(1) }
+// 유형을 고치면 **소단원도 따라가야** 한다 — 안 그러면 문제은행 화면에서 엉뚱한 소단원에 남는다
+if (retype.length) {
+  const codes = [...new Set(retype.map(r => r.to))]
+  const { data: st } = await db.from('standard_types')
+    .select('code, sub_chapter_no, sub_chapter_title').in('code', codes)
+  const sub = new Map((st ?? []).map(t => [t.code, t]))
+  for (const r of retype) {
+    const t = sub.get(r.to)
+    if (!t) { console.error('✗ 없는 유형 코드', r.to); process.exit(1) }
+    const { error: e } = await db.from('problems').update({
+      type_code: r.to, sub_chapter_no: t.sub_chapter_no, sub_chapter_title: t.sub_chapter_title
+    }).eq('id', r.id)
+    if (e) { console.error('✗ 유형고침', r.id, e.message); process.exit(1) }
+  }
 }
 console.log('넣었습니다.')
