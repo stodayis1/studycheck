@@ -5,11 +5,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { fmtDuration, lessonUrl, type LessonVideo } from '@/lib/lessonVideos'
+import { fmtDuration, lessonUrl, youtubeId, type LessonVideo } from '@/lib/lessonVideos'
 
-export function LessonVideoPicker({ picked, onPick, onClose }: {
+export function LessonVideoPicker({ picked, onPick, onUnpick, onClose }: {
   picked: string[]                          // 이미 넣은 링크들 (표시용)
   onPick: (url: string) => void
+  /** 이미 넣은 것을 다시 누르면 뺀다 (원장님 2026-10-23 「한번 클릭한 걸 취소할 수가 없네」) */
+  onUnpick: (url: string) => void
   onClose: () => void
 }) {
   const [all, setAll] = useState<LessonVideo[]>([])
@@ -29,7 +31,9 @@ export function LessonVideoPicker({ picked, onPick, onClose }: {
   const grades = useMemo(() => [...new Set(all.map((v) => v.grade))], [all])
   const shown = all.filter((v) => (!grade || v.grade === grade) &&
     (!q.trim() || `${v.order_label} ${v.title} ${v.chapter} ${v.sub_chapter}`.includes(q.trim())))
-  const pickedIds = new Set(picked.map((u) => u.match(/([\w-]{11})\s*$/)?.[1]).filter(Boolean))
+  // ★ 주소 **끝**에서만 id 를 찾던 것을 공용 함수로 바꿨다. 뒤에 ?si=… 가 붙은 주소는
+  //   예전 방식으로는 못 찾아서, 이미 넣은 영상이 「넣음」으로 안 보였다.
+  const pickedIds = new Set(picked.map((u) => youtubeId(u)).filter(Boolean))
 
   // 대단원 › 소단원으로 묶는다 (개념 아래에 그 개념의 증명, 그다음 필수예제 풀이가 이어서 온다 — order_label 순)
   const groups: { head: string; items: LessonVideo[] }[] = []
@@ -68,18 +72,29 @@ export function LessonVideoPicker({ picked, onPick, onClose }: {
                 {g.items.map((v) => {
                   const on = pickedIds.has(v.youtube_id!)
                   return (
-                    <button key={v.id} disabled={on} onClick={() => onPick(lessonUrl(v))}
-                      className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-xl border text-sm transition-all ${
-                        on ? 'border-green-200 bg-green-50 text-gray-400' : 'border-gray-100 hover:border-green-300 hover:bg-green-50/40'}`}>
+                    // ★ 넣은 것을 **다시 누르면 뺀다.** 예전에는 눌린 줄이 disabled 라
+                    //   잘못 고르면 창을 닫고 아래 링크 칸에서 지워야 했다
+                    //   (원장님 2026-10-23 「그래야 잘못 골라도 다시 선택하지」).
+                    <button key={v.id} title={on ? '다시 누르면 뺍니다' : undefined}
+                      onClick={() => (on ? onUnpick(lessonUrl(v)) : onPick(lessonUrl(v)))}
+                      className={`group w-full flex items-center gap-2 text-left px-3 py-2 rounded-xl border text-sm transition-all ${
+                        on ? 'border-green-300 bg-green-50 hover:border-red-300 hover:bg-red-50'
+                           : 'border-gray-100 hover:border-green-300 hover:bg-green-50/40'}`}>
                       <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-md ${
                         v.kind === '증명' ? 'bg-amber-50 text-amber-700 ml-4'
                         : v.kind === '대표예제' ? 'bg-sky-50 text-sky-700 ml-4' : 'bg-green-50 text-green-700'}`}>
                         {v.kind === '증명' ? `증명 ${v.order_label.split('증명')[1]}`
                           : v.kind === '대표예제' ? `풀이 ${v.order_label.split('풀이')[1]}` : v.order_label}
                       </span>
-                      <span className="flex-1 min-w-0 truncate text-gray-800">{v.title}</span>
+                      <span className={`flex-1 min-w-0 truncate ${on ? 'text-gray-500' : 'text-gray-800'}`}>{v.title}</span>
                       <span className="shrink-0 text-[11px] text-gray-400 tabular-nums">{fmtDuration(v.duration_seconds)}</span>
-                      {on && <span className="shrink-0 text-[11px] text-green-600 font-bold">넣음</span>}
+                      {on && (
+                        <span className="shrink-0 text-[11px] font-bold">
+                          {/* 평소엔 「넣음」, 마우스를 올리면 「빼기」로 바뀐다 */}
+                          <span className="text-green-600 group-hover:hidden">✓ 넣음</span>
+                          <span className="hidden text-red-500 group-hover:inline">빼기</span>
+                        </span>
+                      )}
                     </button>
                   )
                 })}

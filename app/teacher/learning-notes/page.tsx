@@ -4631,6 +4631,14 @@ ${e?.message ?? '연결 실패'}
                         const kept = prev.filter((u) => u.trim())
                         return [...kept, url]
                       })}
+                      // ★ 유튜브 id 로 견준다 — 같은 영상이라도 뒤에 ?si=… 가 붙어 들어온
+                      //   것이 있어서 글자 그대로 맞추면 안 빠진다.
+                      //   다 빼면 빈 칸 하나는 남겨 둔다(입력칸이 통째로 사라지지 않게).
+                      onUnpick={(url) => setHwVideoUrls((prev) => {
+                        const id = youtubeId(url)
+                        const kept = prev.filter((u) => u.trim() && (id ? youtubeId(u) !== id : u.trim() !== url))
+                        return kept.length ? kept : ['']
+                      })}
                       onClose={() => setShowVideoPicker(false)} />
                   )}
                   <div className="space-y-2">
