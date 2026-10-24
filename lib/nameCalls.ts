@@ -58,11 +58,67 @@ export const SOL_LINES = {
 } as const satisfies Record<string, { tone: NameTone; lines: readonly string[] }>
 export type SolCallKey = keyof typeof SOL_LINES
 
-const base2 = () => `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/name-calls/${NAME_CALL_V2}`
+// ── 개념·증명 영상도 이름 따로 + 문장 따로 (원장님 2026-10-24: 「매번 같은 패턴이면 애들이 지루해한다」) ──────
+// 문장은 그때그때 고르고, 「어느 장면에서 부를지」도 강의마다 다르게 고른다(planLectureCalls).
+// 저장 위치: name-calls/v2/line/lec_<key>/<n>.mp3 — name_calls_v2.mjs 가 이 표도 읽는다.
+export const LEC_LINES = {
+  start:  { tone: 'soft', lines: ['오늘도 같이 해 보자.', '준비됐지? 시작해 볼게.', '오늘 내용 어렵지 않아. 천천히 같이 보자.', '연습장 옆에 두고 같이 보자.', '반가워. 오늘도 차근차근 해 보자.', '자, 오늘 개념 같이 열어 보자.'] },
+  focus:  { tone: 'call', lines: ['여기 중요해. 잘 봐 줘.', '이 부분 시험에 자주 나와. 집중해 보자.', '여기서부터 진짜 중요한 거야.', '이거 하나만은 꼭 기억해 줘.', '지금부터 나오는 거 놓치면 안 돼.'] },
+  mid:    { tone: 'soft', lines: ['여기까지 이해됐어?', '지금까지 괜찮아? 어려우면 한 번 더 보자.', '잘 따라오고 있지?', '여기까지 머릿속에 잘 들어왔어?'] },
+  plus:   { tone: 'call', lines: ['이건 한 단계 더 나간 거야. 집중해 볼까?', '여기는 조금 어려워. 천천히 같이 보자.', '이거 알아 두면 문제가 훨씬 쉬워져.'] },
+  cheer:  { tone: 'soft', lines: ['잘하고 있어. 조금만 더 가 보자.', '벌써 반이나 왔어. 멋지다.', '집중 잘하고 있네. 이대로 가자.', '좋아, 이 흐름 그대로 가 보자.'] },
+  check:  { tone: 'call', lines: ['영상 잠깐 멈춰 둘게. 연습장에 먼저 풀어 볼까?', '이제 네 차례야. 먼저 풀어 보고 다시 틀어 줘.', '바로 보지 말고 한번 풀어 봐. 기다릴게.', '연필 들고 먼저 풀어 보자.'] },
+  answer: { tone: 'soft', lines: ['다 맞았어? 틀린 건 꼭 다시 풀어 봐.', '네 답이랑 똑같았어?', '맞았으면 정말 잘했어. 틀렸으면 한 번 더 보자.', '어디서 막혔는지 한번 생각해 봐.'] },
+  proof:  { tone: 'soft', lines: ['노트 펴고 같이 써 보자.', '오늘은 손으로 직접 증명해 볼 거야. 노트 준비됐지?', '연필 들고 한 줄씩 같이 따라 써 보자.'] },
+  away:   { tone: 'call', lines: ['어디 갔었어? 다시 화면 봐 줄래?', '다시 돌아왔지? 이어서 같이 보자.', '조금만 더 집중해 보자.'] },
+  idle:   { tone: 'soft', lines: ['혹시 졸려? 조금만 더 힘내 보자.', '멈춰 뒀네. 다시 이어서 볼까?', '아직 조금 남았어. 마저 보자.'] },
+  end:    { tone: 'soft', lines: ['오늘도 정말 수고했어.', '끝까지 봤구나, 멋있다.', '오늘 배운 거 유형편에서 꼭 풀어 봐.', '잘했어. 다음 강의에서 또 보자.', '오늘도 잘 따라왔어. 고마워.'] },
+} as const satisfies Record<string, { tone: NameTone; lines: readonly string[] }>
+export type LecCallKey = keyof typeof LEC_LINES
+
+type Scene = { start: number; end: number; kind?: string }
+/** 이 강의에서 어느 장면 앞에서 무슨 말로 부를지 — 강의(id)마다 다르게, 같은 강의는 늘 같게.
+ *  늘 하는 것: 시작·끝(·개념 Check 앞 「풀어 봐」, 예제 앞 「맞았어?」). 나머지(focus·mid·plus·cheer)는 강의마다 2~3개만 골라 자리도 섞는다. */
+export function planLectureCalls(seed: string, scenes: Scene[]): { key: LecCallKey; scene: number }[] {
+  let h = 2166136261
+  for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619)
+  const rnd = () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296 }
+  const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)]
+  const idx = (k: string) => scenes.map((s, i) => (s.kind === k ? i : -1)).filter((i) => i > 0)
+  const concept = idx('개념'), plus = idx('plus'), check = idx('check'), ex = idx('examples')
+  const fixed: { key: LecCallKey; scene: number }[] = []
+  if (check.length) fixed.push({ key: 'check', scene: check[0] })
+  if (check.length && ex.length) fixed.push({ key: 'answer', scene: ex[0] })
+  const used = new Set([0, ...fixed.map((x) => x.scene)])   // 0 = 시작 인사 — 바로 다음 장면(첫 개념)에서 또 부르지 않는다
+  const before = check[0] ?? ex[0] ?? scenes.length
+  const middle = scenes.map((_, i) => i).filter((i) => i > 1 && i < before)   // 첫 개념 다음부터 Check 전까지
+  const all: { key: LecCallKey; at: number[] }[] = [
+    { key: 'focus', at: concept },
+    { key: 'mid', at: middle },
+    { key: 'plus', at: plus },
+    { key: 'cheer', at: middle },
+  ]
+  const options = all.filter((o) => o.at.length)
+  for (let i = options.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [options[i], options[j]] = [options[j], options[i]] }
+  const want = 2 + (rnd() < 0.5 ? 1 : 0)
+  const extra: { key: LecCallKey; scene: number }[] = []
+  for (const o of options) {
+    if (extra.length >= want) break
+    const free = o.at.filter((i) => !used.has(i) && !used.has(i - 1) && !used.has(i + 1))   // 연달아 부르지 않는다
+    if (!free.length) continue
+    const s = pick(free); used.add(s); extra.push({ key: o.key, scene: s })
+  }
+  return [...fixed, ...extra].sort((a, b) => a.scene - b.scene)
+}
+
+const base2 = () =>`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/name-calls/${NAME_CALL_V2}`
 export const nameToneUrl = (studentId: string, tone: NameTone) => `${base2()}/name/${studentId}/${tone}.mp3`
 export const solLineUrl = (key: SolCallKey, n: number) => `${base2()}/line/${key}/${n}.mp3`
 export const solCallText = (key: SolCallKey, n: number, fullName: string) =>
   `${vocative(callName(fullName))}, ${SOL_LINES[key].lines[n]}`
+export const lecLineUrl = (key: LecCallKey, n: number) => `${base2()}/line/lec_${key}/${n}.mp3`
+export const lecCallText = (key: LecCallKey, n: number, fullName: string) =>
+  `${vocative(callName(fullName))}, ${LEC_LINES[key].lines[n]}`
 
 // ── 이름을 부르면 학생이 버튼으로 대답한다 (원장님 2026-10-21) ─────────────────────
 // 누를 때까지 영상은 멈춰 있다. 대답은 video_watch_logs.call_responses 에 쌓인다 (응답 시간·무응답·스스로 맞혔는지).
@@ -72,6 +128,10 @@ export const CALL_REPLIES: Record<string, string[]> = {
   proof: ['네, 펼쳤어요'], away: ['집중할게요!'], idle: ['집중할게요!'], end: ['감사합니다!'],
   'sol:start': ['네! 준비됐어요'], 'sol:try': ['다 풀었어요'], 'sol:answer': ['맞았어요', '틀렸어요'],
   'sol:away': ['집중할게요!'], 'sol:idle': ['집중할게요!'], 'sol:end': ['감사합니다!'],
+  // 개념·증명(2026-10-24~). cheer 는 대답 없이 지나간다. mid 의 「한 번 더 볼래요」는 앞 장면을 다시 튼다
+  'lec:start': ['네! 준비됐어요'], 'lec:focus': ['네, 볼게요'], 'lec:mid': ['이해했어요', '한 번 더 볼래요'],
+  'lec:plus': ['네, 볼게요'], 'lec:check': ['다 풀었어요'], 'lec:answer': ['맞았어요', '틀렸어요'],
+  'lec:proof': ['네, 펼쳤어요'], 'lec:away': ['집중할게요!'], 'lec:idle': ['집중할게요!'], 'lec:end': ['감사합니다!'],
 }
 export type CallResponse = { key: string; at: number; answer: string | null; ms?: number; noanswer?: boolean; ts: string }
 

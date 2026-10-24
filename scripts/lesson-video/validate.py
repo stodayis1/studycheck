@@ -8,6 +8,7 @@
   · 필기(marks)의 cue 가 말 안에 없음 → 필기가 엉뚱한 때 나온다
   · 필기의 find 가 그 토막 안에서 안 찾아짐 → 영상 만들 때 멈춘다
   · show 가 없는 토막을 가리킴, 말풍선·필기 글자가 너무 김
+  · 말 전체가 1650자를 넘음 → 4분을 넘을 수 있다
 """
 import argparse, glob, json, os, re, sys
 import pymupdf
@@ -16,6 +17,7 @@ from lesson_video import parse_say, plain, find_rect, penfont, font, has_glyph, 
 PEN, GOTHIC = penfont(40), font(36, True)
 
 TYPES = {'underline', 'box', 'circle', 'highlight', 'note', 'arrow'}
+MAX_CHARS = 1650   # 공통수학1 01 실측: 1513자 → 3분 30초(1초에 7.2자). 4분 = 약 1730자
 
 
 def check(path, doc, mat_dir):
@@ -77,7 +79,9 @@ def check(path, doc, mat_dir):
                 warns.append(f'{mt}: cue 「{m.get("cue")}」가 말에 여러 번 나옴 — 앞 필기 뒤 첫 번째에 걸린다')
             if m.get('type') in ('note', 'arrow') and len(m.get('text', '')) > 22:
                 warns.append(f'{mt}: 필기 글자가 김')
-    if not (500 <= total <= 2000): warns.append(f'말 전체 {total}자 (보통 700~1500자)')
+    # 한 강의 4분 이내 (원장님 2026-10-24). 필기 시간까지 1초에 7.2~8.1자 → 느린 쪽(7.2)으로 잰다
+    if total > MAX_CHARS: errs.append(f'말 전체 {total}자 → 약 {total / 7.2 / 60:.1f}분. {MAX_CHARS}자(약 3분 50초) 안으로 — 개념 Check → Plus 순으로 줄일 것')
+    elif total < 500: warns.append(f'말 전체 {total}자 (보통 1200~1800자)')
     return errs, warns, total
 
 
