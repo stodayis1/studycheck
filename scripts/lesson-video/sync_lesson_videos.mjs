@@ -26,6 +26,8 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const grade = opt('--grade', '공통수학2')
 const plEnv = opt('--playlist-env', 'YOUTUBE_PLAYLIST_CM2')
 const dry = args.includes('--dry')
+// --ids <json>: 번호 → 유튜브 id 를 파일로 받는다 (재생목록 없이 올린 영상 — yt_update_concepts.mjs 가 만든 _유튜브_주소.json)
+const idsFile = opt('--ids', null)
 
 // 1) 영상 폴더 → 행
 const rows = []
@@ -82,14 +84,15 @@ if (key && list) {
     if (j.error) throw new Error('유튜브: ' + j.error.message)
     for (const it of j.items) {
       if (it.status?.privacyStatus === 'private') { privateCount++; continue }
-      const m = it.snippet.title.match(/공통수학2\]\s*(\d{2}(?:-(?:증명|풀이)\d+)?)\./)
+      const m = it.snippet.title.match(new RegExp(grade + '\]\s*(\d{2}(?:-(?:증명|풀이)\d+)?)\.'))
       if (m) ytBy[m[1]] = it.contentDetails.videoId
     }
     tok = j.nextPageToken
   } while (tok)
-} else {
+} else if (!idsFile) {
   console.log('! 유튜브 키나 재생목록이 없어 주소는 붙이지 않음')
 }
+if (idsFile) Object.assign(ytBy, JSON.parse(fs.readFileSync(idsFile, 'utf8')))
 for (const r of rows) r.youtube_id = ytBy[r.order_label] ?? null
 
 rows.sort((a, b) => a.order_label.localeCompare(b.order_label))

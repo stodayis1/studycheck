@@ -291,9 +291,18 @@ def base_frame(L, sc, book, mouth):
         im.paste(book.img, (book.ox, book.oy))
     elif sc['show'] == 'title':
         x, y = CARD_BOX[0] + 90, CARD_BOX[1] + 300
+        # 긴 제목은 수지쌤 뒤로 들어가지 않게 두 줄로 (수지쌤 왼쪽 끝 ≈ 1450)
+        lines, size = [L['title']], 110
+        if d.textlength(L['title'], font=font(size, True)) > 1450 - x and ' ' in L['title']:
+            ws = L['title'].split(' ')
+            cut = min(range(1, len(ws)), key=lambda i: abs(len(' '.join(ws[:i])) - len(' '.join(ws[i:]))))
+            lines, y = [' '.join(ws[:cut]), ' '.join(ws[cut:])], y - 60
+        while max(d.textlength(t, font=font(size, True)) for t in lines) > 1450 - x and size > 60: size -= 6
         d.text((x, y), L.get('unit', '공통수학2'), font=font(40), fill=SOFT)
-        d.text((x, y + 60), L['title'], font=font(110, True), fill=INK)
-        d.rectangle((x + 4, y + 220, x + 150, y + 230), fill=BRICK)
+        for i, t in enumerate(lines):
+            d.text((x, y + 60 + i * (size + 14)), t, font=font(size, True), fill=INK)
+        uy = y + 220 + (len(lines) - 1) * (size + 14)
+        d.rectangle((x + 4, uy, x + 150, uy + 10), fill=BRICK)
     elif sc['show'] == 'examples':
         x0, y0 = CARD_BOX[0] + 60, CARD_BOX[1] + 50
         d.text((x0, y0), '이어서 풀 필수예제', font=font(44, True), fill=BRICK)

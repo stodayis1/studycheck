@@ -6,7 +6,7 @@ for (const f of ['.env.local','.env']) { if(!fs.existsSync(f))continue;
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}})
 const rows=[]
 for(let from=0;;from+=1000){
-  const {data}=await db.from('problems').select('id,book,type_code,twin_group').eq('grade','공통수학2').range(from,from+999)
+  const {data}=await db.from('problems').select('id,book,type_code,twin_group').eq('grade','공통수학2').order('id').range(from,from+999)
   if(!data||!data.length)break; rows.push(...data); if(data.length<1000)break
 }
 const tw=rows.filter(r=>r.twin_group)
