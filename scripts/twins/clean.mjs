@@ -6,7 +6,9 @@ for (const f of ['.env.local','.env']) { if(!fs.existsSync(f))continue;
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}})
 const rows=[]
 for(let from=0;;from+=1000){
-  const {data}=await db.from('problems').select('id,book,local_no,twin_group').not('twin_group','is',null).range(from,from+999)
+  // ★ order 없이 range 로 넘기면 쪽마다 차례가 달라 **짝의 한쪽을 놓친다** →
+  //   멀쩡한 쌍이 「혼자」로 보여 지워졌다 (2026-10-24).
+  const {data}=await db.from('problems').select('id,book,local_no,twin_group').not('twin_group','is',null).order('id').range(from,from+999)
   if(!data||!data.length)break; rows.push(...data); if(data.length<1000)break
 }
 const g={}; for(const r of rows) (g[r.twin_group]=g[r.twin_group]||[]).push(r)
@@ -14,7 +16,10 @@ const lone=Object.entries(g).filter(([,v])=>v.length<2)
 console.log('혼자 남은 묶음', lone.length, lone.map(([k,v])=>`${v[0].book} ${v[0].local_no}`).join(', '))
 if (lone.length && !process.argv.includes('--dry')) {
   const ids=lone.flatMap(([,v])=>v.map(r=>r.id))
-  const { error } = await db.from('problems').update({ twin_group: null }).in('id', ids)
-  if (error) { console.error(error.message); process.exit(1) }
-  console.log('비웠습니다.')
+  // 한 번에 다 넣으면 주소가 너무 길어 **말없이 일부만** 지워진다 → 끊어서 보낸다
+  for (let i=0;i<ids.length;i+=100) {
+    const { error } = await db.from('problems').update({ twin_group: null }).in('id', ids.slice(i,i+100))
+    if (error) { console.error(error.message); process.exit(1) }
+  }
+  console.log(`비웠습니다. (${ids.length}문항)`)
 }
