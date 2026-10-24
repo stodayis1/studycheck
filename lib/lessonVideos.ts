@@ -18,6 +18,7 @@ export type LessonVideo = {
   duration_seconds: number | null
   scenes: LessonScene[]
   type_codes: string[]
+  quiz?: { answer: string; wrong: string[] } | null   // 풀이 영상 객관식 (lib/nameCalls.ts buildQuiz)
 }
 
 /** 유튜브 링크에서 영상 id (youtu.be/ID, watch?v=ID, embed/ID, shorts/ID). 아니면 null */

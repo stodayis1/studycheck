@@ -8,7 +8,7 @@ import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
-import { SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, LEC_LINES, lecLineUrl, lecCallText, type LecCallKey, planLectureCalls, CALL_REPLIES, type CallResponse } from '@/lib/nameCalls'
+import { SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, LEC_LINES, lecLineUrl, lecCallText, type LecCallKey, planLectureCalls, CALL_REPLIES, type CallResponse, buildQuiz, type QuizChoice, QUIZ_RATE, CIRCLED } from '@/lib/nameCalls'
 import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
 declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => void } }
@@ -73,11 +73,17 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   const [started, setStarted] = useState(false)
   // 이름을 부르면 대답 버튼을 띄우고, 누를 때까지 영상은 멈춰 둔다 (원장님 2026-10-21)
   // 풀이 영상의 「먼저 풀어 봐」도 여기서 「다 풀었어요」를 눌러야 풀이가 이어진다
-  type Ask = { tag: string; replies: string[]; askedAt: number; at: number; resume: (answer: string) => void }
+  type Ask = { tag: string; replies: string[]; askedAt: number; at: number; resume: (answer: string) => void; quiz?: boolean }
   const [ask, setAsk] = useState<Ask | null>(null)
   const askRef = useRef<Ask | null>(null)
   const [nudge, setNudge] = useState(false)
   const isSol = lesson?.kind === '대표예제'
+  // 객관식: 이 영상을 열 때 한 번 정한다 — 절반쯤만 보기가 나온다 (원장님 2026-10-24: 랜덤으로)
+  const quiz = useRef<{ choices: QuizChoice[]; picked?: QuizChoice } | null | undefined>(undefined)
+  function quizNow() {
+    if (quiz.current === undefined) quiz.current = isSol && lesson?.quiz?.answer && Math.random() < QUIZ_RATE ? { choices: buildQuiz(lesson.quiz, studentName) } : null
+    return quiz.current
+  }
 
   // 1) 과제·강의·지난 기록 읽기
   useEffect(() => {
@@ -174,7 +180,11 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       // 장면 2 = 「먼저 혼자 풀어 봐」 → 그 장면이 끝나는 쉼에서 멈추고 이름을 부른 뒤 멈춘 채로 기다린다
       if (state === 1 && sc.length > 3 && justBefore(sc[2])) callSol('try', { hold: true })
       // 마지막 장면(정리) 직전 = 답이 다 나온 뒤 → 「답 맞았어?」
-      if (state === 1 && sc.length > 3 && justBefore(sc[sc.length - 1])) callSol('answer')
+      if (state === 1 && sc.length > 3 && justBefore(sc[sc.length - 1])) {
+        const pk = quiz.current?.picked
+        if (pk) callSol(pk.right ? 'right' : 'wrong', { tag: 'sol:answer', scene: 3, extra: pk.right ? '' : ` 정답은 ${lesson?.quiz?.answer}` })
+        else callSol('answer')
+      }
       if (state === 2 && !askRef.current && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callSol('idle')
       return
     }
@@ -189,7 +199,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
 
   // 풀이 영상용: 학생 이름(말투 하나) → 0.12초 → 여럿이 같이 쓰는 문장. 문장은 그때그때 고르고 바로 전에 쓴 것은 피한다
   const lastLine = useRef<Record<string, number>>({})
-  type CallOpt = { again?: boolean; hold?: boolean; after?: () => void; tag?: string; scene?: number }
+  type CallOpt = { again?: boolean; hold?: boolean; after?: () => void; tag?: string; scene?: number; extra?: string }
   function callSol(key: SolCallKey, opt: CallOpt = {}) { callLine('sol', key, opt) }
   // 개념·증명 영상: 같은 방식(이름 → 문장)인데 문장 표가 따로다 (원장님 2026-10-24: 매번 같은 말이면 지루하다)
   function callLec(key: LecCallKey, opt: CallOpt = {}) { callLine('lec', key, opt) }
@@ -210,19 +220,20 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     if (lines.length > 1 && n === prev) n = (n + 1) % lines.length
     lastLine.current[mem] = n
     try { localStorage.setItem(mem, String(n)) } catch {}
-    const text = table === 'sol' ? solCallText(key as SolCallKey, n, studentName) : lecCallText(key as LecCallKey, n, studentName)
+    const text = (table === 'sol' ? solCallText(key as SolCallKey, n, studentName) : lecCallText(key as LecCallKey, n, studentName)) + (opt.extra ?? '')
     const lineUrl = table === 'sol' ? solLineUrl(key as SolCallKey, n) : lecLineUrl(key as LecCallKey, n)
     const a = voice.current ?? (voice.current = new Audio())
     a.pause()
     // 「먼저 풀어 봐」(hold)는 「다 풀었어요」를 누르면 「같이 맞춰 보자」 하고 풀이를 튼다
     // 「여기까지 이해됐어?」에 「한 번 더 볼래요」면 앞 장면 처음부터 다시 튼다
+    const q = tag === 'sol:try' ? quizNow() : null
     const done = () => openAsk(tag, (answer) => {
       if (opt.hold) callSol('back', { again: true, after: () => player.current?.playVideo?.() })
       else if (answer === '한 번 더 볼래요' && opt.scene != null && lessonRef.current?.scenes?.[opt.scene - 1]) {
         p?.seekTo?.(lessonRef.current.scenes[opt.scene - 1].start, true); p?.playVideo?.()
       } else if (wasPlaying) p?.playVideo?.()
       opt.after?.()
-    })
+    }, q ? q.choices.map((c) => c.text) : undefined)
     let part = 0
     a.onplay = () => setBubble(text)
     a.onerror = () => { if (part === 0) { part = 1; a.src = lineUrl; a.play().catch(done) } else done() }
@@ -239,10 +250,10 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     l.call_responses = [...(l.call_responses ?? []), r]
     dirty.current = true; saveRef.current(true)
   }
-  function openAsk(tag: string, resume: (answer: string) => void) {
-    const replies = CALL_REPLIES[tag]
+  function openAsk(tag: string, resume: (answer: string) => void, choices?: string[]) {
+    const replies = choices ?? CALL_REPLIES[tag]
     if (!replies) { setTimeout(() => setBubble(null), 900); resume(''); return }
-    const a: Ask = { tag, replies, askedAt: Date.now(), at: Math.round((player.current?.getCurrentTime?.() ?? 0) * 10) / 10, resume }
+    const a: Ask = { tag, replies, askedAt: Date.now(), at: Math.round((player.current?.getCurrentTime?.() ?? 0) * 10) / 10, resume, quiz: !!choices }
     askRef.current = a; setAsk(a); setNudge(false)
     setTimeout(() => {                                  // 15초 안에 안 누르면 무응답으로 한 번 적고 말풍선을 흔든다
       if (askRef.current !== a) return
@@ -251,7 +262,18 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   }
   function reply(answer: string) {
     const a = askRef.current; if (!a) return
-    pushResp({ key: a.tag, at: a.at, answer, ms: Date.now() - a.askedAt, ts: new Date().toISOString() })
+    const q = a.quiz ? quiz.current : null
+    const c = q?.choices.find((x) => x.text === answer)
+    if (q && c?.fun) {
+      // 엉뚱한 보기: 웃고 나서 그 보기를 빼고 다시 고르게 한다 (기록은 남긴다)
+      pushResp({ key: 'sol:quiz-fun', at: a.at, answer, ms: Date.now() - a.askedAt, ts: new Date().toISOString() })
+      q.choices = q.choices.filter((x) => !x.fun)
+      askRef.current = null; setAsk(null); setNudge(false)
+      callSol('fun', { again: true, after: () => openAsk(a.tag, a.resume, q.choices.map((x) => x.text)) })
+      return
+    }
+    if (q && c) q.picked = c
+    pushResp({ key: q ? 'sol:quiz' : a.tag, at: a.at, answer, ms: Date.now() - a.askedAt, ts: new Date().toISOString(), ...(q && c ? { correct: !!c.right } : {}) })
     askRef.current = null; setAsk(null); setNudge(false); setBubble(null); pausedSince.current = null
     a.resume(answer)
   }
@@ -358,17 +380,17 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
           </button>
         )}
         {ask && (
-          <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 p-3 bg-gradient-to-t from-black/70 to-transparent">
-            {ask.replies.map((r) => (
+          <div className="absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-2 p-3 bg-gradient-to-t from-black/70 to-transparent">
+            {ask.replies.map((r, i) => (
               <button key={r} onClick={() => reply(r)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg ${r === '틀렸어요' ? 'bg-white text-gray-800' : 'bg-[#E2703A] text-white'} ${nudge ? 'animate-bounce' : ''}`}>
-                {r}
+                className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg ${ask.quiz ? 'bg-white text-gray-900' : r === '틀렸어요' ? 'bg-white text-gray-800' : 'bg-[#E2703A] text-white'} ${nudge ? 'animate-bounce' : ''}`}>
+                {ask.quiz ? `${CIRCLED[i]} ${r}` : r}
               </button>
             ))}
           </div>
         )}
         {bubble && (
-          <div className={`absolute left-3 ${ask ? 'bottom-20' : 'bottom-12'} flex items-end gap-2 pointer-events-none ${nudge ? 'animate-pulse' : ''}`}>
+          <div className={`absolute left-3 ${ask?.quiz ? 'bottom-32' : ask ? 'bottom-20' : 'bottom-12'} flex items-end gap-2 pointer-events-none ${nudge ? 'animate-pulse' : ''}`}>
             <img src="/exam-blog/suji_uniform_fighting.jpg" alt="" className="w-11 h-11 rounded-full object-cover object-top border-2 border-white shadow" />
             <div className="bg-white/95 text-gray-900 text-sm font-bold px-3 py-2 rounded-2xl rounded-bl-sm shadow-lg max-w-[70vw]">{bubble}</div>
           </div>
