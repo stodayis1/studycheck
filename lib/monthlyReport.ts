@@ -45,8 +45,14 @@ export interface MonthlyReport {
   retrySummary: { total: number; passed: number }
   /** 영역별 성취도 */
   areas: { label: string; value: number }[]
-  /** 선생님이 남긴 말 (알림장에서 가져온다) */
+  /** 선생님이 남긴 말 — 그 달 **마지막** 알림장. 한 달 총평이 아니다. */
   teacherNote: string | null
+  /**
+   * 그 달에 쓴 알림장 전부 (날짜 순). 한 달 총평을 쓰는 **재료**다.
+   * ★ 리포트 화면에는 이걸 그대로 싣지 않는다 — 요약한 comment 를 싣는다
+   *   (원장님 2026-10-24 「한달동안 써준 알림장 내용을 너가 요약정리해서」).
+   */
+  notices: { date: string; teacher: string | null; content: string }[]
   /**
    * 선생님이 직접 쓰는 한 줄 평. 비어 있으면 화면이 알림장을 쓰고, 그것도 없으면 기본 문장.
    * ★ 예전엔 「원장 Talk」였는데 원장님이 빼자고 하셨다 (2026-10-20
@@ -84,7 +90,8 @@ export async function buildMonthlyReport(
     .eq('student_id', studentId).gte('session_date', from).lte('session_date', to).order('session_date')
   const ids = (ses ?? []).map((x: any) => x.id)
   const noKey = '00000000-0000-0000-0000-000000000000'
-  const [{ data: notes }, { data: ws }, { data: tb }, { data: ep }, { data: vw }, { data: pf }, { data: fb }] =
+  const [{ data: notes }, { data: ws }, { data: tb }, { data: ep }, { data: vw }, { data: pf }, { data: fb },
+         { data: allFb }, { data: mrc }] =
     await Promise.all([
       db.from('learning_notes').select('*').in('session_id', ids.length ? ids : [noKey]),
       // ★ 단원별 도달 레벨은 **누적**이라 그 학생 것을 다 읽어야 한다(한 명이면 양이 적다).
@@ -96,6 +103,13 @@ export async function buildMonthlyReport(
       db.from('feedbacks').select('content, created_at').eq('student_id', studentId)
         .gte('created_at', from).lte('created_at', `${to}T23:59:59+09:00`)
         .order('created_at', { ascending: false }).limit(1),
+      // 그 달 알림장 전부 — 요약의 재료. 한 학생 한 달치라 많아야 열 건 안팎이다.
+      db.from('feedbacks').select('content, teacher_name, created_at').eq('student_id', studentId)
+        .gte('created_at', from).lte('created_at', `${to}T23:59:59+09:00`)
+        .order('created_at', { ascending: true }).limit(60),
+      // 한 달 총평 — 알림장을 요약해 적어 둔 글 (monthly_report_comments)
+      db.from('monthly_report_comments').select('comment')
+        .eq('student_id', studentId).eq('year', year).eq('month', month).maybeSingle(),
     ])
 
   const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
@@ -187,6 +201,14 @@ export async function buildMonthlyReport(
     retrySummary: { total: retriesRaw.length, passed: retriesRaw.filter((w: any) => w.status === 'passed').length },
     areas,
     teacherNote: (fb ?? [])[0]?.content ?? null,
-    comment: null,
+    notices: (allFb ?? [])
+      .filter((f: any) => String(f.content ?? '').trim())
+      .map((f: any) => ({
+        date: String(f.created_at).slice(0, 10),
+        teacher: f.teacher_name ?? null,
+        content: String(f.content).trim(),
+      })),
+    // 적어 둔 한 달 총평이 있으면 그것을 쓴다. 없으면 null — 화면이 알림장으로 떨어진다.
+    comment: (mrc as any)?.comment ?? null,
   }
 }
