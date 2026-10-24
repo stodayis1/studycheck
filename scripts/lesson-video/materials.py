@@ -29,6 +29,20 @@ SUB = {1: (1, '두 점 사이의 거리'), 2: (1, '선분의 내분점'), 3: (1,
        13: (2, '명제의 증명'), 14: (3, '함수의 뜻'), 15: (3, '합성함수'), 16: (3, '역함수'), 17: (3, '유리식'), 18: (3, '무리식')}
 # PDF 글자층에서 숫자·기호가 빠지는 개념 이름은 손으로
 TITLE_FIX = {7: '원의 방정식 (1)', 9: '원의 방정식 (2)', 22: '명제 p→q의 참, 거짓', 23: '‘모든’이나 ‘어떤’을 포함한 명제'}
+CONCEPT_SUB = None   # 개념 번호 → 소단원 (공통수학2 는 문제은행 쪽 번호로 찾는다)
+
+# 공통수학1 (standard_types 공통수학1). 문제은행 파일에 쪽 번호가 없어 개념 번호로 소단원을 정한다
+CM1 = dict(
+    CHAPTER={1: '다항식', 2: '방정식', 3: '부등식', 4: '순열과 조합', 5: '행렬'},
+    SUB={1: (1, '다항식의 연산'), 2: (1, '나머지 정리와 인수분해'), 3: (2, '복소수'), 4: (2, '이차방정식'),
+         5: (2, '이차방정식과 이차함수'), 6: (2, '여러 가지 방정식'), 7: (3, '일차부등식'), 8: (3, '이차부등식'),
+         9: (4, '순열과 조합'), 10: (5, '행렬과 그 연산')},
+    TITLE_FIX={10: 'i의 거듭제곱, 음수의 제곱근', 15: '이차함수의 최대, 최소', 18: '방정식 x³=1의 허근의 성질',
+               32: '행렬의 덧셈, 뺄셈과 실수배'},
+    CONCEPT_SUB={n: s for s, ns in {1: range(1, 5), 2: range(5, 9), 3: range(9, 11), 4: range(11, 14), 5: range(14, 16),
+                                    6: range(16, 21), 7: range(21, 24), 8: range(24, 28), 9: range(28, 31), 10: range(31, 36)}.items()
+                 for n in ns},
+)
 
 
 def file_name(no, title, sub_no, page):
@@ -40,7 +54,9 @@ def file_name(no, title, sub_no, page):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--pdf', required=True); ap.add_argument('--cuts', required=True); ap.add_argument('--out', required=True)
+    ap.add_argument('--course', default='공통수학2', choices=['공통수학1', '공통수학2'])
     a = ap.parse_args()
+    if a.course == '공통수학1': globals().update(CM1)
     doc = pymupdf.open(a.pdf)
     allc = json.load(open(os.path.join(a.cuts, 'cuts.json'), encoding='utf-8'))
     os.makedirs(a.out, exist_ok=True)
@@ -63,9 +79,12 @@ def main():
                              more_pages=len(ct['parts']) > 1,
                              lines=lines_in(doc[pt['page'] - 1], pt['y0'], pt['y1'])))
         # 소단원: 이 개념 뒤 첫 필수예제가 문제은행에서 어느 소단원 유형인지로 정한다
-        probs = json.load(open(os.path.join(os.path.dirname(__file__), '..', 'problems_ky_gn_cm2.json'), encoding='utf-8'))
-        pg2sub = {q['pg']: int(q['c'].split('-')[1]) for q in probs}
-        sub_no = next((pg2sub[e['page']] for e in ex if e['page'] in pg2sub), None) or prev_sub
+        if CONCEPT_SUB:
+            sub_no = CONCEPT_SUB[c['no']]
+        else:
+            probs = json.load(open(os.path.join(os.path.dirname(__file__), '..', 'problems_ky_gn_cm2.json'), encoding='utf-8'))
+            pg2sub = {q['pg']: int(q['c'].split('-')[1]) for q in probs}
+            sub_no = next((pg2sub[e['page']] for e in ex if e['page'] in pg2sub), None) or prev_sub
         prev_sub = sub_no
         title = TITLE_FIX.get(c['no'], c['title'])
         meta = dict(no=c['no'], title=title, chapter=CHAPTER[SUB[sub_no][0]], sub_chapter=SUB[sub_no][1],

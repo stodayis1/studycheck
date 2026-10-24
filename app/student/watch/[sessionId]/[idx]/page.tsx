@@ -8,7 +8,7 @@ import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
-import { nameCallText, nameCallUrl, type NameCallKey, SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, CALL_REPLIES, type CallResponse } from '@/lib/nameCalls'
+import { SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, LEC_LINES, lecLineUrl, lecCallText, type LecCallKey, planLectureCalls, CALL_REPLIES, type CallResponse } from '@/lib/nameCalls'
 import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
 declare global { interface Window { YT: any; onYouTubeIframeAPIReady?: () => void } }
@@ -73,7 +73,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   const [started, setStarted] = useState(false)
   // 이름을 부르면 대답 버튼을 띄우고, 누를 때까지 영상은 멈춰 둔다 (원장님 2026-10-21)
   // 풀이 영상의 「먼저 풀어 봐」도 여기서 「다 풀었어요」를 눌러야 풀이가 이어진다
-  type Ask = { tag: string; replies: string[]; askedAt: number; at: number; resume: () => void }
+  type Ask = { tag: string; replies: string[]; askedAt: number; at: number; resume: (answer: string) => void }
   const [ask, setAsk] = useState<Ask | null>(null)
   const askRef = useRef<Ask | null>(null)
   const [nudge, setNudge] = useState(false)
@@ -123,7 +123,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
           onStateChange: (e: any) => {
             if (e.data !== 1) { lastT.current = null; saveRef.current() }
             pausedSince.current = e.data === 2 ? Date.now() : null
-            if (e.data === 0) { if (lessonRef.current?.kind === '대표예제') callSol('end'); else callName('end') }
+            if (e.data === 0) { if (lessonRef.current?.kind === '대표예제') callSol('end'); else callLec('end') }
           },
         },
       })
@@ -178,66 +178,56 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       if (state === 2 && !askRef.current && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callSol('idle')
       return
     }
-    if (state === 1) {
-      const firstConcept = sc.find((x) => x.kind === '개념')
-      if (justBefore(firstConcept)) callName('important')
-      const check = sc.find((x) => x.kind === 'check')
-      if (justBefore(check)) callName('check')
-      const ex = sc.find((x) => x.kind === 'examples')
-      if (check && justBefore(ex)) callName('answer')
+    // 개념 영상: 어느 장면 앞에서 무슨 말을 할지는 강의마다 다르다 (lib/nameCalls.ts planLectureCalls)
+    if (state === 1 && lesson?.kind === '개념') {
+      for (const c of lecPlan) if (justBefore(sc[c.scene])) callLec(c.key, { tag: 'lec:' + c.key + '@' + c.scene, scene: c.scene })
     }
     // 멈춘 채 2분 넘게 화면만 켜 두면
-    if (state === 2 && !askRef.current && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callName('idle')
+    if (state === 2 && !askRef.current && pausedSince.current && !document.hidden && Date.now() - pausedSince.current > 120000) callLec('idle')
   }
-
-  function callName(key: NameCallKey, again = false, after?: () => void) {
-    if (!studentId || !studentName) { after?.(); return }
-    if (!again && fired.current.has(key)) { after?.(); return }
-    fired.current.add(key)
-    const p = player.current
-    const wasPlaying = p?.getPlayerState?.() === 1
-    if (wasPlaying) p.pauseVideo()                      // 설명과 안 겹치게 멈춘다
-    const a = voice.current ?? (voice.current = new Audio())
-    a.pause()
-    // 말이 끝나면 대답을 기다렸다가(버튼) 이어서 튼다
-    const done = () => openAsk(key, () => { if (wasPlaying) p?.playVideo?.(); after?.() })
-    a.onplay = () => setBubble(nameCallText(key, studentName))
-    a.onended = a.onerror = done
-    a.src = nameCallUrl(studentId, key)
-    a.play().catch(() => { setBubble(nameCallText(key, studentName)); setTimeout(done, 2200) })  // 소리가 막혀도 말풍선은 띄운다
-  }
+  const lecPlan = lesson?.kind === '개념' && lesson.scenes?.length ? planLectureCalls(lesson.id, lesson.scenes) : []
 
   // 풀이 영상용: 학생 이름(말투 하나) → 0.12초 → 여럿이 같이 쓰는 문장. 문장은 그때그때 고르고 바로 전에 쓴 것은 피한다
   const lastLine = useRef<Record<string, number>>({})
-  function callSol(key: SolCallKey, opt: { again?: boolean; hold?: boolean; after?: () => void } = {}) {
+  type CallOpt = { again?: boolean; hold?: boolean; after?: () => void; tag?: string; scene?: number }
+  function callSol(key: SolCallKey, opt: CallOpt = {}) { callLine('sol', key, opt) }
+  // 개념·증명 영상: 같은 방식(이름 → 문장)인데 문장 표가 따로다 (원장님 2026-10-24: 매번 같은 말이면 지루하다)
+  function callLec(key: LecCallKey, opt: CallOpt = {}) { callLine('lec', key, opt) }
+  function callLine(table: 'sol' | 'lec', key: string, opt: CallOpt) {
     if (!studentId || !studentName) { opt.after?.(); return }
-    const tag = 'sol:' + key
-    if (!opt.again && fired.current.has(tag)) { opt.after?.(); return }
-    fired.current.add(tag)
+    const tag = table + ':' + key
+    const once = opt.tag ?? tag
+    if (!opt.again && fired.current.has(once)) { opt.after?.(); return }
+    fired.current.add(once)
     const p = player.current
     const wasPlaying = p?.getPlayerState?.() === 1
     if (wasPlaying || opt.hold) p?.pauseVideo?.()
-    const { tone, lines } = SOL_LINES[key]
-    let prev = lastLine.current[key]
-    try { if (prev == null) prev = Number(localStorage.getItem('sc_sol_' + key) ?? -1) } catch {}
+    const { tone, lines } = (table === 'sol' ? SOL_LINES[key as SolCallKey] : LEC_LINES[key as LecCallKey]) as { tone: 'call' | 'soft'; lines: readonly string[] }
+    const mem = `sc_${table}_${key}`
+    let prev = lastLine.current[mem]
+    try { if (prev == null) prev = Number(localStorage.getItem(mem) ?? -1) } catch {}
     let n = Math.floor(Math.random() * lines.length)
     if (lines.length > 1 && n === prev) n = (n + 1) % lines.length
-    lastLine.current[key] = n
-    try { localStorage.setItem('sc_sol_' + key, String(n)) } catch {}
-    const text = solCallText(key, n, studentName)
+    lastLine.current[mem] = n
+    try { localStorage.setItem(mem, String(n)) } catch {}
+    const text = table === 'sol' ? solCallText(key as SolCallKey, n, studentName) : lecCallText(key as LecCallKey, n, studentName)
+    const lineUrl = table === 'sol' ? solLineUrl(key as SolCallKey, n) : lecLineUrl(key as LecCallKey, n)
     const a = voice.current ?? (voice.current = new Audio())
     a.pause()
     // 「먼저 풀어 봐」(hold)는 「다 풀었어요」를 누르면 「같이 맞춰 보자」 하고 풀이를 튼다
-    const done = () => openAsk(tag, () => {
+    // 「여기까지 이해됐어?」에 「한 번 더 볼래요」면 앞 장면 처음부터 다시 튼다
+    const done = () => openAsk(tag, (answer) => {
       if (opt.hold) callSol('back', { again: true, after: () => player.current?.playVideo?.() })
-      else if (wasPlaying) p?.playVideo?.()
+      else if (answer === '한 번 더 볼래요' && opt.scene != null && lessonRef.current?.scenes?.[opt.scene - 1]) {
+        p?.seekTo?.(lessonRef.current.scenes[opt.scene - 1].start, true); p?.playVideo?.()
+      } else if (wasPlaying) p?.playVideo?.()
       opt.after?.()
     })
     let part = 0
     a.onplay = () => setBubble(text)
-    a.onerror = () => { if (part === 0) { part = 1; a.src = solLineUrl(key, n); a.play().catch(done) } else done() }
+    a.onerror = () => { if (part === 0) { part = 1; a.src = lineUrl; a.play().catch(done) } else done() }
     a.onended = () => {
-      if (part === 0) { part = 1; setTimeout(() => { a.src = solLineUrl(key, n); a.play().catch(done) }, 120) }
+      if (part === 0) { part = 1; setTimeout(() => { a.src = lineUrl; a.play().catch(done) }, 120) }
       else done()
     }
     a.src = nameToneUrl(studentId, tone)
@@ -249,9 +239,9 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     l.call_responses = [...(l.call_responses ?? []), r]
     dirty.current = true; saveRef.current(true)
   }
-  function openAsk(tag: string, resume: () => void) {
+  function openAsk(tag: string, resume: (answer: string) => void) {
     const replies = CALL_REPLIES[tag]
-    if (!replies) { setTimeout(() => setBubble(null), 900); resume(); return }
+    if (!replies) { setTimeout(() => setBubble(null), 900); resume(''); return }
     const a: Ask = { tag, replies, askedAt: Date.now(), at: Math.round((player.current?.getCurrentTime?.() ?? 0) * 10) / 10, resume }
     askRef.current = a; setAsk(a); setNudge(false)
     setTimeout(() => {                                  // 15초 안에 안 누르면 무응답으로 한 번 적고 말풍선을 흔든다
@@ -263,7 +253,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     const a = askRef.current; if (!a) return
     pushResp({ key: a.tag, at: a.at, answer, ms: Date.now() - a.askedAt, ts: new Date().toISOString() })
     askRef.current = null; setAsk(null); setNudge(false); setBubble(null); pausedSince.current = null
-    a.resume()
+    a.resume(answer)
   }
 
   // 장면 경계를 놓치지 않게 0.2초마다 본다 (쉼이 0.45초라 1초 간격이면 지나친다)
@@ -282,7 +272,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       const playing = player.current?.getPlayerState?.() === 1
       if (document.hidden) { if (playing) hiddenSince.current = Date.now(); return }
       if (hiddenSince.current && Date.now() - hiddenSince.current > 8000 && awayCount.current < 3) {
-        awayCount.current++; if (lessonRef.current?.kind === '대표예제') callSol('away', { again: true }); else callName('away', true)
+        awayCount.current++; if (lessonRef.current?.kind === '대표예제') callSol('away', { again: true }); else callLec('away', { again: true })
       }
       hiddenSince.current = null
     }
@@ -337,7 +327,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     setStarted(true)
     // 시작 인사를 먼저 하고 영상을 튼다 (증명 영상은 「노트 펴고 같이 써야지」)
     if (isSol) callSol('start', { after: () => player.current?.playVideo?.() })
-    else callName(lesson?.kind === '증명' ? 'proof' : 'start', false, () => player.current?.playVideo?.())
+    else callLec(lesson?.kind === '증명' ? 'proof' : 'start', { after: () => player.current?.playVideo?.() })
   }
 
   const seek = (s: number) => { player.current?.seekTo?.(s, true); player.current?.playVideo?.() }

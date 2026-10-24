@@ -32,10 +32,16 @@ const doNames = args.includes('--names') || !args.includes('--lines')
 // lib/nameCalls.ts 에서 판(NAME_CALL_V2)과 문장 표(SOL_LINES)를 읽는다
 const ts = fs.readFileSync('lib/nameCalls.ts', 'utf8')
 const VERSION = ts.match(/NAME_CALL_V2 = '(\w+)'/)[1]
+// 풀이용 SOL_LINES 는 line/<key>/, 개념·증명용 LEC_LINES 는 line/lec_<key>/ 에 올라간다
 const SOL = {}
-for (const m of ts.slice(ts.indexOf('export const SOL_LINES')).matchAll(/^\s+(\w+):\s*\{ tone: '(\w+)', lines: \[(.*)\] \},?$/gm)) {
-  SOL[m[1]] = { tone: m[2], lines: [...m[3].matchAll(/'([^']*)'/g)].map((x) => x[1]) }
+function readTable(name, prefix) {
+  const from = ts.indexOf(`export const ${name}`), to = ts.indexOf('} as const', from)
+  for (const m of ts.slice(from, to).matchAll(/^\s+(\w+):\s*\{ tone: '(\w+)', lines: \[(.*)\] \},?$/gm)) {
+    SOL[prefix + m[1]] = { tone: m[2], lines: [...m[3].matchAll(/'([^']*)'/g)].map((x) => x[1]) }
+  }
 }
+readTable('SOL_LINES', '')
+readTable('LEC_LINES', 'lec_')
 if (!Object.keys(SOL).length) throw new Error('SOL_LINES 를 못 읽음')
 const CARRIER = { call: ', 같이 풀어 보자.', soft: '~ 오늘도 같이 해 보자.' }
 
