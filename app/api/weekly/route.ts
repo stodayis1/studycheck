@@ -84,7 +84,7 @@ export async function GET(req: Request) {
       supabase.from('video_watch_logs')
         .select('session_id, video_url, coverage_pct, completed_at, watch_seconds, focus_lost_seconds').in('session_id', c))),
     Promise.all(vChunks.map((c) =>
-      supabase.from('proof_submissions').select('session_id, video_url, submitted_at').in('session_id', c))),
+      supabase.from('proof_submissions').select('session_id, video_url, submitted_at, photo_paths').in('session_id', c))),
     vIds.length
       ? supabase.from('lesson_videos').select('youtube_id, kind, title, order_label')
       : Promise.resolve({ data: [] as any[], error: null }),
@@ -203,6 +203,18 @@ export async function GET(req: Request) {
         unit: '%',
         title: proofUrls.map((u, i) =>
           `${i + 1}. ${nameOf(u)} — ${subs.some((p) => p.video_url === u) ? '올림' : '안 올림'}`).join('\n'),
+        // ★ 낸 사진을 **여기서 바로** 열 수 있게 함께 내려보낸다 (원장님 2026-10-23
+        //   「증명 제출한 건 어디서 봐?」). 예전에는 학습관리의 **오늘 카드**에만 있어서,
+        //   그 학생 수업이 없는 날이 되면 사진을 볼 길이 아예 없었다.
+        //   주소가 아니라 보관함 경로만 보낸다 — 화면이 그때그때 10분짜리 주소를 받아 연다.
+        proofUrls,
+        proofLabels: Object.fromEntries(proofUrls.map((u) => [u, nameOf(u)])),
+        proofSubs: subs
+          .filter((p) => proofUrls.includes(p.video_url))
+          .map((p) => ({
+            session_id: p.session_id, video_url: p.video_url,
+            photo_paths: p.photo_paths ?? [], submitted_at: p.submitted_at,
+          })),
       })
     }
   }

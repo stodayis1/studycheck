@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { WorksheetTabs } from '@/components/teacher/WorksheetTabs'
+import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
@@ -24,6 +25,10 @@ type Badge = {
   total?: number
   gradingId?: string
   code?: string
+  /** 증명 배지 — 낸 사진을 그 자리에서 열려고 같이 받는다 */
+  proofUrls?: string[]
+  proofLabels?: Record<string, string>
+  proofSubs?: ProofSubmission[]
 }
 type Student = {
   id: string; name: string; grade: string | null; school: string | null
@@ -359,6 +364,16 @@ export default function WeeklyPage() {
                   </div>
                   <div className="text-sm text-gray-700 mt-1">{b.title ?? b.label}</div>
 
+                  {/* 증명 — 낸 사진을 바로 연다. 보관함이 비공개라 누를 때 10분짜리 주소를 받는다. */}
+                  {b.kind === 'proof' && b.proofUrls?.length && (
+                    <div className="mt-2.5">
+                      <ProofSubmissionChip
+                        proofUrls={b.proofUrls}
+                        subs={b.proofSubs ?? []}
+                        labelOf={(u) => b.proofLabels?.[u] ?? u} />
+                    </div>
+                  )}
+
                   {b.kind === 'exam' && b.gradingId ? (
                     <div className="grid grid-cols-3 gap-1.5 mt-3">
                       {([['wrong', '틀린 문제'], ['twin', '쌍둥이'], ['similar', '유사 문제']] as const).map(([m, l]) => (
@@ -370,11 +385,11 @@ export default function WeeklyPage() {
                         </button>
                       ))}
                     </div>
-                  ) : (
+                  ) : b.kind === 'exam' ? (
                     <div className="text-[11px] text-gray-400 mt-2">
                       QR로 채점한 시험지만 오답·유사 문제를 만들 수 있습니다.
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))}
               {detail.badges.length === 0 && (
