@@ -39,6 +39,45 @@ export default function SurveyPage() {
   const [tab, setTab] = useState<'all' | 'consult' | 'wish'>('all')
   const [open, setOpen] = useState<string | null>(null)
 
+  // ── 문자로 보내기 ────────────────────────────────────────────────
+  const [smsOpen, setSmsOpen] = useState(false)
+  const [scope, setScope] = useState<'all' | 'elementary' | 'middle' | 'high'>('all')
+  const [useStudents, setUseStudents] = useState(true)
+  const [extra, setExtra] = useState('')
+  const [smsText, setSmsText] = useState(
+    '[수학의지혜]\n오늘 설명회에 와 주셔서 고맙습니다.\n'
+    + '짧은 설문 하나 부탁드립니다. 적어 주신 한 줄이 다음 수업을 바꿉니다.\n'
+    + '상담 신청도 여기서 받습니다.\n'
+    + 'https://studycheck-five.vercel.app/survey')
+  const [pre, setPre] = useState<any>(null)
+  const [smsBusy, setSmsBusy] = useState(false)
+  const [smsErr, setSmsErr] = useState('')
+  const [smsDone, setSmsDone] = useState<any>(null)
+  // 받는 사람이나 글이 바뀌면 미리 센 값은 버린다 — 옛 숫자를 보고 보내면 안 된다.
+  const resetPre = () => { setPre(null); setSmsDone(null) }
+
+  async function ask(send: boolean) {
+    setSmsBusy(true); setSmsErr('')
+    try {
+      const r = await apiFetch('/api/survey/sms', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: smsText, scope, useStudents, extraPhones: extra, send }),
+      })
+      const j = await r.json()
+      if (!r.ok) { setSmsErr(j.error ?? '실패했어요.'); return null }
+      return j
+    } catch {
+      setSmsErr('연결에 실패했어요.'); return null
+    } finally { setSmsBusy(false) }
+  }
+  async function preview() { setSmsDone(null); const j = await ask(false); if (j) setPre(j) }
+  async function reallySend() {
+    if (!pre) return
+    if (!confirm(pre.총번호 + '개 번호로 문자를 보냅니다.\n한 번 나가면 되돌릴 수 없어요.\n\n보낼까요?')) return
+    const j = await ask(true)
+    if (j) { setSmsDone(j); setPre(null) }
+  }
+
   useEffect(() => {
     apiFetch('/api/survey?key=설명회')
       .then((r) => r.json())
@@ -82,7 +121,109 @@ export default function SurveyPage() {
             className="rounded-lg border px-3 py-2 text-xs font-bold" style={{ borderColor: GREEN, color: GREEN }}>
             직접 열어 보기
           </a>
+          <button onClick={() => setSmsOpen((v) => !v)}
+            className="rounded-lg px-3 py-2 text-xs font-bold text-white" style={{ background: BROWN }}>
+            문자로 보내기
+          </button>
         </div>
+
+        {smsOpen && (
+          <div className="mt-3 rounded-xl border bg-white p-3.5 space-y-3">
+            <div>
+              <p className="mb-1.5 text-[11.5px] font-bold text-gray-500">누구에게</p>
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                {([['all', '전체'], ['elementary', '초등'], ['middle', '중등'], ['high', '고등']] as const)
+                  .map(([k, l]) => (
+                    <button key={k} onClick={() => { setScope(k); resetPre() }} disabled={!useStudents}
+                      className="rounded-full border px-3 py-1.5 text-xs font-bold disabled:opacity-40"
+                      style={scope === k ? { background: GREEN, color: '#fff', borderColor: GREEN }
+                        : { background: '#fff', color: '#6b7280', borderColor: '#e5e7eb' }}>
+                      {l}
+                    </button>
+                  ))}
+                <label className="ml-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                  <input type="checkbox" checked={useStudents}
+                    onChange={(e) => { setUseStudents(e.target.checked); resetPre() }} />
+                  재원생 보호자에게
+                </label>
+              </div>
+              {/* ★ 설명회에는 재원생이 아닌 분도 오신다 (원장님 2026-10-24 「외부 학부모님도 … 17명 정도」) */}
+              <p className="mb-1 text-[11.5px] font-bold text-gray-500">
+                외부 학부모님 번호
+                <span className="font-normal text-gray-400"> — 쉼표·줄바꿈 아무렇게나 붙여넣으세요</span>
+              </p>
+              <textarea value={extra} onChange={(e) => { setExtra(e.target.value); resetPre() }} rows={3}
+                placeholder="010-1234-5678, 010-2345-6789 …"
+                className="w-full rounded-lg border px-3 py-2 text-[13px]" />
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11.5px] font-bold text-gray-500">보낼 글</p>
+              <textarea value={smsText} onChange={(e) => { setSmsText(e.target.value); resetPre() }} rows={6}
+                className="w-full rounded-lg border px-3 py-2 text-[13px] leading-relaxed" />
+              <p className="mt-1 text-[11px] text-gray-400">
+                {smsText.length}자 · 주소만 41바이트라 어떻게 써도 장문(LMS)으로 나갑니다
+              </p>
+            </div>
+
+            {smsErr && (
+              <p className="rounded-lg px-3 py-2 text-xs font-semibold"
+                style={{ background: '#FEE2E2', color: '#991B1B' }}>{smsErr}</p>
+            )}
+
+            {pre && (
+              <div className="rounded-lg px-3 py-2.5 text-[12.5px]" style={{ background: MINT }}>
+                <p className="font-bold" style={{ color: GREEN }}>
+                  {pre.총번호}개 번호로 나갑니다
+                  <span className="font-normal text-gray-500">
+                    {' '}(재원생 {pre.학생수}명 · 외부 {pre.외부}명
+                    {pre.한번호에여럿 ? ' · 같은 번호 쓰는 ' + pre.한번호에여럿 + '집은 한 통만' : ''})
+                  </span>
+                </p>
+                {!!pre.미리보기?.length && (
+                  <ul className="mt-1.5 space-y-0.5 text-[11.5px] text-gray-600">
+                    {pre.미리보기.map((x: string, i: number) => <li key={i}>· {x}</li>)}
+                    {pre.총번호 > pre.미리보기.length && (
+                      <li className="text-gray-400">… 외 {pre.총번호 - pre.미리보기.length}개</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {smsDone && (
+              <div className="rounded-lg px-3 py-2.5 text-[12.5px]"
+                style={{ background: smsDone.테스트모드 ? '#FEF3C7' : MINT }}>
+                <p className="font-bold" style={{ color: smsDone.테스트모드 ? BROWN : GREEN }}>
+                  {smsDone.테스트모드
+                    ? '테스트 모드라 실제로는 안 나갔습니다 (' + smsDone.보냄 + '건 처리). 수학OPS 에서 테스트 모드를 꺼야 진짜로 나갑니다.'
+                    : smsDone.보냄 + '개 번호로 보냈습니다.'}
+                </p>
+                {smsDone.실패?.length > 0 && (
+                  <p className="mt-1 text-[11.5px]" style={{ color: '#991B1B' }}>
+                    실패 {smsDone.실패.length}건 — {smsDone.실패.slice(0, 3).map((x: any) => x.phone + '(' + x.error + ')').join(', ')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={preview} disabled={smsBusy}
+                className="flex-1 rounded-lg border py-2.5 text-sm font-bold disabled:opacity-50"
+                style={{ borderColor: GREEN, color: GREEN }}>
+                {smsBusy && !pre ? '세는 중…' : '몇 명에게 가는지 보기'}
+              </button>
+              <button onClick={reallySend} disabled={smsBusy || !pre}
+                className="flex-1 rounded-lg py-2.5 text-sm font-bold text-white disabled:opacity-40"
+                style={{ background: BROWN }}>
+                {smsBusy && pre ? '보내는 중…' : '진짜로 보내기'}
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              먼저 「몇 명에게 가는지 보기」를 눌러야 보내기 단추가 열립니다. 한 번 나가면 되돌릴 수 없어요.
+            </p>
+          </div>
+        )}
       </div>
 
       {err && <P>{err}</P>}
