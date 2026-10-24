@@ -59,6 +59,12 @@ export default function SurveyPage() {
   const [smsErr, setSmsErr] = useState('')
   const [smsDone, setSmsDone] = useState<any>(null)
   const resetPre = () => { setPre(null); setSmsDone(null) }
+  // 붙여넣은 글에서 번호가 몇 개로 읽혔는지 — 17개 넣고 17개인지 바로 보이게 (서버와 같은 규칙)
+  const extraCount = useMemo(() => {
+    const seen = new Set(
+      extra.split(/[\s,;]+/).map((x) => x.replace(/\D/g, '')).filter((d) => d.length >= 10))
+    return seen.size
+  }, [extra])
 
   // 명단은 창을 열 때 한 번만 읽는다
   useEffect(() => {
@@ -164,10 +170,31 @@ export default function SurveyPage() {
 
         {smsOpen && (
           <div className="mt-3 rounded-xl border bg-white p-3.5 space-y-3">
+            {/* ★ 설명회에는 재원생이 아닌 분도 오신다 (원장님 2026-10-24 「외부 학부모님도 … 17명 정도」).
+                학생 명단 아래에 두었더니 스크롤에 밀려 안 보였다 — 맨 위로 올렸다. */}
+            <div className="rounded-xl p-3" style={{ background: MINT, border: '1px solid #C7DED6' }}>
+              <div className="mb-1.5 flex items-baseline gap-2 flex-wrap">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white"
+                  style={{ background: GREEN }}>1</span>
+                <p className="text-[12.5px] font-bold">외부 학부모님 번호</p>
+                <span className="text-[11.5px] text-gray-500">재원생이 아닌 분 — 쉼표·줄바꿈 아무렇게나 붙여넣으세요</span>
+                {extraCount > 0 && (
+                  <span className="ml-auto text-[11.5px] font-bold" style={{ color: GREEN }}>
+                    번호 {extraCount}개
+                  </span>
+                )}
+              </div>
+              <textarea value={extra} onChange={(e) => { setExtra(e.target.value); resetPre() }} rows={4}
+                placeholder={'010-1234-5678, 010-2345-6789\n010-3456-7890 …'}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-[13px]" />
+            </div>
+
             <div>
               <div className="mb-1.5 flex items-baseline gap-2 flex-wrap">
-                <p className="text-[11.5px] font-bold text-gray-500">설명회에 오신 분을 고르세요</p>
-                <span className="text-[11.5px] font-bold" style={{ color: GREEN }}>고른 학생 {picked.size}명</span>
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white"
+                  style={{ background: GREEN }}>2</span>
+                <p className="text-[12.5px] font-bold">재원생 중에서 고르기</p>
+                <span className="text-[11.5px] font-bold" style={{ color: GREEN }}>{picked.size}명 고름</span>
                 {picked.size > 0 && (
                   <button onClick={() => { setPicked(new Set()); resetPre() }}
                     className="text-[11px] text-gray-400 underline">모두 지우기</button>
@@ -216,14 +243,6 @@ export default function SurveyPage() {
                 })}
               </div>
 
-              {/* ★ 설명회에는 재원생이 아닌 분도 오신다 (원장님 2026-10-24 「외부 학부모님도 … 17명 정도」) */}
-              <p className="mb-1 mt-3 text-[11.5px] font-bold text-gray-500">
-                외부 학부모님 번호
-                <span className="font-normal text-gray-400"> — 쉼표·줄바꿈 아무렇게나 붙여넣으세요</span>
-              </p>
-              <textarea value={extra} onChange={(e) => { setExtra(e.target.value); resetPre() }} rows={3}
-                placeholder="010-1234-5678, 010-2345-6789 …"
-                className="w-full rounded-lg border px-3 py-2 text-[13px]" />
             </div>
 
             <div>

@@ -33,7 +33,8 @@ const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '')
 const pretty = (d: string) =>
   d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
     : d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : d
-const mask = (d: string) => pretty(d).replace(/^(\d{3})-(\d+)-/, '$1-****-')
+// ★ 받는 분 목록은 **원장님 화면에만** 뜬다. 가운데를 가려 두면 잘못 적은 번호를
+//   못 찾는다 (원장님 2026-10-24 「잘못 쓴 번호가 있는데 수정하려면?」). 그대로 보여 준다.
 
 export async function POST(req: NextRequest) {
   const who = await staffOrDeny(req, { adminOnly: true })
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
     외부: list.filter((w) => w.label === '외부').length,
     한번호에여럿: targets.filter((t) => t.names.length > 1).length,
     // 보내기 전에 **전부** 보여 준다 — 고른 것이 맞는지 눈으로 확인하시라고.
-    받는분: targets.map((t) => `${mask(t.phone)} — ${t.names.join(', ')}`),
+    받는분: targets.map((t) => `${pretty(t.phone)} — ${t.names.join(', ')}`),
   }
 
   if (b.send !== true) return NextResponse.json({ dryRun: true, ...summary })
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
   for (const t of targets) {
     const r = await sendSmsViaOps({ to: t.phone, text, refType: 'survey_link' })
     if (r.ok) { sent++; opsDryRun = opsDryRun || !!r.dryRun }
-    else failed.push({ phone: mask(t.phone), error: r.error ?? '알 수 없는 까닭' })
+    else failed.push({ phone: pretty(t.phone), error: r.error ?? '알 수 없는 까닭' })
   }
   return NextResponse.json({
     ...summary,
