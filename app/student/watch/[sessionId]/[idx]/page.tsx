@@ -267,7 +267,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
     if (q && c?.fun) {
       // 엉뚱한 보기: 웃고 나서 그 보기를 빼고 다시 고르게 한다 (기록은 남긴다)
       pushResp({ key: 'sol:quiz-fun', at: a.at, answer, ms: Date.now() - a.askedAt, ts: new Date().toISOString() })
-      q.choices = q.choices.filter((x) => !x.fun)
+      q.choices = q.choices.filter((x) => x !== c)
       askRef.current = null; setAsk(null); setNudge(false)
       callSol('fun', { again: true, after: () => openAsk(a.tag, a.resume, q.choices.map((x) => x.text)) })
       return

@@ -58,7 +58,7 @@ export const SOL_LINES = {
   // 객관식(원장님 2026-10-24): 고른 답이 맞았는지 풀이가 끝난 뒤 알려 준다. 엉뚱한 보기를 고르면 fun
   right:  { tone: 'soft', lines: ['맞았어! 정말 잘했어.', '정답이야. 역시 잘하네.', '맞혔네, 멋있다.'] },
   wrong:  { tone: 'soft', lines: ['아쉽다. 어디서 달라졌는지 풀이 한 번 더 보자.', '괜찮아. 틀린 곳 찾으면 그게 실력이야.', '아깝다. 다음엔 꼭 맞힐 수 있어.'] },
-  fun:    { tone: 'soft', lines: ['하하, 고마워! 그래도 진짜 답을 골라 줘.', '그건 나도 알아. 이제 진짜 답 골라 볼까?', '고마워. 그럼 이번엔 진짜 답!'] },
+  fun:    { tone: 'soft', lines: ['하하, 고마워! 그래도 진짜 답을 골라 줘.', '그건 나도 알아. 이제 진짜 답 골라 볼까?', '고마워. 그럼 이번엔 진짜 답!', '앗, 그건 내가 몰래 넣은 보기야. 다시 골라 봐.', '장난꾸러기네. 진짜 답은 뭘까?', '웃겼지? 이제 진짜로 골라 보자.', '그것도 좋지만 수학 답을 골라 줘.'] },
 } as const satisfies Record<string, { tone: NameTone; lines: readonly string[] }>
 export type SolCallKey = keyof typeof SOL_LINES
 
@@ -145,11 +145,28 @@ export type CallResponse = { key: string; at: number; answer: string | null; ms?
 // 객관식이 뜬 문제 중 3분의 1쯤은 엉뚱한 보기 하나를 섞는다(재미). 고르면 웃고 진짜 답을 다시 고르게 한다.
 export type LessonQuiz = { answer: string; wrong: string[] }
 export const QUIZ_RATE = 0.5, FUN_RATE = 0.35
-const FUN_CHOICES = ['수지원장님 짱', '○ 짱', '사다리', '무지개', '떡볶이', '오늘 저녁 메뉴', '수지쌤 안경', '고양이']
+// 엉뚱한 보기 (원장님 2026-10-24: 「수지원장님 짱, ○○ 짱, 사다리, 무지개」는 예시 — 더 다양하게). ○ = 학생 이름
+const FUN_CHOICES = [
+  // 이름·학원
+  '수지원장님 짱', '○ 짱', '○ 천재', '○ 최고', '수학의지혜 최고', '수지쌤 안경', '수지쌤 사랑해요', '원장님 간식 사 주세요',
+  // 수학 말장난
+  '사다리', '무지개', '루트 떡볶이', '파이 한 조각', '무한대 곱하기 2', '삼각김밥', '원두커피', '직선으로 집에 가기',
+  '내 간식의 집합', '0점 말고 100점', '공식 외우는 꿈',
+  // 생활 개그
+  '고양이', '치킨', '아이스크림', '오늘 저녁 메뉴', '숙제 면제권', '쉬는 시간 10분', '주말', '방학', '노래방',
+  '유튜브 5분만', '잠 10분 더', '내일의 나에게 맡김', '정답은 마음속에', '연필 굴리기', '눈 감고 찍기',
+  '엄마한테 물어볼게요', '이 문제 너무 쉬워요', '선생님이 알려 주세요', '모르겠다 그냥 찍자',
+]
 export type QuizChoice = { text: string; fun?: boolean; right?: boolean }
 export function buildQuiz(q: LessonQuiz, fullName: string, rnd = Math.random): QuizChoice[] {
   const xs: QuizChoice[] = [{ text: q.answer, right: true }, ...q.wrong.slice(0, 3).map((t) => ({ text: t }))]
-  if (rnd() < FUN_RATE) xs.push({ text: FUN_CHOICES[Math.floor(rnd() * FUN_CHOICES.length)].replace('○', callName(fullName) || '나'), fun: true })
+  // 엉뚱한 보기: 가끔 하나, 더 가끔 둘 (같은 것은 안 겹치게)
+  const nFun = rnd() < FUN_RATE ? (rnd() < 0.3 ? 2 : 1) : 0
+  const pool = [...FUN_CHOICES]
+  for (let k = 0; k < nFun; k++) {
+    const t = pool.splice(Math.floor(rnd() * pool.length), 1)[0]
+    xs.push({ text: t.replace('○', callName(fullName) || '나'), fun: true })
+  }
   for (let i = xs.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [xs[i], xs[j]] = [xs[j], xs[i]] }
   return xs
 }
