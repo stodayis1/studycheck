@@ -53,5 +53,6 @@
     {"cue": "각의 이등분선도 항상 두 개", "tex": "이등분선 $\\rightarrow$ 거리가 같다 $\\rightarrow$ 두 개!", "color": "red", "underline": true}
    ]
   }
- ]
+ ],
+ "quiz": {"answer": "4x−4y=9, 8x+8y=15", "wrong": ["4x−4y=9", "x−5y=3, 5x+7y=9", "4x+4y=9, 8x−8y=15"]}
 }

@@ -51,5 +51,6 @@
     {"cue": "마주 보는 변의 중점을 지난다", "tex": "꼭짓점을 지나는 이등분선 $\\rightarrow$ 대변의 중점!", "color": "red", "underline": true}
    ]
   }
- ]
+ ],
+ "quiz": {"answer": "y=−2x+2", "wrong": ["y=2x+2", "y=−x+2", "y=−2x+1"]}
 }
