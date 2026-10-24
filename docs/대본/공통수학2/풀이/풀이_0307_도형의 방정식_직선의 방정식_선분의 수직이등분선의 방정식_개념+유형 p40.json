@@ -59,5 +59,6 @@
     {"cue": "기울기의 곱이 마이너스 일 그리고", "tex": "수직이등분선 $\\rightarrow$ 기울기 곱 $-1$ 그리고 중점!", "color": "red", "underline": true}
    ]
   }
- ]
+ ],
+ "quiz": {"answer": "y=x+1", "wrong": ["y=−x+4", "y=x−1", "y=x+5/2"]}
 }

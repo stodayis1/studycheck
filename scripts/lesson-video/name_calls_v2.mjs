@@ -26,6 +26,8 @@ for (const f of ['.env.local', '.env']) {
 const args = process.argv.slice(2)
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
 const force = args.includes('--force'), dry = args.includes('--dry')
+// --keys right,wrong,fun : 그 문장들만 새로 만든다(문장을 바꿨을 때). 판(NAME_CALL_V2)을 안 올려도 된다
+const onlyKeys = args.includes('--keys') ? args[args.indexOf('--keys') + 1].split(',') : null
 const doLines = args.includes('--lines') || !args.includes('--names')
 const doNames = args.includes('--names') || !args.includes('--lines')
 
@@ -106,8 +108,9 @@ let chars = 0
 if (doLines) {
   for (const [key, { lines }] of Object.entries(SOL)) {
     for (const [n, line] of lines.entries()) {
+      if (onlyKeys && !onlyKeys.includes(key)) continue
       const p = `${VERSION}/line/${key}/${n}.mp3`
-      if (!force && await exists(p)) continue
+      if (!force && !onlyKeys && await exists(p)) continue
       const text = '서연아, ' + line; chars += text.length
       if (dry) { console.log('dry', p, text); continue }
       const { mp3, al } = await tts(text)

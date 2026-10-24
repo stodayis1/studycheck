@@ -52,5 +52,6 @@
     {"cue": "점을 하나 잡아서", "tex": "평행선 거리 $\\rightarrow$ 한 점 잡고 거리 공식!", "color": "red", "underline": true}
    ]
   }
- ]
+ ],
+ "quiz": {"answer": "k=−11 또는 k=9", "wrong": ["k=9", "k=11 또는 k=−9", "k=−3 또는 k=1"]}
 }

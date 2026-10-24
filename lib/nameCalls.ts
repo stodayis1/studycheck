@@ -55,6 +55,11 @@ export const SOL_LINES = {
   away:   { tone: 'call', lines: ['어디 갔었어? 다시 화면 봐 줄래?', '다시 돌아왔지? 이어서 같이 보자.', '조금만 더 집중해 보자.'] },
   idle:   { tone: 'soft', lines: ['혹시 졸려? 조금만 더 힘내 보자.', '멈춰 뒀네. 다시 이어서 볼까?', '아직 조금 남았어. 마저 보자.'] },
   end:    { tone: 'soft', lines: ['오늘도 정말 수고했어.', '잘했어. 유제도 꼭 풀어 봐.', '끝까지 봤구나, 멋있다.', '오늘도 잘했어. 다음 문제에서 보자.'] },
+  // 객관식(원장님 2026-10-24): 고른 답이 맞았는지 풀이가 끝난 뒤 알려 준다. 엉뚱한 보기를 고르면 fun
+  // 말투는 담백하게 — 감정 섞인 칭찬·감탄 빼고 사실만 (원장님: 「오글거려, 난 T야」)
+  right:  { tone: 'soft', lines: ['맞았어. 계산 깔끔했어.', '정답. 그대로 가면 돼.', '맞았네. 이 유형은 이제 됐다.'] },
+  wrong:  { tone: 'soft', lines: ['틀렸어. 풀이랑 어디서 달라졌는지 찾아봐.', '답이 달라. 계산 한 줄씩 다시 맞춰 보자.', '틀렸어. 어느 단계에서 갈렸는지 체크해 봐.'] },
+  fun:    { tone: 'soft', lines: ['그건 보기에 몰래 넣은 거야. 진짜 답 골라.', '그건 수학 답이 아니지. 다시 골라 봐.', '오케이, 그건 패스. 진짜 답은?', '장난은 여기까지. 진짜 답 골라 보자.', '그건 아니고. 다시 골라 볼까?', '그건 정답 후보가 아니야. 다시.'] },
 } as const satisfies Record<string, { tone: NameTone; lines: readonly string[] }>
 export type SolCallKey = keyof typeof SOL_LINES
 
@@ -128,12 +133,45 @@ export const CALL_REPLIES: Record<string, string[]> = {
   proof: ['네, 펼쳤어요'], away: ['집중할게요!'], idle: ['집중할게요!'], end: ['감사합니다!'],
   'sol:start': ['네! 준비됐어요'], 'sol:try': ['다 풀었어요'], 'sol:answer': ['맞았어요', '틀렸어요'],
   'sol:away': ['집중할게요!'], 'sol:idle': ['집중할게요!'], 'sol:end': ['감사합니다!'],
+  'sol:wrong': ['한 번 더 볼래요', '알겠어요'],   // 객관식 틀렸을 때 — 「한 번 더」면 풀이 처음부터
   // 개념·증명(2026-10-24~). cheer 는 대답 없이 지나간다. mid 의 「한 번 더 볼래요」는 앞 장면을 다시 튼다
   'lec:start': ['네! 준비됐어요'], 'lec:focus': ['네, 볼게요'], 'lec:mid': ['이해했어요', '한 번 더 볼래요'],
   'lec:plus': ['네, 볼게요'], 'lec:check': ['다 풀었어요'], 'lec:answer': ['맞았어요', '틀렸어요'],
   'lec:proof': ['네, 펼쳤어요'], 'lec:away': ['집중할게요!'], 'lec:idle': ['집중할게요!'], 'lec:end': ['감사합니다!'],
 }
-export type CallResponse = { key: string; at: number; answer: string | null; ms?: number; noanswer?: boolean; ts: string }
+export type CallResponse = { key: string; at: number; answer: string | null; ms?: number; noanswer?: boolean; ts: string; correct?: boolean }
+
+// ── 풀이 영상 객관식 (원장님 2026-10-24) ─────────────────────────────────────────────
+// 「먼저 풀어 봐」에서 절반쯤은 「다 풀었어요」 대신 보기를 고르게 한다. 보기는 lesson_videos.quiz(정답 + 오답 3개).
+// 객관식이 뜬 문제 중 3분의 1쯤은 엉뚱한 보기 하나를 섞는다(재미). 고르면 웃고 진짜 답을 다시 고르게 한다.
+export type LessonQuiz = { answer: string; wrong: string[] }
+export const QUIZ_RATE = 0.5, FUN_RATE = 0.35
+// 엉뚱한 보기 (원장님 2026-10-24: 「수지원장님 짱, ○○ 짱, 사다리, 무지개」는 예시 — 더 다양하게). ○ = 학생 이름
+const FUN_CHOICES = [
+  // 이름·학원
+  '수지원장님 짱', '○ 짱', '○ 천재', '○ 최고', '수학의지혜 최고', '수지쌤 안경', '수지쌤 사랑해요', '원장님 간식 사 주세요',
+  // 수학 말장난
+  '사다리', '무지개', '루트 떡볶이', '파이 한 조각', '무한대 곱하기 2', '삼각김밥', '원두커피', '직선으로 집에 가기',
+  '내 간식의 집합', '0점 말고 100점', '공식 외우는 꿈',
+  // 생활 개그
+  '고양이', '치킨', '아이스크림', '오늘 저녁 메뉴', '숙제 면제권', '쉬는 시간 10분', '주말', '방학', '노래방',
+  '유튜브 5분만', '잠 10분 더', '내일의 나에게 맡김', '정답은 마음속에', '연필 굴리기', '눈 감고 찍기',
+  '엄마한테 물어볼게요', '이 문제 너무 쉬워요', '선생님이 알려 주세요', '모르겠다 그냥 찍자',
+]
+export type QuizChoice = { text: string; fun?: boolean; right?: boolean }
+export function buildQuiz(q: LessonQuiz, fullName: string, rnd = Math.random): QuizChoice[] {
+  const xs: QuizChoice[] = [{ text: q.answer, right: true }, ...q.wrong.slice(0, 3).map((t) => ({ text: t }))]
+  // 엉뚱한 보기: 가끔 하나, 더 가끔 둘 (같은 것은 안 겹치게)
+  const nFun = rnd() < FUN_RATE ? (rnd() < 0.3 ? 2 : 1) : 0
+  const pool = [...FUN_CHOICES]
+  for (let k = 0; k < nFun; k++) {
+    const t = pool.splice(Math.floor(rnd() * pool.length), 1)[0]
+    xs.push({ text: t.replace('○', callName(fullName) || '나'), fun: true })
+  }
+  for (let i = xs.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [xs[i], xs[j]] = [xs[j], xs[i]] }
+  return xs
+}
+export const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥']
 
 /** 선생님 화면 요약: 대답 몇 번 중 몇 번, 평균 응답 초, 무응답, 스스로 맞힘 */
 export function summarizeResponses(rs: CallResponse[] | null | undefined) {
@@ -141,10 +179,10 @@ export function summarizeResponses(rs: CallResponse[] | null | undefined) {
   const answered = list.filter((r) => r.answer)
   const asked = new Set(list.map((r) => r.key + '@' + r.at)).size
   const ms = answered.map((r) => r.ms ?? 0).filter((x) => x > 0)
-  const graded = answered.filter((r) => r.key.endsWith('answer'))
+  const graded = answered.filter((r) => r.key.endsWith('answer') || r.key === 'sol:quiz')   // quiz = 객관식(앱이 채점)
   return {
     asked, answered: answered.length, noanswer: list.filter((r) => r.noanswer).length,
     avgSec: ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length / 100) / 10 : null,
-    selfRight: graded.filter((r) => r.answer === '맞았어요').length, selfGraded: graded.length,
+    selfRight: graded.filter((r) => r.answer === '맞았어요' || r.correct === true).length, selfGraded: graded.length,
   }
 }

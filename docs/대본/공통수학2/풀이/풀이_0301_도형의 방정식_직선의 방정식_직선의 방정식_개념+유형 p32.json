@@ -54,5 +54,6 @@
     {"cue": "점 하나와 기울기", "tex": "점 하나와 기울기 또는 점 두 개 $\\rightarrow$ 직선!", "color": "red", "underline": true}
    ]
   }
- ]
+ ],
+ "quiz": {"answer": "(1)y=2x−7 (2)y=−x+2", "wrong": ["(1)y=2x+7 (2)y=−x+2", "(1)y=2x−7 (2)y=−2x", "(1)y=2x−5 (2)y=−x−2"]}
 }
