@@ -21,6 +21,9 @@ POSE = {'A': 'pose_A_point.png', 'B': 'pose_B_remember.png', 'C': 'pose_C_wonder
 THEME = {
     'concept': dict(bg=(221, 245, 230), grid=(204, 234, 214), badge=(22, 72, 40), pill=(196, 232, 206),
                     label=(24, 52, 34), title=(17, 33, 52)),
+    # 공통수학1 개념: 하늘색 파스텔 (과정별로 바탕색을 다르게 — 공통수학2 는 연두)
+    'concept_cm1': dict(bg=(222, 236, 252), grid=(205, 223, 246), badge=(26, 54, 104), pill=(199, 220, 247),
+                    label=(22, 40, 76), title=(16, 30, 56)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
     # 풀이: 개념(연한 연두) → 증명(진한 초록) 보다 한 단계 더 진한 초록 (원장님 2026-10-21)
@@ -88,7 +91,7 @@ def split_title(d, title, f, width):
     return None
 
 
-def make(kind, no_label, chapter, title, bubble, pose, pill=None):
+def make(kind, no_label, chapter, title, bubble, pose, pill=None, grade='공통수학2'):
     T = THEME[kind]
     im = Image.new('RGB', (W, H), T['bg']); d = ImageDraw.Draw(im)
     for x in range(0, W, 46): d.line([(x, 0), (x, H)], fill=T['grid'], width=2)
@@ -97,11 +100,14 @@ def make(kind, no_label, chapter, title, bubble, pose, pill=None):
     bf = malgun(64); bw = d.textlength(no_label, font=bf) + 56
     d.rounded_rectangle((70, 60, 70 + bw, 160), 26, fill=T['badge'])
     d.text((70 + bw / 2, 110), no_label, font=bf, fill=(255, 255, 255), anchor='mm')
-    lf = malgun(46); lab = pill or f'공통수학2 · {chapter}'; lw = d.textlength(lab, font=lf)
+    lf = malgun(46); lab = pill or f'{grade} · {chapter}'; lw = d.textlength(lab, font=lf)
     d.rounded_rectangle((70 + bw + 22, 72, 70 + bw + 22 + lw + 52, 148), 38, fill=T['pill'])
     d.text((70 + bw + 48, 110), lab, font=lf, fill=T['label'], anchor='lm')
     # 수지 자리를 먼저 잡는다 (지시봉처럼 옆으로 뻗은 자세도 제목을 덮지 않게)
-    sj = Image.open(os.path.join(HERE, 'suji', POSE[pose])).convert('RGBA'); sj = sj.crop(sj.getbbox())
+    if pose in POSE: sj = Image.open(os.path.join(HERE, 'suji', POSE[pose]))
+    else:                                            # F~I(쓰기·아하·교재·엄지)는 새 자세 그림
+        import suji_pose; sj = Image.open(suji_pose.image(pose, 'closed'))
+    sj = sj.convert('RGBA'); sj = sj.crop(sj.getbbox())
     th = int(H * (0.84 if pose == 'E' else 0.95))
     sj = sj.resize((int(sj.width * th / sj.height), th), Image.LANCZOS)
     x = W - sj.width - 40
@@ -143,6 +149,7 @@ def make(kind, no_label, chapter, title, bubble, pose, pill=None):
 def main():
     a = sys.argv[1:]
     folder = a[0]; force = '--force' in a; proofs = '--proofs' in a
+    grade = a[a.index('--grade') + 1] if '--grade' in a else '공통수학2'
     if '--solutions' in a:
         made = []
         for k, g in enumerate(sorted(glob.glob(os.path.join(folder, '*_풀이*.구간.json')))):
@@ -157,9 +164,10 @@ def main():
         print(len(made), '장'); [print(' ', m) for m in made]; return
     only = set(a[a.index('--only') + 1].split(',')) if '--only' in a else None
     scripts = {}
-    for f in glob.glob(os.path.join(REPO, 'docs', '대본', '공통수학2', '*.json')):
+    for f in glob.glob(os.path.join(REPO, 'docs', '대본', grade, '*.json')) + glob.glob(os.path.join(REPO, 'docs', '대본', grade, '개념', '*.json')):
         if os.path.basename(f).startswith('_'): continue
-        L = json.load(open(f, encoding='utf-8')); scripts[L['no']] = L
+        L = json.load(open(f, encoding='utf-8'))
+        if 'scenes' in L: scripts[L['no']] = L
     made = []
     if not proofs:
         for g in sorted(glob.glob(os.path.join(folder, '*_개념_*.구간.json'))):
@@ -168,8 +176,9 @@ def main():
             big = [p for p in (base + '.jpg', base + '.png') if os.path.exists(p) and os.path.getsize(p) > 500000]
             if big and not force: continue                      # 원장님이 GPT 로 만든 것은 그대로 둔다
             L = scripts[int(no)]
-            bubble = BUBBLE.get(L['no']) or next(s['bubble'] for s in L['scenes'] if s['show'].startswith('cut_'))
-            make('concept', no, L['chapter'], L['title'], bubble, L.get('thumb_pose', 'A')).save(base + '.jpg', quality=93)
+            bubble = (BUBBLE.get(L['no']) if grade == '공통수학2' else None) or next(s['bubble'] for s in L['scenes'] if s['show'].startswith('cut_'))
+            make('concept' if grade == '공통수학2' else 'concept_cm1', no, L['chapter'], L['title'], bubble, L.get('thumb_pose', 'A'),
+                 grade=grade).save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
     else:
         for g in sorted(glob.glob(os.path.join(folder, '*_증명*.구간.json'))):
