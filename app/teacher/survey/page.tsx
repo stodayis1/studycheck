@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
+import { supabase } from '@/lib/supabase'
 
 const GREEN = '#085041'
 const MINT = '#F0FBF7'
@@ -40,9 +41,13 @@ export default function SurveyPage() {
   const [open, setOpen] = useState<string | null>(null)
 
   // ── 문자로 보내기 ────────────────────────────────────────────────
+  // ★ 설명회에 오신 분만 보낸다. 학년으로 한꺼번에 보내지 않는다
+  //   (원장님 2026-10-24 「그냥 나갈 번호를 내가 누르면 안돼? 재원생 전체한테 보내는 게 아니라」).
   const [smsOpen, setSmsOpen] = useState(false)
-  const [scope, setScope] = useState<'all' | 'elementary' | 'middle' | 'high'>('all')
-  const [useStudents, setUseStudents] = useState(true)
+  const [students, setStudents] = useState<{ id: string; name: string; grade: string | null; parent_phone: string | null; teacher_name: string | null }[]>([])
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [q, setQ] = useState('')
+  const [gradeF, setGradeF] = useState('')
   const [extra, setExtra] = useState('')
   const [smsText, setSmsText] = useState(
     '[수학의지혜]\n오늘 설명회에 와 주셔서 고맙습니다.\n'
@@ -53,15 +58,45 @@ export default function SurveyPage() {
   const [smsBusy, setSmsBusy] = useState(false)
   const [smsErr, setSmsErr] = useState('')
   const [smsDone, setSmsDone] = useState<any>(null)
-  // 받는 사람이나 글이 바뀌면 미리 센 값은 버린다 — 옛 숫자를 보고 보내면 안 된다.
   const resetPre = () => { setPre(null); setSmsDone(null) }
+
+  // 명단은 창을 열 때 한 번만 읽는다
+  useEffect(() => {
+    if (!smsOpen || students.length) return
+    supabase.from('students')
+      .select('id, name, grade, parent_phone, teacher_name')
+      .eq('is_active', true).order('grade').order('name')
+      .then(({ data }) => setStudents((data ?? []) as any))
+  }, [smsOpen, students.length])
+
+  const grades = useMemo(
+    () => [...new Set(students.map((s) => s.grade).filter(Boolean))] as string[], [students])
+  const shownStudents = useMemo(() => {
+    const k = q.trim().toLowerCase()
+    return students.filter((s) =>
+      (!gradeF || s.grade === gradeF) &&
+      (!k || s.name.toLowerCase().includes(k) || String(s.teacher_name ?? '').toLowerCase().includes(k)))
+  }, [students, q, gradeF])
+
+  const toggleOne = (id: string) => {
+    setPicked((p) => { const nx = new Set(p); nx.has(id) ? nx.delete(id) : nx.add(id); return nx })
+    resetPre()
+  }
+  const pickShown = (on: boolean) => {
+    setPicked((p) => {
+      const nx = new Set(p)
+      for (const s of shownStudents) on ? nx.add(s.id) : nx.delete(s.id)
+      return nx
+    })
+    resetPre()
+  }
 
   async function ask(send: boolean) {
     setSmsBusy(true); setSmsErr('')
     try {
       const r = await apiFetch('/api/survey/sms', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: smsText, scope, useStudents, extraPhones: extra, send }),
+        body: JSON.stringify({ text: smsText, studentIds: [...picked], extraPhones: extra, send }),
       })
       const j = await r.json()
       if (!r.ok) { setSmsErr(j.error ?? '실패했어요.'); return null }
@@ -130,25 +165,59 @@ export default function SurveyPage() {
         {smsOpen && (
           <div className="mt-3 rounded-xl border bg-white p-3.5 space-y-3">
             <div>
-              <p className="mb-1.5 text-[11.5px] font-bold text-gray-500">누구에게</p>
-              <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                {([['all', '전체'], ['elementary', '초등'], ['middle', '중등'], ['high', '고등']] as const)
-                  .map(([k, l]) => (
-                    <button key={k} onClick={() => { setScope(k); resetPre() }} disabled={!useStudents}
-                      className="rounded-full border px-3 py-1.5 text-xs font-bold disabled:opacity-40"
-                      style={scope === k ? { background: GREEN, color: '#fff', borderColor: GREEN }
-                        : { background: '#fff', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                      {l}
-                    </button>
-                  ))}
-                <label className="ml-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-                  <input type="checkbox" checked={useStudents}
-                    onChange={(e) => { setUseStudents(e.target.checked); resetPre() }} />
-                  재원생 보호자에게
-                </label>
+              <div className="mb-1.5 flex items-baseline gap-2 flex-wrap">
+                <p className="text-[11.5px] font-bold text-gray-500">설명회에 오신 분을 고르세요</p>
+                <span className="text-[11.5px] font-bold" style={{ color: GREEN }}>고른 학생 {picked.size}명</span>
+                {picked.size > 0 && (
+                  <button onClick={() => { setPicked(new Set()); resetPre() }}
+                    className="text-[11px] text-gray-400 underline">모두 지우기</button>
+                )}
               </div>
+
+              <div className="mb-1.5 flex gap-1.5 flex-wrap">
+                <input value={q} onChange={(e) => setQ(e.target.value)}
+                  placeholder="학생 이름이나 담당 선생님으로 찾기"
+                  className="flex-1 min-w-[150px] rounded-lg border px-3 py-1.5 text-[13px]" />
+                <select value={gradeF} onChange={(e) => setGradeF(e.target.value)}
+                  className="rounded-lg border px-2.5 py-1.5 text-[13px]">
+                  <option value="">학년 전체</option>
+                  {grades.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <button onClick={() => pickShown(true)}
+                  className="rounded-lg border px-2.5 py-1.5 text-[11.5px] font-bold"
+                  style={{ borderColor: GREEN, color: GREEN }}>보이는 것 모두</button>
+                <button onClick={() => pickShown(false)}
+                  className="rounded-lg border px-2.5 py-1.5 text-[11.5px] font-bold text-gray-500">해제</button>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto rounded-lg border divide-y">
+                {!students.length && <p className="px-3 py-4 text-center text-xs text-gray-400">명단 불러오는 중…</p>}
+                {!!students.length && !shownStudents.length && (
+                  <p className="px-3 py-4 text-center text-xs text-gray-400">찾는 학생이 없어요.</p>
+                )}
+                {shownStudents.map((st) => {
+                  const on = picked.has(st.id)
+                  const noPhone = !String(st.parent_phone ?? '').replace(/\D/g, '')
+                  return (
+                    <button key={st.id} onClick={() => !noPhone && toggleOne(st.id)} disabled={noPhone}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left disabled:opacity-40"
+                      style={on ? { background: MINT } : undefined}>
+                      <span className="grid h-4 w-4 shrink-0 place-items-center rounded border"
+                        style={on ? { background: GREEN, borderColor: GREEN, color: '#fff' } : { borderColor: '#d1d5db' }}>
+                        {on ? '✓' : ''}
+                      </span>
+                      <span className="text-[13px] font-semibold">{st.name}</span>
+                      <span className="text-[11.5px] text-gray-400">{st.grade}</span>
+                      <span className="ml-auto text-[11.5px] text-gray-400">
+                        {noPhone ? '번호 없음' : st.teacher_name ?? ''}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
               {/* ★ 설명회에는 재원생이 아닌 분도 오신다 (원장님 2026-10-24 「외부 학부모님도 … 17명 정도」) */}
-              <p className="mb-1 text-[11.5px] font-bold text-gray-500">
+              <p className="mb-1 mt-3 text-[11.5px] font-bold text-gray-500">
                 외부 학부모님 번호
                 <span className="font-normal text-gray-400"> — 쉼표·줄바꿈 아무렇게나 붙여넣으세요</span>
               </p>
@@ -180,12 +249,9 @@ export default function SurveyPage() {
                     {pre.한번호에여럿 ? ' · 같은 번호 쓰는 ' + pre.한번호에여럿 + '집은 한 통만' : ''})
                   </span>
                 </p>
-                {!!pre.미리보기?.length && (
-                  <ul className="mt-1.5 space-y-0.5 text-[11.5px] text-gray-600">
-                    {pre.미리보기.map((x: string, i: number) => <li key={i}>· {x}</li>)}
-                    {pre.총번호 > pre.미리보기.length && (
-                      <li className="text-gray-400">… 외 {pre.총번호 - pre.미리보기.length}개</li>
-                    )}
+                {!!pre.받는분?.length && (
+                  <ul className="mt-1.5 max-h-40 space-y-0.5 overflow-y-auto text-[11.5px] text-gray-600">
+                    {pre.받는분.map((x: string, i: number) => <li key={i}>· {x}</li>)}
                   </ul>
                 )}
               </div>
