@@ -30,6 +30,25 @@ for (const f of files) {
     }
   }
 }
+// 이미 DB 에 있는 짝(twin_id — 쎈↔쎈B 4,025쌍)도 같이 잇는다.
+//   findings 에 쎈 문항만 적고 쎈B 짝을 안 적으면 그 짝이 혼자 남는다.
+//   둘은 애초에 쌍둥이니 적어 두지 않아도 같은 묶음이어야 한다.
+{
+  const pairs=[]
+  for(let from=0;;from+=1000){
+    const {data,error}=await db.from('problems').select('id,twin_id').not('twin_id','is',null).order('id').range(from,from+999)
+    if(error){console.error(error.message);process.exit(1)}
+    if(!data||!data.length)break; pairs.push(...data); if(data.length<1000)break
+  }
+  let n=0
+  for(const r of pairs){
+    if(!parent.has(r.id) && !parent.has(r.twin_id)) continue   // findings 에 없는 쌍은 그대로 둔다
+    for(const id of [r.id, r.twin_id]) if(!parent.has(id)) parent.set(id,id)
+    join(r.id, r.twin_id); n++
+  }
+  console.log(`DB 의 짝 ${pairs.length}개 중 ${n}개를 같이 이었다`)
+}
+
 const comp = new Map()   // 묶음번호 → id들
 for (const id of parent.keys()) { const r = find(id); if(!comp.has(r)) comp.set(r,[]); comp.get(r).push(id) }
 const real = [...comp.entries()].filter(([,v])=>v.length>=2)
