@@ -324,6 +324,20 @@ export async function runWatchCron(req: NextRequest) {
   const out: any = { phase, startedAt: new Date().toISOString() }
 
   const db = admin()
+
+  // ?test=1 — 문자 경로만 시험한다(원장님 번호 찾기 → OPS 발송). 점검도 기록도 하지 않는다.
+  // 평소엔 문제가 없어 문자가 한 통도 안 나가므로, 이 길이 살아 있는지는 이렇게만 확인된다.
+  if (q.get('test') === '1') {
+    const phones = await ownerPhones(db)
+    if (!phones.length) return NextResponse.json({ ...out, test: true, sms: { error: '원장님 번호를 못 찾았어요' } })
+    const text = '[스터디체크] 자동 발송 점검 — 시험 문자입니다.\n문제가 생기면 이 번호로 이렇게 알려 드려요. 답장하지 않으셔도 됩니다.'
+    const results = await Promise.all(phones.map((to) => sendSmsViaOps({ to, text, refType: 'cron_watch_test' })))
+    return NextResponse.json({
+      ...out, test: true,
+      sms: results.map((r, i) => ({ to: phones[i].replace(/^(\d{3})\d+(\d{4})$/, '$1****$2'), ok: r.ok, dryRun: r.dryRun, error: r.error })),
+    })
+  }
+
   if (!force) {
     const { data: claimed } = await db.from('cron_runs')
       .upsert({ phase, run_date: kstDate(0) }, { onConflict: 'phase,run_date', ignoreDuplicates: true })
