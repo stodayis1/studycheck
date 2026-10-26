@@ -22,6 +22,7 @@ const ITEM = {
   weekly:        { href: '/teacher/weekly',         label: '학습현황',     icon: 'ti-calendar-week' },
   myRecords:     { href: '/teacher/my-records',     label: '내 기록',      icon: 'ti-history' },
   bulk:          { href: '/teacher/bulk-progress',  label: '진도일괄입력', icon: 'ti-list-check' },
+  visualAids:    { href: '/teacher/visual-aids',    label: '수업 시각화',  icon: 'ti-cube' },
   students:      { href: '/teacher/students',       label: '학생관리',     icon: 'ti-users' },
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
@@ -50,7 +51,7 @@ const ITEM = {
 function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
-    { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : [])] },
+    { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.consultations] },
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.attendance, ITEM.importRecords] },
