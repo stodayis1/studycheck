@@ -13,6 +13,7 @@ import { fetchAllRows } from '@/lib/utils'
 import { consultCycleDays, CONSULT_CYCLE_LABEL } from '@/lib/consultCycle'
 import { ExamAnalysisNotice } from '@/components/exam-analysis/ExamAnalysisNotice'
 import { OpsTaskNotice } from '@/components/teacher/OpsTaskNotice'
+import { CronHealthNotice } from '@/components/teacher/CronHealthNotice'
 import { DailyFlow } from '@/components/teacher/DailyFlow'
 import { splitTeachers } from '@/lib/teachers'
 
@@ -415,6 +416,9 @@ export default function TeacherDashboardPage() {
         ) : undefined} />
 
       <div className="px-4 py-5 space-y-4 max-w-2xl mx-auto">
+
+        {/* 자동 발송 점검 — 원장에게만, 카톡 브리핑 예약이 안 돌거나 실패했을 때만 뜬다 */}
+        {isAdmin() && <CronHealthNotice />}
 
         {/* 하루 업무 흐름 — 출근해서 처음 보는 자리에 둔다(원장님 2026-10-12).
             매뉴얼 안에만 있으면 새로 오신 선생님이 찾아 들어가지 않는다.
