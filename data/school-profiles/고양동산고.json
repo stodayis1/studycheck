@@ -1,0 +1,131 @@
+{
+  "school_name": "고양동산고",
+  "school_level": "고",
+  "official_name": "고양동산고등학교",
+  "source_year": 2026,
+  "region": "경기도 고양시 덕양구",
+  "office": "경기도고양교육지원청",
+  "foundation": "공립",
+  "school_type": "일반고",
+  "coed": "남녀공학 · 주간",
+  "stats": {
+    "total": 578,
+    "classes": 25,
+    "perClass": 23.1,
+    "byGrade": [
+      {
+        "grade": "1학년",
+        "students": 194,
+        "classes": 8,
+        "perClass": 24.3
+      },
+      {
+        "grade": "2학년",
+        "students": 186,
+        "classes": 8,
+        "perClass": 23.3
+      },
+      {
+        "grade": "3학년",
+        "students": 190,
+        "classes": 8,
+        "perClass": 23.8
+      }
+    ],
+    "teachers": 65,
+    "studentsPerTeacher": 12,
+    "special": {
+      "students": 8,
+      "classes": 1,
+      "perClass": 8
+    }
+  },
+  "math_curriculum": [
+    {
+      "grade": "1학년",
+      "revision": "2022 개정",
+      "terms": [
+        {
+          "term": "1학기",
+          "subject": "공통수학1",
+          "units": 4
+        },
+        {
+          "term": "2학기",
+          "subject": "공통수학2",
+          "units": 4
+        }
+      ],
+      "note": "학교 지정이라 전원 같은 과목을 듣습니다."
+    },
+    {
+      "grade": "2학년",
+      "revision": "2022 개정",
+      "terms": [
+        {
+          "term": "1학기",
+          "subject": "대수",
+          "units": 4
+        },
+        {
+          "term": "2학기",
+          "subject": "미적분Ⅰ",
+          "units": 4
+        }
+      ],
+      "picks": [
+        {
+          "label": "학생 선택",
+          "options": [
+            "기하",
+            "수학과제 탐구",
+            "문학과 영상",
+            "주제 탐구 독서",
+            "미디어 영어",
+            "세계 문화와 영어"
+          ]
+        }
+      ],
+      "note": "대수·미적분Ⅰ은 전원 공통입니다."
+    },
+    {
+      "grade": "3학년",
+      "terms": [],
+      "note": "3학년은 학교 지정 수학이 없고 전부 개별 선택입니다. 어떤 묶음에서 고르는지는 공시 문서의 학년 표기가 엇갈려 확인하지 못했습니다 — 학교에 확인이 필요합니다."
+    }
+  ],
+  "exam_calendar": {},
+  "highlights": [
+    {
+      "label": "교내 Wee클래스",
+      "value": "설치"
+    },
+    {
+      "label": "창의적체험활동 동아리",
+      "value": "40개 · 575명 참여"
+    },
+    {
+      "label": "학생 자율동아리",
+      "value": "4개 · 41명"
+    },
+    {
+      "label": "교과교실제 · 자율학교 · 수준별 수업",
+      "value": "지정 없음"
+    },
+    {
+      "label": "2026 신입생",
+      "value": "196명 (남 101 · 여 95)"
+    }
+  ],
+  "notes": "1·2학년은 공통수학1·2 → 대수 → 미적분Ⅰ까지 전원 같은 과목이라 내신 경쟁 범위가 학년 전체입니다. 3학년은 학교 지정 수학이 없습니다.\n정기시험 날짜는 이 학교 공시에 들어 있지 않아 비워 뒀습니다 — 시험대비 화면에 등록된 일정을 봐주세요.",
+  "sources": [
+    {
+      "name": "학교알리미 공시",
+      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"
+    },
+    {
+      "name": "학교알리미 OpenAPI",
+      "detail": "학년별·학급별 학생수 / 직위별 교원 현황 / 동아리 / 상담 / 입학생 (2026)"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "school_name": "서정고",
+  "school_level": "고",
+  "official_name": "서정고등학교",
+  "source_year": 2026,
+  "region": "경기도 고양시 덕양구",
+  "office": "경기도고양교육지원청",
+  "foundation": "공립",
+  "school_type": "일반고",
+  "coed": "남녀공학 · 주간",
+  "stats": {
+    "total": 772,
+    "classes": 35,
+    "perClass": 22.1,
+    "byGrade": [
+      {
+        "grade": "1학년",
+        "students": 258,
+        "classes": 11,
+        "perClass": 23.5
+      },
+      {
+        "grade": "2학년",
+        "students": 257,
+        "classes": 11,
+        "perClass": 23.4
+      },
+      {
+        "grade": "3학년",
+        "students": 244,
+        "classes": 11,
+        "perClass": 22.2
+      }
+    ],
+    "teachers": 77,
+    "studentsPerTeacher": 11.5,
+    "special": {
+      "students": 13,
+      "classes": 2,
+      "perClass": 6.5
+    }
+  },
+  "math_curriculum": [],
+  "exam_calendar": {},
+  "highlights": [
+    {
+      "label": "교내 Wee클래스",
+      "value": "설치"
+    },
+    {
+      "label": "창의적체험활동 동아리",
+      "value": "43개 · 747명 참여"
+    },
+    {
+      "label": "학생 자율동아리",
+      "value": "2개 · 17명"
+    },
+    {
+      "label": "교과교실제 · 자율학교 · 수준별 수업",
+      "value": "지정 없음"
+    },
+    {
+      "label": "2026 신입생",
+      "value": "262명 (남 136 · 여 126)"
+    }
+  ],
+  "notes": "숫자 지표만 먼저 올렸습니다. 수학 편제와 시험 일정은 공시 원문을 읽어 채우는 중입니다.",
+  "sources": [
+    {
+      "name": "학교알리미 공시",
+      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"
+    },
+    {
+      "name": "학교알리미 OpenAPI",
+      "detail": "학년별·학급별 학생수 / 직위별 교원 현황 / 동아리 / 상담 / 입학생 (2026)"
+    }
+  ]
+}

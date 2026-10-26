@@ -1,0 +1,115 @@
+{
+  "school_name": "백양고",
+  "school_level": "고",
+  "official_name": "백양고등학교",
+  "source_year": 2026,
+  "region": "경기도 고양시 덕양구",
+  "office": "경기도고양교육지원청",
+  "foundation": "공립",
+  "school_type": "일반고",
+  "coed": "남녀공학 · 주간",
+  "stats": {
+    "total": 726,
+    "classes": 34,
+    "perClass": 21.4,
+    "byGrade": [
+      {
+        "grade": "1학년",
+        "students": 248,
+        "classes": 11,
+        "perClass": 22.5
+      },
+      {
+        "grade": "2학년",
+        "students": 238,
+        "classes": 11,
+        "perClass": 21.6
+      },
+      {
+        "grade": "3학년",
+        "students": 239,
+        "classes": 11,
+        "perClass": 21.7
+      }
+    ],
+    "teachers": 76,
+    "studentsPerTeacher": 11.3,
+    "special": {
+      "students": 1,
+      "classes": 1,
+      "perClass": 1
+    }
+  },
+  "math_curriculum": [
+    {
+      "grade": "1학년",
+      "revision": "2022 개정",
+      "terms": [
+        {
+          "term": "1학기",
+          "subject": "공통수학1",
+          "units": 4
+        },
+        {
+          "term": "2학기",
+          "subject": "공통수학2",
+          "units": 4
+        }
+      ],
+      "note": "3년 계획이 공시에 나와 있습니다 — 2학년 대수·미적분Ⅰ, 3학년 확률과 통계·실용 통계까지 전원 같은 과목입니다."
+    },
+    {
+      "grade": "2학년",
+      "revision": "2022 개정",
+      "terms": [
+        {
+          "term": "1학기",
+          "subject": "대수",
+          "units": 4
+        },
+        {
+          "term": "2학기",
+          "subject": "미적분Ⅰ",
+          "units": 4
+        }
+      ],
+      "note": "3학년에는 확률과 통계(3) · 실용 통계(3)가 이어집니다."
+    },
+    {
+      "grade": "3학년",
+      "revision": "2015 개정",
+      "terms": [],
+      "note": "수학Ⅰ·수학Ⅱ를 이수하고 기하 등이 선택으로 편성돼 있습니다. 어느 학기에 몇 단위인지는 공시 표의 열이 어긋나 확인하지 못했습니다."
+    }
+  ],
+  "exam_calendar": {},
+  "highlights": [
+    {
+      "label": "교내 Wee클래스",
+      "value": "설치"
+    },
+    {
+      "label": "창의적체험활동 동아리",
+      "value": "55개 · 724명 참여"
+    },
+    {
+      "label": "교과교실제 · 자율학교 · 수준별 수업",
+      "value": "자율학교 운영"
+    },
+    {
+      "label": "2026 신입생",
+      "value": "251명 (남 132 · 여 119)"
+    }
+  ],
+  "notes": "현 1·2학년은 2022 개정이라 공통수학1·2 → 대수 → 미적분Ⅰ → 확률과 통계 → 실용 통계까지 3년 내내 전원 같은 과목입니다. 수학에서 선택으로 갈리는 구간이 없어 내신 경쟁 범위가 줄곧 학년 전체입니다.\n정기시험 날짜는 이 학교 공시에 들어 있지 않아 비워 뒀습니다 — 시험대비 화면에 등록된 일정을 봐주세요.",
+  "sources": [
+    {
+      "name": "학교알리미 공시",
+      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"
+    },
+    {
+      "name": "학교알리미 OpenAPI",
+      "detail": "학년별·학급별 학생수 / 직위별 교원 현황 / 동아리 / 상담 / 입학생 (2026)"
+    }
+  ]
+}
