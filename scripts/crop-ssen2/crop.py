@@ -70,10 +70,18 @@ def run(outdir, only=None):
         for r in labels:
             x0, x1 = col_span(r, labels, W)
             st = step[str(r['N'])]
-            # 같은 단의 다음 문항
+            # 같은 단의 다음 문항.
+            #
+            # 예전에는 「x 가 ±40 안에 드는 것」만 봤다. A단계는 한 단에 문항이
+            # **가로로 둘씩** 들어가는데(0105 왼쪽 · 0106 오른쪽), 오른쪽 문항 아래의
+            # 문항들은 전부 왼쪽에 서 있어 ±40 에 안 걸렸다. 그래서 경계를 못 찾고
+            # **쪽 끝까지 잘라 아래 문항 여러 개를 왼쪽이 잘린 채 삼켰다**
+            # (2026-10-26, 0106·0117·0390·0636·0753·1238 등 12문항).
+            # 가로로 **겹치는지**로 봐야 한다 — 그래야 가로 짝(같은 y)은 건너뛰고
+            # 아래 것은 모두 걸린다.
             later = [q for q in labels
-                     if q['side'] == r['side'] and abs(q['x0'] - r['x0']) <= 40
-                     and q['y0'] > r['y1'] + 5]
+                     if q['side'] == r['side'] and q['y0'] > r['y1'] + 5
+                     and not (q['x1'] <= x0 + 6 or q['x0'] >= x1 - 6)]
             nxt = min((q['y0'] for q in later), default=int(H * 0.945))
             # 다음 부속물(지시문·배지)도 경계다
             nxt = min([nxt] + [s2['y0'] - 6 for s2 in stops
