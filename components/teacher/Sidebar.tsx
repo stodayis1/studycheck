@@ -35,6 +35,7 @@ const ITEM = {
   //   안에서 탭으로 간다 — 내 학습지 / 개별과제 / 학습지 현황 / 새 학습지 만들기
   //   (components/teacher/WorksheetTabs.tsx).
   worksheets:    { href: '/teacher/worksheets',     label: '학습지',       icon: 'ti-files' },
+  survey:        { href: '/teacher/survey',         label: '학부모 설문',  icon: 'ti-clipboard-text' },
   typeConcepts:  { href: '/teacher/type-concepts',  label: '대표개념 연결', icon: 'ti-bulb' },
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
@@ -54,7 +55,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.attendance, ITEM.importRecords] },
   ]
-  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.changeLog, ITEM.settings] })
+  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.survey, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.changeLog, ITEM.settings] })
   return groups
 }
 
