@@ -199,6 +199,34 @@ def read_directions(doc):
                 hi = (div - 4) if x0 < div else p.rect.width - 12
                 for n in range(int(m.group(1)), int(m.group(2)) + 1):
                     out['%04d' % n] = dict(pg=pi, rect=(lo, y0 - 3, hi, y1 + 2))
+                # 아래 경계로도 써야 한다 — 묶음의 마지막 문항이 **다음 묶음 지시문**을 삼킨다
+                out.setdefault('_tops', []).append(
+                    dict(pg=pi, col=int(x0 >= div), y=y0 - 3))
+    return out
+
+
+def read_sections(doc):
+    """소단원 머리말 자리 — 「06-2 등식의 성질」처럼 녹색 배지로 구간이 바뀌는 곳.
+
+    글자로는 `06-2` 한 덩어리(크기 12)로 찍힌다. 차례(1쪽)의 같은 글자는 크기가
+    2.2 라 크기로 가려진다. 아래 경계로 쓰지 않으면 묶음의 마지막 문항이
+    **다음 소단원 머리말까지** 삼킨다 (2026-10-27).
+    """
+    out = []
+    pat = re.compile(r'^\s*\d{2}\s*[-–]\s*\d\s*$')
+    for pi, p in enumerate(doc):
+        div = column_split(p)
+        for b in p.get_text('dict')['blocks']:
+            if b['type'] != 0:
+                continue
+            for l in b.get('lines', []):
+                txt = ''.join(z['text'] for z in l['spans'])
+                if not pat.match(txt):
+                    continue
+                if max(z['size'] for z in l['spans']) < 10:
+                    continue
+                x0, y0 = l['bbox'][0], l['bbox'][1]
+                out.append(dict(pg=pi, col=int(x0 >= div), y=y0 - 4))
     return out
 
 
@@ -316,7 +344,19 @@ def main():
     answers = read_answers(sol)
     directions = read_directions(doc)
     print('문항 %d · 유형 %d · 정답 %d · 지시문 딸린 문항 %d'
-          % (len(items), len(types), len(answers), len(directions)))
+          % (len(items), len(types), len(answers),
+             len([k for k in directions if not k.startswith('_')])))
+
+    # 아래 경계로 쓸 멈춤 자리 — 묶음 지시문 머리와 유형 머리말
+    stop_tops = {}
+    for t in directions.get('_tops', []):
+        stop_tops.setdefault((t['pg'], t['col']), []).append(t['y'])
+    for t in read_types(doc):
+        stop_tops.setdefault((t['pg'], t['col']), []).append(t['y'])
+    for t in read_sections(doc):
+        stop_tops.setdefault((t['pg'], t['col']), []).append(t['y'])
+    for v in stop_tops.values():
+        v.sort()
 
     # 문항은 바로 앞(위)에 나온 유형에 속한다. 첫 유형보다 앞선 교과서 문제는 그 소단원 첫 유형으로 본다.
     def pos(r): return (r['pg'], r['col'], r['y'])
@@ -370,6 +410,13 @@ def main():
         nxt = groups[gi + 1][1][0] if gi + 1 < len(groups) else None
         same_col = nxt and nxt['pg'] == g[0]['pg'] and nxt['col'] == g[0]['col']
         ybottom = (nxt['y'] - 6) if same_col else g[0]['h'] - 40
+        # 다음 문항 번호만 보면, 묶음의 **마지막 문항**은 아래에 번호가 없어 단 바닥까지
+        # 잘린다. 그러면 다음 묶음의 지시문「[0020~0022] …」과 그 문항들이,
+        # 구간이 바뀌는 자리에서는 유형 머리말까지 통째로 딸려 들어간다
+        # (2026-10-27 중1 RPM 표본 150개 중 14개).
+        for sy in stop_tops.get((g[0]['pg'], g[0]['col']), []):
+            if g[0]['y'] + 8 < sy < ybottom:
+                ybottom = sy - 4
         # 가로 범위는 넉넉하게. 좁게 잡아 문장 끝이 잘리면 문제를 못 읽는다.
         lo = 45 if g[0]['col'] == 0 else g[0]['div'] + 6
         hi = (g[0]['div'] - 4) if g[0]['col'] == 0 else g[0]['w'] - 12
