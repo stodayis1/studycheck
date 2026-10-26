@@ -13,6 +13,28 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
     return <div className="min-h-screen" style={{ background: '#f9fafb' }} />
   }
 
+  // 선생님이 아닌 사람이 주소를 치고 들어온 경우 — 학생·학부모도 익명 로그인이라
+  // Auth 세션은 갖고 있다. 데이터는 RLS 가 막지만 화면 구조와 메뉴는 그대로 보였다.
+  // 여기서 먼저 세운다 (원장님 2026-10-27).
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#F0FBF7' }}>
+        <div className="rounded-2xl p-6 max-w-sm w-full text-center"
+          style={{ background: '#fff', border: '1px solid #9FE1CB' }}>
+          <p className="font-bold mb-1" style={{ color: '#085041' }}>선생님 전용 화면이에요</p>
+          <p className="text-sm mb-4" style={{ color: '#0F6E56' }}>
+            학생·학부모님은 로그인 화면에서 들어와주세요.
+          </p>
+          <a href="/auth/login"
+            className="inline-block px-4 py-2 rounded-xl text-sm font-bold"
+            style={{ background: '#0F6E56', color: '#fff' }}>
+            로그인 화면으로
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   if (currentUser?.is_locked) {
     // 화면은 평소 대시보드 그대로 보이되, 투명 오버레이가 전체를 덮어서 아무것도 클릭/터치할 수 없게 막는다.
     return (
