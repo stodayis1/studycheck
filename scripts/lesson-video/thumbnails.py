@@ -24,6 +24,9 @@ THEME = {
     # 공통수학1 개념: 하늘색 파스텔 (과정별로 바탕색을 다르게 — 공통수학2 는 연두)
     'concept_cm1': dict(bg=(222, 236, 252), grid=(205, 223, 246), badge=(26, 54, 104), pill=(199, 220, 247),
                     label=(22, 40, 76), title=(16, 30, 56)),
+    # 공통수학1 증명: 하늘색(개념)보다 한 단계 진한 파랑 — 공통수학2 의 연두 → 초록과 같은 짜임
+    'proof_cm1': dict(bg=(160, 196, 238), grid=(144, 182, 228), badge=(18, 42, 86), pill=(205, 224, 248),
+                    label=(16, 34, 68), title=(12, 26, 50)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
     # 풀이: 개념(연한 연두) → 증명(진한 초록) 보다 한 단계 더 진한 초록 (원장님 2026-10-21)
@@ -186,7 +189,9 @@ def main():
             G = json.load(open(g, encoding='utf-8'))
             if only and G['order'] not in only: continue
             if os.path.exists(base + '.jpg') and not force: continue
-            make('proof', G['order'], G['chapter'] + ' 증명', G['title'], G['steps'][0]['bubble'], 'D').save(base + '.jpg', quality=93)
+            kind = 'proof' if grade == '공통수학2' else 'proof_cm1'
+            tag = ' 공식 쓰기' if G.get('label') == '공식 쓰기' else ' 증명'
+            make(kind, G['order'], G['chapter'] + tag, G['title'], G['steps'][0]['bubble'], 'D', grade=grade).save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
     print(len(made), '장'); [print(' ', m) for m in made]
 
