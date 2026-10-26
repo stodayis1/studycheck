@@ -97,7 +97,7 @@ def right_panel(im, P, step):
     head = f"{P.get('label', '증명')}  {P['title']}"
     d.text((44, 30), head, font=font(40, True), fill=INK)
     tw = d.textlength(head, font=font(40, True))
-    d.text((44 + tw + 22, 46), f"공통수학2 · {P['sub_chapter']}", font=font(22), fill=SOFT)
+    d.text((44 + tw + 22, 46), f"{P.get('grade', '공통수학2')} · {P['sub_chapter']}", font=font(22), fill=SOFT)
     R0, RW = 1484, 410
     bf = font(32, True); bl = wrap(d, step['bubble'], bf, RW - 50)[:4]
     by0 = 120; bh = 48 * len(bl) + 38
@@ -134,6 +134,9 @@ def main():
     ap.add_argument('--cuts', default=None, help='교재 토막 폴더(concept_cuts.py 결과). figure.image 는 이 폴더 기준 상대 경로')
     a = ap.parse_args()
     P = json.load(open(a.proof, encoding='utf-8'))
+    # 과정 이름: 대본에 grade 가 없으면 대본 폴더(docs/대본/<과정>/…)에서 읽는다
+    if not P.get('grade'):
+        P['grade'] = next((g for g in ('공통수학1', '공통수학2') if g in os.path.abspath(a.proof).replace(os.sep, '/')), '공통수학2')
     global NOTE, PROB
     if P.get('problem'):
         fp = P['problem']['image']
@@ -314,7 +317,7 @@ def main():
     ff.stdin.close(); ff.wait()
 
     # 4) 단계별 구간 (개념 영상의 .구간.json 과 같은 꼴)
-    seg = dict(id=P['id'], kind=P.get('kind', '증명'), label=P.get('label'), type_code=P.get('type_code'), title=P['title'], concept_no=P.get('concept_no'), chapter=P.get('chapter'),
+    seg = dict(id=P['id'], order=P.get('order'), kind=P.get('kind', '증명'), label=P.get('label'), type_code=P.get('type_code'), title=P['title'], concept_no=P.get('concept_no'), chapter=P.get('chapter'),
                sub_chapter=P.get('sub_chapter'), book_page=P.get('book_page'), duration=round(total, 3),
                steps=[dict(step=i + 1, start=round(offs[i], 3), end=round(offs[i + 1] if i + 1 < len(offs) else total, 3),
                            pose=s.get('pose', 'A'), bubble=s['bubble'],

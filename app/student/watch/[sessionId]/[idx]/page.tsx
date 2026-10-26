@@ -419,7 +419,7 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
 
       {/* 증명 영상: 다 본 뒤 백지에 써서 사진 제출 (채점 없음) */}
       {lesson?.kind === '증명' && studentId && url && (
-        <ProofSubmitBox studentId={studentId} sessionId={sessionId} videoUrl={url} watched={!!log?.completed_at} />
+        <ProofSubmitBox studentId={studentId} sessionId={sessionId} videoUrl={url} watched={!!log?.completed_at} formula={/공식.*써 보기/.test(lesson.title)} />
       )}
 
       {/* 장면 목차 */}
