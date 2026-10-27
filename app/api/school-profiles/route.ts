@@ -33,10 +33,12 @@ export async function GET(req: Request) {
     if (!data) return NextResponse.json({ error: '아직 정리된 자료가 없어요.' }, { status: 404 })
 
     // 우리 학생 — 이 학교 다니는 아이들을 학년과 함께
+    // ★ 퇴원생(is_active=false)은 빼야 한다. 안 그러면 몇 달 전 나간 아이가 계속 뜬다.
+    //   휴원(on_leave)은 아직 재원이므로 그대로 둔다.
     // ★ order 없이 range 로 넘기면 행을 놓친다. 정렬 기준을 반드시 준다.
     const students = await fetchAllRows(() =>
       db.from('students').select('id, name, grade, school')
-        .eq('school', key).order('grade').order('name')
+        .eq('school', key).eq('is_active', true).order('grade').order('name')
     )
     return NextResponse.json({ profile: data, students })
   }
@@ -47,8 +49,9 @@ export async function GET(req: Request) {
     .order('school_level').order('school_name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 학교별 우리 학생 수 — 학교 칸만 읽어 센다
-  const rows = await fetchAllRows(() => db.from('students').select('id, school').order('id'))
+  // 학교별 우리 학생 수 — 학교 칸만 읽어 센다 (퇴원생 제외. 상세 화면과 같은 기준이어야 한다)
+  const rows = await fetchAllRows(() =>
+    db.from('students').select('id, school').eq('is_active', true).order('id'))
   const counts: Record<string, number> = {}
   for (const r of rows as any[]) {
     const k = normalizeSchool(r.school)
