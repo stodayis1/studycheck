@@ -9,37 +9,37 @@ type Stage = { stage: string; units: Unit[] }
 
 const STAGES: Stage[] = [
   {
-    stage: '중1-2',
-    units: [
-      { unit: '입체도형의 성질 · 회전체', what: '평면도형을 회전축 둘레로 돌려 회전체 만들기, 회전축을 품은 단면·수직인 단면', href: '/visual/hoijeon.html' },
-      { unit: '입체도형의 성질 · 다면체와 정다면체', what: '정다면체가 다섯 가지뿐인 이유, 전개도 접기, 겹치는 꼭짓점' },
-      { unit: '기본 도형 · 위치 관계', what: '꼬인 위치, 직선과 평면·평면과 평면의 위치 관계' },
-      { unit: '입체도형의 겉넓이와 부피', what: '기둥·뿔·뿔대·구, 원뿔 전개도의 부채꼴' },
-    ],
-  },
-  {
     stage: '초등',
     units: [
+      { unit: '4-1 평면도형의 이동', what: '밀기·뒤집기·돌리기, 목표 모양 맞히기', href: '/visual/idong.html' },
+      { unit: '5-2 직육면체', what: '정육면체 전개도 11가지 접기, 마주 보는 면 맞히기', href: '/visual/jeongyukmyeonche.html' },
+      { unit: '6-1 각기둥과 각뿔', what: '밑면과 옆면, 전개도, 면·모서리·꼭짓점 수', href: '/visual/dagakhyeong.html' },
       { unit: '6-2 공간과 입체 · 쌓기나무', what: '위·앞·옆에서 본 모양, 층별 모양, 최소·최대 개수', href: '/visual/ssakgi.html' },
-      { unit: '6-2 원기둥, 원뿔, 구', what: '원기둥 전개도, 돌려서 만든 모양' },
-      { unit: '6-1 각기둥과 각뿔', what: '밑면과 옆면, 전개도' },
-      { unit: '5-2 직육면체', what: '겨냥도, 정육면체 전개도 11가지, 마주 보는 면' },
-      { unit: '4-1 평면도형의 이동', what: '밀기·뒤집기·돌리기' },
+      { unit: '6-2 원기둥, 원뿔, 구', what: '원기둥·원뿔 전개도 펴기, 겉넓이와 부피', href: '/visual/geotneolbi.html' },
     ],
   },
   {
-    stage: '중2 · 중3',
+    stage: '중1-2',
     units: [
-      { unit: '중2 도형의 닮음', what: '닮은 입체도형의 겉넓이 비·부피 비' },
-      { unit: '중2 피타고라스 정리 활용', what: '직육면체 대각선, 입체 겉면을 따라가는 최단 거리' },
+      { unit: '기본 도형 · 위치 관계', what: '꼬인 위치, 직선과 평면·평면과 평면의 위치 관계', href: '/visual/wichi.html' },
+      { unit: '입체도형의 성질 · 다면체와 정다면체', what: '정다면체가 다섯 가지뿐인 이유, 전개도 접기, 면·모서리·꼭짓점 세기', href: '/visual/dagakhyeong.html' },
+      { unit: '입체도형의 성질 · 회전체', what: '평면도형을 회전축 둘레로 돌려 회전체 만들기, 회전축을 품은 단면·수직인 단면', href: '/visual/hoijeon.html' },
+      { unit: '입체도형의 겉넓이와 부피', what: '기둥·뿔·뿔대·구, 원뿔 전개도의 부채꼴', href: '/visual/geotneolbi.html' },
+    ],
+  },
+  {
+    stage: '중2',
+    units: [
+      { unit: '중2 도형의 닮음', what: '닮은 입체도형의 겉넓이 비·부피 비', href: '/visual/darmeum.html' },
+      { unit: '중2 피타고라스 정리 활용', what: '입체 겉면을 따라가는 최단 거리 (직육면체·원기둥·원뿔)', href: '/visual/choedan.html' },
     ],
   },
   {
     stage: '고등',
     units: [
-      { unit: '기하 · 공간도형', what: '삼수선의 정리, 이면각, 정사영' },
-      { unit: '기하 · 공간좌표', what: '좌표공간의 점, 구의 방정식' },
-      { unit: '미적분 · 입체의 부피', what: '단면의 넓이로 부피 구하기' },
+      { unit: '기하 · 공간도형', what: '삼수선의 정리, 이면각, 정사영', href: '/visual/gonggan-dohyeong.html' },
+      { unit: '기하 · 공간좌표', what: '좌표공간의 점·대칭점·거리, 구의 방정식', href: '/visual/gonggan-jwapyo.html' },
+      { unit: '미적분 · 입체의 부피', what: '단면의 넓이로 부피 구하기, 얇은 조각으로 다가가기', href: '/visual/ipche-bupi.html' },
     ],
   },
 ]

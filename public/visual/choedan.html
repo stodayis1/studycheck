@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>겉면 최단 거리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 입체와 크기 고르기 + 길이 비교 / 오른쪽: 접었다 펴는 3D. 아래: 펼친 그림(전개도) 위의 곧은 선 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --shape: #f97316;
+  --shape-fill: rgba(249, 115, 22, 0.22);
+  --axis: #e11d48;
+  --cut: #2563eb;
+  --cut-fill: rgba(37, 99, 235, 0.16);
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible, canvas:focus-visible, input:focus-visible, .pathBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sliders { display: grid; gap: 8px; }
+.sl { display: grid; grid-template-columns: 5.2em minmax(0, 1fr) 2.4em; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.sl input { width: 100%; accent-color: var(--accent); }
+.sl output { font-family: var(--font-display); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.results { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.pathBtn { font: inherit; text-align: left; display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.pathBtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.pathBtn .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.pathBtn .name { font-size: 13px; color: var(--muted); }
+.pathBtn .val { font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; }
+.pathBtn .expr { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pill { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--ok); color: var(--surface); }
+.answer { display: grid; gap: 4px; padding: 12px; border-radius: 10px; background: var(--accent-soft); }
+.answer b { font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.answer span { font-size: 13px; color: var(--muted); }
+.warnNote { font-size: 13px; color: var(--warn); margin: 0; }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; min-width: 0; }
+#canvasBox { height: 460px; }
+@media (max-width: 860px) { #canvasBox { height: 360px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.overlayTop { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+/* 펴기 막대는 그림을 가리지 않게 3D 아래에 둔다 */
+.overlayBottom { position: relative; margin: 0 10px 10px; z-index: 2; display: grid; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.sweep { display: flex; align-items: center; gap: 10px; }
+.sweep input[type="range"] { flex: 1; min-width: 0; accent-color: var(--shape); }
+.sweep output { font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; font-family: var(--font-display); }
+.hint { margin: 0; font-size: 12px; color: var(--muted); }
+
+.netGrid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .netGrid { grid-template-columns: minmax(0, 1fr); } }
+#net { width: 100%; max-height: 360px; display: block; }
+#net .f1 { fill: var(--cut-fill); stroke: var(--cut); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+#net .f2 { fill: var(--shape-fill); stroke: var(--shape); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+#net .path { stroke: var(--axis); stroke-width: 3; fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+#net .dash { stroke: var(--muted); stroke-width: 1; fill: none; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+#net text { fill: var(--ink); font-family: var(--font-body); }
+#net .lbl { fill: var(--muted); }
+#net .ptA { fill: var(--ok); } #net .ptB { fill: var(--axis); }
+.netNote { margin: 0; font-size: 14px; }
+.netNote + .netNote { color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">중2 피타고라스 정리 활용 · 입체 겉면 최단 거리</div>
+    <h1>겉면 최단 거리</h1>
+    <p>입체의 겉면을 따라가는 가장 짧은 길은, 지나가는 면들을 평평하게 펼쳤을 때 두 점을 잇는 <b>선분</b>입니다. 펴기 막대를 움직여 면이 펼쳐지면서 굽은 길이 곧은 선이 되는 것을 확인해 보세요.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="입체와 크기">
+      <h2>입체 고르기</h2>
+      <div class="btns" role="group" aria-label="입체">
+        <button class="chip" data-solid="box" aria-pressed="true">직육면체</button>
+        <button class="chip" data-solid="cyl" aria-pressed="false">원기둥 (실 감기)</button>
+        <button class="chip" data-solid="cone" aria-pressed="false">원뿔 (한 바퀴)</button>
+      </div>
+      <p class="sub" id="solidSub" style="margin:0"></p>
+      <div class="sliders" id="sliders"></div>
+      <div class="results" id="results" aria-live="polite"></div>
+    </section>
+
+    <section class="stage" aria-label="3D 입체">
+      <div class="overlayTop" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso">비스듬히</button>
+        <button class="chip" data-view="front">앞에서</button>
+        <button class="chip" data-view="top">위에서</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox"><canvas id="c" tabindex="0" aria-label="입체 3D 모형. 끌거나 화살표 키로 돌릴 수 있습니다."></canvas></div>
+      <div class="overlayBottom">
+        <div class="sweep">
+          <button class="btn primary" id="play">펼치기</button>
+          <input type="range" id="unfold" min="0" max="100" step="1" value="0" aria-label="펼친 정도">
+          <output id="unfoldOut" for="unfold">0%</output>
+        </div>
+        <p class="hint">끌어서 돌려 보기 · 휠·두 손가락으로 확대 · 초록 점에서 빨간 점까지가 가장 짧은 길</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" aria-label="펼친 그림">
+    <h2>펼친 그림 위의 가장 짧은 길</h2>
+    <div class="netGrid">
+      <svg id="net" role="img" aria-label="전개도와 가장 짧은 길"></svg>
+      <div style="display:grid;gap:10px">
+        <p class="netNote" id="netNote"></p>
+        <p class="netNote" id="netNote2"></p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = { solid: 'box', a: 4, b: 3, c: 2, path: 0, r: 1, h: 6, n: 1, cr: 2, l: 6, d: 6, t: 0 };
+
+  // ---------- 계산 ----------
+  // N 을 k√m 꼴로 (N 은 양의 정수)
+  function rootForm(N) {
+    let k = 1, m = N;
+    for (let f = 2; f * f <= m; f++) while (m % (f * f) === 0) { m /= f * f; k *= f; }
+    return m === 1 ? String(k) : (k === 1 ? `√${m}` : `${k}√${m}`);
+  }
+  const dec = v => (Math.round(v * 100) / 100).toFixed(2);
+  // 직육면체: 마주 보는 두 꼭짓점을 잇는 겉면 길 세 가지
+  function boxPaths(a, b, c) {
+    return [
+      { name: '앞면 → 윗면', expr: `√(${a}² + (${b}+${c})²)`, N: a * a + (b + c) ** 2 },
+      { name: '앞면 → 오른쪽 옆면', expr: `√((${a}+${b})² + ${c}²)`, N: (a + b) ** 2 + c * c },
+      { name: '왼쪽 옆면 → 윗면', expr: `√(${b}² + (${a}+${c})²)`, N: b * b + (a + c) ** 2 },
+    ];
+  }
+  // 원기둥: 옆면에 n 바퀴 감은 실
+  function cylLen(r, h, n) { return Math.sqrt((2 * Math.PI * r * n) ** 2 + h * h); }
+  // 원뿔: 꼭짓점에서 d 떨어진 모선 위 점에서 옆면을 한 바퀴
+  function coneInfo(r, l, d) {
+    const deg = 360 * r / l;
+    if (deg >= 180 - 1e-9) return { deg, len: 2 * d, exact: String(2 * d), viaApex: true };
+    const len = 2 * d * Math.sin(deg * Math.PI / 360);
+    const near = x => Math.abs(deg - x) < 1e-9;
+    const exact = near(60) ? String(d) : near(90) ? rootForm(2 * d * d) : near(120) ? rootForm(3 * d * d) : null;
+    return { deg, len, exact, viaApex: false };
+  }
+
+  // ---------- 조절 막대 ----------
+  const SLIDERS = {
+    box: [['a', '가로', 1, 8], ['b', '세로', 1, 8], ['c', '높이', 1, 8]],
+    cyl: [['r', '반지름', 1, 4], ['h', '높이', 1, 12], ['n', '감는 횟수', 1, 3]],
+    cone: [['cr', '밑면 반지름', 1, 6], ['l', '모선', 2, 12], ['d', '꼭짓점에서', 1, 12]],
+  };
+  const SUB = {
+    box: '개미가 앞쪽 아래 꼭짓점(초록)에서 맞은편 위 꼭짓점(빨강)까지 겉면으로 갑니다.',
+    cyl: '실을 밑면의 한 점(초록)에서 옆면에 감아 바로 위 윗면의 점(빨강)까지 갑니다.',
+    cone: '모선 위 한 점(초록)에서 옆면을 한 바퀴 돌아 제자리로 돌아옵니다.',
+  };
+  function drawSliders() {
+    const box = $('sliders'); box.innerHTML = '';
+    SLIDERS[S.solid].forEach(([key, label, min, max]) => {
+      const row = document.createElement('div'); row.className = 'sl';
+      row.innerHTML = `<label for="s-${key}">${label}</label><input type="range" id="s-${key}" min="${min}" max="${max}" step="1" value="${S[key]}"><output for="s-${key}">${S[key]}</output>`;
+      const inp = row.querySelector('input'), out = row.querySelector('output');
+      inp.addEventListener('input', () => {
+        S[key] = Number(inp.value);
+        if (S.solid === 'cone') fixCone();
+        out.textContent = S[key]; refresh(false);
+      });
+      box.appendChild(row);
+    });
+    $('solidSub').textContent = SUB[S.solid];
+    if (S.solid === 'cone') fixCone();
+  }
+  // 모선은 반지름보다 길고, 출발점은 모선 위에 있어야 한다
+  function fixCone() {
+    if (S.l <= S.cr) S.l = S.cr + 1;
+    if (S.d > S.l) S.d = S.l;
+    [['l', S.l], ['d', S.d]].forEach(([k, v]) => { const i = $('s-' + k); if (i) { i.value = v; i.nextElementSibling.textContent = v; } });
+    const di = $('s-d'); if (di) di.max = S.l;
+  }
+
+  function drawResults() {
+    const box = $('results');
+    if (S.solid === 'box') {
+      const ps = boxPaths(S.a, S.b, S.c), min = Math.min(...ps.map(p => p.N));
+      box.innerHTML = '<h2>길 세 가지 비교</h2>' + ps.map((p, i) => `
+        <button class="pathBtn" data-path="${i}" aria-pressed="${i === S.path}">
+          <span class="top"><span class="name">${'①②③'[i]} ${p.name}</span>${p.N === min ? '<span class="pill">가장 짧음</span>' : ''}</span>
+          <span class="top"><span class="expr">${p.expr} = √${p.N}</span><span class="val">${rootForm(p.N)} ≈ ${dec(Math.sqrt(p.N))}</span></span>
+        </button>`).join('');
+      box.querySelectorAll('.pathBtn').forEach(b => b.addEventListener('click', () => { S.path = Number(b.dataset.path); refresh(false); goTo('iso'); }));
+    } else if (S.solid === 'cyl') {
+      const W = 2 * S.r * S.n, K = W * W, len = cylLen(S.r, S.h, S.n);
+      box.innerHTML = `<h2>실의 가장 짧은 길이</h2><div class="answer">
+        <span>√((2π × ${S.r} × ${S.n})² + ${S.h}²) = √(${K === 1 ? '' : K}π² + ${S.h * S.h})</span>
+        <b>≈ ${dec(len)}</b>
+        <span>펼친 옆면 가로 = 2π × 반지름 × 감는 횟수 = ${W === 1 ? '' : W}π ≈ ${dec(Math.PI * W)}, 세로 = 높이 ${S.h}</span></div>`;
+    } else {
+      const ci = coneInfo(S.cr, S.l, S.d);
+      box.innerHTML = `<h2>한 바퀴 도는 가장 짧은 길이</h2><div class="answer">
+        <span>부채꼴 중심각 = 360° × ${S.cr} ÷ ${S.l} = ${dec(ci.deg).replace(/\.00$/, '')}°</span>
+        ${ci.viaApex
+          ? `<span>중심각이 180° 이상 → 꼭짓점을 지나는 길 2 × ${S.d}</span><b>${ci.exact}</b>`
+          : `<span>2 × ${S.d} × sin(중심각 ÷ 2)</span><b>${ci.exact ? ci.exact + ' ≈ ' : '≈ '}${dec(ci.len)}</b>`}
+        </div>
+        ${ci.viaApex ? '<p class="warnNote">펼친 부채꼴의 중심각이 180° 이상이면 두 점을 잇는 선분이 부채꼴 밖으로 나가서 겉면 위의 길이 될 수 없습니다. 그래서 꼭짓점까지 갔다 오는 길이 가장 짧습니다.</p>' : ''}`;
+    }
+  }
+
+  // ---------- 3D ----------
+  const canvas = $('c'), box = $('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 500);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.66));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(5, 9, 7); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-7, 3, -4); scene.add(fill);
+
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const mat = {
+    ghost: new THREE.MeshLambertMaterial({ color: 0xbfdcff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }),
+    edge: new THREE.LineBasicMaterial({ color: 0x6b8fbf }),
+    f1: new THREE.MeshLambertMaterial({ color: 0x8cc8ff, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }),
+    f2: new THREE.MeshLambertMaterial({ color: 0xffc38f, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }),
+    surf: new THREE.MeshLambertMaterial({ color: 0x8cc8ff, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+    rim: new THREE.LineBasicMaterial({ color: 0x6b8fbf, transparent: true, opacity: 0.55 }),
+    path: new THREE.MeshBasicMaterial({ color: 0xe11d48 }),
+    A: new THREE.MeshBasicMaterial({ color: 0x16a34a }),
+    B: new THREE.MeshBasicMaterial({ color: 0xe11d48 }),
+  };
+  let root = new THREE.Group(); scene.add(root);
+  const target = V3(0, 0, 0);
+  let baseDist = 20, theta = 0.6, phi = 1.1, zoom = 1;
+  const VIEWS = { iso: [0.6, 1.1], front: [0, Math.PI / 2], top: [0, 0.0005] };
+
+  function quad(p, m) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p[0], ...p[1], ...p[2], ...p[0], ...p[2], ...p[3]]), 3));
+    g.computeVertexNormals(); return new THREE.Mesh(g, m);
+  }
+  const outline = p => new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(p.map(q => V3(...q))), mat.edge);
+  const dot = (p, m, r) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m); s.position.copy(p); return s; };
+  function seg(p, q, r) {
+    const d = q.clone().sub(p), L = d.length();
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 10), mat.path);
+    m.position.copy(p).add(q).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(V3(0, 1, 0), d.normalize()); return m;
+  }
+  const polyTube = (pts, r) => new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), Math.max(16, pts.length), r, 8, false), mat.path);
+  function sheet(nu, nv, f, m) {
+    const pos = [], idx = [];
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { const p = f(i / nu, j / nv); pos.push(p.x, p.y, p.z); }
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1;
+      idx.push(a, b, d, a, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return new THREE.Mesh(g, m);
+  }
+
+  function buildBox(g) {
+    const { a, b, c, t } = S, P = S.path, sc = Math.max(a, b, c) / 5, e = 0.03 * sc, rad = 0.055 * sc;
+    g.position.set(-a / 2, -c / 2, -b / 2);
+    const gb = new THREE.Mesh(new THREE.BoxGeometry(a, c, b), mat.ghost); gb.position.set(a / 2, c / 2, b / 2); gb.scale.setScalar(0.996); g.add(gb);
+    const eg = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(a, c, b)), mat.edge); eg.position.copy(gb.position); g.add(eg);
+    const A = [0, 0, b];
+    let f1, n1, pivot, f2, n2, X, G, turn;
+    if (P === 0) {
+      f1 = [[0, 0, b], [a, 0, b], [a, c, b], [0, c, b]]; n1 = [0, 0, 1];
+      pivot = [0, c, b]; f2 = [[0, 0, 0], [a, 0, 0], [a, 0, -b], [0, 0, -b]]; n2 = [0, 1, 0];
+      X = [a * c / (b + c), c, b]; G = [a, 0, -b]; turn = q => { q.rotation.x = t * Math.PI / 2; };
+    } else if (P === 1) {
+      f1 = [[0, 0, b], [a, 0, b], [a, c, b], [0, c, b]]; n1 = [0, 0, 1];
+      pivot = [a, 0, b]; f2 = [[0, 0, 0], [0, c, 0], [0, c, -b], [0, 0, -b]]; n2 = [1, 0, 0];
+      X = [a, c * a / (a + b), b]; G = [0, c, -b]; turn = q => { q.rotation.y = -t * Math.PI / 2; };
+    } else {
+      f1 = [[0, 0, 0], [0, 0, b], [0, c, b], [0, c, 0]]; n1 = [-1, 0, 0];
+      pivot = [0, c, 0]; f2 = [[0, 0, 0], [a, 0, 0], [a, 0, b], [0, 0, b]]; n2 = [0, 1, 0];
+      X = [0, c, b - b * c / (a + c)]; G = [a, 0, 0]; turn = q => { q.rotation.z = t * Math.PI / 2; };
+    }
+    g.add(quad(f1, mat.f1), outline(f1));
+    const off = (p, n) => V3(p[0] + n[0] * e, p[1] + n[1] * e, p[2] + n[2] * e);
+    g.add(seg(off(A, n1), off(X, n1), rad), dot(V3(...A), mat.A, rad * 2.4));
+    const q = new THREE.Group(); q.position.set(...pivot);
+    const Xl = [X[0] - pivot[0], X[1] - pivot[1], X[2] - pivot[2]];
+    q.add(quad(f2, mat.f2), outline(f2), seg(off(Xl, n2), off(G, n2), rad), dot(V3(...G), mat.B, rad * 2.4));
+    turn(q); g.add(q);
+  }
+
+  function buildCyl(g) {
+    const { r, h, n, t } = S, L = 2 * Math.PI * r * n, sc = Math.max(r * 2, h) / 5, e = 0.035 * sc, rad = 0.05 * sc;
+    g.position.set(0, -h / 2, 0);
+    const flat = t >= 0.999, R = flat ? 0 : r / (1 - t);
+    const pos = (s, y, o) => flat ? V3(s, y, r + o) : V3((R + o) * Math.sin(s / R), y, r - R + (R + o) * Math.cos(s / R));
+    g.add(sheet(Math.ceil(72 * n), 1, (u, v) => pos(L * u, h * v, 0), mat.surf));
+    [0, h].forEach(y => g.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
+      Array.from({ length: 72 }, (_, k) => V3(r * Math.sin(k / 36 * Math.PI), y, r * Math.cos(k / 36 * Math.PI)))), mat.rim)));
+    // 펼쳐 갈 때 옆면 가장자리(가로선)
+    [0, h].forEach(y => g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+      Array.from({ length: 121 }, (_, k) => pos(L * k / 120, y, 0))), mat.edge)));
+    const pts = Array.from({ length: 160 * n + 1 }, (_, k) => { const u = k / (160 * n); return pos(L * u, h * u, e); });
+    g.add(polyTube(pts, rad), dot(pos(0, 0, 0), mat.A, rad * 2.4), dot(pos(L, h, 0), mat.B, rad * 2.4));
+  }
+
+  function buildCone(g) {
+    const { cr: r, l, d, t } = S, th = 2 * Math.PI * r / l, H0 = Math.sqrt(l * l - r * r), sc = l / 5, e = 0.035 * sc, rad = 0.05 * sc;
+    g.position.set(0, -H0 / 2, 0);
+    const k = (2 * Math.PI / th) * (1 - t) + t, rho = l / k, Ht = Math.sqrt(Math.max(0, l * l - rho * rho));
+    const pos = (s, psi, o) => {
+      const ph = psi * k, sx = Math.sin(ph), cz = Math.cos(ph);
+      return V3(s * (rho / l) * sx + o * (Ht / l) * sx, Ht - s * Ht / l + o * (rho / l), s * (rho / l) * cz + o * (Ht / l) * cz);
+    };
+    g.add(sheet(96, 24, (u, v) => pos(l * v, th * u, 0), mat.surf));
+    g.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
+      Array.from({ length: 72 }, (_, i) => V3(r * Math.sin(i / 36 * Math.PI), 0, r * Math.cos(i / 36 * Math.PI)))), mat.rim));
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 121 }, (_, i) => pos(l, th * i / 120, 0))), mat.edge));
+    [0, th].forEach(ps => g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pos(0, ps, 0), pos(l, ps, 0)]), mat.edge)));
+    const ci = coneInfo(r, l, d), pts = [];
+    if (!ci.viaApex) {
+      const x0 = d, y0 = 0, x1 = d * Math.cos(th), y1 = d * Math.sin(th);
+      for (let i = 0; i <= 160; i++) {
+        const u = i / 160, x = x0 + (x1 - x0) * u, y = y0 + (y1 - y0) * u;
+        pts.push(pos(Math.hypot(x, y), Math.min(th, Math.max(0, Math.atan2(y, x))), e));
+      }
+      g.add(polyTube(pts, rad));
+    } else {
+      g.add(seg(pos(d, 0, e), pos(0, 0, e), rad), seg(pos(0, th, e), pos(d, th, e), rad));
+    }
+    g.add(dot(pos(d, 0, 0), mat.A, rad * 2.4), dot(pos(d, th, 0), mat.B, rad * 1.8));
+  }
+
+  function build3D() {
+    root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    scene.remove(root); root = new THREE.Group(); scene.add(root);
+    ({ box: buildBox, cyl: buildCyl, cone: buildCone })[S.solid](root);
+    root.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(root), sp = bb.getBoundingSphere(new THREE.Sphere());
+    target.copy(sp.center);
+    baseDist = sp.radius / Math.sin(cam.fov * Math.PI / 360) * 1.08;
+    draw();
+  }
+
+  function frame() {
+    const w = box.clientWidth, h = box.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw();
+  }
+  function draw() {
+    const a = cam.aspect || 1, R = (a < 1 ? baseDist / a : baseDist) / zoom, sp = Math.sin(phi);
+    cam.position.set(target.x + R * sp * Math.sin(theta), target.y + R * Math.cos(phi), target.z + R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target); renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let tween = null;
+  const viewChips = () => document.querySelectorAll('.chip[data-view]');
+  function goTo(name) {
+    let [t1, p1] = VIEWS[name];
+    if (name === 'iso' && S.solid === 'box' && S.path === 2) t1 = -0.7;   // 왼쪽 옆면이 보이게
+    viewChips().forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, ez = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * ez; phi = p0 + (p1 - p0) * ez; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  viewChips().forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI - 0.05, p));
+  const setZoom = z => { zoom = Math.max(0.4, Math.min(4, z)); draw(); };
+  const pts = new Map(); let pinch = 0;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); if (pts.size === 2) pinch = pinchDist();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const dd = pinchDist(); if (pinch) setZoom(zoom * dd / pinch); pinch = dd; }
+  });
+  const endDrag = e => { pts.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener('keydown', e => {
+    const dd = 0.12, m = { ArrowLeft: [dd, 0], ArrowRight: [-dd, 0], ArrowUp: [0, dd], ArrowDown: [0, -dd] }[e.key];
+    if (!m) return; e.preventDefault(); theta += m[0]; phi = clampPhi(phi + m[1]); draw();
+  });
+  $('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  $('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  // ---------- 펴기 ----------
+  const unf = $('unfold'), unfOut = $('unfoldOut'), playBtn = $('play');
+  let playId = null;
+  function setT(v) { S.t = v; unf.value = Math.round(v * 100); unfOut.textContent = Math.round(v * 100) + '%'; build3D(); }
+  unf.addEventListener('input', () => { stopPlay(); setT(Number(unf.value) / 100); });
+  function stopPlay() { if (playId) cancelAnimationFrame(playId); playId = null; playBtn.textContent = S.t >= 0.999 ? '접기' : '펼치기'; }
+  playBtn.addEventListener('click', () => {
+    if (playId) return stopPlay();
+    const from = S.t, to = S.t >= 0.999 ? 0 : 1;
+    if (reduce) { setT(to); return stopPlay(); }
+    playBtn.textContent = '멈추기';
+    const start = performance.now(), dur = 2200 * Math.abs(to - from);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, ez = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      setT(from + (to - from) * ez);
+      if (k < 1) playId = requestAnimationFrame(step); else { playId = null; stopPlay(); }
+    };
+    playId = requestAnimationFrame(step);
+  });
+
+  // ---------- 펼친 그림 ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  function drawNet() {
+    const svg = $('net'), items = [], labels = [];
+    let pathPts, A, B, note, note2;
+    const rect = (x, y, w, h, cls) => items.push({ poly: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], cls });
+    if (S.solid === 'box') {
+      const { a, b, c } = S, P = S.path, p = boxPaths(a, b, c)[P];
+      if (P === 0) { rect(0, 0, a, c, 'f1'); rect(0, c, a, b, 'f2'); B = [a, b + c];
+        labels.push([a / 2, 0, `가로 ${a}`, 'b'], [0, c / 2, `높이 ${c}`, 'l'], [0, c + b / 2, `세로 ${b}`, 'l']); }
+      else if (P === 1) { rect(0, 0, a, c, 'f1'); rect(a, 0, b, c, 'f2'); B = [a + b, c];
+        labels.push([a / 2, 0, `가로 ${a}`, 'b'], [a + b / 2, 0, `세로 ${b}`, 'b'], [0, c / 2, `높이 ${c}`, 'l']); }
+      else { rect(0, 0, b, c, 'f1'); rect(0, c, b, a, 'f2'); B = [b, c + a];
+        labels.push([b / 2, 0, `세로 ${b}`, 'b'], [0, c / 2, `높이 ${c}`, 'l'], [0, c + a / 2, `가로 ${a}`, 'l']); }
+      A = [0, 0]; pathPts = [A, B];
+      note = `파란 면과 주황 면을 펼치면 길이 직각삼각형의 빗변이 됩니다: ${p.expr} = ${rootForm(p.N)} ≈ ${dec(Math.sqrt(p.N))}`;
+      note2 = '어느 두 면을 지나느냐에 따라 길이 세 가지로 나옵니다. 세 값을 모두 계산해서 가장 작은 것을 고르세요. 가장 긴 모서리를 다른 두 모서리의 합과 짝지을 때 가장 짧아집니다.';
+    } else if (S.solid === 'cyl') {
+      const { r, h, n } = S, W = 2 * Math.PI * r;
+      for (let i = 0; i < n; i++) rect(W * i, 0, W, h, i % 2 ? 'f2' : 'f1');
+      A = [0, 0]; B = [W * n, h]; pathPts = [A, B];
+      labels.push([W / 2, 0, `2π×${r} ≈ ${dec(W)}`, 'b'], [0, h / 2, `높이 ${h}`, 'l']);
+      note = `옆면을 펼치면 직사각형${n > 1 ? ` ${n}개를 이어 붙인 모양` : ''}이고, 실은 그 대각선입니다: √((2π×${r}×${n})² + ${h}²) ≈ ${dec(cylLen(r, h, n))}`;
+      note2 = n > 1 ? '여러 바퀴 감을 때는 펼친 옆면을 감는 횟수만큼 옆으로 이어 붙여서 대각선을 긋습니다.' : '감는 횟수를 늘려 보세요. 펼친 옆면을 그만큼 이어 붙이면 됩니다.';
+    } else {
+      const { cr: r, l, d } = S, th = 2 * Math.PI * r / l, rot = Math.PI / 2 - th / 2;
+      const P = (rr, ang) => [rr * Math.cos(ang + rot), rr * Math.sin(ang + rot)];
+      const sector = [[0, 0]]; for (let i = 0; i <= 96; i++) sector.push(P(l, th * i / 96));
+      items.push({ poly: sector, cls: 'f1' });
+      A = P(d, 0); B = P(d, th);
+      const ci = coneInfo(r, l, d);
+      pathPts = ci.viaApex ? [A, [0, 0], B] : [A, B];
+      if (ci.viaApex) items.push({ line: [A, B], cls: 'dash' });
+      labels.push([P(l / 2, 0)[0], P(l / 2, 0)[1], `모선 ${l}`, 'r'], [0, 0, `${dec(ci.deg).replace(/\.00$/, '')}°`, 'c']);
+      note = ci.viaApex
+        ? `중심각이 ${dec(ci.deg).replace(/\.00$/, '')}°로 180° 이상이라 두 점을 잇는 선분(점선)이 부채꼴 밖으로 나갑니다. 그래서 꼭짓점을 지나는 길 2×${d} = ${2 * d} 가 가장 짧습니다.`
+        : `옆면을 펼치면 중심각 ${dec(ci.deg).replace(/\.00$/, '')}°인 부채꼴이고, 길은 두 점을 잇는 현입니다: 2×${d}×sin(${dec(ci.deg / 2).replace(/\.00$/, '')}°) ${ci.exact ? '= ' + ci.exact + ' ' : ''}≈ ${dec(ci.len)}`;
+      note2 = '중심각 = 360° × (밑면 반지름) ÷ (모선). 중심각이 60°, 90°, 120°이면 정삼각형·직각이등변삼각형·30°-60°-90° 삼각형으로 정확한 값을 구할 수 있습니다.';
+    }
+    const all = items.flatMap(it => it.poly || it.line).concat(pathPts);
+    const xs = all.map(p => p[0]), ys = all.map(p => -p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const span = Math.max(maxX - minX, maxY - minY), pad = span * 0.16, fs = span * 0.055;
+    svg.setAttribute('viewBox', `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`);
+    const pts = arr => arr.map(p => `${p[0]},${-p[1]}`).join(' ');
+    let html = items.map(it => it.poly ? `<polygon class="${it.cls}" points="${pts(it.poly)}"></polygon>` : `<polyline class="${it.cls}" points="${pts(it.line)}"></polyline>`).join('');
+    html += `<polyline class="path" points="${pts(pathPts)}"></polyline>`;
+    html += `<circle class="ptA" cx="${A[0]}" cy="${-A[1]}" r="${fs * 0.35}"></circle><circle class="ptB" cx="${B[0]}" cy="${-B[1]}" r="${fs * 0.35}"></circle>`;
+    html += labels.map(([x, y, txt, side]) => {
+      const o = fs * 0.9, at = { b: [x, -y + o * 1.2, 'middle'], l: [x - o * 0.4, -y + fs * 0.35, 'end'], r: [x, -y - o * 0.5, 'middle'], c: [x, -y + o * 1.3, 'middle'] }[side];
+      return `<text class="lbl" x="${at[0]}" y="${at[1]}" text-anchor="${at[2]}" font-size="${fs}">${txt}</text>`;
+    }).join('');
+    svg.innerHTML = html;
+    $('netNote').textContent = note; $('netNote2').textContent = note2;
+  }
+
+  function refresh(rebuildSliders) {
+    if (rebuildSliders) drawSliders();
+    drawResults(); drawNet(); build3D();
+  }
+  document.querySelectorAll('[data-solid]').forEach(b => b.addEventListener('click', () => {
+    S.solid = b.dataset.solid;
+    document.querySelectorAll('[data-solid]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    stopPlay(); S.t = 0; unf.value = 0; unfOut.textContent = '0%'; playBtn.textContent = '펼치기';
+    zoom = 1; refresh(true); goTo('iso');
+  }));
+
+  refresh(true);
+  goTo('iso');
+  frame();
+})();
+</script>
+</html>

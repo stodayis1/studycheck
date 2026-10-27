@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>정육면체 전개도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 전개도 11가지(와 전개도가 아닌 것) 고르기 / 오른쪽: 접어서 정육면체 만들기. 아래: 마주 보는 면 찾기 문제 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --pair1: #fdba74;
+  --pair2: #93c5fd;
+  --pair3: #86efac;
+  --overlap: #fca5a5;
+  --shape: #f97316;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.presets, .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible, .thumb:focus-visible, canvas:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.thumb { font: inherit; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 8px 6px 6px; cursor: pointer; display: grid; gap: 4px; justify-items: center; color: var(--ink); }
+.thumb[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.thumb svg { width: 100%; height: 54px; display: block; }
+.thumb svg rect { fill: var(--surface); stroke: var(--accent); stroke-width: 1.2; }
+.thumb.non svg rect { stroke: var(--bad); }
+.thumb span { font-size: 11px; color: var(--muted); }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.status { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); font-size: 14px; }
+.status.bad { background: #fee2e2; color: #991b1b; }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; min-width: 0; }
+#canvasBox { height: 500px; }
+@media (max-width: 860px) { #canvasBox { height: 400px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.overlayTop { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+.overlayBottom { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2; display: grid; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.sweep { display: flex; align-items: center; gap: 10px; }
+.sweep input[type="range"] { flex: 1; min-width: 0; accent-color: var(--shape); }
+.sweep output { font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; font-family: var(--font-display); }
+.hint { margin: 0; font-size: 12px; color: var(--muted); }
+
+.quizGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: center; }
+@media (max-width: 760px) { .quizGrid { grid-template-columns: minmax(0, 1fr); } }
+#big { width: 100%; max-width: 420px; justify-self: center; display: block; }
+#big rect { stroke: var(--ink); stroke-width: 2; }
+#big .cell { cursor: default; }
+#big.quiz .cell { cursor: pointer; }
+#big .cell:hover rect { filter: brightness(0.96); }
+#big text { font-family: var(--font-display); font-size: 26px; fill: var(--ink); pointer-events: none; }
+#big .star { fill: var(--brand); font-size: 18px; }
+#big .ring { fill: none; stroke: var(--accent); stroke-width: 5; pointer-events: none; }
+#big .ring.no { stroke: var(--bad); }
+.q { margin: 0; font-family: var(--font-display); font-size: 20px; }
+#verdict { margin: 0; min-height: 1.5em; }
+#verdict.ok { color: var(--ok); } #verdict.no { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">초5-2 직육면체 · 정육면체 전개도 11가지</div>
+    <h1>정육면체 전개도</h1>
+    <p>정육면체의 전개도는 모두 11가지입니다. 하나를 골라 접어 보고, 접었을 때 서로 마주 보는 면이 전개도에서 어디에 있는지 찾아보세요.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="전개도 고르기">
+      <h2>전개도 고르기</h2>
+      <div class="presets" role="group" aria-label="보여 줄 모양">
+        <button class="chip" id="showNets" aria-pressed="true">전개도 11가지</button>
+        <button class="chip" id="showNon" aria-pressed="false">전개도가 아닌 것</button>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+      <label class="check"><input type="checkbox" id="pairColor" checked> 마주 보는 면을 같은 색으로</label>
+      <p class="status" id="status"></p>
+    </section>
+
+    <section class="stage" aria-label="정육면체 3D">
+      <div class="overlayTop" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso">비스듬히</button>
+        <button class="chip" data-view="front">앞에서</button>
+        <button class="chip" data-view="top">위에서</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox"><canvas id="c" tabindex="0" aria-label="전개도 3D 모형. 끌거나 화살표 키로 돌릴 수 있습니다."></canvas></div>
+      <div class="overlayBottom">
+        <div class="sweep">
+          <button class="btn primary" id="play">접기</button>
+          <input type="range" id="fold" min="0" max="100" step="1" value="45" aria-label="접은 정도">
+          <output id="foldOut" for="fold">45%</output>
+        </div>
+        <p class="hint">끌어서 돌려 보기 · 휠·두 손가락으로 확대 · 막대로 접은 정도 조절</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" aria-label="마주 보는 면 찾기">
+    <div class="row" style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center">
+      <h2>마주 보는 면 찾기</h2>
+      <div class="btns">
+        <button class="btn primary" id="quizBtn">문제 내기</button>
+        <button class="btn" id="checkFold">접어서 확인</button>
+      </div>
+    </div>
+    <div class="quizGrid">
+      <svg id="big" role="img" aria-label="펼친 전개도"></svg>
+      <div style="display:grid;gap:10px">
+        <p class="q" id="question">전개도에 쓴 번호를 보고, 접었을 때 마주 보는 면을 짝지어 보세요.</p>
+        <p id="verdict" aria-live="polite"></p>
+        <p class="sub" style="margin:0">마주 보는 면은 전개도에서 서로 닿지 않습니다. 한 줄로 이어진 세 면에서는 첫째와 셋째가 마주 봅니다.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  // ---- 순수 계산 시작 (THREE 없이 돈다. node 로도 검사한다)
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = a => mul(a, 1 / Math.hypot(a[0], a[1], a[2]));
+  function rotMat(k, t) {
+    const [x, y, z] = k, c = Math.cos(t), s = Math.sin(t), C = 1 - c;
+    return [c + x * x * C, x * y * C - z * s, x * z * C + y * s,
+            y * x * C + z * s, c + y * y * C, y * z * C - x * s,
+            z * x * C - y * s, z * y * C + x * s, c + z * z * C];
+  }
+  const mv = (R, v) => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
+  const mm = (A, B) => { const o = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) o.push(A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]); return o; };
+  const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  const apply = (M, v) => add(mv(M.R, v), M.t);
+  const compose = (A, B) => ({ R: mm(A.R, B.R), t: add(mv(A.R, B.t), A.t) });
+  const hinge = (a, k, ang) => { const R = rotMat(k, ang); return { R, t: sub(a, mv(R, a)) }; };
+
+  // 칸 [x, y] 여섯 개. 펼친 그림은 높이 1 에 깔고, 면을 아래로 접어 바닥 위 정육면체가 되게 한다
+  const NETS = [
+    { type: '1-4-1형', cells: [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1], [0, 2]] },
+    { type: '1-4-1형', cells: [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1], [1, 2]] },
+    { type: '1-4-1형', cells: [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1], [2, 2]] },
+    { type: '1-4-1형', cells: [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1], [3, 2]] },
+    { type: '1-4-1형', cells: [[1, 0], [0, 1], [1, 1], [2, 1], [3, 1], [1, 2]] },
+    { type: '1-4-1형', cells: [[1, 0], [0, 1], [1, 1], [2, 1], [3, 1], [2, 2]] },
+    { type: '2-3-1형', cells: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1], [1, 2]] },
+    { type: '2-3-1형', cells: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1], [2, 2]] },
+    { type: '2-3-1형', cells: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1], [3, 2]] },
+    { type: '2-2-2형', cells: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2], [3, 2]] },
+    { type: '3-3형', cells: [[0, 0], [1, 0], [2, 0], [2, 1], [3, 1], [4, 1]] },
+  ];
+  const NON_NETS = [
+    { type: '2×3 직사각형', cells: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]] },
+    { type: '한 줄에 5개', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [1, 1]] },
+    { type: '같은 쪽에 2개', cells: [[0, 1], [1, 1], [2, 1], [3, 1], [0, 0], [1, 0]] },
+  ];
+  const H = 1, UP = [0, 1, 0];
+  const center = c => [c[0] + 0.5, H, c[1] + 0.5];
+
+  // 가장 많이 이어진 칸을 바닥(뿌리)으로 두고 넓게 퍼지는 나무
+  function netTree(cells) {
+    const key = c => c[0] + ',' + c[1], idx = new Map(cells.map((c, i) => [key(c), i]));
+    const nb = i => [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => idx.get(key([cells[i][0] + dx, cells[i][1] + dy]))).filter(j => j !== undefined);
+    let root = 0;
+    cells.forEach((_, i) => { if (nb(i).length > nb(root).length) root = i; });
+    const parent = {}, order = [root], seen = new Set([root]);
+    for (let q = 0; q < order.length; q++) nb(order[q]).forEach(j => { if (!seen.has(j)) { seen.add(j); parent[j] = order[q]; order.push(j); } });
+    return { root, parent, order };
+  }
+  // 접은 정도 t (0 펼침 ~ 1 다 접음)
+  function foldTransforms(cells, tree, t) {
+    const M = {};
+    M[tree.root] = { R: I3, t: [0, 0, 0] };
+    tree.order.forEach(i => {
+      if (i === tree.root) return;
+      const p = tree.parent[i], cp = center(cells[p]), ci = center(cells[i]);
+      const mid = mul(add(cp, ci), 0.5), d = unit(sub(ci, cp));
+      M[i] = compose(M[p], hinge(mid, cross(UP, d), (Math.PI / 2) * t));
+    });
+    return M;
+  }
+  // 다 접었을 때 각 면이 바깥으로 향하는 방향 (반올림한 단위 벡터)
+  function foldedNormals(cells) {
+    const tree = netTree(cells), M = foldTransforms(cells, tree, 1);
+    return cells.map((_, i) => mv(M[i].R, UP).map(v => Math.round(v) + 0));
+  }
+  // 정육면체가 되는지, 마주 보는 면 짝, 겹치는 면
+  function analyze(cells) {
+    const N = foldedNormals(cells), k = n => n.join(',');
+    const groups = new Map();
+    N.forEach((n, i) => { if (!groups.has(k(n))) groups.set(k(n), []); groups.get(k(n)).push(i); });
+    const valid = groups.size === 6;
+    const opposite = cells.map((_, i) => valid ? N.findIndex(n => k(n) === k(mul(N[i], -1).map(v => v + 0))) : -1);
+    const overlaps = [...groups.values()].filter(g => g.length > 1);
+    return { valid, opposite, overlaps, missing: 6 - groups.size };
+  }
+  // 돌리거나 뒤집어 같은 모양인지 (11가지가 서로 다른지 검사용)
+  function canon(cells) {
+    const forms = [];
+    for (let r = 0; r < 8; r++) {
+      let cs = cells.map(([x, y]) => { let a = x, b = y; for (let q = 0; q < r % 4; q++) [a, b] = [-b, a]; return r >= 4 ? [-a, b] : [a, b]; });
+      const mx = Math.min(...cs.map(c => c[0])), my = Math.min(...cs.map(c => c[1]));
+      forms.push(cs.map(([x, y]) => [x - mx, y - my]).sort((p, q) => p[0] - q[0] || p[1] - q[1]).join(';'));
+    }
+    return forms.sort()[0];
+  }
+  // ---- 순수 계산 끝
+
+  // ---------- 상태 ----------
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const PAIR = [css('--pair1'), css('--pair2'), css('--pair3')];
+  const st = { list: 'nets', idx: 0, t: 0.45, pairColor: true, quiz: null };
+  let cells = [], tree = null, info = null;
+  const shape = () => (st.list === 'nets' ? NETS : NON_NETS)[st.idx];
+
+  // 면 색: 마주 보는 짝마다 같은 색, 겹치는 면은 빨강
+  function faceColors() {
+    if (!info.valid) {
+      const bad = new Set(info.overlaps.flat());
+      return cells.map((_, i) => bad.has(i) ? css('--overlap') : '#ffffff');
+    }
+    if (!st.pairColor || st.quiz) return cells.map(() => '#ffffff');
+    const pairId = [], seen = [];
+    cells.forEach((_, i) => { const j = info.opposite[i]; const key = Math.min(i, j); if (!seen.includes(key)) seen.push(key); pairId[i] = seen.indexOf(key); });
+    return pairId.map(p => PAIR[p]);
+  }
+
+  // ---------- 3D ----------
+  const canvas = document.getElementById('c'), box = document.getElementById('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(4, 9, 6); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-6, 3, -4); scene.add(fill);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.MeshBasicMaterial({ color: 0x9cc4ff, transparent: true, opacity: 0.16, depthWrite: false }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.01; scene.add(floor);
+  const backMat = new THREE.MeshLambertMaterial({ color: 0xcfd8e3, side: THREE.BackSide });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x1e3a8a });
+  let group = new THREE.Group(); scene.add(group);
+  let faces = [];
+
+  function texture(label, bg, star) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    const g = cv.getContext('2d');
+    g.fillStyle = bg; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = '#1e3a8a'; g.lineWidth = 10; g.strokeRect(5, 5, 246, 246);
+    g.fillStyle = '#1d2b3a'; g.font = '700 120px "Gowun Batang", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(label, 128, 140);
+    if (star) { g.fillStyle = '#f26b1d'; g.font = '700 64px sans-serif'; g.fillText('★', 200, 56); }
+    const tx = new THREE.CanvasTexture(cv); tx.anisotropy = 4; return tx;
+  }
+  // 칸 하나: 위를 보는 정사각형 (높이 H). 글자는 앞(+z)에서 바로 읽히게
+  function cellGeometry([x, z]) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([x, H, z, x, H, z + 1, x + 1, H, z + 1, x, H, z, x + 1, H, z + 1, x + 1, H, z], 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1], 2));
+    g.computeVertexNormals();
+    return g;
+  }
+  function buildMeshes() {
+    group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== backMat && o.material !== edgeMat) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    scene.remove(group); group = new THREE.Group(); scene.add(group);
+    const colors = faceColors();
+    faces = cells.map((c, i) => {
+      const geo = cellGeometry(c);
+      const front = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: texture(String(i + 1), colors[i], st.quiz && st.quiz.mark === i), side: THREE.FrontSide }));
+      const back = new THREE.Mesh(geo, backMat);
+      const [x, z] = c;
+      const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[x, z], [x + 1, z], [x + 1, z + 1], [x, z + 1]].map(([a, b]) => new THREE.Vector3(a, H, b))), edgeMat);
+      [front, back, edge].forEach(o => { o.matrixAutoUpdate = false; group.add(o); });
+      return [front, back, edge];
+    });
+    pose();
+  }
+  const m4 = new THREE.Matrix4();
+  function pose() {
+    const M = foldTransforms(cells, tree, st.t);
+    faces.forEach((objs, i) => {
+      const { R, t } = M[i];
+      m4.set(R[0], R[1], R[2], t[0], R[3], R[4], R[5], t[1], R[6], R[7], R[8], t[2], 0, 0, 0, 1);
+      objs.forEach(o => o.matrix.copy(m4));
+    });
+    // 펼친 그림 가운데 → 접힌 정육면체 가운데로 옮겨 가며 본다
+    const xs = cells.map(c => c[0]), zs = cells.map(c => c[1]);
+    const nc = [(Math.min(...xs) + Math.max(...xs) + 1) / 2, (Math.min(...zs) + Math.max(...zs) + 1) / 2];
+    const rc = [cells[tree.root][0] + 0.5, cells[tree.root][1] + 0.5];
+    const k = st.t;
+    group.position.set(-(nc[0] + (rc[0] - nc[0]) * k), 0, -(nc[1] + (rc[1] - nc[1]) * k));
+    fitR = Math.hypot(Math.max(...xs) - Math.min(...xs) + 1, Math.max(...zs) - Math.min(...zs) + 1) / 2 * (1 - k) + 1.1 * k;
+    target.set(0, H - 0.5 * k, 0);
+    draw();
+  }
+
+  // ---------- 카메라 ----------
+  let theta = 0.5, phi = 0.95, zoom = 1, fitR = 2;
+  const target = new THREE.Vector3(0, H, 0);
+  const VIEWS = { iso: [0.5, 0.95], front: [0, Math.PI / 2 - 0.02], top: [0, 0.0005] };
+  function frame() {
+    const w = box.clientWidth, h = box.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw();
+  }
+  function draw() {
+    const a = cam.aspect || 1, R = fitR * 6.2 / Math.min(1, a) / zoom, sp = Math.sin(phi);
+    cam.position.set(R * sp * Math.sin(theta), target.y + R * Math.cos(phi), R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target); renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let tween = null;
+  const viewChips = () => document.querySelectorAll('.chip[data-view]');
+  function goTo(name) {
+    const [t1, p1] = VIEWS[name];
+    viewChips().forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * e; phi = p0 + (p1 - p0) * e; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  viewChips().forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI - 0.05, p));
+  const setZoom = z => { zoom = Math.max(0.4, Math.min(3, z)); draw(); };
+  const pts = new Map(); let pinch = 0;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); if (pts.size === 2) pinch = pinchDist();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+  });
+  const endDrag = e => { pts.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener('keydown', e => {
+    const d = 0.12, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!m) return; e.preventDefault(); theta += m[0]; phi = clampPhi(phi + m[1]); draw();
+  });
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  // ---------- 접기 ----------
+  const foldIn = document.getElementById('fold'), foldOut = document.getElementById('foldOut'), playBtn = document.getElementById('play');
+  let playId = null;
+  function setT(t) {
+    st.t = t; foldIn.value = Math.round(t * 100); foldOut.textContent = Math.round(t * 100) + '%';
+    playBtn.textContent = playId ? '멈추기' : t >= 1 ? '다시 펴기' : '접기';
+    pose();
+  }
+  function animateTo(to, then) {
+    if (playId) cancelAnimationFrame(playId);
+    const from = st.t;
+    if (reduce || from === to) { playId = null; setT(to); if (then) then(); return; }
+    const start = performance.now(), dur = 2200 * Math.abs(to - from);
+    const step = now => {
+      const k = Math.min(1, (now - start) / dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      playId = k < 1 ? requestAnimationFrame(step) : null;
+      setT(from + (to - from) * e);
+      if (!playId && then) then();
+    };
+    playId = requestAnimationFrame(step);
+  }
+  foldIn.addEventListener('input', () => { if (playId) { cancelAnimationFrame(playId); playId = null; } setT(Number(foldIn.value) / 100); });
+  playBtn.addEventListener('click', () => {
+    if (playId) { cancelAnimationFrame(playId); playId = null; return setT(st.t); }
+    animateTo(st.t >= 1 ? 0 : 1);
+  });
+
+  // ---------- 고르기 ----------
+  const thumbs = document.getElementById('thumbs');
+  function thumbSvg(cs) {
+    const w = Math.max(...cs.map(c => c[0])) + 1, h = Math.max(...cs.map(c => c[1])) + 1;
+    return `<svg viewBox="-0.2 -0.2 ${w + 0.4} ${h + 0.4}" aria-hidden="true">${cs.map(([x, y]) => `<rect x="${x}" y="${y}" width="1" height="1" vector-effect="non-scaling-stroke"></rect>`).join('')}</svg>`;
+  }
+  function drawThumbs() {
+    const list = st.list === 'nets' ? NETS : NON_NETS;
+    thumbs.innerHTML = '';
+    list.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.className = 'thumb' + (st.list === 'nets' ? '' : ' non'); b.type = 'button';
+      b.setAttribute('aria-pressed', String(i === st.idx));
+      b.setAttribute('aria-label', `${st.list === 'nets' ? i + 1 + '번 전개도' : '전개도가 아닌 모양'} ${s.type}`);
+      b.innerHTML = thumbSvg(s.cells) + `<span>${st.list === 'nets' ? i + 1 + ' · ' : ''}${s.type}</span>`;
+      b.addEventListener('click', () => { st.idx = i; endQuiz(); load(); });
+      thumbs.appendChild(b);
+    });
+  }
+  function setList(list) {
+    st.list = list; st.idx = 0; endQuiz();
+    document.getElementById('showNets').setAttribute('aria-pressed', String(list === 'nets'));
+    document.getElementById('showNon').setAttribute('aria-pressed', String(list !== 'nets'));
+    load();
+  }
+  document.getElementById('showNets').addEventListener('click', () => setList('nets'));
+  document.getElementById('showNon').addEventListener('click', () => setList('non'));
+  document.getElementById('pairColor').addEventListener('change', e => { st.pairColor = e.target.checked; buildMeshes(); drawBig(); });
+
+  // 받침 없는 숫자(2·4·5) 뒤에는 「와」
+  const wa = n => [2, 4, 5].includes(n) ? '와' : '과';
+  function describe() {
+    const s = document.getElementById('status');
+    s.classList.toggle('bad', !info.valid);
+    if (!info.valid) {
+      const g = info.overlaps.map(gr => gr.map(i => i + 1).join('번과 ') + '번').join(', ');
+      s.textContent = `정육면체가 되지 않아요. 접으면 ${g} 면이 같은 자리에서 겹치고, 빈 면이 ${info.missing}개 생깁니다.`;
+      return;
+    }
+    const done = new Set(), pairs = [];
+    cells.forEach((_, i) => { const j = info.opposite[i]; if (!done.has(i)) { done.add(i); done.add(j); pairs.push(`${i + 1}${wa(i + 1)} ${j + 1}`); } });
+    s.textContent = st.quiz ? '문제를 푸는 동안에는 짝을 가려 둡니다.' : `${st.idx + 1}번 전개도 (${shape().type}) · 마주 보는 면: ${pairs.join(', ')}`;
+  }
+
+  // ---------- 큰 전개도와 문제 ----------
+  const big = document.getElementById('big'), U = 64;
+  function drawBig() {
+    const w = Math.max(...cells.map(c => c[0])) + 1, h = Math.max(...cells.map(c => c[1])) + 1;
+    big.setAttribute('viewBox', `-4 -4 ${w * U + 8} ${h * U + 8}`);
+    big.classList.toggle('quiz', !!st.quiz);
+    const colors = faceColors();
+    big.innerHTML = cells.map(([x, y], i) => {
+      const q = st.quiz, ring = q && q.picked === i ? `<rect class="ring${q.right ? '' : ' no'}" x="${x * U + 5}" y="${y * U + 5}" width="${U - 10}" height="${U - 10}"></rect>` : '';
+      const star = q && q.mark === i ? `<text class="star" x="${x * U + U - 14}" y="${y * U + 20}" text-anchor="middle">★</text>` : '';
+      return `<g class="cell" data-i="${i}"><rect x="${x * U}" y="${y * U}" width="${U}" height="${U}" fill="${colors[i]}"></rect>
+        <text x="${x * U + U / 2}" y="${y * U + U / 2 + 9}" text-anchor="middle">${i + 1}</text>${star}${ring}</g>`;
+    }).join('');
+  }
+  big.addEventListener('click', e => {
+    const g = e.target.closest('.cell'); if (!g || !st.quiz || st.quiz.right) return;
+    const i = Number(g.dataset.i), q = st.quiz, v = document.getElementById('verdict');
+    if (i === q.mark) { v.textContent = '★ 면 자신은 고를 수 없어요.'; v.className = 'no'; return; }
+    q.picked = i; q.right = info.opposite[q.mark] === i;
+    v.textContent = q.right
+      ? `맞았어요! ★(${q.mark + 1}번)과 마주 보는 면은 ${i + 1}번입니다. 「접어서 확인」을 눌러 보세요.`
+      : `${i + 1}번은 접으면 ★ 면 옆에 붙는 면이에요. 다시 골라 보세요.`;
+    v.className = q.right ? 'ok' : 'no';
+    drawBig();
+  });
+  function makeQuiz() {
+    st.list = 'nets';
+    document.getElementById('showNets').setAttribute('aria-pressed', 'true');
+    document.getElementById('showNon').setAttribute('aria-pressed', 'false');
+    let idx = Math.floor(Math.random() * NETS.length);
+    if (idx === st.idx && NETS.length > 1) idx = (idx + 1 + Math.floor(Math.random() * (NETS.length - 1))) % NETS.length;
+    st.idx = idx;
+    st.quiz = { mark: Math.floor(Math.random() * 6), picked: -1, right: false };
+    if (playId) { cancelAnimationFrame(playId); playId = null; }
+    st.t = 0;
+    load();
+    document.getElementById('question').textContent = '접었을 때 ★ 면과 마주 보는 면을 눌러 보세요.';
+    const v = document.getElementById('verdict'); v.textContent = ''; v.className = '';
+    goTo('top');
+  }
+  function endQuiz() {
+    if (!st.quiz) return;
+    st.quiz = null;
+    document.getElementById('question').textContent = '전개도에 쓴 번호를 보고, 접었을 때 마주 보는 면을 짝지어 보세요.';
+    const v = document.getElementById('verdict'); v.textContent = ''; v.className = '';
+  }
+  document.getElementById('quizBtn').addEventListener('click', makeQuiz);
+  document.getElementById('checkFold').addEventListener('click', () => {
+    goTo('iso');
+    animateTo(1, () => {
+      if (!st.quiz) return;
+      const q = st.quiz, v = document.getElementById('verdict');
+      if (!q.right) { v.textContent = `정답은 ${info.opposite[q.mark] + 1}번입니다. ★(${q.mark + 1}번)의 맞은편을 3D에서 돌려 확인해 보세요.`; v.className = 'no'; }
+    });
+  });
+
+  function load() {
+    cells = shape().cells; tree = netTree(cells); info = analyze(cells);
+    drawThumbs(); describe(); drawBig(); buildMeshes(); setT(st.t);
+  }
+
+  load();
+  goTo('iso');
+  frame();
+})();
+</script>
+</html>

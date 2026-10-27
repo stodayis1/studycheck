@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>위치 관계 관찰대</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 고르는 판(입체·보는 관계·모서리나 면) / 오른쪽: 색칠된 입체. 아래: 관계별 목록 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --sel: #f97316;
+  --par: #2563eb;
+  --meet: #16a34a;
+  --skew: #e11d48;
+  --contain: #8b5cf6;
+  --tilt: #ca8a04;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.presets, .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible, canvas:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.row label, .lbl { font-size: 13px; color: var(--muted); }
+select { font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; }
+.tool { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; min-width: 0; }
+#canvasBox { height: 500px; }
+@media (max-width: 860px) { #canvasBox { height: 400px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.overlayTop { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+.hint { position: absolute; left: 12px; bottom: 8px; margin: 0; font-size: 12px; color: var(--muted); pointer-events: none; }
+
+.results { display: grid; gap: 10px; }
+.res { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.res .sw { width: 14px; height: 14px; border-radius: 4px; align-self: center; }
+.res b { font-family: var(--font-display); font-size: 16px; }
+.res .n { font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; }
+.res .names { grid-column: 2 / 4; font-size: 14px; color: var(--ink); word-break: keep-all; }
+.res .extra { grid-column: 2 / 4; font-size: 13px; color: var(--muted); }
+.note { margin: 0; font-size: 14px; color: var(--ink); background: var(--accent-soft); border-radius: 10px; padding: 12px 14px; }
+.note b { font-family: var(--font-display); color: var(--accent); }
+.selName { font-family: var(--font-display); font-size: 22px; color: var(--sel); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">중1-2 기본 도형 · 위치 관계</div>
+    <h1>위치 관계 관찰대</h1>
+    <p>입체도형에서 모서리나 면을 하나 고르면, 나머지 모서리·면이 그것과 어떤 위치 관계인지 색으로 나눠 보여 줍니다. 3D는 끌어서 돌려 볼 수 있고, 모서리나 면을 직접 눌러 고를 수도 있습니다.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="고르기">
+      <h2>무엇을 볼까요</h2>
+      <div class="row" role="group" aria-label="입체도형">
+        <button class="chip" data-solid="box" aria-pressed="true">직육면체</button>
+        <button class="chip" data-solid="tri" aria-pressed="false">삼각기둥</button>
+      </div>
+      <div class="row" role="group" aria-label="보는 관계">
+        <button class="chip" data-mode="ee" aria-pressed="true">모서리와 모서리</button>
+        <button class="chip" data-mode="ef" aria-pressed="false">모서리와 면</button>
+        <button class="chip" data-mode="ff" aria-pressed="false">면과 면</button>
+      </div>
+      <div class="tool">
+        <div class="row">
+          <label for="pick" id="pickLabel">기준 모서리</label>
+          <select id="pick"></select>
+        </div>
+        <p class="sub" style="margin:0">3D에서 모서리나 면을 눌러도 바로 골라집니다.</p>
+      </div>
+      <div class="row" style="justify-content:space-between;border-top:1px dashed var(--line);padding-top:10px">
+        <span class="lbl" id="selKind">기준 모서리</span><span class="selName" id="selName">AB</span>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="입체도형 3D">
+      <div class="overlayTop" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso">비스듬히</button>
+        <button class="chip" data-view="front">앞에서</button>
+        <button class="chip" data-view="top">위에서</button>
+        <button class="chip" data-view="side">옆에서</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox"><canvas id="c" tabindex="0" aria-label="입체도형 3D 모형. 끌거나 화살표 키로 돌릴 수 있습니다."></canvas></div>
+      <p class="hint">끌어서 돌리기 · 휠·두 손가락으로 확대 · 모서리나 면을 눌러 고르기</p>
+    </section>
+  </div>
+
+  <section class="card" aria-label="위치 관계 목록">
+    <h2 id="resTitle">모서리 AB와의 위치 관계</h2>
+    <div class="results" id="results"></div>
+    <p class="note" id="note"></p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  // ---------- 입체 ----------
+  // 교과서처럼 윗면 ABCD, 아랫면 EFGH, A 바로 아래가 E (삼각기둥은 윗면 ABC, 아랫면 DEF)
+  const SOLIDS = {
+    box: {
+      V: { A: [-2, 2.4, -1.3], B: [2, 2.4, -1.3], C: [2, 2.4, 1.3], D: [-2, 2.4, 1.3],
+           E: [-2, 0, -1.3], F: [2, 0, -1.3], G: [2, 0, 1.3], H: [-2, 0, 1.3] },
+      faces: ['ABCD', 'EFGH', 'ABFE', 'BFGC', 'CGHD', 'AEHD'],
+    },
+    tri: {
+      V: { A: [-2, 2.4, -1.2], B: [2, 2.4, -1.2], C: [-0.6, 2.4, 1.5],
+           D: [-2, 0, -1.2], E: [2, 0, -1.2], F: [-0.6, 0, 1.5] },
+      faces: ['ABC', 'DEF', 'ABED', 'BEFC', 'ADFC'],
+    },
+  };
+  const EPS = 1e-6;
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = a => Math.hypot(a[0], a[1], a[2]);
+  const unit = a => { const l = len(a); return [a[0] / l, a[1] / l, a[2] / l]; };
+
+  function edgesOf(S) {
+    const set = new Map();
+    S.faces.forEach(f => {
+      for (let i = 0; i < f.length; i++) {
+        const name = [f[i], f[(i + 1) % f.length]].sort().join('');
+        if (!set.has(name)) set.set(name, name);
+      }
+    });
+    return [...set.keys()].sort();
+  }
+  const line = (S, e) => ({ P: S.V[e[0]], d: unit(sub(S.V[e[1]], S.V[e[0]])) });
+  const plane = (S, f) => { const a = S.V[f[0]], b = S.V[f[1]], c = S.V[f[2]]; return { P: a, n: unit(cross(sub(b, a), sub(c, a))) }; };
+
+  // 직선 두 개: 평행 / 한 점에서 만남(수직 여부) / 꼬인 위치. 모서리는 늘인 직선으로 본다
+  function edgeEdge(S, e1, e2) {
+    const a = line(S, e1), b = line(S, e2);
+    if (len(cross(a.d, b.d)) < EPS) return { kind: 'par' };
+    const coplanar = Math.abs(dot(sub(b.P, a.P), cross(a.d, b.d))) < EPS;
+    if (!coplanar) return { kind: 'skew' };
+    return { kind: 'meet', perp: Math.abs(dot(a.d, b.d)) < EPS };
+  }
+  // 직선과 평면: 포함 / 평행 / 만남(수직 여부)
+  function edgeFace(S, e, f) {
+    const a = line(S, e), p = plane(S, f);
+    const along = Math.abs(dot(a.d, p.n)) < EPS;
+    if (along && Math.abs(dot(sub(a.P, p.P), p.n)) < EPS) return { kind: 'contain' };
+    if (along) return { kind: 'par' };
+    return { kind: 'meet', perp: len(cross(a.d, p.n)) < EPS };
+  }
+  // 평면 두 개: 평행 / 수직 / 비스듬히 만남
+  function faceFace(S, f1, f2) {
+    const a = plane(S, f1), b = plane(S, f2);
+    if (len(cross(a.n, b.n)) < EPS) return { kind: 'par' };
+    if (Math.abs(dot(a.n, b.n)) < EPS) return { kind: 'perp' };
+    return { kind: 'tilt' };
+  }
+
+  const ST = { solid: 'box', mode: 'ee', pick: 'AB' };
+
+  // ---------- 3D ----------
+  const canvas = document.getElementById('c'), box = document.getElementById('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.45); sun.position.set(5, 9, 7); scene.add(sun);
+
+  const target = new THREE.Vector3(0, 1.2, 0);
+  let theta = 0.6, phi = 1.12, zoom = 1;
+  const VIEWS = { iso: [0.6, 1.12], front: [0, Math.PI / 2], top: [0, 0.0005], side: [Math.PI / 2, Math.PI / 2] };
+
+  const COL = { sel: 0xf97316, par: 0x2563eb, meet: 0x16a34a, skew: 0xe11d48, contain: 0x8b5cf6, perp: 0x16a34a, tilt: 0xca8a04, none: 0x64748b };
+  const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  let dyn = new THREE.Group(); scene.add(dyn);
+  let pickables = [];
+
+  function labelSprite(text, color) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+    const g = cv.getContext('2d');
+    g.font = '700 84px "Gowun Batang", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 12; g.strokeStyle = '#ffffff'; g.strokeText(text, 64, 68);
+    g.fillStyle = color; g.fillText(text, 64, 68);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(0.62, 0.62, 1); sp.renderOrder = 10; return sp;
+  }
+  function rod(a, b, radius, color) {
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, d.length(), 10), color === null ? hitMat : new THREE.MeshLambertMaterial({ color }));
+    m.position.copy(A.clone().add(B).multiplyScalar(0.5));
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+    return m;
+  }
+  function faceMesh(S, f, color, opacity) {
+    const pts = [...f].map(v => S.V[v]), pos = [];
+    for (let i = 1; i + 1 < pts.length; i++) pos.push(...pts[0], ...pts[i], ...pts[i + 1]);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+  }
+
+  // 지금 고른 것과의 관계 → 모서리·면마다 색
+  function classify() {
+    const S = SOLIDS[ST.solid], edges = edgesOf(S), out = { edges: {}, faces: {} };
+    if (ST.mode === 'ee') edges.forEach(e => { out.edges[e] = e === ST.pick ? { kind: 'sel' } : edgeEdge(S, ST.pick, e); });
+    if (ST.mode === 'ef') S.faces.forEach(f => { out.faces[f] = edgeFace(S, ST.pick, f); });
+    if (ST.mode === 'ff') S.faces.forEach(f => { out.faces[f] = f === ST.pick ? { kind: 'sel' } : faceFace(S, ST.pick, f); });
+    return out;
+  }
+
+  function build3D() {
+    dyn.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== hitMat) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    scene.remove(dyn); dyn = new THREE.Group(); scene.add(dyn); pickables = [];
+    const S = SOLIDS[ST.solid], cls = classify(), edges = edgesOf(S);
+    S.faces.forEach(f => {
+      const c = cls.faces[f];
+      const color = c ? COL[c.kind === 'meet' && c.perp ? 'perp' : c.kind] : 0x93c5fd;
+      const m = faceMesh(S, f, color, c ? (c.kind === 'sel' ? 0.45 : 0.32) : 0.12);
+      m.userData = { face: f }; dyn.add(m);
+      if (ST.mode === 'ff') pickables.push(m);
+    });
+    edges.forEach(e => {
+      const a = S.V[e[0]], b = S.V[e[1]], c = cls.edges[e];
+      let color = COL.none, r = 0.035;
+      if (ST.mode === 'ee') { color = COL[c.kind]; r = c.kind === 'sel' ? 0.08 : 0.05; }
+      if (ST.mode === 'ef' && e === ST.pick) { color = COL.sel; r = 0.08; }
+      dyn.add(rod(a, b, r, color));
+      if (ST.mode !== 'ff') { const h = rod(a, b, 0.2, null); h.userData = { edge: e }; dyn.add(h); pickables.push(h); }
+    });
+    const ctr = Object.values(S.V).reduce((s, v) => [s[0] + v[0] / Object.keys(S.V).length, s[1] + v[1] / Object.keys(S.V).length, s[2] + v[2] / Object.keys(S.V).length], [0, 0, 0]);
+    Object.entries(S.V).forEach(([k, v]) => {
+      const off = unit(sub(v, ctr)), sp = labelSprite(k, ST.mode !== 'ff' && ST.pick.includes(k) ? '#ea580c' : '#1d2b3a');
+      sp.position.set(v[0] + off[0] * 0.38, v[1] + off[1] * 0.38, v[2] + off[2] * 0.38); dyn.add(sp);
+    });
+    draw();
+  }
+
+  function frame() {
+    const w = box.clientWidth, h = box.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw();
+  }
+  function draw() {
+    const a = cam.aspect || 1, R = (a < 1 ? 15 / a : 15) / zoom, sp = Math.sin(phi);
+    cam.position.set(R * sp * Math.sin(theta), target.y + R * Math.cos(phi), R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target); renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let tween = null;
+  const viewChips = () => document.querySelectorAll('.chip[data-view]');
+  function goTo(name) {
+    const [t1, p1] = VIEWS[name];
+    viewChips().forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * e; phi = p0 + (p1 - p0) * e; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  viewChips().forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI - 0.05, p));
+  const setZoom = z => { zoom = Math.max(0.5, Math.min(3, z)); draw(); };
+  const pts = new Map(); let pinch = 0, downAt = null, moved = 0;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); if (pts.size === 2) pinch = pinchDist();
+    downAt = { x: e.clientX, y: e.clientY }; moved = 0;
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    moved += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
+    if (pts.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+  });
+  const endDrag = e => {
+    const wasTap = pts.size === 1 && moved < 6 && downAt;
+    pts.delete(e.pointerId); pinch = 0;
+    if (wasTap && e.type === 'pointerup') pickAt(e.clientX, e.clientY);
+  };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener('keydown', e => {
+    const d = 0.12, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!m) return; e.preventDefault(); theta += m[0]; phi = clampPhi(phi + m[1]); draw();
+  });
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  const ray = new THREE.Raycaster();
+  function pickAt(x, y) {
+    const r = canvas.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), cam);
+    const hit = ray.intersectObjects(pickables, false)[0];
+    if (!hit) return;
+    const v = hit.object.userData.edge || hit.object.userData.face;
+    if (v) { ST.pick = v; update(); }
+  }
+
+  // ---------- 판과 목록 ----------
+  const pick = document.getElementById('pick');
+  function fillPick() {
+    const S = SOLIDS[ST.solid], list = ST.mode === 'ff' ? S.faces : edgesOf(S);
+    if (!list.includes(ST.pick)) ST.pick = list[0];
+    pick.innerHTML = list.map(v => `<option value="${v}">${ST.mode === 'ff' ? '면' : '모서리'} ${v}</option>`).join('');
+    pick.value = ST.pick;
+    document.getElementById('pickLabel').textContent = ST.mode === 'ff' ? '기준 면' : '기준 모서리';
+  }
+  pick.addEventListener('change', () => { ST.pick = pick.value; update(); });
+  document.querySelectorAll('[data-solid]').forEach(b => b.addEventListener('click', () => {
+    ST.solid = b.dataset.solid;
+    document.querySelectorAll('[data-solid]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    ST.pick = ''; fillPick(); update();
+  }));
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    const wasFace = ST.mode === 'ff';
+    ST.mode = b.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    if (wasFace !== (ST.mode === 'ff')) ST.pick = '';
+    fillPick(); update();
+  }));
+
+  const NOTES = {
+    ee: '<b>꼬인 위치란</b> 공간에서 두 직선이 같은 평면 위에 있지 않아서, 만나지도 않고 평행하지도 않은 위치 관계입니다. 평면에서는 생기지 않고 공간에서만 생겨요. 모서리는 양쪽으로 늘인 직선으로 생각합니다.',
+    ef: '<b>직선과 평면</b> 모서리를 늘인 직선이 면(평면)에 들어 있거나(포함), 아무리 늘여도 만나지 않거나(평행), 한 점에서 만납니다. 만나는 점을 지나는 면 위의 모든 직선과 수직이면 「수직」이에요.',
+    ff: '<b>두 평면</b> 공간에서 두 면은 평행하거나 만납니다. 만날 때 한 면이 다른 면에 수직인 직선을 품고 있으면 두 면은 수직이에요.',
+  };
+  function res(color, title, items, extra) {
+    return `<div class="res"><span class="sw" style="background:${color}"></span><b>${title}</b><span class="n">${items.length}개</span>
+      <span class="names">${items.length ? items.join(', ') : '없음'}</span>${extra ? `<span class="extra">${extra}</span>` : ''}</div>`;
+  }
+  function update() {
+    fillPick();
+    const S = SOLIDS[ST.solid], cls = classify(), out = document.getElementById('results');
+    const isFace = ST.mode === 'ff', unitName = isFace ? '면' : '모서리';
+    document.getElementById('selKind').textContent = isFace ? '기준 면' : '기준 모서리';
+    document.getElementById('selName').textContent = `${unitName} ${ST.pick}`;
+    document.getElementById('resTitle').textContent = `${unitName} ${ST.pick}와(과)의 위치 관계`;
+    const by = (map, test) => Object.entries(map).filter(([, c]) => test(c)).map(([k]) => k);
+    if (ST.mode === 'ee') {
+      const meet = by(cls.edges, c => c.kind === 'meet'), perp = by(cls.edges, c => c.kind === 'meet' && c.perp);
+      out.innerHTML = res('var(--par)', '평행한 모서리', by(cls.edges, c => c.kind === 'par').map(e => '모서리 ' + e))
+        + res('var(--meet)', '한 점에서 만나는 모서리', meet.map(e => '모서리 ' + e), perp.length ? `그중 수직으로 만나는 모서리: ${perp.join(', ')}` : '')
+        + res('var(--skew)', '꼬인 위치에 있는 모서리', by(cls.edges, c => c.kind === 'skew').map(e => '모서리 ' + e));
+    } else if (ST.mode === 'ef') {
+      const meet = by(cls.faces, c => c.kind === 'meet'), perp = by(cls.faces, c => c.kind === 'meet' && c.perp);
+      out.innerHTML = res('var(--contain)', '모서리를 포함하는 면', by(cls.faces, c => c.kind === 'contain').map(f => '면 ' + f))
+        + res('var(--par)', '모서리와 평행한 면', by(cls.faces, c => c.kind === 'par').map(f => '면 ' + f))
+        + res('var(--meet)', '모서리와 한 점에서 만나는 면', meet.map(f => '면 ' + f), perp.length ? `그중 모서리와 수직인 면: ${perp.join(', ')}` : '수직인 면은 없습니다.');
+    } else {
+      const tilt = by(cls.faces, c => c.kind === 'tilt');
+      out.innerHTML = res('var(--par)', '평행한 면', by(cls.faces, c => c.kind === 'par').map(f => '면 ' + f))
+        + res('var(--meet)', '수직인 면', by(cls.faces, c => c.kind === 'perp').map(f => '면 ' + f))
+        + (tilt.length ? res('var(--tilt)', '수직이 아니게 만나는 면', tilt.map(f => '면 ' + f)) : '');
+    }
+    document.getElementById('note').innerHTML = NOTES[ST.mode];
+    build3D();
+  }
+
+  update();
+  goTo('iso');
+  frame();
+})();
+</script>
+</html>
