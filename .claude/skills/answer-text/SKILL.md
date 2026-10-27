@@ -73,6 +73,24 @@ where book = '<교재>' and grade = '<중1>' and semester = <2> group by 1;
 4. 숫자는 tesseract 로 한 번 더 읽고 다른 곳만 원본을 눈으로 본다(tesseract 는 옆 그림 조각에 잘 끌린다)
 5. **원본(빠른정답 표 또는 풀이 본문의 「답」)과 한 번 더 맞춘다.** 원본과 그림이 다르면 원본을 눈으로 보고, 원본이 객관식·숫자면 원본 값을 넣는다
 
+**C. 스캔 해설인데 빠른정답 표가 있다** — 쎈 공통수학2 방식 (2026-10-27). 자세한 것은 `scripts/answers/README.md`
+빠른정답 표는 번호와 답이 한 줄에 같이 있어 **밀림이 생길 수 없는 원본**이다. 정답 그림보다 이쪽을 먼저 읽는다.
+| 겹 | 무엇 | 역할 |
+|---|---|---|
+| ① 원본 | 빠른정답 표를 번호와 함께 읽어 `read_*.json` → `merge_reads.py` 로 `표판독.json` | **값을 정한다** |
+| ② 기계 | `ocr_answers.py` (tesseract, 4배 확대+이진화) | **다시 볼 곳을 알려 주는 깃발일 뿐** |
+| ③ 그림 | `sheet_check.py` 로 「번호 · 넣을 값 · 정답 그림」을 한 칸에 나란히 | 마지막 눈 확인 |
+```
+python scripts/answers/ocr_answers.py <정답그림폴더>
+python scripts/answers/merge_reads.py <표판독폴더> <정답그림폴더>
+python scripts/answers/make_sql.py 표판독.json DB현황.json <교재> <과정> <학기> <나갈폴더>
+node   scripts/answers/fetch_by_id.mjs <나갈폴더>/_검산목록.json <볼폴더>      # 바꿀 것만 그림 받기
+python scripts/answers/sheet_check.py <볼폴더> <목록.json> <볼폴더>/check
+```
+- **OCR 로 값을 정하지 않는다.** 쎈 공수2 에서 표와 OCR 이 다른 242건이 **전부 OCR 오독**이었다(빼기표 누락 −12→12, 자릿수 36→3860 · 116→6).
+- 글자 정답은 **순수한 정수만** 넣는다. 단위·식·집합(쎈 공수2 556개)은 그림 그대로 — 글자로 넣으면 숫자만 쓴 학생이 오답이 된다.
+- **이미 들어 있는 객관식 정답도 원본과 다시 맞춘다.** 쎈 공수2 객관식 404개 중 56개가 틀려 있었다(②→③ 27 · ③→⑤ 17 · ⑤→③ 12 — 예전 기계 판독이 동그라미 숫자를 헷갈린 자국). 새로 넣는 것만 보지 말 것.
+
 ### 2) SQL 파일로 만들어 넣는다 (되돌리기 쌍 필수)
 `scripts/answers/라이트쎈_중1-2_정답.sql` 형식을 따른다 — 머리말에 만든 방법·건수, 본문은 `id` 와 `local_no` 를 같이 적은 `update … from (values …)`:
 ```sql
@@ -84,6 +102,7 @@ where p.id = v.id and p.book = '라이트쎈' and p.grade = '중1' and p.semeste
 - **지금 `image` 인 것만** 바꾼다(이미 맞게 들어간 글자 정답을 덮지 않게).
 - 같은 폴더에 `<이름>_되돌리기.sql` 을 같이 만든다. 운영 DB 이므로 되돌릴 수 없는 변경 금지.
 - 파일 이름: `scripts/answers/<교재>_<학년-학기>_정답.sql`. README 표(`scripts/answers/README.md`)에 건수(전체·객관식·숫자·그림·원본으로 바로잡음)를 한 줄 추가한다.
+- 적용은 `node scripts/answers/run_sql.mjs scripts/answers/<적용>.sql` — **.sql 파일을 그대로 읽어** 돌리고(목록을 베껴 쓰지 않는다), 한 건이라도 안 바뀌면 멈추고 종료코드 1 을 낸다.
 - 적용 뒤 바뀐 행 수가 파일 행 수와 같은지 본다(건너뜀 0).
 
 > ⚠ `scripts/answers/apply.py` 의 `kind_of()` 는 객관식을 **숫자 `'1,3'`** 로 바꿔 넣는다 — 1,839문항(RPM 1,361 · 개념+유형 478)이 이렇게 들어가 QR 에서 늘 오답이었고 `객관식_숫자정답_바꾸기.sql` 로 고쳤다. apply.py 를 다시 쓸 거면 원문자 그대로 넣게 고친 뒤 쓸 것. 또 이 스크립트는 `semester=1` 과 `C:/Users/USER/studycheck/.env.local` 이 박혀 있다.
@@ -110,16 +129,18 @@ where p.id = v.id and p.book = '라이트쎈' and p.grade = '중1' and p.semeste
    select count(*) from problems where answer_kind = 'number'
      and (answer_text is null or answer_text !~ '^-?[0-9]+(\.[0-9]+)?$');
    ```
-2. **QR 채점 화면 실제 확인**: 문제은행(`/teacher/problem-bank`)에서 그 교재 문항으로 시험지를 만들고 → 인쇄(`/teacher/gradings/print`)의 QR 또는 `/grade/<코드>` 를 열어
+2. **QR 채점 자동 확인**: `node --import ./scripts/ts-resolve.mjs scripts/answers/qr_check.mjs <교재> <과정>` — 임시 시험지를 만들어 진짜 `app/api/grade/[code]/route.ts` 의 GET() 을 부르고, 끝나면 그 시험지를 지운다.
+3. **QR 채점 화면 눈으로 확인**: 문제은행(`/teacher/problem-bank`)에서 그 교재 문항으로 시험지를 만들고 → 인쇄(`/teacher/gradings/print`)의 QR 또는 `/grade/<코드>` 를 열어
    - 객관식에서 정답 번호를 고르면 정답, 다른 번호면 오답으로 나오는지
    - 숫자 문항 입력란이 뜨고 정답이 맞게 판정되는지
    - 그림 문항은 정답 그림이 뜨고 O/X 버튼이 있는지
    (1,839문항 수정 때는 운영 QR `RQRBAM` 에서 「정답 번호를 못 읽는 객관식 0」을 확인했다.)
-3. QR 은 시험 대상 학생(`lib/pilot.ts`)만 이름 목록에 뜬다. 테스트 제출은 `gradings` 에 기록이 남으니 원장님께 알리거나 시험 대상 계정으로 할 것.
-4. Storage 그림을 다시 올렸으면 CDN 캐시(1시간) 때문에 한동안 옛 그림이 보일 수 있다.
+4. QR 은 시험 대상 학생(`lib/pilot.ts`)만 이름 목록에 뜬다. 테스트 제출은 `gradings` 에 기록이 남으니 원장님께 알리거나 시험 대상 계정으로 할 것.
+5. Storage 그림을 다시 올렸으면 CDN 캐시(1시간) 때문에 한동안 옛 그림이 보일 수 있다.
 
 ## 자주 하는 실수
 
+- OCR(tesseract) 결과를 그대로 정답으로 넣음 → 빼기표·자릿수 오독. 깃발로만 쓴다
 - 객관식을 `3`·`1,3` 숫자로 넣음 → 무엇을 골라도 오답 (가장 흔하고, 에러도 안 난다)
 - 단위·분수·√·여러 개 숫자 답을 `number` 로 넣음 → 학생이 맞게 써도 오답
 - 두 판독이 같으니 맞다고 믿음 → 그림이 옆 문항 답이면 **같게 틀린다**(1-2 0800: 그림 ②, 풀이 ③). 원본과 한 번 더
@@ -132,3 +153,4 @@ where p.id = v.id and p.book = '라이트쎈' and p.grade = '중1' and p.semeste
 ## 규칙 추가 기록
 > 작업하다 새 규칙이 생기면 여기 날짜와 함께 한 줄씩 추가하고, 위 본문의 해당 자리에도 반영한다.
 - 2026-10-27 스킬 처음 만듦 (지금까지의 커밋·문서 기준)
+- 2026-10-27 쎈 공통수학2 전수 검산(a2a7199) 반영 — 빠른정답 표 원본 세 겹 대조(C), OCR 은 깃발만, 정수만 글자로, 기존 객관식도 재검산, `run_sql.mjs`·`qr_check.mjs`·`fetch_by_id.mjs`
