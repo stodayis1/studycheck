@@ -16,7 +16,8 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
   const school = decodeURIComponent(name)
 
   const [profile, setProfile] = useState<SchoolProfile | null>(null)
-  const [students, setStudents] = useState<any[]>([])
+  // ★ 인원수·이름은 받지 않는다 — 상담 때 보여 드리는 화면이다
+  const [hasStudents, setHasStudents] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -30,7 +31,7 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
     const json = await res.json().catch(() => ({}))
     if (!res.ok) { setError(json.error ?? '불러오지 못했어요.'); setLoading(false); return }
     setProfile(json.profile)
-    setStudents(json.students ?? [])
+    setHasStudents(!!json.hasStudents)
     setLoading(false)
   }
 
@@ -67,10 +68,10 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
               {[profile.region, profile.office].filter(Boolean).join(' · ')}
             </p>
           </div>
-          {students.length > 0 && (
+          {hasStudents && (
             <span className="text-sm font-bold px-3 py-1.5 rounded-xl"
               style={{ background: '#E6F7F0', color: '#0F6E56' }}>
-              우리 학생 {students.length}명
+              재원생 있음
             </span>
           )}
         </div>
@@ -98,16 +99,9 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
         </div>
         {refreshMsg && <p className="text-xs mt-2" style={{ color: '#5A8E7E' }}>{refreshMsg}</p>}
 
-        {students.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {students.map(st => (
-              <span key={st.id} className="text-xs px-2 py-1 rounded-lg"
-                style={{ background: '#F0FBF7', color: '#0F6E56', border: '1px solid #D6F0E6' }}>
-                {st.name} <span style={{ color: '#8FB8AA' }}>{st.grade}</span>
-              </span>
-            ))}
-          </div>
-        )}
+        {/* ★ 재원생 이름 칩이 여기 있었다. 상담 때 학부모님께 보여 드리는 화면이라
+            다른 집 아이 이름이 보이면 안 된다. 2026-10-27 원장님 지시로 뺐다.
+            어느 학생인지는 학생 관리·시험대비 화면에서 본다. */}
       </Card>
 
       {/* 한눈에 */}

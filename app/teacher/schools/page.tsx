@@ -26,7 +26,8 @@ const LEVELS = ['고', '중', '초'] as const
 
 export default function SchoolsPage() {
   const [rows, setRows] = useState<Row[]>([])
-  const [counts, setCounts] = useState<Record<string, number>>({})
+  // ★ 인원수가 아니라 「있나 없나」만 받는다 — 상담 때 보여 드리는 화면이라 숫자를 두지 않는다
+  const [hasStudents, setHasStudents] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [level, setLevel] = useState<string>('전체')
   const [q, setQ] = useState('')
@@ -39,14 +40,15 @@ export default function SchoolsPage() {
     const res = await apiFetch('/api/school-profiles')
     const json = await res.json().catch(() => ({}))
     setRows(json.profiles ?? [])
-    setCounts(json.counts ?? {})
+    setHasStudents(json.hasStudents ?? {})
     setLoading(false)
   }
 
   const visible = rows
     .filter(r => level === '전체' || r.school_level === level)
     .filter(r => !q || r.school_name.includes(q) || (r.official_name ?? '').includes(q))
-    .sort((a, b) => (counts[b.school_name] ?? 0) - (counts[a.school_name] ?? 0)
+    // 우리 학생이 있는 학교를 먼저, 그 안에서는 이름순 (인원수로는 못 줄 세운다 — 숫자를 안 받는다)
+    .sort((a, b) => Number(!!hasStudents[b.school_name]) - Number(!!hasStudents[a.school_name])
       || a.school_name.localeCompare(b.school_name, 'ko'))
 
   return (
@@ -90,7 +92,7 @@ export default function SchoolsPage() {
 
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
           {visible.map(r => {
-            const mine = counts[r.school_name] ?? 0
+            const mine = !!hasStudents[r.school_name]
             return (
               <Link key={r.school_name} href={`/teacher/schools/${encodeURIComponent(r.school_name)}`}
                 className="rounded-2xl p-4 block transition-all hover:shadow-md"
@@ -102,10 +104,10 @@ export default function SchoolsPage() {
                       {[r.foundation, r.school_type].filter(Boolean).join(' · ') || r.region}
                     </div>
                   </div>
-                  {mine > 0 && (
+                  {mine && (
                     <span className="text-xs font-bold px-2 py-1 rounded-lg shrink-0"
                       style={{ background: '#E6F7F0', color: '#0F6E56' }}>
-                      우리 {mine}명
+                      재원생 있음
                     </span>
                   )}
                 </div>
