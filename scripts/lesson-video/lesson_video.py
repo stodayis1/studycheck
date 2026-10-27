@@ -264,7 +264,8 @@ class Book:
             k = DPI / 72
             c0 = max(0, int((clip[0] - part['y0']) * k)); c1 = min(cut.height, int((clip[1] - part['y0']) * k))
             cut = cut.crop((0, c0, cut.width, c1)); self.cy = c0
-        bb = cut.convert('L').point(lambda v: 255 if v < 110 else 0).getbbox() or (0, 0, cut.width, cut.height)
+        # 여백 자르기: 바탕(밝은 베이지·흰색)이 아닌 곳까지. 예전 기준(<110)은 분홍·하늘색 글자(교재 화살표 설명)를 잘라 냈다
+        bb = cut.convert('L').point(lambda v: 255 if v < 200 else 0).getbbox() or (0, 0, cut.width, cut.height)
         bb = (max(0, bb[0] - 24), max(0, bb[1] - 24), min(cut.width, bb[2] + 24), min(cut.height, bb[3] + 24))
         self.img = cut.crop(bb)
         inner = (CARD_BOX[0] + 36, CARD_BOX[1] + 36, CARD_BOX[2] - 36, CARD_BOX[3] - 36)
@@ -277,7 +278,8 @@ class Book:
 
     def to_screen(self, x, y):
         k = DPI / 72
-        cx, cy = (x - X0) * k - self.bb[0], (y - self.part['y0']) * k - self.bb[1] - self.cy
+        x0 = self.part.get('x0', X0)                 # 중학교 교재(concept_cuts_mid.py)는 토막 왼쪽 끝이 다르다
+        cx, cy = (x - x0) * k - self.bb[0], (y - self.part['y0']) * k - self.bb[1] - self.cy
         return self.ox + cx * self.s, self.oy + cy * self.s
 
 
@@ -305,7 +307,8 @@ def base_frame(L, sc, book, mouth):
         d.rectangle((x + 4, uy, x + 150, uy + 10), fill=BRICK)
     elif sc['show'] == 'examples':
         x0, y0 = CARD_BOX[0] + 60, CARD_BOX[1] + 50
-        d.text((x0, y0), '이어서 풀 필수예제', font=font(44, True), fill=BRICK)
+        mid = L.get('unit', '').startswith('중')            # 중학교 교재는 「필수 문제」라고 부른다
+        d.text((x0, y0), '이어서 풀 필수 문제' if mid else '이어서 풀 필수예제', font=font(44, True), fill=BRICK)
         for k, t in enumerate(L['examples']):
             y = y0 + 100 + k * 118
             d.rounded_rectangle((x0, y, CARD_BOX[2] - 60, y + 96), 18, fill=(251, 246, 240), outline=LINE, width=2)

@@ -48,7 +48,7 @@ def main():
             '모르는 건 스터디체크 질문하기로 물어보세요.',
             '수학의지혜 · AI선생님 수지쌤',
             '',
-            f'#{grade} #문제풀이 #고1수학 #수학의지혜',
+            f"#{grade} #문제풀이 #{'고1수학' if grade.startswith('공통') else grade.split('-')[0] + '수학'} #수학의지혜",
         ])
         fw = lambda t: t.replace('<', '＜').replace('>', '＞')     # 유튜브는 제목·설명에 < > 를 안 받는다
         open(out, 'w', encoding='utf-8').write(f'제목:\n{fw(title)}\n\n설명:\n{fw(desc)}\n'); made += 1
