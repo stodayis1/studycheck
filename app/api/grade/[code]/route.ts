@@ -60,7 +60,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     supabase
       .from('exam_sheet_problems')
       .select(
-        'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_image_path, image_path, solution_image_path, is_essay)'
+        'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_kind, answer_text, answer_unit, answer_image_path, image_path, solution_image_path, is_essay)'
       )
       .eq('sheet_id', sheet.id)
       .order('no'),
@@ -160,6 +160,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       answerKind: p?.answer_kind ?? 'image',
       isEssay: !!p?.is_essay,
       answerText: p?.answer_text ?? null,
+      // 단위는 따로 내려 준다 — 학생은 숫자만 치고(8), 화면에는 「8 cm」로 보인다.
+      answerUnit: p?.answer_unit ?? null,
       answerChoices: choiceDigits(p?.answer_text ?? null),
       answerImage: p?.answer_image_path ? signed.get(p.answer_image_path) ?? null : null,
       image: wantImages && p?.image_path ? signed.get(p.image_path) ?? null : null,

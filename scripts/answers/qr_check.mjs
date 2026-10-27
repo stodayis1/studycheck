@@ -17,23 +17,46 @@ const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE
 
 const BOOK=process.argv[2]||'쎈', GRADE=process.argv[3]||'공통수학2', EACH=Number(process.argv[4]||6)
 
+// --drop <코드> : --keep 으로 남겨 둔 시험지를 지운다
+const di=process.argv.indexOf('--drop')
+if (di>0) {
+  const c=process.argv[di+1]
+  const {data:sh}=await db.from('exam_sheets').select('id,title').eq('code',c).maybeSingle()
+  if(!sh){ console.log(`${c} 없음`); process.exit(0) }
+  if(!String(sh.title).startsWith('[검사용]')){ console.error(`${c} 는 검사용 시험지가 아니다 — 지우지 않는다`); process.exitCode=1 }
+  else {
+    await db.from('exam_sheet_problems').delete().eq('sheet_id', sh.id)
+    await db.from('exam_sheets').delete().eq('id', sh.id)
+    console.log(`${c} 지움`)
+  }
+  process.exit(process.exitCode ?? 0)
+}
+
 // app/grade/[code]/page.tsx 의 judge 와 같은 규칙 (화면 쪽은 리액트라 그대로 못 불러온다)
 const norm=(s)=>s.replace(/[\s,]/g,'').trim()
 function judge(p, mine){
   if (p.answerKind==='choice') { const a=[...mine].sort().join(','); return a!=='' && a===[...p.answerChoices].sort().join(',') }
-  if (p.answerKind==='number') { const a=norm(mine); return a!=='' && a===norm(p.answerText??'') }
+  if (p.answerKind==='number') {
+    let a=norm(mine)
+    if (p.answerUnit && a.endsWith(p.answerUnit)) a=a.slice(0, -p.answerUnit.length)
+    return a!=='' && a===norm(p.answerText??'')
+  }
   return null
 }
 
-const pick=async (kind, hasText)=>{
-  let q=db.from('problems').select('id,local_no,answer_kind,answer_text')
+const pick=async (kind, hasText, unit)=>{
+  let q=db.from('problems').select('id,local_no,answer_kind,answer_text,answer_unit')
     .eq('book',BOOK).eq('grade',GRADE).eq('answer_kind',kind).order('id').limit(EACH)
   q = hasText ? q.not('answer_text','is',null) : q.is('answer_text',null).not('answer_image_path','is',null)
+  if (unit===true) q = q.not('answer_unit','is',null)
+  if (unit===false) q = q.is('answer_unit',null)
   const {data,error}=await q
   if(error) throw new Error(error.message)
   return data
 }
-const sample=[...await pick('choice',true), ...await pick('number',true), ...await pick('image',false)]
+const sample=[...await pick('choice',true), ...await pick('number',true,false),
+              ...await pick('number',true,true),            // 단위가 붙은 문항
+              ...await pick('image',false)]
 if (sample.length < 3) { console.error('표본을 못 모았다'); process.exit(1) }
 
 const code='ZZ'+Math.random().toString(36).slice(2,6).toUpperCase()
@@ -64,17 +87,26 @@ try {
       console.log(`${line} ${src.answer_text} → ${JSON.stringify(p.answerChoices)} · 맞게쓰면 ${yes} · 다르게쓰면 ${no}`)
     } else if (p.answerKind==='number') {
       const yes = judge(p, src.answer_text), no = judge(p, src.answer_text+'9')
+      // 단위가 있으면 학생은 **숫자만** 친다 — 단위까지 치면 틀리게 채점되면 안 된다
+      const withUnit = src.answer_unit ? judge(p, src.answer_text+' '+src.answer_unit) : null
       if(p.answerText!==src.answer_text || yes!==true || no!==false) bad.push(`${p.localNo} 숫자 (내려온값 ${p.answerText})`)
-      console.log(`${line} ${p.answerText} · 맞게쓰면 ${yes} · 다르게쓰면 ${no}`)
+      if(src.answer_unit && p.answerUnit!==src.answer_unit) bad.push(`${p.localNo} 단위 (내려온값 ${p.answerUnit})`)
+      if(src.answer_unit && withUnit!==true) bad.push(`${p.localNo} 단위까지 썼을 때 오답이 된다`)
+      console.log(`${line} ${p.answerText}${p.answerUnit?' '+p.answerUnit:''} · 맞게쓰면 ${yes} · 다르게쓰면 ${no}`
+                  + (src.answer_unit?` · 단위까지 쓰면 ${withUnit}`:''))
     } else {
       if(!p.answerImage) bad.push(`${p.localNo} 정답 그림 주소가 비었다`)
       console.log(`${line} 정답그림 ${p.answerImage?'있음':'없음'} (학생이 보고 스스로 채점)`)
     }
   }
 } finally {
-  await db.from('exam_sheet_problems').delete().eq('sheet_id', sheet.id)
-  await db.from('exam_sheets').delete().eq('id', sheet.id)
-  console.log(`  임시 시험지 ${code} 지움`)
+  if (process.argv.includes('--keep')) {
+    console.log(`  임시 시험지 ${code} 를 남겨 둔다 — /grade/${code} 로 열어 볼 것 (다 보면 --drop ${code})`)
+  } else {
+    await db.from('exam_sheet_problems').delete().eq('sheet_id', sheet.id)
+    await db.from('exam_sheets').delete().eq('id', sheet.id)
+    console.log(`  임시 시험지 ${code} 지움`)
+  }
 }
 
 if (bad.length) { console.error('\n! 어긋난 문항\n  ' + bad.join('\n  ')); process.exitCode=1 }

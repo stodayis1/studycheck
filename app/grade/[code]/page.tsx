@@ -24,6 +24,7 @@ type Problem = {
   answerKind: 'choice' | 'number' | 'image'
   isEssay: boolean
   answerText: string | null
+  answerUnit: string | null
   answerChoices: string[]
   answerImage: string | null
   // 유형에 걸린 대표개념 — 없으면 버튼도 안 뜬다
@@ -85,6 +86,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
   const [selfMark, setSelfMark] = useState<Record<number, boolean>>({})
   const [conceptOpen, setConceptOpen] = useState<Record<number, boolean>>({})
   const [shown, setShown] = useState<Record<number, boolean>>({})
+  const [note, setNote] = useState<Record<number, boolean>>({})   // 자기채점 문항에서 「내 답 적어 두기」를 펼쳤나
 
   const [done, setDone] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -152,7 +154,10 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       return mine !== '' && mine === real
     }
     if (p.answerKind === 'number') {
-      const mine = norm(texts[p.no] ?? '')
+      // 단위(cm · ° · 개)는 비교하지 않는다 — 학생은 숫자만 친다.
+      // 그래도 버릇처럼 「27°」라고 쓰는 학생이 있으니, 끝에 붙은 단위는 떼고 본다.
+      let mine = norm(texts[p.no] ?? '')
+      if (p.answerUnit && mine.endsWith(p.answerUnit)) mine = mine.slice(0, -p.answerUnit.length)
       return mine !== '' && mine === norm(p.answerText ?? '')
     }
     return selfMark[p.no] === true
@@ -168,7 +173,8 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       return t || (photos[p.no]?.path ? '(풀이 사진)' : '무응답')
     }
     const t = (texts[p.no] ?? '').trim()
-    return t || '무응답'
+    if (!t) return '무응답'
+    return p.answerUnit ? `${t} ${p.answerUnit}` : t
   }
 
   const answered = (p: Problem) => {
@@ -329,7 +335,7 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
                   <span className="text-slate-500">내 답 {myAnswerLabel(p)}</span>
                   {p.answerKind !== 'image' && (
                     <span className="ml-auto font-medium" style={{ color: GOLD }}>
-                      정답 {p.answerText}
+                      정답 {p.answerText}{p.answerUnit ? ` ${p.answerUnit}` : ''}
                     </span>
                   )}
                 </div>
@@ -484,13 +490,20 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
             )}
 
             {!p.isEssay && p.answerKind === 'number' && (
-              <input
-                inputMode="numeric"
-                value={texts[p.no] ?? ''}
-                onChange={(e) => setTexts((t) => ({ ...t, [p.no]: e.target.value }))}
-                placeholder="답을 입력하세요"
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-base outline-none focus:border-slate-500"
-              />
+              // 단위가 있는 문항은 단위를 칸 옆에 적어 두고 **숫자만** 받는다.
+              // (단위까지 치게 하면 「8」 이라고 쓴 학생이 틀리게 채점된다)
+              <div className="flex items-center gap-2">
+                <input
+                  inputMode="numeric"
+                  value={texts[p.no] ?? ''}
+                  onChange={(e) => setTexts((t) => ({ ...t, [p.no]: e.target.value }))}
+                  placeholder={p.answerUnit ? '숫자만 입력하세요' : '답을 입력하세요'}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-base outline-none focus:border-slate-500"
+                />
+                {p.answerUnit && (
+                  <span className="shrink-0 text-base text-slate-500">{p.answerUnit}</span>
+                )}
+              </div>
             )}
 
             {p.isEssay ? (
@@ -521,20 +534,35 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
                 <p className="text-[11px] text-slate-400">서술형은 선생님이 풀이 사진을 보고 채점합니다.</p>
               </div>
             ) : p.answerKind === 'image' && (
+              // 자기채점 문항은 **누른 O/X 로만** 채점한다(judge 를 볼 것). 그래서 수식 입력은
+              // 채점에 쓰이지 않는데, 예전에는 맨 위에 입력칸이 먼저 떠 있어서 학생이 써야 하는 줄 알았다.
+              // 전체 문항의 35%가 이 종류라 가장 힘든 단계를 안 해도 되는데 하고 있었다 (원장님 2026-10-27).
+              // → 「정답 확인하기 → 맞았어요/틀렸어요」 두 번으로 끝내고, 적어 두고 싶을 때만 펼친다.
               <div className="space-y-3">
-                <MathInput
-                  value={latex[p.no] ?? ''}
-                  onChange={(v) => setLatex((t) => ({ ...t, [p.no]: v }))}
-                  placeholder="내가 쓴 답"
-                />
                 {!shown[p.no] ? (
-                  <button
-                    onClick={() => setShown((s) => ({ ...s, [p.no]: true }))}
-                    className="h-11 w-full rounded-lg text-sm font-medium text-white"
-                    style={{ background: NAVY }}
-                  >
-                    정답 확인하기
-                  </button>
+                  <>
+                    {note[p.no] ? (
+                      <MathInput
+                        value={latex[p.no] ?? ''}
+                        onChange={(v) => setLatex((t) => ({ ...t, [p.no]: v }))}
+                        placeholder="내가 쓴 답"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setNote((n) => ({ ...n, [p.no]: true }))}
+                        className="text-xs text-slate-400 underline"
+                      >
+                        내 답 적어 두기 (안 해도 돼요)
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShown((s) => ({ ...s, [p.no]: true }))}
+                      className="h-11 w-full rounded-lg text-sm font-medium text-white"
+                      style={{ background: NAVY }}
+                    >
+                      정답 확인하기
+                    </button>
+                  </>
                 ) : (
                   <>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">

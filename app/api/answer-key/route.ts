@@ -43,7 +43,7 @@ export async function GET(req: Request) {
   const { data: rows } = await s
     .from('exam_sheet_problems')
     .select(
-      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_text, answer_image_path, solution_image_path, is_essay, twin_group)'
+      'no, problem_id, problems(id, book, grade, semester, sub_chapter_title, page_no, local_no, type_code, difficulty, answer_text, answer_unit, answer_image_path, solution_image_path, is_essay, twin_group)'
     )
     .eq('sheet_id', sheet.id)
     .order('no')
@@ -101,6 +101,7 @@ export async function GET(req: Request) {
       typeTitle: p?.type_code ? typeTitle.get(p.type_code) ?? null : null,
       isEssay: !!p?.is_essay,
       answerText: p?.answer_text ?? null,
+      answerUnit: p?.answer_unit ?? null,
       // 동그라미 숫자만 있는 답은 답지에서 크게 보여 준다
       choices: String(p?.answer_text ?? '').split('').filter((c) => CIRCLE.includes(c)),
       answerImage: !p?.answer_text && p?.answer_image_path ? signed.get(p.answer_image_path) ?? null : null,

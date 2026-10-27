@@ -45,6 +45,7 @@ type SheetProblem = {
     type_code: string | null
     answer_kind: string | null
     answer_text: string | null
+    answer_unit?: string | null
     book: string | null
     local_no: string | null
   } | null
@@ -170,7 +171,7 @@ export default function TeacherGradingsPage() {
         supabase
           .from('exam_sheet_problems')
           .select(
-            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, book, grade, semester, page_no, local_no)'
+            'no, problem_id, problems(difficulty, type_code, answer_kind, answer_text, answer_unit, book, grade, semester, page_no, local_no)'
           )
           .eq('sheet_id', sel.id)
           .order('no'),
@@ -220,7 +221,9 @@ export default function TeacherGradingsPage() {
       return {
         no: p.no,
         difficulty: p.problems?.difficulty ?? null,
-        answerText: p.problems?.answer_text ?? null,
+        answerText: p.problems?.answer_text
+          ? `${p.problems.answer_text}${p.problems.answer_unit ? ' ' + p.problems.answer_unit : ''}`
+          : null,
         typeTitle: p.problems?.type_code ? typeTitles[p.problems.type_code] ?? null : null,
         source: sourceLabel(p.problems),
         ok: e.ok,
