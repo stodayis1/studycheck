@@ -562,14 +562,20 @@ export default function TeacherLearningNotesPage() {
   // ★ 수업일지 목록은 **시간표상 오늘 수업이 있는 학생**만 보여 준다. 그래서 보강·추가 수업으로
   //   그날 기록이 생긴 학생(예: 화·금 시간표인데 목요일에 수업한 윤수지)은 목록에 없고
   //   학생 줄의 「카톡 발송」 버튼도 없다. 그런 경우 여기서 골라 보낸다.
-  async function sendOne(p: { studentId: string; name: string; phone: string }) {
-    if (!confirm(`${p.name} 학생 학부모님(${p.phone})께 ${briefDate} 수업 브리핑을 보냅니다.\n\n보내면 되돌릴 수 없습니다. 진행할까요?`)) return
+  async function sendOne(p: { studentId: string; name: string; phone: string; alreadySent?: boolean }) {
+    // ★ 이미 나간 날도 **일부러** 다시 보낼 수 있다 (원장님 2026-10-27
+    //   「못 받았다는 사람 다시 보내지」). 그래서 말투를 다르게 해 두 번 가는 것임을 분명히 한다.
+    const 다시 = !!p.alreadySent
+    if (!confirm(다시
+      ? `${p.name} 학생 학부모님(${p.phone})께 ${briefDate} 수업 브리핑을 **다시** 보냅니다.\n`
+        + `이 날짜는 이미 한 번 나갔습니다 — 학부모님께 같은 글이 두 번 갑니다.\n\n보낼까요?`
+      : `${p.name} 학생 학부모님(${p.phone})께 ${briefDate} 수업 브리핑을 보냅니다.\n\n보내면 되돌릴 수 없습니다. 진행할까요?`)) return
     setBriefBusy(true)
     try {
       const res = await apiFetch('/api/kakao-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: briefDate, dryRun: false, studentIds: [p.studentId] }),
+        body: JSON.stringify({ date: briefDate, dryRun: false, studentIds: [p.studentId], resend: 다시 }),
       })
       const d = await res.json()
       if (!res.ok) { alert('발송 실패: ' + (d.error ?? '알 수 없는 오류')); return }
@@ -2951,11 +2957,13 @@ ${e?.message ?? '연결 실패'}
                             </button>
                             <button
                               onClick={(e) => { e.preventDefault(); sendOne(p) }}
-                              disabled={briefBusy || p.alreadySent}
-                              title={p.alreadySent ? '이미 학부모님께 나간 날이에요' : undefined}
+                              disabled={briefBusy}
+                              title={p.alreadySent
+                                ? '이미 나간 날이에요. 눌러서 같은 글을 한 번 더 보낼 수 있어요 (못 받으셨다고 할 때).'
+                                : undefined}
                               className="px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
-                              style={{ background: '#FEE500' }}>
-                              이 학생만 보내기
+                              style={{ background: p.alreadySent ? '#FFF0B3' : '#FEE500' }}>
+                              {p.alreadySent ? '다시 보내기' : '이 학생만 보내기'}
                             </button>
                           </summary>
                           <pre className="mx-2.5 mb-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
