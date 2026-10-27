@@ -3,7 +3,7 @@
 //   POST { shl, level, sigungu }   학교 찾기에서 고른 학교를 새로 만든다
 //   POST { school_name }           있는 학교의 숫자를 다시 받는다(stats.schoolinfo 로 찾아간다)
 //
-// ★ 사람이 정리한 수학 편제·정기시험·메모·성취도는 덮지 않는다(lib/schoolinfo.ts mergeProfile).
+// ★ 사람이 정리한 수학 편제·정기시험·메모·성취도·수행평가는 덮지 않는다(lib/schoolinfo.ts mergeProfile).
 // 공시자료(공공데이터)를 넣는 일이라 직원이면 누구나 — 상담 직전에 선생님이 직접 추가한다.
 
 import { NextResponse } from 'next/server'
