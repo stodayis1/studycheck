@@ -158,7 +158,9 @@ export default function GradePage({ params }: { params: Promise<{ code: string }
       // 그래도 버릇처럼 「27°」라고 쓰는 학생이 있으니, 끝에 붙은 단위는 떼고 본다.
       let mine = norm(texts[p.no] ?? '')
       if (p.answerUnit && mine.endsWith(p.answerUnit)) mine = mine.slice(0, -p.answerUnit.length)
-      return mine !== '' && mine === norm(p.answerText ?? '')
+      // 정수와 유리수 단원은 교재가 답을 「+9」처럼 쓴다. 학생이 「9」라고 써도 같은 답이다.
+      const plus = (s: string) => (s.startsWith('+') ? s.slice(1) : s)
+      return mine !== '' && plus(mine) === plus(norm(p.answerText ?? ''))
     }
     return selfMark[p.no] === true
   }

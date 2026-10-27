@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """잘라 둔 정답 그림을 **기계로** 읽는다 (사람 판독과 맞대기 위한 한 겹).
 
-  python scripts/answers/ocr_answers.py <정답그림폴더> [--zoom 4]
+  python scripts/answers/ocr_answers.py <정답그림폴더> [--zoom 4] [--left 40]
+
+  --left N : 왼쪽 N 픽셀을 떼고 읽는다. RPM 처럼 정답 그림 맨 앞에 「답」 배지가 붙어 있으면
+             tesseract 가 그 배지를 글자로 읽어 **전부 쓰레기**가 된다(2026-10-27 RPM 중1-1 에서 0/45).
+             RPM 은 `--left 30` 이면 깨끗하게 읽힌다. 더 떼면(42) 짧은 답이 같이 날아간다.
 
 왜 있나
   그림을 눈으로만 읽으면 1,300개를 같은 품질로 끝까지 보기 어렵다.
@@ -28,6 +32,8 @@ TESS = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 d = sys.argv[1]
 zi = sys.argv.index('--zoom') if '--zoom' in sys.argv else -1
 ZOOM = int(sys.argv[zi + 1]) if zi > 0 else 4
+li = sys.argv.index('--left') if '--left' in sys.argv else -1
+LEFT = int(sys.argv[li + 1]) if li > 0 else 0
 
 rows = json.load(io.open(os.path.join(d, 'list.json'), encoding='utf8'))
 info = {str(r['id']): r for r in rows}
@@ -40,6 +46,8 @@ def prep(path, out):
     """키우고 흑백 이진화 — 작은 글씨는 이 과정 없이는 거의 안 읽힌다"""
     im = Image.open(path).convert('L')
     a = np.array(im)
+    if LEFT and a.shape[1] > LEFT + 20:
+        a = a[:, LEFT:]            # 「답」 배지를 떼고 읽는다
     if a.size == 0:
         return False
     # 테두리 여백을 조금 둬야 글자가 가장자리에 붙지 않는다

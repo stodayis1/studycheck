@@ -39,7 +39,8 @@ function judge(p, mine){
   if (p.answerKind==='number') {
     let a=norm(mine)
     if (p.answerUnit && a.endsWith(p.answerUnit)) a=a.slice(0, -p.answerUnit.length)
-    return a!=='' && a===norm(p.answerText??'')
+    const plus=s=>s.startsWith('+')?s.slice(1):s
+    return a!=='' && plus(a)===plus(norm(p.answerText??''))
   }
   return null
 }
@@ -89,11 +90,14 @@ try {
       const yes = judge(p, src.answer_text), no = judge(p, src.answer_text+'9')
       // 단위가 있으면 학생은 **숫자만** 친다 — 단위까지 치면 틀리게 채점되면 안 된다
       const withUnit = src.answer_unit ? judge(p, src.answer_text+' '+src.answer_unit) : null
+      const noPlus = src.answer_text.startsWith('+') ? judge(p, src.answer_text.slice(1)) : null
       if(p.answerText!==src.answer_text || yes!==true || no!==false) bad.push(`${p.localNo} 숫자 (내려온값 ${p.answerText})`)
       if(src.answer_unit && p.answerUnit!==src.answer_unit) bad.push(`${p.localNo} 단위 (내려온값 ${p.answerUnit})`)
       if(src.answer_unit && withUnit!==true) bad.push(`${p.localNo} 단위까지 썼을 때 오답이 된다`)
+      if(noPlus!==null && noPlus!==true) bad.push(`${p.localNo} +를 빼고 썼을 때 오답이 된다`)
       console.log(`${line} ${p.answerText}${p.answerUnit?' '+p.answerUnit:''} · 맞게쓰면 ${yes} · 다르게쓰면 ${no}`
-                  + (src.answer_unit?` · 단위까지 쓰면 ${withUnit}`:''))
+                  + (src.answer_unit?` · 단위까지 쓰면 ${withUnit}`:'')
+                  + (noPlus!==null?` · +빼고 쓰면 ${noPlus}`:''))
     } else {
       if(!p.answerImage) bad.push(`${p.localNo} 정답 그림 주소가 비었다`)
       console.log(`${line} 정답그림 ${p.answerImage?'있음':'없음'} (학생이 보고 스스로 채점)`)
