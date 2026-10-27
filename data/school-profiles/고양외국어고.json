@@ -9,6 +9,7 @@
   "school_type": "특수목적고",
   "coed": "남녀공학 · 주간",
   "stats": {
+    "schoolinfo": {"shl": "4b2a2b21-aa69-4013-be9b-43001e41f314", "adrcd": "4128111800", "level": "고"},
     "total": 757,
     "classes": 30,
     "perClass": 25.2,

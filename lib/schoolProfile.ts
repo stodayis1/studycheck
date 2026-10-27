@@ -56,6 +56,8 @@ export type SchoolStats = {
   teachers?: number         // 교원 총계(직위별 교원 현황)
   studentsPerTeacher?: number
   achievement?: Achievement // 교과별 학업성취사항(성취도)
+  /** 학교알리미에서 다시 받을 때 쓰는 열쇠 — lib/schoolinfo.ts 가 채운다 */
+  schoolinfo?: { shl: string; adrcd: string; level: '초' | '중' | '고' }
 }
 
 /** 교과별 학업성취사항 한 줄 — 학교알리미 공시(보통 4월에 지난해 것이 올라온다) */

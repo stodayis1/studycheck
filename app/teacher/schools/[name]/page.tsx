@@ -19,6 +19,8 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
   const [students, setStudents] = useState<any[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
 
   useEffect(() => { load() }, [school])
 
@@ -30,6 +32,19 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
     setProfile(json.profile)
     setStudents(json.students ?? [])
     setLoading(false)
+  }
+
+  // 학교알리미에서 숫자(학생수·교원·신입생·동아리)만 다시 받는다. 편제·시험·메모·성취도는 그대로 둔다.
+  async function refresh() {
+    setRefreshing(true); setRefreshMsg('')
+    const res = await apiFetch('/api/school-profiles/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ school_name: school }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setRefreshing(false)
+    setRefreshMsg(res.ok ? '새로 받았어요.' : (json.error ?? '받지 못했어요.'))
+    if (res.ok) load()
   }
 
   if (loading) return <Shell school={school}><p style={{ color: '#0F6E56' }}>불러오는 중…</p></Shell>
@@ -73,7 +88,15 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
               ? '열린 화면에서 「학업성취사항」 → 「교과별 학업성취 사항」 → 보이는 숫자 입력'
               : `「${profile.official_name || profile.school_name}」 검색 → 공시정보 → 학업성취사항`}
           </span>
+          {s.schoolinfo && (
+            <button onClick={refresh} disabled={refreshing}
+              className="ml-auto inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-xl"
+              style={{ background: '#fff', color: '#0F6E56', border: '1px solid #9FE1CB' }}>
+              <i className="ti ti-refresh" /> {refreshing ? '받는 중…' : '학교알리미에서 숫자 새로 받기'}
+            </button>
+          )}
         </div>
+        {refreshMsg && <p className="text-xs mt-2" style={{ color: '#5A8E7E' }}>{refreshMsg}</p>}
 
         {students.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -168,6 +191,17 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* 학교 추가로 막 만든 한 장 — 사람이 읽어야 하는 칸이 비어 있다고 알려 준다 */}
+      {!profile.math_curriculum?.length && (
+        <Card title="아직 정리 전이에요">
+          <p className="text-sm leading-relaxed" style={{ color: '#0F6E56' }}>
+            수학 편제와 정기시험 날짜는 학교마다 모양이 다른 공시 첨부라 사람이 읽어 정리해요.
+            Claude에게 「{profile.school_name} 편제 정리해줘」라고 하면 채워져요.
+            성취도는 위 버튼으로 학교알리미 표를 연 뒤, 표를 복사해 Claude에게 붙여넣으면 돼요.
+          </p>
         </Card>
       )}
 
