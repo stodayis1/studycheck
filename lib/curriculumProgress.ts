@@ -22,7 +22,7 @@ export interface CurriculumProgressGroup {
   round: number // 그 학기 안에서 가장 높이 나간 회차
 }
 
-const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
+const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '중3모의고사', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
 
 export function computeCurriculumProgressGroups(
   concepts: ConceptLite[],
