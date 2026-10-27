@@ -9,6 +9,7 @@
   "school_type": "일반고",
   "coed": "남녀공학 · 주간",
   "stats": {
+    "schoolinfo": {"shl": "2fa9b209-d3b9-469f-bcf1-10cf27bb4e17", "adrcd": "4128110600", "level": "고"},
     "total": 703,
     "classes": 33,
     "perClass": 21.3,

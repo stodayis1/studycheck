@@ -27,6 +27,32 @@ description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 
 | 화면 | `app/teacher/schools/page.tsx`(목록), `app/teacher/schools/[name]/page.tsx`(한 장) |
 | 메뉴·매뉴얼 | `components/teacher/Sidebar.tsx`(「학생」 묶음 `ITEM.schools`), `app/teacher/manual/page.tsx` |
 
+## 앱에서 바로 추가 (2026-10-27~) — 먼저 이걸 쓴다
+선생님이 `/teacher/schools` 의 **「학교 추가」** 에서 학교급 → 시도 → 시군구 → 학교를 누르면 몇 초 만에 한 장이 생긴다.
+학교 화면의 **「학교알리미에서 숫자 새로 받기」** 는 숫자만 다시 받는다. 미리 정리해 둘 필요가 없다.
+| 무엇 | 경로 |
+|---|---|
+| 학교알리미 호출·조립 | `lib/schoolinfo.ts` — `listSidos/listSigungus/listSchools`, `fetchSchool`, `mergeProfile` |
+| 학교 찾기 API | `app/api/school-profiles/lookup/route.ts` (GET `step=sido·sigungu·school`, 직원) |
+| 만들기·새로 받기 API | `app/api/school-profiles/import/route.ts` (POST `{shl, level, sigungu}` 또는 `{school_name}`, 직원) |
+- 인증키: Vercel 환경변수 **`SCHOOLINFO_API_KEY`**. 없으면 「인증키가 서버에 아직 없어요」가 뜬다.
+  공개 견본 키 `sample` 도 실제 값을 주지만 **한 번에 20곳까지만** 준다 → 운영에 쓰지 않는다(시험용으로만).
+- 다시 받을 때의 열쇠는 `stats.schoolinfo = {shl, adrcd(행정동 10자리), level}`. OpenAPI 지역 코드는 adrcd 앞 2자리/5자리.
+- **★ `mergeProfile` 은 사람이 정리한 것을 덮지 않는다**: `math_curriculum`, `exam_calendar`, `notes`, `stats.achievement`,
+  손으로 적은 한 줄(`highlights` 중 자동 이름이 아닌 것). 자동 이름: 교내 Wee클래스 · 창의적체험활동 동아리 · 학생 자율동아리 · 「YYYY 신입생」.
+- 올해 공시가 비어 있으면 작년 것을 쓴다(`source_year` 에 실제로 쓴 해).
+- 편제가 빈 한 장에는 「아직 정리 전이에요」 카드가 뜬다 → 아래 순서로 사람이(Claude가) 채운다.
+- OpenAPI 칸 뜻 (고양일고 손 정리값과 숫자까지 맞대 확인함):
+  | apiType | 칸 → 자료집 |
+  |---|---|
+  | 0 기본정보 | `SCHUL_NM` 공식이름 · `SHL_IDF_CD` · `SCHUL_CODE`(다른 항목과 잇는 열쇠) · `ADRCD_CD`/`ADRCD_NM` · `FOND_SC_CODE` · `HS_KND_SC_NM` · `COEDU_SC_CODE` · `DGHT_SC_CODE` |
+  | 09 학생수 | `COL_S1~6` 학년 학생 · `COL_C1~6` 학급 · `COL_1~6` 학급당 · `7` 은 특수학급 · `COL_S_SUM` 전교생(특수 포함) · `COL_C_SUM` · `COL_SUM` · `TEACH_CAL` 교원 1인당 · `JU_ORG_NM` 교육지원청 |
+  | 22 교원 | `COL_S` 교원 총계 |
+  | 51 입학생 | `ALL_SUM` · `MAN_SUM` · `WOMAN_SUM` |
+  | 56 동아리 | `CREAT_EXPER_ACT_CCCLU_FGR` 창체동아리 수 · `CREAT_EXPER_ACT_STDNT_FGR` 참여 · `STDNT_SLCTL_CCCLU_FGR`/`STDNT_SLCTL_FGR` 자율동아리 |
+  | 61 상담 | `WEE_CINSTL_YN` |
+- 이 컨테이너에서 Node 로 시험할 때는 프록시를 켠다: `NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt SCHOOLINFO_API_KEY=sample node --import ./scripts/ts-resolve.mjs <시험.mts>`
+
 ## 데이터 출처와 무엇을 뽑는지
 1. **학교알리미 OpenAPI** — 숫자 지표. 손으로 옮기지 않는다(15곳 중 한 곳쯤은 틀리고, 틀려도 아무도 모른다).
    - 학년별·학급별 학생수 → `stats.total / classes / perClass / byGrade[] / special`
@@ -173,3 +199,4 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 - 2026-10-27 성취도 — `stats.achievement` 형식, 학교알리미 바로가기 `sources[].url`(HG_CD), 「학교알리미에서 성취도 보기」 버튼, 코드 짐작 금지
 - 2026-10-27 학교알리미 주소 15곳 채움 — SHL_IDF_CD 찾는 json 주소, title 확인, cp949, DB 는 jsonb 부분 수정. 성취도는 OpenAPI·공개용 데이터에 없고 화면은 캡차 → 원장님 캡처로만 채운다
 - 2026-10-27 전국 학교 찾기 도구 `scripts/find_schools.py`(지역·이름, --check). 성취도는 「표 붙여넣기 → 캡처 → 브라우저 같이 쓰기(캡차는 원장님) → 정보공개청구」 순. 다른 학원용 사본을 따로 만들어 드림
+- 2026-10-27 앱에서 바로 추가 — 「학교 추가」·「숫자 새로 받기」, lib/schoolinfo.ts, SCHOOLINFO_API_KEY(견본 키는 20곳 제한), stats.schoolinfo 열쇠, 사람이 정리한 칸은 덮지 않음, OpenAPI 칸 뜻표
