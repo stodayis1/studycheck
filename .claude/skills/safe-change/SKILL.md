@@ -1,0 +1,184 @@
+---
+name: safe-change
+description: StudyCheck 앱 코드를 바꾸는 작업을 끝내기 전에 반드시 거치는 안전 점검표. 새 화면(page)·사이드바 메뉴·API route·Supabase 테이블/RLS 정책/마이그레이션을 만들거나, 버튼 이름·화면 규칙을 바꿀 때 쓴다. Use before finishing ANY change to app code — new screen, menu, API route, Supabase table/RLS/migration, or renamed buttons/rules. 트리거 예: "화면 추가", "페이지 만들어줘", "메뉴 만들어줘", "기능 추가", "API 만들어", "라우트 추가", "테이블 추가", "칸 추가", "정책 바꿔", "권한", "고쳐줘", "버튼 이름 바꿔".
+---
+
+# 새 화면·메뉴·API·DB 변경 시 안전 점검표
+
+운영 중인 실서비스(학생 ~220명)다. **데이터가 사라지는 변경은 절대 금지.**
+아래는 지금까지 실제로 구멍이 났던 자리들이다. 해당하는 묶음만 골라 하나씩 확인하고 끝낸다.
+근거 문서: `AGENTS.md`, `docs/보안.md`, `docs/배포와백업.md`, `docs/OPS연동.md`.
+
+## 1. 화면(page)
+
+- [ ] **선생님 화면은 `app/teacher/` 아래에 둔다.** `app/teacher/layout.tsx` → `components/teacher/AccessGate.tsx`가
+      선생님이 아니면(익명 세션인 학생·학부모 포함) 화면 대신 「선생님 전용 화면이에요」 안내만 보여 준다.
+      `middleware.ts`/`proxy.ts`는 **없다** — 서버 쪽 경로 차단은 없고 이 클라이언트 관문이 전부다.
+      `app/teacher` 밖에 직원용 화면을 만들면 이 관문을 못 받는다.
+- [ ] 이 관문은 **화면을 가릴 뿐 데이터를 막지 않는다.** 데이터는 RLS(브라우저 직접 조회) 또는
+      API의 `denyIfNotStaff`(서버)가 막아야 한다. 둘 중 하나는 반드시 있어야 한다.
+- [ ] **원장 전용 화면**은 화면 안에서 한 번 더 막는다.
+      ```tsx
+      if (!isAdmin()) return <Shell><div className="p-10 text-center text-gray-500">관리자만 접근할 수 있습니다.</div></Shell>
+      ```
+      (예: `app/teacher/worksheets/books/page.tsx`)
+- [ ] **「다른 강사에게만 숨기기」는 `isAdmin()`이 아니라 `currentUser?.role === 'admin'`으로 본다.**
+      `isAdmin()`은 「관리자모드」 토글(`hooks/useAuth.ts`의 adminMode)까지 봐서, 원장님이 강사모드로
+      살피는 동안 원장님께도 사라진다(아래 「자주 하는 실수」 참고).
+- [ ] 저장이 upsert라면 **빈 칸으로 열어서 덮어쓰지 않는지** 확인한다. 기존 기록이 있으면 그걸 열고,
+      저장 직전에 DB를 한 번 더 봐서 「새로 쓰는 중인데 이미 기록이 있으면」 멈춘다.
+
+## 2. Next.js 16 함정
+
+- [ ] Next.js 16이다. 막히면 `node_modules/next/dist/docs/`를 먼저 읽는다(설치돼 있을 때).
+- [ ] `params`는 **Promise**다.
+      ```ts
+      // 서버(route handler, server page)
+      export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
+        const { code } = await params
+      // 클라이언트 page
+      const { code } = use(params)   // import { use } from 'react'
+      ```
+- [ ] `useSearchParams()`는 **Suspense 경계**가 필요하다. 간단한 화면이면 state로 처리하는 편이 낫다.
+      꼭 쓰면 `<Suspense>`로 감싼다(예: `app/teacher/gradings/answers/page.tsx`).
+- [ ] production 빌드는 `console.*`를 지운다(`next.config.ts` `removeConsole`, `error`만 남김).
+      운영에서 추적할 로그는 `console.error`로 남긴다.
+
+## 3. 사이드바 메뉴 · 사용 매뉴얼
+
+- [ ] 메뉴는 `components/teacher/Sidebar.tsx`의 `ITEM`에 `{ href, label, icon }`을 추가하고
+      `buildNavGroups(admin, showBulk)` 안의 알맞은 묶음(수업 / 학생 / 과제 · 평가 / 보고 / 원장 전용 /
+      가끔 쓰는 것)에 넣는다. 원장 전용 화면은 **`if (admin)` 안의 '원장 전용' 묶음**에만 넣는다.
+- [ ] 아이콘은 Tabler 외곽선 아이콘 `ti-*`만 쓴다.
+- [ ] 이름이 기존 메뉴와 헷갈리지 않는지 본다(「학습지관리」/「학습지」 → 「학습지 배부」/「학습지 출제」로 바꾼 전례).
+      메뉴 이름과 화면 제목을 맞춘다(「시험배정」인데 화면 제목은 「시험대비 관리」였던 전례).
+- [ ] **`app/teacher/manual/page.tsx`의 `GROUPS`도 같이 고친다.** 묶음은 사이드바와 같게 유지하고,
+      항목은 `{ href, label, icon, summary, steps, notes?, adminOnly? }`. 메뉴 추가·버튼 이름 변경·규칙 변경 모두
+      해당한다 — 선생님들이 이걸 보고 일한다. (한 번은 매뉴얼 고치기가 커밋에서 빠져 따로 채웠다: 6e83a86)
+
+## 4. API route (`app/api/*`)
+
+서버 API는 `SUPABASE_SERVICE_ROLE_KEY`(`sb_secret_...`)로 **RLS를 통째로 우회한다.**
+인증 검사를 빼먹으면 그 순간 인터넷 전체에 열린다.
+
+- [ ] 핸들러 **첫 줄**에 가드:
+      ```ts
+      import { denyIfNotStaff } from '@/lib/apiAuth'
+      export async function POST(req: Request) {
+        const deny = await denyIfNotStaff(req)            // 원장 전용이면 denyIfNotStaff(req, { adminOnly: true })
+        if (deny) return deny
+      ```
+      「누가 했는지」가 필요하면 `staffOrDeny(req)` → `who.deny`, `who.id/name/role/supervisorGrades`
+      (신원을 두 번 묻지 않는다). 둘 다 `is_locked`(퇴사) 계정도 막는다.
+- [ ] 화면에서 원장 전용이면 **API도 `adminOnly: true`**. 강사가 주소로 직접 불러도 막혀야 한다.
+- [ ] 브라우저에서 부를 때는 `fetch` 대신 **`apiFetch`**(`lib/apiFetch.ts`). 토큰을 붙여 준다.
+      빼먹으면 화면에서 401이 난다(2026-09-22에 호출부 11곳을 바꿨다).
+- [ ] 학생·학부모가 부르는 API는 `denyIfNotStaff`를 못 쓴다. 토큰으로 본인을 확인하고
+      **body의 `studentId`/`userId`를 믿지 말고** 토큰 주인으로 덮어쓴다
+      (`app/api/push/subscribe`, `app/api/proof-submit` 방식: `auth.getUser(token)` → `students.session_uid`/`parent_session_uid`).
+- [ ] cron은 `CRON_SECRET` Bearer 검사(`lib/cronBriefing.ts` `runBriefingCron` 참고). 쿼리스트링 붙은 cron 경로는 피한다
+      (2026-10-13 발송 누락 때 의심 원인이라 쿼리 없는 경로로 나눴다).
+- [ ] 일부러 열어둔 것은 `api/grade/[code]`, `api/grade/[code]/photo`(QR 자가채점), `api/push/unsubscribe`뿐이다.
+      **새로 여는 것은 원장님 확인 없이 하지 않는다.**
+- [ ] 다 만든 뒤 가드 빠진 라우트를 훑는다(CI 검사가 아직 없다 — `docs/보안.md` 12번):
+      ```bash
+      for f in $(find app/api -name route.ts); do grep -qE 'denyIfNotStaff|staffOrDeny' $f || echo $f; done
+      ```
+      나온 목록에서 cron·create/delete-account·proof-submit·health·push·grade 말고 새 것이 있으면 이유를 확인한다.
+
+## 5. DB · RLS · 마이그레이션
+
+- [ ] **학생·학부모도 `authenticated`다(익명 로그인).** `to authenticated using (true)`는 그들에게도 열린다.
+- [ ] 직원 전용 정책은 **괄호로 감싼** 모양으로만:
+      ```sql
+      alter table public.새표 enable row level security;
+      create policy 새표_staff_read on public.새표 for select to authenticated
+        using ((select public.is_staff()));
+      create policy 새표_admin_write on public.새표 for all to authenticated
+        using ((select public.is_admin())) with check ((select public.is_admin()));
+      ```
+      맨몸 `is_staff()`는 행마다 호출돼 앱 전체가 느려진다(2026-10-04 정책 60개 → 470ms가 4ms로).
+      만든 뒤 아래가 **0**인지 확인:
+      ```sql
+      select count(*) from pg_policies where schemaname='public'
+        and (coalesce(qual,'')||' '||coalesce(with_check,'')) ~ '(?<!SELECT )(?<![.\w])is_(staff|admin)\(\)';
+      ```
+- [ ] 학생 본인 것 정책은 **학생 칸과 학부모 칸 둘 다** 본다(2026-09-22 학부모 세션 분리 이후):
+      ```sql
+      using ((select public.is_staff()) or student_id in (select id from public.students
+        where session_uid = (select auth.uid()) or parent_session_uid = (select auth.uid())))
+      ```
+      `session_uid`만 쓰면 학부모 화면이 조용히 빈다.
+- [ ] 서버만 쓰는 표는 **정책을 아예 안 만든다**(= 앱에서 접근 불가, service_role만). 예: `push_subscriptions`, `exam_papers`.
+- [ ] **조이기 전에 누가 읽는지 전수조사**: `grep -rn "from('테이블명')" app components lib`.
+      브라우저가 직접 읽고 있으면 조이는 순간 그 화면이 조용히 빈다(`ssenb_problem_map`은 학생 대시보드가 직접 읽는다).
+- [ ] **지우는 변경 금지.** `drop table`/`drop column`/조건 없는 `delete`/`truncate` 쓰지 않는다. 칸 추가·정책 확대처럼
+      **추가만** 하는 방향으로, 동작이 안 바뀌는 단계부터 순서대로 배포한다(학부모세션분리 1→앱 배포→2 순서 참고).
+- [ ] SQL은 `docs/sql/<한글이름>.sql` + **`docs/sql/<한글이름>_되돌리기.sql`** 짝으로 남긴다. 파일 끝에 확인 쿼리
+      (`select tablename, policyname, cmd from pg_policies where tablename='…'`)를 둔다.
+- [ ] **Supabase는 한 번에 1000행만 준다.** 전체가 필요하면:
+      ```ts
+      import { fetchAllRows } from '@/lib/utils'
+      const rows = await fetchAllRows(() => supabase.from('exams').select('*').order('exam_date', { ascending: false }).order('id'))
+      ```
+      (빌더를 **함수로** 넘긴다 — 내부에서 `.range()`를 붙여 돈다. 페이지가 밀리지 않게 `.order('id')`처럼
+      유일한 정렬을 끝에 붙인다 — `app/teacher/exams/page.tsx` 방식.) 지금 1000행 아래인 표도 곧 넘는다.
+- [ ] `tsconfig`의 `strictNullChecks`가 꺼져 있어 `{ok:true}|{ok:false}` 유니온이 좁혀지지 않는다.
+      헬퍼는 `NextResponse | null` 같은 형태로 만든다(`lib/apiAuth.ts`).
+
+## 6. 학교 이름 · OPS 연동
+
+- [ ] 학교 이름을 **저장하는 모든 자리**(신규 등록·수정·엑셀 업로드·시험일정·스크립트)는
+      `normalizeSchool()`(`lib/school.ts`)을 거친다. 「신원중학교」로 저장되면 「신원중」 시험일정에 영원히 안 걸린다 — 에러도 없다.
+- [ ] 업로드 스크립트는 이름이 「…학교」로 끝나면 **멈추게** 한다(`scripts/upload-school-profile.mjs` 방식).
+- [ ] `lib/school.ts`를 고치면 OPS(`sumath-admin`)의 `src/lib/school.ts`도 같이 고친다. 한쪽만 고치지 않는다.
+- [ ] 학생 정보(학교·학년·휴원)는 양쪽에서 고칠 수 있다. 한쪽만 바꾸면 조용히 어긋난다(`docs/OPS연동.md`).
+      `is_active=false`는 퇴원일 수도 휴원일 수도 있다 — **`on_leave`를 같이 본다.**
+
+## 7. 타입 에러 확인 (빌드는 에러가 있어도 통과한다)
+
+`next.config.ts`에 `typescript.ignoreBuildErrors: true`, `eslint.ignoreDuringBuilds: true`. 기존 에러가 여러 개 있다.
+**내가 만든 에러만** 골라 본다.
+
+```bash
+npm install                     # node_modules 가 없으면
+npx tsc --noEmit 2>&1 | grep -F -f <(git diff --name-only HEAD; git ls-files --others --exclude-standard)
+```
+걸린 줄이 원래 있던 것인지 애매하면 바뀌기 전 결과와 견준다(작업물을 잃지 않게 stash 대신 사본으로):
+```bash
+git worktree add /tmp/sc-base HEAD && (cd /tmp/sc-base && npm ci && npx tsc --noEmit > /tmp/before.txt 2>&1)
+npx tsc --noEmit > /tmp/after.txt 2>&1; diff <(sed 's/([0-9,]*)//' /tmp/before.txt | sort) <(sed 's/([0-9,]*)//' /tmp/after.txt | sort)
+git worktree remove /tmp/sc-base
+```
+
+## 8. 배포 전후 확인
+
+- [ ] `main`에 push하면 Vercel이 자동 배포한다. **DB 변경이 앱보다 먼저인지 나중인지** 순서를 정해 두고 지킨다.
+- [ ] 환경변수만 바꿨으면 push가 없으니 Vercel **Redeploy**. 새 변수는 Production and Preview 둘 다 체크.
+- [ ] `vercel.json`의 `"regions": ["icn1"]`은 건드리지 않는다(DB가 서울).
+- [ ] 배포 뒤 바뀐 화면을 **역할별로** 눈으로 연다: 원장 / 강사 / 학생 / 학부모. 최소한 학생 로그인 · 선생님 학생관리 ·
+      바꾼 화면. 막아야 할 것이 실제로 막히는지도 본다(81cb573은 익명 세션으로 막히는 것과,
+      일부러 망가뜨린 사본에서 열리는 것을 둘 다 확인했다).
+- [ ] 화면이 비면 → Vercel **Instant Rollback**. 특정 화면만 데이터가 사라지면 → 최근 RLS 변경 의심, `pg_policies` 확인.
+
+## 자주 하는 실수 (실제 있었던 일)
+
+- **학생이 주소창으로 선생님 화면에 들어왔다** (2026-10-27, 81cb573). `useAuth`가 `users`에 없는 익명 세션을
+  `role: 'teacher'`로 메워서 `/teacher/dashboard`와 공지 본문이 그대로 보였다. → `useAuth`·`AccessGate`에서 막음.
+- **인증 없는 API** (2026-09-22). `push/send`(전체 학부모에게 임의 푸시), `generate-feedback`·`parse-records`
+  (학원 AI 키가 외부 프록시로), `sync-absence-to-ops`(OPS 비밀키 대리 첨부), `push/subscribe`(남의 studentId로 구독 →
+  남의 알림 수신). `sync-student-to-ops`는 그 전(09-16)까지 누구나 OPS 학생 정보를 바꿀 수 있었다.
+- **맨몸 `is_staff()` 정책 60개로 앱 전체가 느렸다** (2026-10-04). `(select public.is_staff())`로 감싸 해결.
+- **학부모가 학생에게 밀려 화면이 비었다** (2026-09-22). 한 칸(`session_uid`)에 둘 다 덮어쓰던 것 → `parent_session_uid` 분리,
+  정책 12개를 넓힘. 하나라도 빠뜨리면 그 화면만 조용히 빈다.
+- **1000행에 잘려 지난 점수가 사라졌다** (2026-10-21, 55ba4c3). `exams` 1,355행을 `.select('*')` 한 번으로 읽어
+  07-23 이전 355행이 빠졌다. 원장님은 「기능을 없앴냐」고 물으셨다 → `fetchAllRows`.
+- **원장님께도 메뉴가 사라졌다** (2026-10-21, c24f180). 「다른 강사들한테 안 보이게」를 `isAdmin()`으로 감쌌더니
+  강사모드에서 원장님께도 숨겨졌다 → `currentUser?.role === 'admin'`.
+- **빈 칸으로 열려 어제 기록을 덮어썼다** (2026-10-22, de6102a). 수업일지 upsert 창이 오늘 것만 찾아서 빈 칸으로 열렸다.
+- **학교 이름이 갈라져 시험대비에서 빠졌다** (2026-10-08 기준 12명). 「신원초등학교」 7명 등 → `normalizeSchool()`.
+- **매뉴얼 고치기가 커밋에서 빠졌다** (2026-10-21, 6e83a86). 메뉴/버튼을 바꾼 커밋에 매뉴얼이 같이 있는지 본다.
+
+## 규칙 추가 기록
+> 작업하다 새 규칙이 생기면 여기 날짜와 함께 한 줄씩 추가하고, 위 본문의 해당 자리에도 반영한다.
+- 2026-10-27 스킬 처음 만듦 (지금까지의 커밋·문서 기준)

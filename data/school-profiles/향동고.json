@@ -135,7 +135,8 @@
   "sources": [
     {
       "name": "학교알리미 공시",
-      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"
+      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)",
+      "url": "https://www.schoolinfo.go.kr/ei/ss/Pneiss_b01_s0.do?SHL_IDF_CD=30f593ce-38b3-49fb-b5ea-06567d97c257"
     },
     {
       "name": "학교알리미 OpenAPI",
