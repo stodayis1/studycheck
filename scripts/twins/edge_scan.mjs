@@ -12,7 +12,10 @@ const OUT=process.argv[3]||'scan'
 const li=process.argv.indexOf('--limit'); const LIMIT=li>0?Number(process.argv[li+1]):0
 const bi=process.argv.indexOf('--book');  const BOOK=bi>0?process.argv[bi+1]:null
 fs.mkdirSync(OUT,{recursive:true})
-let q=db.from('problems').select('id,book,local_no,type_code,image_path').eq('grade',GRADE).not('image_path','is',null)
+const ANS = process.argv.includes('--answers')   // 정답 그림을 받는다
+const COL = ANS ? 'answer_image_path' : 'image_path'
+let q=db.from('problems').select(`id,book,local_no,type_code,answer_kind,answer_text,${COL}`).eq('grade',GRADE).not(COL,'is',null)
+if (ANS && !process.argv.includes('--all')) q = q.is('answer_text', null)
 if(BOOK) q=q.eq('book',BOOK)
 const rows=[]
 for(let from=0;;from+=1000){
@@ -27,7 +30,7 @@ fs.writeFileSync(path.join(OUT,'list.json'), JSON.stringify(list))
 let n=0
 for(let i=0;i<list.length;i+=100){
   const part=list.slice(i,i+100)
-  const {data:urls}=await db.storage.from('problem-images').createSignedUrls(part.map(r=>r.image_path),3600)
+  const {data:urls}=await db.storage.from('problem-images').createSignedUrls(part.map(r=>r[COL]),3600)
   for(let j=0;j<part.length;j++){
     const u=urls?.[j]; if(!u?.signedUrl) continue
     const res=await fetch(u.signedUrl); if(!res.ok) continue
