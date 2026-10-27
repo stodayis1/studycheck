@@ -36,6 +36,7 @@ description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 
 | 학교 찾기 API | `app/api/school-profiles/lookup/route.ts` (GET `step=sido·sigungu·school`, 직원) |
 | 만들기·새로 받기 API | `app/api/school-profiles/import/route.ts` (POST `{shl, level, sigungu}` 또는 `{school_name}`, 직원) |
 - 인증키: Vercel 환경변수 **`SCHOOLINFO_API_KEY`**. 없으면 「인증키가 서버에 아직 없어요」가 뜬다.
+  **2026-10-27 원장님이 넣음 — 운영에서 신원고로 동작 확인**(전교생 737 · 32학급 · 교원 73 · 신입생 244, 편제 3개 학년과 손으로 적은 한 줄은 그대로).
   공개 견본 키 `sample` 도 실제 값을 주지만 **한 번에 20곳까지만** 준다 → 운영에 쓰지 않는다(시험용으로만).
 - 다시 받을 때의 열쇠는 `stats.schoolinfo = {shl, adrcd(행정동 10자리), level}`. OpenAPI 지역 코드는 adrcd 앞 2자리/5자리.
 - **★ `mergeProfile` 은 사람이 정리한 것을 덮지 않는다**: `math_curriculum`, `exam_calendar`, `notes`, `stats.achievement`,
@@ -200,3 +201,4 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 - 2026-10-27 학교알리미 주소 15곳 채움 — SHL_IDF_CD 찾는 json 주소, title 확인, cp949, DB 는 jsonb 부분 수정. 성취도는 OpenAPI·공개용 데이터에 없고 화면은 캡차 → 원장님 캡처로만 채운다
 - 2026-10-27 전국 학교 찾기 도구 `scripts/find_schools.py`(지역·이름, --check). 성취도는 「표 붙여넣기 → 캡처 → 브라우저 같이 쓰기(캡차는 원장님) → 정보공개청구」 순. 다른 학원용 사본을 따로 만들어 드림
 - 2026-10-27 앱에서 바로 추가 — 「학교 추가」·「숫자 새로 받기」, lib/schoolinfo.ts, SCHOOLINFO_API_KEY(견본 키는 20곳 제한), stats.schoolinfo 열쇠, 사람이 정리한 칸은 덮지 않음, OpenAPI 칸 뜻표
+- 2026-10-27 운영 인증키로 「숫자 새로 받기」 동작 확인(신원고). 다른 학원용 사본에 앱 「학교 추가」 본보기 코드·칸 뜻표 넣어 다시 보냄
