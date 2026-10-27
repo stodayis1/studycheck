@@ -38,12 +38,29 @@ description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 
    - 학사일정·평가계획 → `exam_calendar` (`rounds[{label, dates, note}]`, `mock[]`, `terms[]`, `note`)
 3. **교과별 학업성취사항(성취도)** — `stats.achievement` (`{year, rows[{grade, term, subject, avg, sd, students, dist}], note}`)
    - `year` 는 **성적 연도**(보통 4월 공시에 지난해 것이 올라온다). `dist` 는 A~E 비율(%) 5칸, 3단계 과목은 A~C 3칸.
-   - 수학 과목부터 채운다. 숫자는 OpenAPI·공시 값을 그대로 — 손으로 옮기지 않는다.
    - 표에 칸을 새로 만들지 않으려고 `stats`(jsonb) 안에 둔다. 비어 있으면 화면에 성취도 칸이 안 나온다.
+   - **★ 자동으로 가져올 수 없다 (2026-10-27 확인).**
+     - OpenAPI(`/openApi.do`, apiType 목록은 `/js/new/dev/openApi.js` 의 `case`)에 교과별 학업성취 항목이 **없다**.
+     - 공개용 데이터(`/ng/go/pnnggo_a01_l2.do`, 내려받는 파일)에도 **없다**.
+     - 학교 화면의 표 조각(`/ei/pp/Pneipp_b44_s0p.do`, GS_HANGMOK_CD=44 · JG_BURYU_CD=JG040 · JG_HANGMOK_CD=15)은
+       **자동입력 방지 숫자(캡차)** 를 먼저 묻는다. 사람이 보라고 막아 둔 것이므로 **뚫으려 하지 않는다.**
+   - 그래서 채우는 길은 하나다: **원장님이 학교알리미에서 표를 열어 화면 캡처를 보내 주면**, 그림을 읽어 수학 과목만 옮긴다.
+     옮긴 뒤 과목 수·학년·학기를 캡처와 한 번 더 맞대고, `dist` 합이 100 근처인지 본다. note 에 「학교알리미 화면에서 옮김」.
 4. **학교알리미 바로가기 주소** — `sources[]` 의 「학교알리미 공시」 줄에 `url` 을 붙인다:
-   `https://www.schoolinfo.go.kr/ei/ss/Pneiss_b01_s0.do?HG_CD=<학교알리미 학교코드>`
-   화면 맨 위 「학교알리미에서 성취도 보기」 버튼이 이 주소로 간다. `url` 이 없으면 학교알리미 첫 화면으로 가고
-   「학교 이름 검색 → 공시정보 → 학업성취사항」 안내가 같이 뜬다. **코드를 짐작해서 넣지 않는다** — 학교알리미에서 열어 본 주소만.
+   `https://www.schoolinfo.go.kr/ei/ss/Pneiss_b01_s0.do?SHL_IDF_CD=<학교 UUID>` (이게 정식 주소. 옛 `HG_CD=` 주소도 이리로 넘어간다)
+   - UUID 찾기 — 캡차 없이 지역 단위로 한 번에 나온다:
+     ```
+     # 시군구 코드 (경기 4100000000 → 고양시 덕양구 4128100000, 일산동구 4128500000, 일산서구 4128700000)
+     curl -sS https://www.schoolinfo.go.kr/ei/ss/pneiss_a03_s0_sigungu_json.do --data SIDO_CODE=4100000000
+     # 학교 목록 → [{SHL_IDF_CD, SHL_NM}]   HG_JONGRYU_GB: 02 초 · 03 중 · 04 고 · 05 특수/기타
+     curl -sS https://www.schoolinfo.go.kr/ei/ss/pneiss_a03_s0_school_json.do \
+       --data 'HG_JONGRYU_GB=04&SIDO_CODE=4100000000&GUGUN_CODE=4128100000'
+     ```
+     `SHL_NM`(「고양일고등학교」)을 JSON 의 `official_name` 과 맞춰 붙인다.
+   - **주소마다 열어 보고 `<title>` 이 「<학교명> 학교정보 | 학교알리미」인지 확인한 뒤** 넣는다. 짐작 금지.
+   - 학교알리미 화면은 **EUC-KR(cp949)** 이다. 읽을 때 `iconv -f cp949 -t utf-8`.
+   - 화면 맨 위 「학교알리미에서 성취도 보기」 버튼이 이 주소로 간다. 성취도 표까지 바로 여는 주소는 없다(캡차 때문) —
+     버튼 옆에 「학업성취사항 → 교과별 학업성취 사항 → 숫자 입력」 안내가 뜬다. `url` 이 없으면 첫 화면 + 검색 안내.
 5. `sources[]` — 공공누리 출처표시 의무가 있어 화면 아래에 그대로 나온다. 기존 파일처럼 두 줄을 적는다:
    `{"name":"학교알리미 공시","detail":"학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"}`,
    `{"name":"학교알리미 OpenAPI","detail":"학년별·학급별 학생수 / 직위별 교원 현황 / 동아리 / 상담 / 입학생 (2026)"}`
@@ -73,7 +90,17 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
    - 과목은 전원 공통이면 `terms`, 고르는 것이면 `picks`(`label: '택3'`, `options: ['확률과 통계(3)', …]`).
    - 교육과정이 학년마다 다를 수 있으니 `revision`('2022 개정' 등)은 학년마다 붙인다.
 5. **학사일정** — 정기시험 날짜가 공시에 있으면 `exam_calendar.rounds`. 없으면 `{}` 로 두고 notes에 적는다.
-6. **올리기** (저장소 루트, `.env.local` 의 `NEXT_PUBLIC_SUPABASE_URL`·`SUPABASE_SERVICE_ROLE_KEY` 필요)
+6. **올리기** — `.env.local` 이 없는 클라우드 세션이면 Supabase 연결(execute_sql)로 **그 칸만** 고친다.
+   통째로 덮지 말고 jsonb 를 고쳐 끼운다. 예: sources 의 「학교알리미 공시」 줄에 url 만 더하기
+   ```sql
+   update public.school_profiles sp set sources = (
+     select jsonb_agg(case when e->>'name' = '학교알리미 공시' then e || jsonb_build_object('url', v.url) else e end order by ord)
+     from jsonb_array_elements(sp.sources) with ordinality as t(e, ord))
+   from (values ('고양일고', 'https://…')) as v(school_name, url)
+   where sp.school_name = v.school_name returning sp.school_name;
+   ```
+   JSON 파일도 **같이** 고친다(파일이 원본이다 — 다음에 스크립트로 올리면 DB 를 파일 내용으로 덮는다).
+   스크립트로 올릴 때 (저장소 루트, `.env.local` 의 `NEXT_PUBLIC_SUPABASE_URL`·`SUPABASE_SERVICE_ROLE_KEY` 필요)
    ```
    node scripts/upload-school-profile.mjs data/school-profiles/능곡고.json   # 한 학교
    node scripts/upload-school-profile.mjs                                    # 폴더 전체
@@ -103,8 +130,9 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 - **경기 고양시 덕양구 고등학교 15곳 완료, 15곳 모두 수학 편제 채움**:
   고양고·고양동산고·고양외국어고·고양일고·능곡고·도래울고·무원고·백양고·서정고·성사고·신원고·행신고·향동고·화수고·화정고
 - 정기시험 날짜(`exam_calendar.rounds`)가 있는 곳은 고양일고 하나뿐.
-- 성취도(`stats.achievement`)·학교알리미 주소(`sources[].url`)는 **아직 15곳 모두 비어 있다** (화면은 2026-10-27 준비됨).
-  ※ 클라우드 세션은 schoolinfo.go.kr 이 네트워크 허용 목록에 없으면 접속이 안 된다 — 원장님 PC 세션에서 하거나 허용 목록에 추가.
+- 학교알리미 주소(`sources[].url`)는 **15곳 모두 채움** (2026-10-27, JSON·DB 둘 다, 열어서 학교 이름 확인).
+- 성취도(`stats.achievement`)는 **15곳 모두 비어 있다** — 자동으로 못 가져온다(위 3번). 원장님 캡처를 받으면 채운다.
+  ※ 클라우드 세션은 환경 설정의 허용 도메인에 `www.schoolinfo.go.kr` 이 있어야 접속된다(2026-10-27 추가함).
 - 중학교·초등학교, 덕양구 밖 지역은 아직 없다.
 - 커밋: e117b40(화면·표·스크립트, 고양일고) → a5d0dd0(15곳 숫자, 6곳 편제) → 81cb573(15곳 편제 완료).
 
@@ -131,3 +159,4 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 > 작업하다 새 규칙이 생기면 여기 날짜와 함께 한 줄씩 추가하고, 위 본문의 해당 자리에도 반영한다.
 - 2026-10-27 스킬 처음 만듦 (지금까지의 커밋·문서 기준)
 - 2026-10-27 성취도 — `stats.achievement` 형식, 학교알리미 바로가기 `sources[].url`(HG_CD), 「학교알리미에서 성취도 보기」 버튼, 코드 짐작 금지
+- 2026-10-27 학교알리미 주소 15곳 채움 — SHL_IDF_CD 찾는 json 주소, title 확인, cp949, DB 는 jsonb 부분 수정. 성취도는 OpenAPI·공개용 데이터에 없고 화면은 캡차 → 원장님 캡처로만 채운다

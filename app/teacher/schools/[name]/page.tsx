@@ -67,11 +67,12 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
             style={{ background: '#0F6E56', color: '#fff' }}>
             <i className="ti ti-chart-bar" /> 학교알리미에서 성취도 보기 <i className="ti ti-external-link" />
           </a>
-          {!info.direct && (
-            <span className="text-xs" style={{ color: '#5A8E7E' }}>
-              「{profile.official_name || profile.school_name}」 검색 → 공시정보 → 학업성취사항
-            </span>
-          )}
+          {/* 학교알리미는 성취도 표 앞에 자동입력 방지 숫자를 묻는다 — 표까지 바로 여는 주소는 없다 */}
+          <span className="text-xs" style={{ color: '#5A8E7E' }}>
+            {info.direct
+              ? '열린 화면에서 「학업성취사항」 → 「교과별 학업성취 사항」 → 보이는 숫자 입력'
+              : `「${profile.official_name || profile.school_name}」 검색 → 공시정보 → 학업성취사항`}
+          </span>
         </div>
 
         {students.length > 0 && (
