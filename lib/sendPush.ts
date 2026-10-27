@@ -27,6 +27,7 @@ export interface PushPayload {
 export interface PushTarget {
   broadcast?: boolean // 전체 구독자에게 (공지사항용)
   studentIds?: string[] // 특정 학생 관련 구독자(그 학생 본인 + 학부모)에게
+  userIds?: string[] // 직원(users.id) 단말에게 — 원장님께 보내는 업무 알림용
 }
 
 export async function sendPush(target: PushTarget, payload: PushPayload): Promise<{ sent: number; failed: number; skipped?: string }> {
@@ -38,10 +39,19 @@ export async function sendPush(target: PushTarget, payload: PushPayload): Promis
 
   let subsQuery = supabase.from('push_subscriptions').select('*')
   if (!target.broadcast) {
-    if (!target.studentIds || target.studentIds.length === 0) {
+    // 학생(+학부모) 단말과 직원 단말은 구독 행이 다른 칸으로 묶여 있다 — student_id / user_id.
+    // 둘 다 비면 보낼 데가 없는 것이고, 둘 다 주면 지금은 쓰지 않으므로 받지 않는다.
+    const hasStudents = (target.studentIds?.length ?? 0) > 0
+    const hasUsers = (target.userIds?.length ?? 0) > 0
+    if (!hasStudents && !hasUsers) {
       return { sent: 0, failed: 0, skipped: '보낼 대상이 없어요.' }
     }
-    subsQuery = subsQuery.in('student_id', target.studentIds)
+    if (hasStudents && hasUsers) {
+      return { sent: 0, failed: 0, skipped: '학생과 직원을 한 번에 보내진 않아요.' }
+    }
+    subsQuery = hasStudents
+      ? subsQuery.in('student_id', target.studentIds!)
+      : subsQuery.in('user_id', target.userIds!)
   }
 
   const { data: subs, error } = await subsQuery

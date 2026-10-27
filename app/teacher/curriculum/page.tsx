@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
+import { apiFetch } from '@/lib/apiFetch'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 
 // concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
@@ -154,6 +155,13 @@ export default function TeacherCurriculumPage() {
   const [progressGrade, setProgressGrade] = useState<string | null>(null) // null이면 학생 본인 학년을 기본값으로 사용 (선행 등으로 다른 학년 진도표도 볼 수 있게)
   const [progressSubGrade, setProgressSubGrade] = useState<string | null>(null) // 학생 선택 화면에서 초등/중등/고등 안의 특정 학년만 볼 때 사용 (null이면 대분류 전체 블렌디드)
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
+  // 「완료 vs 삭제요청」 안내 — 강사에게 한 번만 띄운다. 본 적이 있으면 이 기기에 적어 두고 다시 안 띄운다.
+  const [showDeleteGuide, setShowDeleteGuide] = useState(false)
+  const DELETE_GUIDE_KEY = 'tbDeleteGuideSeen.v1'
+  function dismissDeleteGuide() {
+    setShowDeleteGuide(false)
+    try { localStorage.setItem(DELETE_GUIDE_KEY, '1') } catch {}
+  }
   const [updatingProgress, setUpdatingProgress] = useState<string | null>(null)
 
   // 교재 카탈로그
@@ -182,6 +190,14 @@ export default function TeacherCurriculumPage() {
   const [tbSsenbStep, setTbSsenbStep] = useState<1 | 2 | 3 | 4 | null>(null) // 쎈B 오토스텝 파일럿: 1~4스텝
 
   useEffect(() => { fetchData() }, [])
+
+  // 안내는 강사에게만 한 번. 원장님은 삭제요청을 하는 쪽이 아니라 받는 쪽이라 안 띄운다.
+  useEffect(() => {
+    if (!currentUser || isAdmin()) return
+    let seen = '1'
+    try { seen = localStorage.getItem(DELETE_GUIDE_KEY) ?? '' } catch { seen = '1' }
+    if (!seen) setShowDeleteGuide(true)
+  }, [currentUser])
 
   async function fetchData() {
     setLoading(true)
@@ -480,22 +496,50 @@ export default function TeacherCurriculumPage() {
   }
 
   // 강사가 잘못 입력한 교재를 발견했을 때 - 직접 지우지 못하고 원장님께 삭제요청만 남김
+  //
+  // ★ 2026-10-27: 「다 끝낸 교재」에 삭제요청을 누르는 일이 많았다(36건 중 31건이 이미 완료 상태였다).
+  //   끝낸 교재는 지우는 게 아니라 「완료」로 눌러 두어야 진도 기록이 남는다. 그래서
+  //   ① 완료된 교재·진도가 찍힌 교재는 한 번 더 막아서 설명하고
+  //   ② 요청은 서버를 거쳐 원장님께 바로 알림이 가게 한다 (app/api/textbook-delete-request).
   async function handleRequestDeleteTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
-    if (!confirm('이 교재 삭제를 원장님께 요청할까요?')) return
-    const requestedBy = currentUser?.name ?? '강사'
-    const requestedAt = new Date().toISOString()
-    await supabase.from('student_textbooks')
-      .update({ delete_requested_by: requestedBy, delete_requested_at: requestedAt })
-      .eq('id', id)
-    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: requestedBy, delete_requested_at: requestedAt } : t))
+    const t = textbooks.find((x) => x.id === id)
+    const checks = t ? progressChecks.filter((p) => p.student_textbook_id === id).length : 0
+
+    if (t?.status === 'completed') {
+      alert('이 교재는 이미 「완료」로 되어 있어요.\n\n'
+        + '끝낸 교재는 지우는 게 아니라 완료로 두시면 됩니다 — 완료 교재는 아래 초록색 칸에 따로 접혀서 목록을 어지럽히지 않아요.\n'
+        + '지우면 지금까지 쌓인 진도 기록이 같이 사라집니다.\n\n'
+        + '정말 잘못 넣은 교재라면 원장님께 직접 말씀해주세요.')
+      return
+    }
+    if (checks > 0 && !confirm(
+      `이 교재에는 진도가 ${checks}회 찍혀 있어요.\n\n`
+      + '다 끝낸 교재라면 삭제요청이 아니라 「완료」를 눌러주세요 — 기록이 그대로 남습니다.\n\n'
+      + '그래도 삭제를 요청할까요?')) return
+    if (checks === 0 && !confirm('이 교재 삭제를 원장님께 요청할까요?')) return
+
+    const res = await apiFetch('/api/textbook-delete-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textbookId: id }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(json.error ?? '요청을 보내지 못했어요.'); return }
+    setTextbooks((prev) => prev.map((x) => x.id === id
+      ? { ...x, delete_requested_by: json.requestedBy, delete_requested_at: json.requestedAt } : x))
   }
 
   // 삭제요청 취소 (원장님이 확인해보니 삭제할 필요는 없었던 경우)
   async function handleCancelDeleteRequest(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!isAdmin()) return
-    await supabase.from('student_textbooks').update({ delete_requested_by: null, delete_requested_at: null }).eq('id', id)
+    const res = await apiFetch('/api/textbook-delete-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textbookId: id, cancel: true }),
+    })
+    if (!res.ok) { alert('취소하지 못했어요.'); return }
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
   }
 
@@ -592,6 +636,29 @@ export default function TeacherCurriculumPage() {
 
   return (
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
+      {showDeleteGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-5" style={{ background: '#fff' }}>
+            <h3 className="text-base font-bold mb-3" style={{ color: '#085041' }}>
+              <i className="ti ti-info-circle align-[-0.125em] mr-1" /> 끝낸 교재는 「완료」를 눌러주세요
+            </h3>
+            <div className="text-sm leading-relaxed space-y-2" style={{ color: '#374151' }}>
+              <p>다 나간 교재에 <b>삭제요청</b>을 누르시는 경우가 많았어요.
+                삭제하면 그동안 찍어 둔 <b>진도 기록이 같이 사라집니다.</b></p>
+              <p className="rounded-xl p-3" style={{ background: '#F0FBF7' }}>
+                <b>완료</b> — 다 나간 교재. 초록색 칸으로 접혀서 목록을 어지럽히지 않아요.<br />
+                <b>중단</b> — 쉬었다 다시 할 교재.<br />
+                <b>삭제요청</b> — <u>잘못 넣은 교재만</u>.
+              </p>
+            </div>
+            <button onClick={dismissDeleteGuide}
+              className="mt-4 w-full py-2.5 rounded-xl text-sm font-bold"
+              style={{ background: '#0F6E56', color: '#fff' }}>
+              알겠습니다
+            </button>
+          </div>
+        </div>
+      )}
       <Header
         title="과정관리"
         subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}

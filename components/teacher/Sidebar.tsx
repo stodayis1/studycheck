@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
@@ -86,6 +87,8 @@ export function TeacherSidebar() {
   const [bulkEnabled, setBulkEnabled] = useState(false)
   // 접어 둔 묶음('가끔 쓰는 것')을 펼쳐 놓았는지. 그 안의 화면에 들어가 있으면 저절로 펼친다.
   const [openRare, setOpenRare] = useState(false)
+  // 강사가 올린 교재 삭제요청 건수(원장님만). 푸시를 못 받는 기기에서도 눈에 띄게 하려고 메뉴에 달아 둔다.
+  const [deleteRequests, setDeleteRequests] = useState(0)
 
   useEffect(() => {
     async function fetchBulkSetting() {
@@ -94,6 +97,16 @@ export function TeacherSidebar() {
     }
     fetchBulkSetting()
   }, [])
+
+  useEffect(() => {
+    if (currentUser?.role !== 'admin') { setDeleteRequests(0); return }
+    let alive = true
+    apiFetch('/api/textbook-delete-request')
+      .then((r) => r.json())
+      .then((j) => { if (alive) setDeleteRequests(Number(j?.count ?? 0)) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [currentUser, pathname])
 
   const showBulk = isAdmin() || bulkEnabled
   const navGroups = buildNavGroups(isAdmin(), showBulk)
@@ -189,6 +202,12 @@ export function TeacherSidebar() {
                       <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
                         color: isActive ? '#085041' : '#6b7280' }} />
                       {item.label}
+                      {item.href === ITEM.curriculum.href && deleteRequests > 0 && (
+                        <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-lg"
+                          style={{ background: '#FEE2E2', color: '#991B1B' }}>
+                          삭제요청 {deleteRequests}
+                        </span>
+                      )}
                     </Link>
                   )
                 })}
