@@ -155,6 +155,10 @@ export default function TeacherCurriculumPage() {
   const [progressGrade, setProgressGrade] = useState<string | null>(null) // null이면 학생 본인 학년을 기본값으로 사용 (선행 등으로 다른 학년 진도표도 볼 수 있게)
   const [progressSubGrade, setProgressSubGrade] = useState<string | null>(null) // 학생 선택 화면에서 초등/중등/고등 안의 특정 학년만 볼 때 사용 (null이면 대분류 전체 블렌디드)
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
+  // 사이드바 「삭제요청 N」 뱃지로 들어오면 그 건들만 모아 보여 준다 (/teacher/curriculum?delete=1).
+  // ★ useSearchParams 는 Suspense 경계가 필요해서 화면 하나 때문에 쓰기에 번거롭다. 주소만 읽는다.
+  const [deleteOnly, setDeleteOnly] = useState(false)
+  const [bulkCancelling, setBulkCancelling] = useState(false)
   // 「완료 vs 삭제요청」 안내 — 강사에게 한 번만 띄운다. 본 적이 있으면 이 기기에 적어 두고 다시 안 띄운다.
   const [showDeleteGuide, setShowDeleteGuide] = useState(false)
   const DELETE_GUIDE_KEY = 'tbDeleteGuideSeen.v1'
@@ -190,6 +194,13 @@ export default function TeacherCurriculumPage() {
   const [tbSsenbStep, setTbSsenbStep] = useState<1 | 2 | 3 | 4 | null>(null) // 쎈B 오토스텝 파일럿: 1~4스텝
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('delete') === '1') {
+      setDeleteOnly(true)
+      setProgressTab('textbook')
+    }
+  }, [])
 
   // 안내는 강사에게만 한 번. 원장님은 삭제요청을 하는 쪽이 아니라 받는 쪽이라 안 띄운다.
   useEffect(() => {
@@ -541,6 +552,37 @@ export default function TeacherCurriculumPage() {
     })
     if (!res.ok) { alert('취소하지 못했어요.'); return }
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
+  }
+
+  // 삭제요청이 걸린 교재들 — 최근 요청순. 진도 회수는 이미 받아 둔 progressChecks 로 센다.
+  const deleteRequested = textbooks
+    .filter((t) => t.delete_requested_at && canEditTextbook(t.id))
+    .map((tb) => ({
+      tb,
+      student: students.find((s) => s.id === tb.student_id),
+      checks: progressChecks.filter((p) => p.student_textbook_id === tb.id).length,
+    }))
+    .sort((a, b) => (b.tb.delete_requested_at ?? '').localeCompare(a.tb.delete_requested_at ?? ''))
+
+  // 「완료된 교재인데 삭제요청」을 한 번에 걷어낸다. 지우는 게 아니라 요청 표시만 지운다.
+  async function cancelAllCompletedRequests() {
+    const target = deleteRequested.filter((r) => r.tb.status === 'completed')
+    if (target.length === 0) return
+    if (!confirm(`이미 「완료」된 교재 ${target.length}건의 삭제요청을 취소할까요?\n\n`
+      + '교재와 진도 기록은 그대로 두고, 빨간 요청 표시만 걷어냅니다.')) return
+    setBulkCancelling(true)
+    for (const r of target) {
+      const res = await apiFetch('/api/textbook-delete-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ textbookId: r.tb.id, cancel: true }),
+      })
+      if (!res.ok) { alert('일부를 취소하지 못했어요. 다시 눌러주세요.'); break }
+    }
+    const ids = new Set(target.map((r) => r.tb.id))
+    setTextbooks((prev) => prev.map((t) => ids.has(t.id)
+      ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
+    setBulkCancelling(false)
   }
 
   // 교재 카탈로그 추가 (관리자)
@@ -1071,8 +1113,84 @@ export default function TeacherCurriculumPage() {
           })()
         )}
 
+        {/* ── 삭제요청만 모아 보기 (사이드바 뱃지로 들어온다) ── */}
+        {progressTab === 'textbook' && deleteOnly && (
+          <div className="rounded-2xl border p-3" style={{ background: '#fff', borderColor: '#FCA5A5' }}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-sm font-bold" style={{ color: '#991B1B' }}>
+                <i className="ti ti-trash align-[-0.125em] mr-1" />삭제요청 {deleteRequested.length}건
+              </p>
+              <button onClick={() => { setDeleteOnly(false); history.replaceState(null, '', '/teacher/curriculum') }}
+                className="text-xs px-2.5 py-1.5 rounded-lg font-semibold"
+                style={{ background: '#f3f4f6', color: '#4b5563' }}>
+                전체 교재 보기
+              </button>
+            </div>
+
+            {/* 「완료된 교재인데 삭제요청」이 대부분이다 — 한 번에 걷어낼 수 있게 해 둔다 */}
+            {deleteRequested.filter((r) => r.tb.status === 'completed').length > 0 && (
+              <button onClick={cancelAllCompletedRequests} disabled={bulkCancelling}
+                className="w-full mb-2 py-2 rounded-xl text-xs font-bold"
+                style={{ background: '#F0FBF7', color: '#085041', border: '1px solid #9FE1CB' }}>
+                {bulkCancelling ? '처리 중…'
+                  : `이미 「완료」된 교재 ${deleteRequested.filter((r) => r.tb.status === 'completed').length}건 요청 한 번에 취소`}
+              </button>
+            )}
+
+            {deleteRequested.length === 0 ? (
+              <p className="text-xs py-6 text-center" style={{ color: '#6b7280' }}>남은 삭제요청이 없어요.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {deleteRequested.map(({ tb, student, checks }) => (
+                  <div key={tb.id} className="rounded-xl border px-3 py-2"
+                    style={{ background: tb.status === 'completed' ? '#F0FBF7' : '#fff', borderColor: '#e5e7eb' }}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold" style={{ color: '#111827' }}>{student?.name ?? '?'}</span>
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{student?.grade}</span>
+                      {tb.status === 'completed' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#9FE1CB', color: '#085041' }}>완료</span>
+                      )}
+                      {tb.status === 'paused' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#e5e7eb', color: '#6b7280' }}>중단</span>
+                      )}
+                      <span className="text-xs" style={{ color: '#374151' }}>{tb.textbook_name}</span>
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>
+                        {tb.grade}{tb.semester ? ` ${tb.semester}학기` : ''}
+                      </span>
+                      {checks > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                          진도 {checks}회
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>
+                        {tb.delete_requested_by} · {tb.delete_requested_at?.slice(0, 10)}
+                      </span>
+                      {isAdmin() && (
+                        <span className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => handleCancelDeleteRequest(tb.id)}
+                            className="text-[11px] px-2.5 py-1 rounded-lg font-semibold"
+                            style={{ background: '#F0FBF7', color: '#085041' }}>
+                            요청 취소
+                          </button>
+                          <button onClick={() => handleDeleteTB(tb.id)}
+                            className="text-[11px] px-2.5 py-1 rounded-lg font-semibold"
+                            style={{ background: '#FEE2E2', color: '#991B1B' }}>
+                            삭제
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── 교재배정 탭 ── */}
-        {progressTab === 'textbook' && (loading ? (
+        {progressTab === 'textbook' && !deleteOnly && (loading ? (
           <div className="text-center py-8">
             <span className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin inline-block" />
           </div>

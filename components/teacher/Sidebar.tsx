@@ -99,14 +99,16 @@ export function TeacherSidebar() {
   }, [])
 
   useEffect(() => {
-    if (currentUser?.role !== 'admin') { setDeleteRequests(0); return }
+    // 모드를 따른다 — 강사 모드로 보실 때는 강사 화면과 같아야 하고,
+    // 그때는 목록도 담당 학생것만 뜨기 때문에 숫자가 안 맞는다.
+    if (!isAdmin()) { setDeleteRequests(0); return }
     let alive = true
     apiFetch('/api/textbook-delete-request')
       .then((r) => r.json())
       .then((j) => { if (alive) setDeleteRequests(Number(j?.count ?? 0)) })
       .catch(() => {})
     return () => { alive = false }
-  }, [currentUser, pathname])
+  }, [currentUser, adminMode, pathname])
 
   const showBulk = isAdmin() || bulkEnabled
   const navGroups = buildNavGroups(isAdmin(), showBulk)
@@ -187,6 +189,29 @@ export function TeacherSidebar() {
               <div className="space-y-0.5" style={shown ? undefined : { display: 'none' }}>
                 {group.items.map((item) => {
                   const isActive = isActiveHref(item.href)
+                  // ★ 삭제요청 뱃지는 **그 건들만 모아 보는 화면**으로 따로 간다.
+                  //   과정관리로만 보내면 전체 학생 목록이 떠서 36건을 또 찾아다녀야 한다(원장님 2026-10-27).
+                  //   <Link> 안에 <Link> 를 넣을 수 없어 줄을 감싸고 두 개를 나란히 둔다.
+                  if (item.href === ITEM.curriculum.href && deleteRequests > 0) {
+                    return (
+                      <div key={item.href} className="flex items-center gap-1 rounded-xl"
+                        style={isActive ? { background: '#9FE1CB', borderLeft: '3px solid #085041' }
+                                        : { borderLeft: '3px solid transparent' }}>
+                        <Link href={item.href}
+                          className="flex items-center gap-2.5 pl-3 py-2 text-sm font-medium flex-1 min-w-0"
+                          style={{ color: isActive ? '#085041' : '#4b5563', fontWeight: isActive ? 600 : 500 }}>
+                          <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
+                            color: isActive ? '#085041' : '#6b7280' }} />
+                          {item.label}
+                        </Link>
+                        <Link href={`${item.href}?delete=1`} title="삭제요청만 모아 보기"
+                          className="text-[10px] font-bold px-1.5 py-0.5 mr-2 rounded-lg shrink-0"
+                          style={{ background: '#FEE2E2', color: '#991B1B' }}>
+                          삭제요청 {deleteRequests}
+                        </Link>
+                      </div>
+                    )
+                  }
                   return (
                     <Link key={item.href} href={item.href}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all"
@@ -202,12 +227,6 @@ export function TeacherSidebar() {
                       <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
                         color: isActive ? '#085041' : '#6b7280' }} />
                       {item.label}
-                      {item.href === ITEM.curriculum.href && deleteRequests > 0 && (
-                        <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-lg"
-                          style={{ background: '#FEE2E2', color: '#991B1B' }}>
-                          삭제요청 {deleteRequests}
-                        </span>
-                      )}
                     </Link>
                   )
                 })}
