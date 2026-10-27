@@ -8,6 +8,7 @@ SHL_IDF_CD 는 find_schools.py 가 주는 학교알리미 학교 열쇠(자료�
 학기마다 차수가 있다(4월 = 1학기, 9월 = 2학기). 맨 위(가장 최근) 차수를 받는다 — 화면이 처음 여는 것과 같다.
 """
 import argparse
+import subprocess
 import os
 import re
 import sys
@@ -66,6 +67,11 @@ def main():
         got.append(path)
         print(f'받음 {q}: {name} ({len(body) // 1024} KB)')
 
+    # 한글(.hwp/.hwpx)만 올리는 학교가 많다(2026-10-27: 12곳 중 6곳). 이 컴퓨터의 한글 프로그램으로 PDF 를 만들어 같은 길로 읽는다.
+    hwps = [p for p in got if p.lower().endswith(('.hwp', '.hwpx')) and '성적관리' not in os.path.basename(p)]
+    if hwps:
+        got += hwp_to_pdf(hwps)
+
     if not a.find:
         return
     try:
@@ -80,7 +86,8 @@ def main():
     table = re.compile(r'평가의\s*종류와\s*반영\s*비율')
     for path in got:
         if not path.lower().endswith('.pdf'):
-            print(f'  {os.path.basename(path)}: PDF 가 아님 — 한글 파일은 직접 열어 읽습니다')
+            if not os.path.exists(os.path.splitext(path)[0] + '.pdf'):
+                print(f'  {os.path.basename(path)}: PDF 가 아니고 바꾸지도 못함 — 한글로 열어 PDF 로 저장한 뒤 읽습니다')
             continue
         doc = pymupdf.open(path)
         texts = [pg.get_text() for pg in doc]
@@ -91,6 +98,45 @@ def main():
                 hits.append(f'{i + 1}→{j + 1}' if j is not None else f'{i + 1}→(표 못 찾음)')
         print(f'  {os.path.basename(path)}: {len(doc)}쪽 · {a.find}과 평가 머리말→반영 비율 표 쪽 {", ".join(hits) or "없음"}')
 
+
+# 한글 프로그램(HWPFrame.HwpObject)으로 PDF 만들기. 보안 확인 창이 뜨면 멈출 수 있어 파일당 넉넉히 기다리고 끊는다.
+# 경로는 명령줄로 넘기면 한글이 깨진다 → UTF-8 목록 파일로 넘긴다.
+PS = r"""
+$h = New-Object -ComObject HWPFrame.HwpObject
+try { $null = $h.RegisterModule('FilePathCheckDLL', 'FilePathCheckerModule') } catch {}
+$h.SetMessageBoxMode(0x00020021) | Out-Null
+foreach ($p in (Get-Content -LiteralPath $env:HWP_LIST -Encoding UTF8)) {
+  if (-not $p) { continue }
+  $fmt = if ($p -like '*.hwpx') { 'HWPX' } else { 'HWP' }
+  $ok = $h.Open($p, $fmt, 'forceopen:true')
+  $s = $h.SaveAs([IO.Path]::ChangeExtension($p, '.pdf'), 'PDF', '')
+}
+$h.Quit()
+"""
+
+
+def hwp_to_pdf(paths):
+    out = []
+    lst = os.path.join(os.path.dirname(paths[0]), '_hwp_list.txt')
+    with open(lst, 'w', encoding='utf-8') as fp:
+        fp.write('\n'.join(os.path.abspath(p) for p in paths))
+    try:
+        r = subprocess.run(['powershell', '-NoProfile', '-Command', PS], timeout=240 * len(paths),
+                           capture_output=True, env=dict(os.environ, HWP_LIST=lst))
+        if r.returncode:
+            print('  한글 변환 오류: ' + r.stderr.decode('cp949', 'replace').strip()[:200])
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f'  한글 → PDF 변환이 끝나지 않았습니다({type(e).__name__}). 한글을 직접 열어 PDF 로 저장하세요.')
+    finally:
+        os.remove(lst)
+    for p in paths:
+        pdf = os.path.splitext(p)[0] + '.pdf'
+        if os.path.exists(pdf):
+            out.append(pdf)
+            print(f'  PDF 로 바꿈: {os.path.basename(pdf)}')
+        else:
+            print(f'  PDF 로 못 바꿈: {os.path.basename(p)}')
+    return out
 
 if __name__ == '__main__':
     main()
