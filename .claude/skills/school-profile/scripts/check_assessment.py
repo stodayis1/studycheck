@@ -24,6 +24,7 @@ def num(x):
 
 def page_text(folder, page):
     import pymupdf
+    pymupdf.TOOLS.mupdf_display_errors(False)
     m = re.match(r'(.+?\.pdf)\s+(\d+)쪽', page or '')
     if not m:
         return None, f'page 꼴이 「<파일>.pdf <N>쪽」이 아님: {page!r}'

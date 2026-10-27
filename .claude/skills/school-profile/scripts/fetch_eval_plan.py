@@ -73,22 +73,23 @@ def main():
     except ImportError:
         print('pymupdf 가 없어 쪽 찾기는 건너뜁니다. PDF 를 열어 「' + a.find + '과 평가」를 찾으세요.')
         return
-    want = re.compile(r'평가의\s*종류와\s*반영\s*비율|반영\s*비율')
-    subj = re.compile(re.escape(a.find) + r'\s*과|교과\s*[:：]?\s*' + re.escape(a.find))
+    pymupdf.TOOLS.mupdf_display_errors(False)   # 주석 모양 경고가 수백 줄 나오는 PDF 가 있다(신원중)
+    # 과목마다 「수학과 평가 세부 계획」 머리말이 있고, 몇 쪽 뒤에 「평가의 종류와 반영 비율」 표가 온다.
+    # 전 학년이 한 파일인 학교(신원중 507쪽)는 머리말이 학년 수만큼 나온다 → 머리말마다 첫 표 한 쪽씩.
+    head = re.compile(re.escape(a.find) + r'과?\s*평가\s*세부')
+    table = re.compile(r'평가의\s*종류와\s*반영\s*비율')
     for path in got:
         if not path.lower().endswith('.pdf'):
             print(f'  {os.path.basename(path)}: PDF 가 아님 — 한글 파일은 직접 열어 읽습니다')
             continue
         doc = pymupdf.open(path)
-        cur, hits = None, []
-        for i, page in enumerate(doc):
-            t = page.get_text()
-            if subj.search(t):
-                cur = i
-            # 과목 머리말을 본 뒤 10쪽 안에 나오는 「반영 비율」 표 쪽을 후보로 둔다
-            if cur is not None and i - cur <= 10 and want.search(t):
-                hits.append(i + 1)
-        print(f'  {os.path.basename(path)}: {len(doc)}쪽 · {a.find} 반영 비율 후보 쪽 {sorted(set(hits)) or "없음"}')
+        texts = [pg.get_text() for pg in doc]
+        hits = []
+        for i, t in enumerate(texts):
+            if head.search(t):
+                j = next((k for k in range(i, min(i + 9, len(texts))) if table.search(texts[k])), None)
+                hits.append(f'{i + 1}→{j + 1}' if j is not None else f'{i + 1}→(표 못 찾음)')
+        print(f'  {os.path.basename(path)}: {len(doc)}쪽 · {a.find}과 평가 머리말→반영 비율 표 쪽 {", ".join(hits) or "없음"}')
 
 
 if __name__ == '__main__':
