@@ -36,8 +36,8 @@ const idsPath = path.join(dir, '_유튜브_주소.json')
 const ids = fs.existsSync(idsPath) ? JSON.parse(fs.readFileSync(idsPath, 'utf8')) : {}
 let done = 0
 for (const it of vids) {
-  // 파일 이름 그대로 올라간 영상: 「01 개념 …」 또는 「02 증명1 …」 (밑줄이 띄어쓰기로 바뀐다)
-  const m = it.snippet.title.match(/^(\d\d) (개념|증명\d+) /); if (!m) continue
+  // 파일 이름 그대로 올라간 영상: 「01 개념 …」「02 증명1 …」「02 풀이01 …」(밑줄이 띄어쓰기로 바뀐다). 풀이는 <영상 폴더>/풀이영상 을 넘긴다
+  const m = it.snippet.title.match(/^(\d\d) (개념|증명\d+|풀이\d+) /); if (!m) continue
   const no = m[2] === '개념' ? m[1] : `${m[1]}-${m[2]}`, pre = `${m[1]}_${m[2]}_`, id = it.snippet.resourceId.videoId
   const txt = files.find((f) => f.startsWith(pre) && f.endsWith('.유튜브.txt'))
   const jpg = files.find((f) => f.startsWith(pre) && f.endsWith('.jpg'))
