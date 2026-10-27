@@ -8,8 +8,8 @@
 import { use, useEffect, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { apiFetch } from '@/lib/apiFetch'
-import type { SchoolProfile, MathYear } from '@/lib/schoolProfile'
-import { subjectLabel } from '@/lib/schoolProfile'
+import type { SchoolProfile, MathYear, Achievement } from '@/lib/schoolProfile'
+import { subjectLabel, schoolinfoLink } from '@/lib/schoolProfile'
 
 export default function SchoolProfilePage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = use(params)
@@ -36,6 +36,7 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
   if (error || !profile) return <Shell school={school}><p style={{ color: '#0F6E56' }}>{error}</p></Shell>
 
   const s = profile.stats ?? {}
+  const info = schoolinfoLink(profile)
 
   return (
     <Shell school={school} subtitle={[profile.foundation, profile.school_type, profile.coed].filter(Boolean).join(' · ')}>
@@ -55,6 +56,20 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
             <span className="text-sm font-bold px-3 py-1.5 rounded-xl"
               style={{ background: '#E6F7F0', color: '#0F6E56' }}>
               우리 학생 {students.length}명
+            </span>
+          )}
+        </div>
+
+        {/* 성취도는 학교알리미 「교과별 학업성취사항」에 있다 — 여기 정리 안 된 학교도 바로 가 볼 수 있게 */}
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <a href={info.url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm font-bold px-3 py-1.5 rounded-xl"
+            style={{ background: '#0F6E56', color: '#fff' }}>
+            <i className="ti ti-chart-bar" /> 학교알리미에서 성취도 보기 <i className="ti ti-external-link" />
+          </a>
+          {!info.direct && (
+            <span className="text-xs" style={{ color: '#5A8E7E' }}>
+              「{profile.official_name || profile.school_name}」 검색 → 공시정보 → 학업성취사항
             </span>
           )}
         </div>
@@ -155,6 +170,9 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
         </Card>
       )}
 
+      {/* 성취도 */}
+      {!!s.achievement?.rows?.length && <AchievementCard a={s.achievement} />}
+
       {/* 시험 */}
       {!!profile.exam_calendar?.rounds?.length && (
         <Card title={`${profile.source_year} 정기시험`}>
@@ -207,6 +225,55 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
       </div>
 
     </Shell>
+  )
+}
+
+// 성취도 A~E — 진한 색이 A. 3단계 과목(A~C)도 같은 색 순서를 쓴다.
+const GRADE_COLORS = ['#085041', '#0F6E56', '#5DCAA5', '#9FE1CB', '#D6F0E6']
+const GRADE_LABELS = ['A', 'B', 'C', 'D', 'E']
+
+function AchievementCard({ a }: { a: Achievement }) {
+  return (
+    <Card title={`${a.year}학년도 교과 성취도`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ borderCollapse: 'collapse', minWidth: 520 }}>
+          <thead>
+            <tr>
+              <Th>학년·학기</Th><Th>과목</Th><Th>평균</Th><Th>표준편차</Th><Th>성취도 비율</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {a.rows.map((r, i) => (
+              <tr key={i}>
+                <Td lead>{r.grade} {r.term}</Td>
+                <Td>{r.subject}{r.students != null && <span className="text-xs ml-1" style={{ color: '#8FB8AA' }}>{r.students}명</span>}</Td>
+                <Td>{r.avg ?? '-'}</Td>
+                <Td>{r.sd ?? '-'}</Td>
+                <td className="px-2 py-2" style={{ border: '1px solid #D6F0E6', minWidth: 220 }}>
+                  {r.dist?.length ? <DistBar dist={r.dist} /> : <span style={{ color: '#8FB8AA' }}>-</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {a.note && <p className="text-xs mt-2 leading-relaxed" style={{ color: '#5A8E7E' }}>{a.note}</p>}
+    </Card>
+  )
+}
+
+function DistBar({ dist }: { dist: number[] }) {
+  return (
+    <div>
+      <div className="flex h-3 rounded overflow-hidden" style={{ background: '#F0FBF7' }}>
+        {dist.map((v, i) => (
+          <div key={i} style={{ width: `${v}%`, background: GRADE_COLORS[i] }} title={`${GRADE_LABELS[i]} ${v}%`} />
+        ))}
+      </div>
+      <div className="flex gap-2 mt-1 text-xs" style={{ color: '#5A8E7E' }}>
+        {dist.map((v, i) => <span key={i}><b style={{ color: '#085041' }}>{GRADE_LABELS[i]}</b> {v}%</span>)}
+      </div>
+    </div>
   )
 }
 
