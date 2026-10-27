@@ -3,7 +3,7 @@
   python scripts/lesson-video/proof_video.py <증명 대본.json> --out <out.mp4> --cuts <토막 폴더> [--cache <음성 캐시>]
 
 대본 형식 (docs/대본/공통수학2/증명/*.json)
-  { "id": "증명_01", "title": "...", "concept_no": 27, "chapter": "...", "sub_chapter": "...", "book_page": 166,
+  { "id": "증명_01", "title": "...", "concept_no": 27, "chapter": "...", "sub_chapter": "...", "book_page": 166, "book_pages": [165, 166] (선택 — 여러 쪽에 걸칠 때),
     "figure": {"image": "cut_04.png 경로(선택)", "crop": [x0,y0,x1,y1] (그림 픽셀)},     ← 그림이 필요한 증명만
     "steps": [ {"pose": "A|B|C|D|E", "bubble": "...", "say": "... (lesson_video 와 같은 표시 / // {강조 …})",
                 "newpage": false,
@@ -318,7 +318,7 @@ def main():
 
     # 4) 단계별 구간 (개념 영상의 .구간.json 과 같은 꼴)
     seg = dict(id=P['id'], order=P.get('order'), kind=P.get('kind', '증명'), label=P.get('label'), type_code=P.get('type_code'), title=P['title'], concept_no=P.get('concept_no'), chapter=P.get('chapter'),
-               sub_chapter=P.get('sub_chapter'), book_page=P.get('book_page'), duration=round(total, 3),
+               sub_chapter=P.get('sub_chapter'), book_page=P.get('book_page'), book_pages=P.get('book_pages'), duration=round(total, 3),
                steps=[dict(step=i + 1, start=round(offs[i], 3), end=round(offs[i + 1] if i + 1 < len(offs) else total, 3),
                            pose=s.get('pose', 'A'), bubble=s['bubble'],
                            lines=[dict(at=round(l['t0'], 3), tex=w['tex']) for w, l in

@@ -144,3 +144,4 @@ node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통
 > 작업하다 새 규칙이 생기면 여기 날짜와 함께 한 줄씩 추가하고, 위 본문의 해당 자리에도 반영한다.
 - 2026-10-27 스킬 처음 만듦 (지금까지의 커밋·문서 기준)
 - 2026-10-27 풀이 영상도 이 도구로(solution_materials·render_all --solutions·--grade). 객관식 보기는 대본 쓸 때 같이. 행렬은 mathtext 에 pmatrix 가 없어 \genfrac 로 그린다. 단위행렬 E 는 「단위행렬 이」로 읽힌다(숫자 2와 헷갈림)
+- 2026-10-27 공식 쓰기 영상은 공식 목록 쪽 + Plus 쪽 두 쪽에 걸친다 → 대본에 `book_pages: [10, 11]` (유튜브 설명 「10~11쪽」, 앱 book_pages). 이미 맞춘 영상만 다시 고칠 땐 `yt_update_concepts.mjs <폴더> --only 02-증명1,07-증명1` (영상마다 할당량 100). 썸네일은 하루 수십 장 넘게 바꾸면 429 「too many thumbnails」 — 다음 날 이어서
