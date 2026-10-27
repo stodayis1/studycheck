@@ -49,7 +49,7 @@ for (const f of files.filter(f => /_증명\d+_/.test(f))) {
   const G = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
   rows.push({
     grade, kind: '증명', concept_no: G.concept_no, order_label: G.order, title: G.title,
-    chapter: G.chapter, sub_chapter: G.sub_chapter, book: '개념+유형 개념편 ' + grade, book_pages: [G.book_page],
+    chapter: G.chapter, sub_chapter: G.sub_chapter, book: '개념+유형 개념편 ' + grade, book_pages: G.book_pages || [G.book_page],
     duration_seconds: G.duration,
     scenes: G.steps.map(s => ({ start: s.start, end: s.end, label: s.bubble, kind: '증명' })),
     type_codes: conceptCodes[G.concept_no] || [],

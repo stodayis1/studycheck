@@ -32,12 +32,14 @@ def main():
             title = f"[{a.grade}] {G['order']}. {G['title']} | {'공식 쓰기' if formula else '손으로 쓰는 증명'} | 수지쌤"
             toc = [f"{ts(s['start'])} {'시작 — ' if k == 0 else ''}{s['bubble']}" for k, s in enumerate(G['steps'])]
             C = scripts.get(G['concept_no'], {})
+            bp = G.get('book_pages') or [G['book_page']]       # 공식 쓰기처럼 두 쪽에 걸치면 「10~11쪽」
+            pg = f"{bp[0]}~{bp[-1]}" if len(bp) > 1 else f"{bp[0]}"
             what = (f"「{G['title']}」 — 교재의 공식을 노트에 하나씩 손으로 써 가며 정리합니다.\n영상을 보면서 같이 써 보고, 다 보고 나면 책을 덮고 공식을 전부 한 번씩 써서 스터디체크에 사진으로 내 주세요."
                     if formula else
                     f"「{G['title']}」 증명. 노트에 한 줄씩 손으로 써 가며 보여 줍니다.\n영상을 보면서 노트에 같이 써 보고, 다 보고 나면 책을 덮고 혼자 다시 써 보세요.")
             body = [f"{a.grade} {G['chapter']} › {G['sub_chapter']} — {what}", '',
                     f"▶ 먼저 볼 개념 강의: {G['concept_no']:02d}. {C.get('title', '')}",
-                    f"▶ 교재: 개념+유형 개념편 {a.grade} {G['book_page']}쪽", '',
+                    f"▶ 교재: 개념+유형 개념편 {a.grade} {pg}쪽", '',
                     '[목차]', *toc, '',
                     '모르는 건 스터디체크 질문하기로 물어보세요.', '수학의지혜 · AI선생님 수지쌤', '',
                     f"#{a.grade} #{'공식' if formula else '증명'} #고1수학 #수학의지혜"]

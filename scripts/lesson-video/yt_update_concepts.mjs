@@ -17,6 +17,8 @@ for (const l of fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)) {
 }
 const E = process.env
 const dir = process.argv[2], dry = process.argv.includes('--dry')
+// --only 02-증명1,07-증명1 : 그 번호만 (할당량 아끼기 — 영상마다 100)
+const onlyArg = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : null
 const tok = (await (await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
   body: new URLSearchParams({ client_id: E.YOUTUBE_OAUTH_CLIENT_ID, client_secret: E.YOUTUBE_OAUTH_CLIENT_SECRET, refresh_token: E.YOUTUBE_OAUTH_REFRESH_TOKEN, grant_type: 'refresh_token' }) })).json()).access_token
 const H = { authorization: 'Bearer ' + tok }
@@ -37,8 +39,12 @@ const ids = fs.existsSync(idsPath) ? JSON.parse(fs.readFileSync(idsPath, 'utf8')
 let done = 0
 for (const it of vids) {
   // 파일 이름 그대로 올라간 영상: 「01 개념 …」「02 증명1 …」「02 풀이01 …」(밑줄이 띄어쓰기로 바뀐다). 풀이는 <영상 폴더>/풀이영상 을 넘긴다
-  const m = it.snippet.title.match(/^(\d\d) (개념|증명\d+|풀이\d+) /); if (!m) continue
+  // 이미 맞춘 영상(「[공통수학1] 02-증명1. …」「[공통수학1] 01. …」)도 다시 맞출 수 있다 (--only 와 함께)
+  const m = it.snippet.title.match(/^(\d\d) (개념|증명\d+|풀이\d+) /)
+    || (it.snippet.title.match(/^\[[^\]]+\] (\d\d)(?:-(증명\d+|풀이\d+))?\. /) || []).slice(0, 3).map((x, i) => i === 2 && !x ? '개념' : x)
+  if (!m || !m[1]) continue
   const no = m[2] === '개념' ? m[1] : `${m[1]}-${m[2]}`, pre = `${m[1]}_${m[2]}_`, id = it.snippet.resourceId.videoId
+  if (onlyArg && !onlyArg.includes(no)) continue
   const txt = files.find((f) => f.startsWith(pre) && f.endsWith('.유튜브.txt'))
   const jpg = files.find((f) => f.startsWith(pre) && f.endsWith('.jpg'))
   if (!txt) { console.log(no, '! 유튜브.txt 없음'); continue }
