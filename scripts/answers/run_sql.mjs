@@ -16,8 +16,11 @@ const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE
 const file=process.argv[2]
 const DRY=process.argv.includes('--dry')
 const sql=fs.readFileSync(file,'utf8')
-const kind = /answer_kind\s*=\s*'number'/.test(sql) ? 'number'
-           : /answer_kind\s*=\s*'image'/.test(sql) ? 'image' : null
+// ★ 종류를 하나씩 적어 두고 찾으면 새 종류(choice)를 적는 날 **조용히 빠진다** —
+//   2026-10-27 에 그렇게 0383 이 answer_kind='image' 인 채 글자 정답만 들어갔다
+//   (문항 수는 맞아서 검사도 통과했다). 그래서 적힌 값을 그대로 읽는다.
+const km = sql.match(/answer_kind\s*=\s*'([a-z]+)'/)
+const kind = km ? km[1] : null
 const nulling = /answer_text\s*=\s*null/.test(sql)
 
 const pairs=[...sql.matchAll(/\(\s*'(\d+)'::bigint\s*,\s*'([^']*)'\s*\)/g)].map(m=>[Number(m[1]), m[2]])
@@ -40,9 +43,12 @@ for (const [txt, ids] of groups) {
   const patch = kind ? {answer_kind:kind, answer_text:txt} : {answer_text:txt}
   for (let i=0;i<ids.length;i+=100) {
     const part=ids.slice(i,i+100)
-    const {data,error}=await db.from('problems').update(patch).in('id',part).select('id')
+    // 바꾼 뒤 값을 **되읽어** 확인한다 — 수만 세면 종류(answer_kind)가 안 바뀐 것을 놓친다
+    const {data,error}=await db.from('problems').update(patch).in('id',part).select('id,answer_kind,answer_text')
     if (error) { bad=error.message; break outer }
     if (data.length!==part.length) { bad=`${txt}: ${part.length}개 중 ${data.length}개만 바뀜`; break outer }
+    const off=data.find(r=>r.answer_text!==txt || (kind && r.answer_kind!==kind))
+    if (off) { bad=`${off.id}: 넣으려던 ${kind??'(그대로)'}/${txt} · 들어간 ${off.answer_kind}/${off.answer_text}`; break outer }
     done+=data.length
   }
 }

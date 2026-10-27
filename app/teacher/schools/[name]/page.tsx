@@ -8,8 +8,8 @@
 import { use, useEffect, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { apiFetch } from '@/lib/apiFetch'
-import type { SchoolProfile, MathYear } from '@/lib/schoolProfile'
-import { subjectLabel } from '@/lib/schoolProfile'
+import type { SchoolProfile, MathYear, Achievement } from '@/lib/schoolProfile'
+import { subjectLabel, schoolinfoLink } from '@/lib/schoolProfile'
 
 export default function SchoolProfilePage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = use(params)
@@ -19,6 +19,8 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
   const [students, setStudents] = useState<any[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
 
   useEffect(() => { load() }, [school])
 
@@ -32,10 +34,24 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
     setLoading(false)
   }
 
+  // 학교알리미에서 숫자(학생수·교원·신입생·동아리)만 다시 받는다. 편제·시험·메모·성취도는 그대로 둔다.
+  async function refresh() {
+    setRefreshing(true); setRefreshMsg('')
+    const res = await apiFetch('/api/school-profiles/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ school_name: school }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setRefreshing(false)
+    setRefreshMsg(res.ok ? '새로 받았어요.' : (json.error ?? '받지 못했어요.'))
+    if (res.ok) load()
+  }
+
   if (loading) return <Shell school={school}><p style={{ color: '#0F6E56' }}>불러오는 중…</p></Shell>
   if (error || !profile) return <Shell school={school}><p style={{ color: '#0F6E56' }}>{error}</p></Shell>
 
   const s = profile.stats ?? {}
+  const info = schoolinfoLink(profile)
 
   return (
     <Shell school={school} subtitle={[profile.foundation, profile.school_type, profile.coed].filter(Boolean).join(' · ')}>
@@ -58,6 +74,29 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
             </span>
           )}
         </div>
+
+        {/* 성취도는 학교알리미 「교과별 학업성취사항」에 있다 — 여기 정리 안 된 학교도 바로 가 볼 수 있게 */}
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <a href={info.url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm font-bold px-3 py-1.5 rounded-xl"
+            style={{ background: '#0F6E56', color: '#fff' }}>
+            <i className="ti ti-chart-bar" /> 학교알리미에서 성취도 보기 <i className="ti ti-external-link" />
+          </a>
+          {/* 학교알리미는 성취도 표 앞에 자동입력 방지 숫자를 묻는다 — 표까지 바로 여는 주소는 없다 */}
+          <span className="text-xs" style={{ color: '#5A8E7E' }}>
+            {info.direct
+              ? '열린 화면에서 「학업성취사항」 → 「교과별 학업성취 사항」 → 보이는 숫자 입력'
+              : `「${profile.official_name || profile.school_name}」 검색 → 공시정보 → 학업성취사항`}
+          </span>
+          {s.schoolinfo && (
+            <button onClick={refresh} disabled={refreshing}
+              className="ml-auto inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-xl"
+              style={{ background: '#fff', color: '#0F6E56', border: '1px solid #9FE1CB' }}>
+              <i className="ti ti-refresh" /> {refreshing ? '받는 중…' : '학교알리미에서 숫자 새로 받기'}
+            </button>
+          )}
+        </div>
+        {refreshMsg && <p className="text-xs mt-2" style={{ color: '#5A8E7E' }}>{refreshMsg}</p>}
 
         {students.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -155,6 +194,20 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
         </Card>
       )}
 
+      {/* 학교 추가로 막 만든 한 장 — 사람이 읽어야 하는 칸이 비어 있다고 알려 준다 */}
+      {!profile.math_curriculum?.length && (
+        <Card title="아직 정리 전이에요">
+          <p className="text-sm leading-relaxed" style={{ color: '#0F6E56' }}>
+            수학 편제와 정기시험 날짜는 학교마다 모양이 다른 공시 첨부라 사람이 읽어 정리해요.
+            Claude에게 「{profile.school_name} 편제 정리해줘」라고 하면 채워져요.
+            성취도는 위 버튼으로 학교알리미 표를 연 뒤, 표를 복사해 Claude에게 붙여넣으면 돼요.
+          </p>
+        </Card>
+      )}
+
+      {/* 성취도 */}
+      {!!s.achievement?.rows?.length && <AchievementCard a={s.achievement} />}
+
       {/* 시험 */}
       {!!profile.exam_calendar?.rounds?.length && (
         <Card title={`${profile.source_year} 정기시험`}>
@@ -207,6 +260,55 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
       </div>
 
     </Shell>
+  )
+}
+
+// 성취도 A~E — 진한 색이 A. 3단계 과목(A~C)도 같은 색 순서를 쓴다.
+const GRADE_COLORS = ['#085041', '#0F6E56', '#5DCAA5', '#9FE1CB', '#D6F0E6']
+const GRADE_LABELS = ['A', 'B', 'C', 'D', 'E']
+
+function AchievementCard({ a }: { a: Achievement }) {
+  return (
+    <Card title={`${a.year}학년도 교과 성취도`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ borderCollapse: 'collapse', minWidth: 520 }}>
+          <thead>
+            <tr>
+              <Th>학년·학기</Th><Th>과목</Th><Th>평균</Th><Th>표준편차</Th><Th>성취도 비율</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {a.rows.map((r, i) => (
+              <tr key={i}>
+                <Td lead>{r.grade} {r.term}</Td>
+                <Td>{r.subject}{r.students != null && <span className="text-xs ml-1" style={{ color: '#8FB8AA' }}>{r.students}명</span>}</Td>
+                <Td>{r.avg ?? '-'}</Td>
+                <Td>{r.sd ?? '-'}</Td>
+                <td className="px-2 py-2" style={{ border: '1px solid #D6F0E6', minWidth: 220 }}>
+                  {r.dist?.length ? <DistBar dist={r.dist} /> : <span style={{ color: '#8FB8AA' }}>-</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {a.note && <p className="text-xs mt-2 leading-relaxed" style={{ color: '#5A8E7E' }}>{a.note}</p>}
+    </Card>
+  )
+}
+
+function DistBar({ dist }: { dist: number[] }) {
+  return (
+    <div>
+      <div className="flex h-3 rounded overflow-hidden" style={{ background: '#F0FBF7' }}>
+        {dist.map((v, i) => (
+          <div key={i} style={{ width: `${v}%`, background: GRADE_COLORS[i] }} title={`${GRADE_LABELS[i]} ${v}%`} />
+        ))}
+      </div>
+      <div className="flex gap-2 mt-1 text-xs" style={{ color: '#5A8E7E' }}>
+        {dist.map((v, i) => <span key={i}><b style={{ color: '#085041' }}>{GRADE_LABELS[i]}</b> {v}%</span>)}
+      </div>
+    </div>
   )
 }
 

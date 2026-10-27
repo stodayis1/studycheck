@@ -11,36 +11,35 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
 <style>
 /* 왼쪽: 돌려 보는 3D 모눈 무대 / 오른쪽: 개수 쓰기판. 아래로 위·앞·옆 모양과 층별 모양이 따라 바뀐다 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
 :root {
-  --bg: #f3f5f1;
+  --bg: #f4f9ff;
   --surface: #ffffff;
-  --ink: #22302a;
-  --muted: #5f6d66;
-  --grid: #d5e1e8;
-  --line: #c4d0cb;
-  --accent: #2c6a88;
-  --accent-soft: #e2eef4;
-  --wood: #e2b877;
-  --wood-edge: #8a5e2c;
-  --ok: #2f7d4f;
-  --warn: #a5621b;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --wood: #ffcf86;
+  --wood-edge: #c98a2e;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --shape: #f97316;
+  --shape-fill: rgba(249, 115, 22, 0.25);
+  --axis: #e11d48;
+  --cut: #2563eb;
+  --cut-fill: rgba(37, 99, 235, 0.18);
   --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
   --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #12181b; --surface: #1a2226; --ink: #e5ece8; --muted: #9aa9a2;
-    --grid: #22313a; --line: #2f3d43; --accent: #7cbfdc; --accent-soft: #1d3340;
-    --wood: #d9ad6c; --wood-edge: #f0d2a2; --ok: #6cc893; --warn: #e5a35a;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #12181b; --surface: #1a2226; --ink: #e5ece8; --muted: #9aa9a2;
-  --grid: #22313a; --line: #2f3d43; --accent: #7cbfdc; --accent-soft: #1d3340;
-  --wood: #d9ad6c; --wood-edge: #f0d2a2; --ok: #6cc893; --warn: #e5a35a;
-  color-scheme: dark;
-}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
 .wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 48px;
@@ -119,6 +118,7 @@ canvas#c:active { cursor: grabbing; }
 
 <div class="wrap">
   <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
     <div class="eyebrow">초6-2 공간과 입체 · 2-1 여러 가지 도형</div>
     <h1>쌓기나무 관찰대</h1>
     <p>오른쪽 판에 칸마다 쌓을 개수를 쓰면 3D로 쌓이고, 위·앞·옆에서 본 모양과 층별 모양이 함께 바뀝니다. 3D는 끌어서 돌려 볼 수 있습니다.</p>
@@ -257,7 +257,7 @@ canvas#c:active { cursor: grabbing; }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
   const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.58));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.72));
   const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(3, 9, 6); scene.add(sun);
   const fill = new THREE.DirectionalLight(0xffffff, 0.18); fill.position.set(-6, 2, -3); scene.add(fill);
 
@@ -266,7 +266,7 @@ canvas#c:active { cursor: grabbing; }
   const VIEWS = { iso: [0.62, 1.0], top: [0, 0.0005], front: [0, Math.PI / 2], side: [Math.PI / 2, Math.PI / 2] };
 
   const off = (N - 1) / 2;
-  const floorMat = new THREE.MeshBasicMaterial({ color: 0x8fb3c7, transparent: true, opacity: 0.32 });
+  const floorMat = new THREE.MeshBasicMaterial({ color: 0x9cc4ff, transparent: true, opacity: 0.32 });
   const floorGeo = new THREE.PlaneGeometry(0.94, 0.94);
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     const m = new THREE.Mesh(floorGeo, floorMat);
@@ -275,7 +275,7 @@ canvas#c:active { cursor: grabbing; }
   function label(text, x, z) {
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
     const g = cv.getContext('2d');
-    g.font = '700 64px "Gowun Batang", serif'; g.fillStyle = '#3b86a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '700 64px "Gowun Batang", serif'; g.fillStyle = '#2563eb'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(text, 128, 64);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
     sp.scale.set(1.2, 0.6, 1); sp.position.set(x, 0.05, z); scene.add(sp);
@@ -285,8 +285,8 @@ canvas#c:active { cursor: grabbing; }
 
   const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
   const edgeGeo = new THREE.EdgesGeometry(cubeGeo);
-  const cubeMat = new THREE.MeshLambertMaterial({ color: 0xe6bd7d });
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x6b4520 });
+  const cubeMat = new THREE.MeshLambertMaterial({ color: 0xffcf86 });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0xa86b1f });
   let cubes = new THREE.Group(); scene.add(cubes);
 
   function buildCubes() {

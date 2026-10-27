@@ -9,6 +9,7 @@
   "school_type": "일반고",
   "coed": "남녀공학 · 주간",
   "stats": {
+    "schoolinfo": {"shl": "6b854465-bc6a-44f4-a30e-822067ce388c", "adrcd": "4128111200", "level": "고"},
     "total": 578,
     "classes": 25,
     "perClass": 23.1,
@@ -121,7 +122,8 @@
   "sources": [
     {
       "name": "학교알리미 공시",
-      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"
+      "detail": "학교교육과정 편성·운영 및 평가에 관한 사항 (2026)",
+      "url": "https://www.schoolinfo.go.kr/ei/ss/Pneiss_b01_s0.do?SHL_IDF_CD=6b854465-bc6a-44f4-a30e-822067ce388c"
     },
     {
       "name": "학교알리미 OpenAPI",

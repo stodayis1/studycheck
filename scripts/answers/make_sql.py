@@ -31,7 +31,7 @@ def clean(s):
     return (s or '').replace('−', '-').replace('–', '-').replace('—', '-').strip()
 
 
-fix, add, skip = [], [], []
+fix, add, pick, skip = [], [], [], []
 for no, raw in table.items():
     v = clean(raw)
     rec = db.get(no)
@@ -41,9 +41,11 @@ for no, raw in table.items():
     if cur:                                   # 이미 글자 정답이 있다 → 검산
         if cur != v and (v in CIRCLE or NUM.match(v)):
             fix.append((rec['id'], no, cur, v))
-    else:                                     # 비어 있다 → 숫자만 채운다
+    else:                                     # 비어 있다 → 객관식·숫자만 채운다
         if NUM.match(v):
             add.append((rec['id'], no, v))
+        elif v in CIRCLE:                     # 자르기가 못 읽고 넘어간 객관식
+            pick.append((rec['id'], no, v))
         else:
             skip.append((no, v))
 
@@ -78,11 +80,26 @@ if add:
     rb += '\n);\n'
     dump('숫자정답_되돌리기.sql', f'-- 위 넣기의 되돌리기 ({len(add)}문항)\n', add, rb)
 
+if pick:
+    body = "update problems p set answer_kind = 'choice', answer_text = v.txt\nfrom (values\n"
+    body += ',\n'.join(f"  ('{i}'::bigint, '{t}')" for i, _, t in pick)
+    body += '\n) as v(id, txt)\nwhere p.id = v.id;\n'
+    dump('객관식정답_넣기.sql',
+         f'-- {book} {grade} — 자르기가 못 읽고 넘어간 객관식 {len(pick)}문항을 글자 정답으로\n'
+         f'-- ①~⑤ 로 넣는다 (app/api/grade/[code] 의 choiceDigits 가 그것만 읽는다).\n', pick, body)
+    rb = "update problems set answer_kind = 'image', answer_text = null\nwhere id in (\n"
+    rb += ',\n'.join(f"  '{i}'::bigint" for i, _, _ in pick)
+    rb += '\n);\n'
+    dump('객관식정답_되돌리기.sql', f'-- 위 넣기의 되돌리기 ({len(pick)}문항)\n', pick, rb)
+
 json.dump([dict(id=i, no=n, before=c, after=t) for i, n, c, t in fix],
           io.open(os.path.join(out, '_검산목록.json'), 'w', encoding='utf8'), ensure_ascii=False, indent=1)
 json.dump([dict(id=i, no=n, txt=t) for i, n, t in add],
           io.open(os.path.join(out, '_넣을목록.json'), 'w', encoding='utf8'), ensure_ascii=False, indent=1)
 
-print(f'검산해서 바로잡을 것 {len(fix)} · 새로 넣을 숫자 정답 {len(add)} · 그림 그대로 둘 것 {len(skip)}')
+json.dump([dict(id=i, no=n, txt=t) for i, n, t in pick],
+          io.open(os.path.join(out, '_객관식목록.json'), 'w', encoding='utf8'), ensure_ascii=False, indent=1)
+
+print(f'검산해서 바로잡을 것 {len(fix)} · 새로 넣을 숫자 정답 {len(add)} · 새로 넣을 객관식 {len(pick)} · 그림 그대로 둘 것 {len(skip)}')
 for i, n, c, t in fix[:40]:
     print(f'  바로잡기 {n}: {c} → {t}')

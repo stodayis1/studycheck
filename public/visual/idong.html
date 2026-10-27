@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>도형 움직이기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 모눈 판 위의 조각(밀기·뒤집기·돌리기) / 오른쪽: 움직이는 단추와 움직인 순서. 문제 내기는 목표 자리를 점선으로 보여 준다 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --shape: #f97316;
+  --shape-fill: rgba(249, 115, 22, 0.55);
+  --axis: #e11d48;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.presets, .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.orange { background: var(--shape); border-color: var(--shape); color: var(--surface); }
+.btn:disabled, .chip:disabled { opacity: 0.45; cursor: default; }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row .lbl { font-size: 13px; color: var(--muted); min-width: 4.5em; }
+.group { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.group h3 { margin: 0; font-family: var(--font-display); font-size: 15px; }
+
+#board { width: 100%; display: block; touch-action: manipulation; user-select: none; }
+#board .g { stroke: var(--grid); stroke-width: 1; }
+#board .frame { fill: var(--surface); stroke: var(--grid-strong); stroke-width: 1.5; }
+#board .cell { fill: var(--shape-fill); stroke: var(--shape); stroke-width: 2; }
+#board .cell.mark { fill: var(--shape); }
+#board .ghost { fill: rgba(91, 107, 125, 0.12); stroke: rgba(91, 107, 125, 0.45); stroke-width: 1.2; stroke-dasharray: 4 3; }
+#board .target { fill: rgba(37, 99, 235, 0.10); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+#board .target.mark { fill: rgba(37, 99, 235, 0.38); }
+#board .mirror { stroke: var(--axis); stroke-width: 3; stroke-dasharray: 9 6; }
+#board .pivot { fill: var(--axis); }
+#board .guideText { fill: var(--axis); font-size: 13px; font-family: var(--font-body); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+#board.editing { cursor: pointer; }
+#board .editHint { fill: rgba(249, 115, 22, 0.08); }
+.boardCard { padding: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+#note { margin: 0; min-height: 1.5em; font-size: 14px; }
+#note.ok { color: var(--ok); } #note.warn { color: var(--warn); } #note.info { color: var(--accent); }
+#history { margin: 0; padding-left: 1.4em; font-size: 14px; display: grid; gap: 2px; max-height: 220px; overflow: auto; }
+#history:empty::before { content: "아직 움직이지 않았어요."; color: var(--muted); margin-left: -1.4em; }
+.facts { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.facts li.hit { color: var(--ok); font-weight: 700; }
+.challenge { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">초4-1 평면도형의 이동</div>
+    <h1>도형 움직이기</h1>
+    <p>조각을 밀고, 뒤집고, 돌려 보세요. 움직이기 전 자리는 흐린 점선으로 남고, 뒤집을 때는 거울선, 돌릴 때는 돌리는 점이 빨갛게 나옵니다.</p>
+  </header>
+
+  <div class="main">
+    <section class="card boardCard" aria-label="모눈 판">
+      <svg id="board" role="img" aria-label="도형 움직이기 모눈 판"></svg>
+      <div class="legend">
+        <span><i style="background:var(--shape)"></i>지금 조각 (진한 칸이 기준)</span>
+        <span><i style="border:1.5px dashed #5b6b7d"></i>움직이기 전</span>
+        <span><i style="border:2px dashed var(--accent)"></i>목표 (문제 내기)</span>
+      </div>
+      <p id="note" aria-live="polite"></p>
+    </section>
+
+    <aside class="card" aria-label="움직이기">
+      <div>
+        <h2>조각 고르기</h2>
+        <div class="presets" id="presets" style="margin-top:8px"></div>
+        <div class="btns" style="margin-top:6px">
+          <button class="btn" id="editBtn">내 모양 만들기</button>
+          <button class="btn primary" id="editDone" hidden>다 만들었어요</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>밀기</h3>
+        <div class="row" role="group" aria-label="미는 방향">
+          <span class="lbl">방향</span>
+          <button class="chip" data-slide="up" aria-pressed="false">위</button>
+          <button class="chip" data-slide="down" aria-pressed="false">아래</button>
+          <button class="chip" data-slide="left" aria-pressed="false">왼쪽</button>
+          <button class="chip" data-slide="right" aria-pressed="true">오른쪽</button>
+        </div>
+        <div class="row" role="group" aria-label="미는 칸 수">
+          <span class="lbl">칸 수</span>
+          <button class="chip" data-n="1" aria-pressed="false">1칸</button>
+          <button class="chip" data-n="2" aria-pressed="false">2칸</button>
+          <button class="chip" data-n="3" aria-pressed="true">3칸</button>
+          <button class="chip" data-n="4" aria-pressed="false">4칸</button>
+          <button class="chip" data-n="5" aria-pressed="false">5칸</button>
+        </div>
+        <button class="btn orange mv" id="slideBtn">밀기</button>
+      </div>
+
+      <div class="group">
+        <h3>뒤집기</h3>
+        <div class="btns">
+          <button class="btn mv" data-flip="up">위쪽으로 뒤집기</button>
+          <button class="btn mv" data-flip="down">아래쪽으로 뒤집기</button>
+          <button class="btn mv" data-flip="left">왼쪽으로 뒤집기</button>
+          <button class="btn mv" data-flip="right">오른쪽으로 뒤집기</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>돌리기</h3>
+        <div class="row" role="group" aria-label="돌리는 방향">
+          <span class="lbl">방향</span>
+          <button class="chip" data-cw="1" aria-pressed="true">시계 방향 ↻</button>
+          <button class="chip" data-cw="0" aria-pressed="false">시계 반대 방향 ↺</button>
+        </div>
+        <div class="row" role="group" aria-label="돌리는 각도">
+          <span class="lbl">각도</span>
+          <button class="chip" data-deg="90" aria-pressed="true">90°</button>
+          <button class="chip" data-deg="180" aria-pressed="false">180°</button>
+          <button class="chip" data-deg="270" aria-pressed="false">270°</button>
+        </div>
+        <button class="btn orange mv" id="rotBtn">돌리기</button>
+      </div>
+
+      <div class="group">
+        <div class="row" style="justify-content:space-between">
+          <h3>움직인 순서</h3>
+          <div class="btns">
+            <button class="btn" id="undoBtn">되돌리기</button>
+            <button class="btn" id="resetBtn">처음으로</button>
+          </div>
+        </div>
+        <ol id="history"></ol>
+      </div>
+
+      <div class="group">
+        <div class="row" style="justify-content:space-between">
+          <h3>문제 내기</h3>
+          <div class="btns">
+            <button class="btn primary" id="quizBtn">문제 내기</button>
+          </div>
+        </div>
+        <div class="challenge" id="quizBox" hidden>
+          <div id="quizText">파란 점선 자리와 똑같이 되도록 움직여 보세요.</div>
+          <div class="btns">
+            <button class="btn" id="answerBtn">답 하나 보기</button>
+            <button class="btn" id="quizEnd">문제 끝내기</button>
+          </div>
+          <div id="answerText" hidden></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>알아 둘 것</h3>
+        <ul class="facts" id="facts">
+          <li data-fact="lr2">왼쪽(오른쪽)으로 두 번 뒤집으면 처음 모양과 같아요.</li>
+          <li data-fact="ud2">위쪽(아래쪽)으로 두 번 뒤집으면 처음 모양과 같아요.</li>
+          <li data-fact="r360">시계 방향으로 90°씩 네 번(360°) 돌리면 처음 모양과 같아요.</li>
+          <li data-fact="cw270">시계 방향으로 270° 돌린 모양 = 시계 반대 방향으로 90° 돌린 모양.</li>
+          <li data-fact="flip2">위(아래)로 한 번, 왼쪽(오른쪽)으로 한 번 뒤집은 모양 = 180° 돌린 모양.</li>
+          <li data-fact="slide">밀기는 모양도 방향도 그대로, 자리만 바뀌어요.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  const W = 14, H = 10, C = 36;
+  const KO = { up: '위', down: '아래', left: '왼', right: '오른' };
+
+  // ---------- 칸 옮기는 계산 (y는 아래로 커진다) ----------
+  // 조각 = 칸 목록 [{x, y, m}] (m: 기준 칸 표시)
+  const bbox = cs => ({
+    minX: Math.min(...cs.map(c => c.x)), maxX: Math.max(...cs.map(c => c.x)),
+    minY: Math.min(...cs.map(c => c.y)), maxY: Math.max(...cs.map(c => c.y)),
+  });
+  // 모양만 비교할 때: 왼쪽 위로 붙이고 정렬한 글자 (기준 칸 표시까지 비교)
+  const shapeKey = cs => {
+    const b = bbox(cs);
+    return cs.map(c => `${c.x - b.minX},${c.y - b.minY}${c.m ? '*' : ''}`).sort().join(';');
+  };
+  const placeKey = cs => cs.map(c => `${c.x},${c.y}${c.m ? '*' : ''}`).sort().join(';');
+  const inBoard = cs => cs.every(c => c.x >= 0 && c.y >= 0 && c.x < W && c.y < H);
+
+  function slide(cs, dir, n) {
+    const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];
+    return cs.map(c => ({ ...c, x: c.x + d[0] * n, y: c.y + d[1] * n }));
+  }
+  // 그 쪽 가장자리를 거울선으로 뒤집는다 (오른쪽으로 뒤집기 → 오른쪽 변이 거울선)
+  function mirrorLine(cs, side) {
+    const b = bbox(cs);
+    return { right: b.maxX + 1, left: b.minX, down: b.maxY + 1, up: b.minY }[side];
+  }
+  function flip(cs, side) {
+    const L = mirrorLine(cs, side);
+    return (side === 'left' || side === 'right')
+      ? cs.map(c => ({ ...c, x: 2 * L - c.x - 1 }))
+      : cs.map(c => ({ ...c, y: 2 * L - c.y - 1 }));
+  }
+  // 돌리는 점: 조각을 둘러싼 네모의 가운데에서 가장 가까운 모눈 꼭짓점
+  function pivotOf(cs) {
+    const b = bbox(cs);
+    return { x: Math.round((b.minX + b.maxX + 1) / 2), y: Math.round((b.minY + b.maxY + 1) / 2) };
+  }
+  function quarter(cs, cw, p) {
+    return cw
+      ? cs.map(c => ({ ...c, x: p.x + p.y - c.y - 1, y: p.y - p.x + c.x }))
+      : cs.map(c => ({ ...c, x: p.x - p.y + c.y, y: p.y + p.x - c.x - 1 }));
+  }
+  function rotate(cs, cw, deg, p = pivotOf(cs)) {
+    let r = cs;
+    for (let k = 0; k < deg / 90; k++) r = quarter(r, cw, p);
+    return r;
+  }
+  function applyMove(cs, mv) {
+    if (mv.type === 'slide') return slide(cs, mv.dir, mv.n);
+    if (mv.type === 'flip') return flip(cs, mv.side);
+    return rotate(cs, mv.cw, mv.deg);
+  }
+  function moveText(mv) {
+    if (mv.type === 'slide') return `${KO[mv.dir]}쪽으로 ${mv.n}칸 밀기`;
+    if (mv.type === 'flip') return `${KO[mv.side]}쪽으로 뒤집기`;
+    return `시계 ${mv.cw ? '' : '반대 '}방향으로 ${mv.deg}° 돌리기`;
+  }
+  window.__idong = { slide, flip, rotate, quarter, pivotOf, shapeKey, placeKey };
+
+  // ---------- 조각 ----------
+  const P = (pts, mark) => pts.map(([x, y], i) => ({ x, y, m: i === (mark || 0) }));
+  const PRESETS = [
+    { name: '화살표', cells: P([[0, 2], [1, 2], [2, 2], [3, 2], [4, 2], [3, 1], [2, 0]], 4) },
+    { name: 'ㄱ자', cells: P([[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], 0) },
+    { name: '깃발', cells: P([[0, 0], [1, 0], [2, 0], [1, 1], [0, 1], [0, 2], [0, 3]], 2) },
+    { name: 'F 모양', cells: P([[0, 0], [1, 0], [2, 0], [0, 1], [0, 2], [1, 2], [0, 3], [0, 4]], 2) },
+  ];
+  const at = (cs, ox, oy) => cs.map(c => ({ ...c, x: c.x + ox, y: c.y + oy }));
+
+  const S = { cells: [], start: [], states: [], moves: [], ghost: null, guide: null, busy: false, editing: false,
+    quiz: null, slideDir: 'right', slideN: 3, cw: true, deg: 90 };
+
+  // ---------- 그리기 ----------
+  const svg = document.getElementById('board'), NS = 'http://www.w3.org/2000/svg';
+  const M = 10;
+  svg.setAttribute('viewBox', `${-M} ${-M} ${W * C + 2 * M} ${H * C + 2 * M}`);
+  function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; }
+  const rect = (c, cls, parent) => el('rect', { class: cls + (c.m && cls !== 'ghost' ? ' mark' : ''), x: c.x * C + 1, y: c.y * C + 1, width: C - 2, height: C - 2, rx: 3 }, parent);
+  let shapeG = null;
+  function render() {
+    svg.innerHTML = '';
+    svg.classList.toggle('editing', S.editing);
+    el('rect', { class: 'frame', x: 0, y: 0, width: W * C, height: H * C });
+    for (let x = 1; x < W; x++) el('line', { class: 'g', x1: x * C, y1: 0, x2: x * C, y2: H * C });
+    for (let y = 1; y < H; y++) el('line', { class: 'g', x1: 0, y1: y * C, x2: W * C, y2: y * C });
+    if (!S.editing) {
+      if (S.quiz) S.quiz.target.forEach(c => rect(c, 'target'));
+      if (S.ghost) S.ghost.forEach(c => rect(c, 'ghost'));
+      const g = S.guide;
+      if (g && g.type === 'flip') {
+        const v = g.side === 'left' || g.side === 'right';
+        if (v) el('line', { class: 'mirror', x1: g.L * C, y1: -M + 2, x2: g.L * C, y2: H * C + M - 2 });
+        else el('line', { class: 'mirror', x1: -M + 2, y1: g.L * C, x2: W * C + M - 2, y2: g.L * C });
+        const t = el('text', { class: 'guideText', x: v ? g.L * C + 5 : 6, y: v ? 14 : g.L * C - 6 });
+        t.textContent = '거울선';
+      }
+      if (g && g.type === 'rotate') {
+        el('circle', { class: 'pivot', cx: g.p.x * C, cy: g.p.y * C, r: 6 });
+        el('text', { class: 'guideText', x: g.p.x * C + 9, y: g.p.y * C - 8 }).textContent = '돌리는 점';
+      }
+    }
+    shapeG = el('g', {});
+    S.cells.forEach(c => rect(c, 'cell', shapeG));
+  }
+
+  // ---------- 움직이기 ----------
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const note = document.getElementById('note');
+  const say = (text, cls) => { note.textContent = text; note.className = cls || ''; };
+
+  function doMove(mv) {
+    if (S.busy || S.editing) return;
+    const before = S.cells, after = applyMove(before, mv);
+    if (!inBoard(after)) { say('판 밖으로 나가요. 먼저 밀기로 조각을 안쪽으로 옮겨 보세요.', 'warn'); return; }
+    // 움직이는 동안 보일 안내선
+    const guide = mv.type === 'flip' ? { type: 'flip', side: mv.side, L: mirrorLine(before, mv.side) }
+      : mv.type === 'rotate' ? { type: 'rotate', p: pivotOf(before) } : null;
+    S.ghost = before.map(c => ({ ...c })); S.guide = guide; render();
+    S.busy = true; setBusy(true);
+    const dur = reduce ? 0 : (mv.type === 'rotate' ? 450 + mv.deg * 2 : 650), t0 = performance.now();
+    const step = now => {
+      const k = dur ? Math.min(1, (now - t0) / dur) : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      shapeG.setAttribute('transform', transformAt(mv, guide, e));
+      if (k < 1) return requestAnimationFrame(step);
+      S.cells = after; S.states.push(after); S.moves.push(mv);
+      S.busy = false; setBusy(false); render(); afterMove();
+    };
+    requestAnimationFrame(step);
+  }
+  function transformAt(mv, g, t) {
+    if (mv.type === 'slide') {
+      const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[mv.dir];
+      return `translate(${d[0] * mv.n * C * t} ${d[1] * mv.n * C * t})`;
+    }
+    if (mv.type === 'flip') {
+      const s = 1 - 2 * t, X = g.L * C;
+      return (mv.side === 'left' || mv.side === 'right')
+        ? `translate(${X} 0) scale(${s} 1) translate(${-X} 0)`
+        : `translate(0 ${X}) scale(1 ${s}) translate(0 ${-X})`;
+    }
+    return `rotate(${(mv.cw ? 1 : -1) * mv.deg * t} ${g.p.x * C} ${g.p.y * C})`;
+  }
+  function setBusy(b) { document.querySelectorAll('.mv, #undoBtn, #resetBtn, #quizBtn').forEach(x => { x.disabled = b || S.editing; }); }
+
+  const histEl = document.getElementById('history');
+  function afterMove() {
+    histEl.innerHTML = '';
+    S.moves.forEach(mv => { const li = document.createElement('li'); li.textContent = moveText(mv); histEl.appendChild(li); });
+    histEl.scrollTop = histEl.scrollHeight;
+    document.querySelectorAll('#facts li').forEach(li => li.classList.remove('hit'));
+    const n = S.moves.length;
+    if (!n) { say(''); return; }
+    const last = S.moves[n - 1], prev = S.moves[n - 2], cur = S.states[n];
+    const hit = f => document.querySelector(`#facts [data-fact="${f}"]`).classList.add('hit');
+    let msg = '', cls = 'info';
+    // 문제
+    if (S.quiz) {
+      if (placeKey(cur) === placeKey(S.quiz.target)) {
+        msg = `맞았어요! ${n - S.quiz.from}번 움직여서 목표와 똑같아졌어요.`; cls = 'ok';
+        say(msg, cls); S.quiz.done = true; return;
+      }
+      if (shapeKey(cur) === shapeKey(S.quiz.target)) { say('모양과 방향은 목표와 같아요. 이제 밀기로 자리만 맞춰 보세요.', 'ok'); return; }
+    }
+    // 같은 쪽으로 두 번 뒤집기 / 위아래 + 좌우 뒤집기
+    const lr = m => m && m.type === 'flip' && (m.side === 'left' || m.side === 'right');
+    const ud = m => m && m.type === 'flip' && (m.side === 'up' || m.side === 'down');
+    if (lr(last) && lr(prev)) { hit('lr2'); msg = '좌우로 두 번 뒤집었더니 처음 모양으로 돌아왔어요.'; }
+    else if (ud(last) && ud(prev)) { hit('ud2'); msg = '위아래로 두 번 뒤집었더니 처음 모양으로 돌아왔어요.'; }
+    else if ((lr(last) && ud(prev)) || (ud(last) && lr(prev))) {
+      hit('flip2'); msg = '위아래로 한 번, 좌우로 한 번 뒤집은 모양은 180° 돌린 모양과 같아요.';
+    }
+    if (last.type === 'slide') hit('slide');
+    if (last.type === 'rotate' && last.deg === 270 && last.cw) { hit('cw270'); msg = msg || '시계 방향 270°는 시계 반대 방향 90°와 같은 모양이에요.'; }
+    // 돌린 각을 거슬러 세어 360°가 되면
+    let sum = 0;
+    for (let i = n - 1; i >= 0 && S.moves[i].type !== 'flip'; i--) {
+      const m = S.moves[i]; if (m.type === 'rotate') sum += (m.cw ? 1 : -1) * m.deg;
+      if (sum !== 0 && sum % 360 === 0) { hit('r360'); msg = msg || `돌린 각을 모두 더하면 ${Math.abs(sum)}°. 처음 모양과 같아요.`; break; }
+    }
+    if (last.type === 'flip' && shapeKey(cur) === shapeKey(S.states[n - 1]) ) msg = '이 조각은 거울선에 대해 양쪽이 같은 모양이라, 뒤집어도 모양이 그대로예요.';
+    if (!msg) {
+      for (let k = 2; k <= n; k++) if (shapeKey(S.states[n - k]) === shapeKey(cur)) { msg = `${k}번 움직이기 전과 모양이 같아졌어요${placeKey(S.states[n - k]) === placeKey(cur) ? ' (자리까지 같아요)' : ' (자리는 달라요)'}.`; break; }
+    }
+    say(msg, cls);
+  }
+
+  // ---------- 단추 ----------
+  function press(attr, val) { document.querySelectorAll(`[${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.getAttribute(attr) === String(val)))); }
+  document.querySelectorAll('[data-slide]').forEach(b => b.addEventListener('click', () => { S.slideDir = b.dataset.slide; press('data-slide', S.slideDir); }));
+  document.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { S.slideN = Number(b.dataset.n); press('data-n', S.slideN); }));
+  document.querySelectorAll('[data-cw]').forEach(b => b.addEventListener('click', () => { S.cw = b.dataset.cw === '1'; press('data-cw', b.dataset.cw); }));
+  document.querySelectorAll('[data-deg]').forEach(b => b.addEventListener('click', () => { S.deg = Number(b.dataset.deg); press('data-deg', S.deg); }));
+  document.getElementById('slideBtn').addEventListener('click', () => doMove({ type: 'slide', dir: S.slideDir, n: S.slideN }));
+  document.getElementById('rotBtn').addEventListener('click', () => doMove({ type: 'rotate', cw: S.cw, deg: S.deg }));
+  document.querySelectorAll('[data-flip]').forEach(b => b.addEventListener('click', () => doMove({ type: 'flip', side: b.dataset.flip })));
+
+  function setPiece(cells) {
+    S.cells = cells; S.start = cells; S.states = [cells]; S.moves = []; S.ghost = null; S.guide = null; S.quiz = null;
+    document.getElementById('quizBox').hidden = true;
+    render(); afterMove();
+  }
+  document.getElementById('undoBtn').addEventListener('click', () => {
+    if (S.busy || !S.moves.length) return;
+    S.moves.pop(); S.states.pop(); S.cells = S.states[S.states.length - 1];
+    S.ghost = null; S.guide = null;
+    if (S.quiz && S.moves.length < S.quiz.from) S.quiz.from = S.moves.length;
+    render(); afterMove();
+  });
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (S.busy) return;
+    const q = S.quiz; setPiece(S.start);
+    if (q) { S.quiz = { ...q, from: 0, done: false }; document.getElementById('quizBox').hidden = false; render(); }
+  });
+
+  const presetBox = document.getElementById('presets');
+  PRESETS.forEach((p, i) => {
+    const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = p.name; b.dataset.i = i;
+    b.addEventListener('click', () => { if (S.busy) return; endEdit(false); press('data-i', i); setPiece(at(p.cells, 4, 3)); });
+    presetBox.appendChild(b);
+  });
+
+  // ---------- 내 모양 만들기 ----------
+  const editBtn = document.getElementById('editBtn'), editDone = document.getElementById('editDone');
+  editBtn.addEventListener('click', () => {
+    if (S.busy) return;
+    S.editing = true; S.quiz = null; document.getElementById('quizBox').hidden = true;
+    S.cells = S.cells.map(c => ({ ...c })); S.ghost = null; S.guide = null;
+    editBtn.hidden = true; editDone.hidden = false; press('data-i', -1); setBusy(false);
+    say('판의 칸을 누르면 칸이 들어가고, 다시 누르면 빠져요. 있는 칸을 빠르게 두 번 누르면 그 칸이 진한 기준 칸이 돼요.', 'info');
+    render();
+  });
+  function endEdit(apply) {
+    if (!S.editing) return;
+    S.editing = false; editBtn.hidden = false; editDone.hidden = true; setBusy(false);
+    if (apply) setPiece(S.cells);
+  }
+  editDone.addEventListener('click', () => {
+    if (S.cells.length < 2) { say('칸을 두 개 이상 넣어 주세요.', 'warn'); return; }
+    if (!S.cells.some(c => c.m)) S.cells[0].m = true;
+    endEdit(true);
+    const lrSym = shapeKey(flip(S.cells, 'right')) === shapeKey(S.cells), udSym = shapeKey(flip(S.cells, 'down')) === shapeKey(S.cells);
+    if (lrSym || udSym) say(`이 모양은 ${lrSym ? '왼쪽과 오른쪽' : '위와 아래'}이 같아서 그쪽으로 뒤집어도 모양이 그대로예요. 양쪽이 다른 모양이 뒤집기를 보기 좋아요.`, 'warn');
+  });
+  let lastTap = { k: '', t: 0 };
+  svg.addEventListener('pointerdown', e => {
+    if (!S.editing) return;
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const x = Math.floor(q.x / C), y = Math.floor(q.y / C);
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    const i = S.cells.findIndex(c => c.x === x && c.y === y), k = x + ',' + y, now = performance.now();
+    if (lastTap.removed && lastTap.k === k && now - lastTap.t < 400) {
+      // 있던 칸을 빠르게 두 번 누르면: 처음 누를 때 지운 것을 되살리고 기준 칸으로 삼는다
+      S.cells.forEach(c => { c.m = false; }); S.cells.push({ x, y, m: true });
+      lastTap = { k: '', t: 0 };
+    } else if (i >= 0) { S.cells.splice(i, 1); lastTap = { k, t: now, removed: true }; }
+    else { S.cells.push({ x, y, m: false }); lastTap = { k, t: now }; }
+    render();
+  });
+
+  // ---------- 문제 내기 ----------
+  function randomMove() {
+    const r = Math.random();
+    if (r < 0.4) return { type: 'flip', side: ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)] };
+    if (r < 0.8) return { type: 'rotate', cw: Math.random() < 0.5, deg: [90, 180, 270][Math.floor(Math.random() * 3)] };
+    return { type: 'slide', dir: ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)], n: 1 + Math.floor(Math.random() * 3) };
+  }
+  document.getElementById('quizBtn').addEventListener('click', () => {
+    if (S.busy || S.editing) return;
+    let target = null, moves = null;
+    for (let tries = 0; tries < 300 && !target; tries++) {
+      const k = 2 + Math.floor(Math.random() * 2); let cs = S.cells; const ms = [];
+      for (let i = 0; i < k; i++) { const m = randomMove(); cs = applyMove(cs, m); ms.push(m); if (!inBoard(cs)) break; }
+      if (!inBoard(cs) || ms.length < k || !ms.some(m => m.type !== 'slide')) continue;
+      if (placeKey(cs) === placeKey(S.cells)) continue;
+      // 목표와 지금 조각이 서로 겹치지 않아야 잘 보인다
+      const now = new Set(S.cells.map(c => c.x + ',' + c.y));
+      if (cs.some(c => now.has(c.x + ',' + c.y))) continue;
+      target = cs; moves = ms;
+    }
+    if (!target) { say('이 자리에서는 문제를 만들기 어려워요. 처음으로 돌리거나 조각을 가운데로 옮긴 뒤 다시 눌러 주세요.', 'warn'); return; }
+    S.quiz = { target, moves, from: S.moves.length, done: false };
+    S.ghost = null; S.guide = null;
+    document.getElementById('quizBox').hidden = false;
+    document.getElementById('answerText').hidden = true;
+    say('파란 점선 자리와 모양·방향·자리가 똑같아지도록 움직여 보세요.', 'info');
+    render();
+  });
+  document.getElementById('answerBtn').addEventListener('click', () => {
+    if (!S.quiz) return;
+    const a = document.getElementById('answerText');
+    a.textContent = '답 하나: ' + S.quiz.moves.map(moveText).join(' → ') + ' (다른 방법도 있어요)';
+    a.hidden = false;
+  });
+  document.getElementById('quizEnd').addEventListener('click', () => { S.quiz = null; document.getElementById('quizBox').hidden = true; say(''); render(); });
+
+  press('data-i', 0);
+  setPiece(at(PRESETS[0].cells, 4, 3));
+})();
+</script>
+</body>
+</html>

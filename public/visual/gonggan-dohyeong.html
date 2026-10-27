@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>공간도형 실험실</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 고르는 판(삼수선·이면각·정사영)과 값 / 오른쪽: 돌려 보는 3D 무대 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --shape: #f97316;
+  --axis: #e11d48;
+  --ok: #16a34a;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.presets, .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible, canvas:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { display: grid; gap: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.row label { font-size: 13px; color: var(--muted); min-width: 7.5em; }
+.row input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.row output { font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; font-family: var(--font-display); }
+.say { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 14px; }
+.say .given { color: var(--accent); font-weight: 700; }
+.say .then { color: var(--shape); font-weight: 700; }
+.facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 14px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.facts b { font-family: var(--font-display); }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; min-width: 0; }
+#canvasBox { height: 540px; }
+@media (max-width: 860px) { #canvasBox { height: 420px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.overlayTop { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+.hint { position: absolute; left: 12px; bottom: 8px; margin: 0; font-size: 12px; color: var(--muted); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">기하 · 삼수선의 정리 · 이면각 · 정사영</div>
+    <h1>공간도형 실험실</h1>
+    <p>그림만으로는 잘 안 보이는 공간 속 수직 관계를 돌려 보며 확인합니다. 파란색은 주어진 것, 주황색은 그래서 알게 되는 것입니다.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="고르기">
+      <div class="row" role="group" aria-label="볼 내용">
+        <button class="chip" data-mode="three" aria-pressed="true">삼수선의 정리</button>
+        <button class="chip" data-mode="dihedral" aria-pressed="false">이면각</button>
+        <button class="chip" data-mode="proj" aria-pressed="false">정사영</button>
+      </div>
+
+      <!-- 삼수선의 정리 -->
+      <div class="panel" id="pThree">
+        <div class="row" role="group" aria-label="정리 고르기">
+          <button class="chip" data-thm="1" aria-pressed="true">정리 1</button>
+          <button class="chip" data-thm="2" aria-pressed="false">정리 2</button>
+          <button class="chip" data-thm="3" aria-pressed="false">정리 3</button>
+        </div>
+        <p class="say" id="thmSay"></p>
+        <div class="row"><label for="hIn">P의 높이 PO</label><input type="range" id="hIn" min="1" max="4" step="0.1" value="3"><output id="hOut" for="hIn"></output></div>
+        <div class="row"><label for="dIn">O와 l 사이 OH</label><input type="range" id="dIn" min="0.5" max="4" step="0.1" value="2.5"><output id="dOut" for="dIn"></output></div>
+        <div class="row"><label for="phiIn">직선 l 의 방향</label><input type="range" id="phiIn" min="0" max="180" step="1" value="35"><output id="phiOut" for="phiIn"></output></div>
+        <div class="row"><label for="sIn">l 위의 다른 점 Q</label><input type="range" id="sIn" min="-3" max="3" step="0.1" value="0"><output id="sOut" for="sIn"></output></div>
+        <dl class="facts" id="threeFacts"></dl>
+        <p class="note">Q를 H에서 옮기면 PQ는 l과 수직이 아니고 PH보다 길어집니다. 점 P에서 직선 l까지의 거리는 PH입니다.</p>
+      </div>
+
+      <!-- 이면각 -->
+      <div class="panel" id="pDih" hidden>
+        <div class="row" role="group" aria-label="이면각 보기">
+          <button class="chip" data-dh="free" aria-pressed="true">직접 돌려 보기</button>
+          <button class="chip" data-dh="cube" aria-pressed="false">정육면체 안의 이면각</button>
+        </div>
+        <div class="row" id="dihRow"><label for="dihIn">두 반평면의 각 θ</label><input type="range" id="dihIn" min="0" max="180" step="1" value="60"><output id="dihOut" for="dihIn"></output></div>
+        <p class="say" id="dihSay"></p>
+        <dl class="facts" id="dihFacts"></dl>
+      </div>
+
+      <!-- 정사영 -->
+      <div class="panel" id="pProj" hidden>
+        <div class="row" role="group" aria-label="도형 고르기">
+          <button class="chip" data-fig="seg" aria-pressed="false">선분</button>
+          <button class="chip" data-fig="tri" aria-pressed="true">삼각형</button>
+          <button class="chip" data-fig="circ" aria-pressed="false">원</button>
+        </div>
+        <div class="row"><label for="projIn">평면 α와 이루는 각 θ</label><input type="range" id="projIn" min="0" max="90" step="1" value="50"><output id="projOut" for="projIn"></output></div>
+        <p class="say" id="projSay"></p>
+        <dl class="facts" id="projFacts"></dl>
+        <p class="note">빛이 평면 α에 수직으로 비칠 때 생기는 그림자가 정사영입니다. θ가 90°가 되면 선분은 점, 도형은 선분이 됩니다.</p>
+      </div>
+
+      <div class="legend"><span><i style="background:var(--accent)"></i>주어진 것</span><span><i style="background:var(--shape)"></i>그래서 알게 되는 것</span></div>
+    </section>
+
+    <section class="stage" aria-label="3D 그림">
+      <div class="overlayTop" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso" aria-pressed="true">비스듬히</button>
+        <button class="chip" data-view="front" aria-pressed="false">앞에서</button>
+        <button class="chip" data-view="top" aria-pressed="false">위에서</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox"><canvas id="c" tabindex="0" aria-label="공간도형 3D 그림. 끌거나 화살표 키로 돌릴 수 있습니다."></canvas></div>
+      <p class="hint">끌어서 돌리기 · 휠·두 손가락으로 확대 · 화살표 키도 됩니다</p>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const S = { mode: 'three', thm: 1, h: 3, d: 2.5, phi: 35, s: 0, dh: 'free', dih: 60, fig: 'tri', proj: 50 };
+  const BLUE = 0x2563eb, ORANGE = 0xf97316, INK = 0x334155, TEAL = 0x0f766e, RED = 0xe11d48;
+  const fmt = (v, k = 2) => (Math.round(v * 10 ** k) / 10 ** k).toString();
+  const deg = r => r * 180 / Math.PI, rad = d => d * Math.PI / 180;
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const angleDeg = (a, b) => deg(Math.acos(Math.max(-1, Math.min(1, a.clone().normalize().dot(b.clone().normalize())))));
+
+  // ---------- 3D 무대 ----------
+  const canvas = document.getElementById('c'), box = document.getElementById('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(5, 9, 7); scene.add(sun);
+  const target = new THREE.Vector3(0, 1.2, 0);
+  let theta = 0.6, phi = 1.1, zoom = 1;
+  const VIEWS = { iso: [0.6, 1.1], front: [0, Math.PI / 2], top: [0, 0.0005] };
+
+  // 평면 α (삼수선·정사영에서 바닥)
+  const alpha = new THREE.Group();
+  const aMesh = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({ color: 0x9cc4ff, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+  aMesh.rotation.x = -Math.PI / 2; alpha.add(aMesh);
+  alpha.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([V3(-5, 0, -5), V3(5, 0, -5), V3(5, 0, 5), V3(-5, 0, 5)]), new THREE.LineBasicMaterial({ color: 0x7aa7e8 })));
+  scene.add(alpha);
+
+  let dyn = new THREE.Group(); scene.add(dyn);
+  function clearDyn() {
+    dyn.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    scene.remove(dyn); dyn = new THREE.Group(); scene.add(dyn);
+  }
+  function rod(a, b, color, r = 0.045) {
+    const d = b.clone().sub(a), L = d.length(); if (L < 1e-6) return;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 12), new THREE.MeshLambertMaterial({ color }));
+    m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(V3(0, 1, 0), d.normalize()); dyn.add(m);
+  }
+  function dashed(a, b, color) {
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineDashedMaterial({ color, dashSize: 0.16, gapSize: 0.1 }));
+    l.computeLineDistances(); dyn.add(l); return l;
+  }
+  function dot(p, color, r = 0.1) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshLambertMaterial({ color })); m.position.copy(p); dyn.add(m); return m; }
+  // 직각 표시: 꼭짓점 V 에서 d1, d2 방향으로 작은 네모
+  function mark(V, d1, d2, color, s = 0.32) {
+    const a = d1.clone().normalize().multiplyScalar(s), b = d2.clone().normalize().multiplyScalar(s);
+    const p1 = V.clone().add(a), p2 = V.clone().add(a).add(b), p3 = V.clone().add(b);
+    rod(p1, p2, color, 0.018); rod(p2, p3, color, 0.018);
+  }
+  // u 에서 w 쪽으로 도는 호
+  function arc(C, u, w, r, color) {
+    const a = u.clone().normalize(), b0 = w.clone().normalize(), ang = Math.acos(Math.max(-1, Math.min(1, a.dot(b0))));
+    let v = b0.clone().sub(a.clone().multiplyScalar(a.dot(b0)));
+    if (v.length() < 1e-6) return;
+    v.normalize();
+    const pts = Array.from({ length: 33 }, (_, i) => { const t = ang * i / 32; return C.clone().add(a.clone().multiplyScalar(r * Math.cos(t))).add(v.clone().multiplyScalar(r * Math.sin(t))); });
+    dyn.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color })));
+    return C.clone().add(a.clone().multiplyScalar((r + 0.3) * Math.cos(ang / 2))).add(v.clone().multiplyScalar((r + 0.3) * Math.sin(ang / 2)));
+  }
+  function label(text, p, color = '#1d2b3a', size = 0.55) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+    const g = cv.getContext('2d');
+    g.font = '700 84px "Gowun Batang", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 10; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.strokeText(text, 64, 68);
+    g.fillStyle = color; g.fillText(text, 64, 68);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(size, size, 1); sp.position.copy(p); sp.renderOrder = 10; dyn.add(sp);
+  }
+  function fillPoly(pts, color, opacity) {
+    const g = new THREE.BufferGeometry(), arr = [];
+    for (let i = 1; i + 1 < pts.length; i++) [pts[0], pts[i], pts[i + 1]].forEach(p => arr.push(p.x, p.y, p.z));
+    g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+    dyn.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false })));
+    dyn.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color })));
+  }
+
+  // ---------- 삼수선의 정리 ----------
+  const THM = {
+    1: { given: 'PO ⊥ α, OH ⊥ l', then: 'PH ⊥ l' },
+    2: { given: 'PO ⊥ α, PH ⊥ l', then: 'OH ⊥ l' },
+    3: { given: 'PH ⊥ l, OH ⊥ l, PO ⊥ OH', then: 'PO ⊥ α' },
+  };
+  function threeGeom() {
+    const u = V3(Math.cos(rad(S.phi)), 0, Math.sin(rad(S.phi))), n = V3(-Math.sin(rad(S.phi)), 0, Math.cos(rad(S.phi)));
+    const O = V3(-0.4, 0, -0.6), H = O.clone().add(n.clone().multiplyScalar(S.d)), P = O.clone().add(V3(0, S.h, 0));
+    const Q = H.clone().add(u.clone().multiplyScalar(S.s));
+    return { u, n, O, H, P, Q };
+  }
+  function buildThree() {
+    const { u, n, O, H, P, Q } = threeGeom(), t = S.thm;
+    const cPO = t === 3 ? ORANGE : BLUE, cOH = t === 2 ? ORANGE : BLUE, cPH = t === 1 ? ORANGE : BLUE;
+    rod(H.clone().add(u.clone().multiplyScalar(-4.6)), H.clone().add(u.clone().multiplyScalar(4.6)), TEAL, 0.035);
+    label('l', H.clone().add(u.clone().multiplyScalar(4.3)).add(V3(0, 0.35, 0)), '#0f766e');
+    rod(P, O, cPO); rod(O, H, cOH); rod(P, H, cPH);
+    mark(O, V3(0, 1, 0), n, t === 3 ? BLUE : BLUE);          // PO ⊥ OH
+    mark(O, V3(0, 1, 0), u, cPO);                             // PO ⊥ (α 위의 다른 방향)
+    mark(H, n.clone().negate(), u, cOH);                      // OH ⊥ l
+    mark(H, P.clone().sub(H), u, cPH);                        // PH ⊥ l
+    dot(P, RED); dot(O, INK, 0.08); dot(H, INK, 0.08);
+    label('P', P.clone().add(V3(0, 0.38, 0)), '#e11d48'); label('O', O.clone().add(V3(-0.3, 0.25, -0.2)));
+    label('H', H.clone().add(n.clone().multiplyScalar(0.35)).add(V3(0, 0.25, 0)));
+    label('α', V3(4.3, 0.2, 4.3), '#2563eb');
+    if (Math.abs(S.s) > 0.05) {
+      dot(Q, INK, 0.08); label('Q', Q.clone().add(V3(0, 0.3, 0)).add(n.clone().multiplyScalar(0.3)));
+      dashed(P, Q, 0x64748b); dashed(O, Q, 0x64748b);
+    }
+  }
+  function textThree() {
+    const { u, O, H, P, Q } = threeGeom(), t = THM[S.thm];
+    document.getElementById('thmSay').innerHTML = `<span class="given">${t.given}</span> 이면 <span class="then">${t.then}</span>`;
+    const PH = P.distanceTo(H), PQ = P.distanceTo(Q);
+    const rows = [
+      ['PO', `<b>${fmt(S.h)}</b>`], ['OH', `<b>${fmt(S.d)}</b>`],
+      ['PH', `<b>${fmt(PH)}</b> (PH² = PO² + OH² = ${fmt(S.h * S.h + S.d * S.d)})`],
+      ['∠(PH, l)', `${fmt(angleDeg(P.clone().sub(H), u), 1)}°`],
+      ['∠(OH, l)', `${fmt(angleDeg(O.clone().sub(H), u), 1)}°`],
+      ['∠POH', `${fmt(angleDeg(P.clone().sub(O), H.clone().sub(O)), 1)}°`],
+    ];
+    if (Math.abs(S.s) > 0.05) rows.push(['Q 로 옮기면', `PQ = ${fmt(PQ)} &gt; PH, ∠(PQ, l) = ${fmt(angleDeg(P.clone().sub(Q), u), 1)}°`]);
+    document.getElementById('threeFacts').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  }
+
+  // ---------- 이면각 ----------
+  function buildDih() {
+    if (S.dh === 'free') {
+      const th = rad(S.dih), a = V3(0, 0, 1), b = V3(0, Math.sin(th), Math.cos(th)), e = V3(1, 0, 0);
+      const quad = dir => [V3(-3, 0, 0), V3(3, 0, 0), V3(3, 0, 0).add(dir.clone().multiplyScalar(3.6)), V3(-3, 0, 0).add(dir.clone().multiplyScalar(3.6))];
+      fillPoly(quad(a), BLUE, 0.22); fillPoly(quad(b), ORANGE, 0.22);
+      rod(V3(-3.4, 0, 0), V3(3.4, 0, 0), INK, 0.04);
+      const M = V3(0.6, 0, 0);
+      rod(M, M.clone().add(a.clone().multiplyScalar(2.6)), BLUE); rod(M, M.clone().add(b.clone().multiplyScalar(2.6)), ORANGE);
+      mark(M, e, a, BLUE); mark(M, e, b, ORANGE);
+      const lp = arc(M, a, b, 1.0, RED); if (lp) label('θ', lp, '#e11d48');
+      dot(M, INK, 0.08); label('M', M.clone().add(V3(0.1, -0.35, -0.3)));
+      label('β', V3(-2.6, 0, 0).add(a.clone().multiplyScalar(3.1)), '#2563eb');
+      label('γ', V3(-2.6, 0, 0).add(b.clone().multiplyScalar(3.1)), '#f97316');
+      return;
+    }
+    // 한 모서리가 2 인 정육면체 ABCD-EFGH, 평면 BDE 와 밑면 ABCD
+    const P = { A: V3(-1, 0, 1), B: V3(1, 0, 1), C: V3(1, 0, -1), D: V3(-1, 0, -1), E: V3(-1, 2, 1), F: V3(1, 2, 1), G: V3(1, 2, -1), H: V3(-1, 2, -1) };
+    Object.values(P).forEach(p => p.multiplyScalar(1.6));   // 한 모서리 2 를 크게 그린다(값은 그대로 2 기준)
+    [['A','B'],['B','C'],['C','D'],['D','A'],['E','F'],['F','G'],['G','H'],['H','E'],['A','E'],['B','F'],['C','G'],['D','H']]
+      .forEach(([p, q]) => rod(P[p], P[q], 0x94a3b8, 0.02));
+    fillPoly([P.A, P.B, P.C, P.D], BLUE, 0.2); fillPoly([P.B, P.D, P.E], ORANGE, 0.3);
+    const M = P.B.clone().add(P.D).multiplyScalar(0.5);
+    rod(P.B, P.D, INK, 0.04); rod(M, P.A, BLUE); rod(M, P.E, ORANGE); rod(P.A, P.E, 0x64748b, 0.03);
+    const bd = P.D.clone().sub(P.B);
+    mark(M, bd, P.A.clone().sub(M), BLUE, 0.25); mark(M, bd, P.E.clone().sub(M), ORANGE, 0.25);
+    mark(P.A, P.E.clone().sub(P.A), M.clone().sub(P.A), 0x64748b, 0.22);
+    const lp = arc(M, P.A.clone().sub(M), P.E.clone().sub(M), 0.55, RED); if (lp) label('θ', lp, '#e11d48', 0.45);
+    Object.entries(P).forEach(([k, p]) => label(k, p.clone().multiplyScalar(1.18).add(V3(0, 0.08, 0)), '#1d2b3a', 0.42));
+    dot(M, INK, 0.07); label('M', M.clone().add(V3(0.3, -0.3, 0)), '#1d2b3a', 0.42);
+  }
+  function textDih() {
+    document.getElementById('dihRow').hidden = S.dh !== 'free';
+    const say = document.getElementById('dihSay'), facts = document.getElementById('dihFacts');
+    if (S.dh === 'free') {
+      say.innerHTML = `모서리 위의 점 M에서 <span class="given">두 반평면 위에 모서리와 수직인 직선</span>을 하나씩 그으면, 그 두 직선이 이루는 각이 <span class="then">이면각 θ</span>입니다.`;
+      facts.innerHTML = `<dt>이면각 θ</dt><dd><b>${S.dih}°</b></dd><dt>cos θ</dt><dd>${fmt(Math.cos(rad(S.dih)), 3)}</dd>
+        <dt>참고</dt><dd>${S.dih === 90 ? '두 평면이 수직입니다.' : S.dih > 90 ? '둔각이면 두 평면이 이루는 각은 180° − θ = ' + (180 - S.dih) + '° 로 봅니다.' : '두 평면이 이루는 각은 θ 와 같습니다.'}</dd>`;
+      return;
+    }
+    say.innerHTML = `한 모서리가 2인 정육면체에서 <span class="given">평면 BDE와 밑면 ABCD</span>가 이루는 각. 모서리 BD의 중점 M에서 <span class="given">MA ⊥ BD, ME ⊥ BD</span> 이므로 <span class="then">θ = ∠AME</span>입니다.`;
+    facts.innerHTML = `<dt>MA</dt><dd>√2 ≈ ${fmt(Math.SQRT2, 3)}</dd><dt>AE</dt><dd>2</dd><dt>ME</dt><dd>√6 ≈ ${fmt(Math.sqrt(6), 3)}</dd>
+      <dt>cos θ</dt><dd><b>MA / ME = √2 / √6 = 1/√3 ≈ ${fmt(1 / Math.sqrt(3), 3)}</b></dd>
+      <dt>θ</dt><dd>≈ ${fmt(deg(Math.acos(1 / Math.sqrt(3))), 1)}°</dd>`;
+  }
+
+  // ---------- 정사영 ----------
+  const FIG = {
+    seg: { name: '선분', pts: [[0, -1.5], [0, 1.5]], len: 3 },
+    tri: { name: '삼각형', pts: [[-1.6, -1.2], [1.6, -1.2], [0, 1.4]], area: 0.5 * 3.2 * 2.6 },
+    circ: { name: '원', pts: Array.from({ length: 64 }, (_, i) => [1.5 * Math.cos(i / 32 * Math.PI), 1.5 * Math.sin(i / 32 * Math.PI)]), area: Math.PI * 1.5 * 1.5 },
+  };
+  const H0 = 2.2;
+  const lift = ([x, v], th) => V3(x, H0 + v * Math.sin(th), v * Math.cos(th));
+  const drop = ([x, v], th) => V3(x, 0.01, v * Math.cos(th));
+  let rays = [];
+  function buildProj() {
+    const th = rad(S.proj), f = FIG[S.fig];
+    const up = f.pts.map(p => lift(p, th)), dn = f.pts.map(p => drop(p, th));
+    if (S.fig === 'seg') { rod(up[0], up[1], ORANGE, 0.06); rod(dn[0], dn[1], BLUE, 0.06); }
+    else { fillPoly(up, ORANGE, 0.45); fillPoly(dn, BLUE, 0.4); }
+    const step = S.fig === 'circ' ? 8 : 1;
+    rays = [];
+    f.pts.forEach((p, i) => {
+      if (i % step) return;
+      const a = lift(p, th), b = drop(p, th);
+      dashed(a, b, 0xf59e0b);
+      const m = dot(a, 0xfbbf24, 0.055); rays.push({ m, a, b, k: i / f.pts.length });
+    });
+    const C = V3(0, H0, 0);
+    dashed(C, C.clone().add(V3(0, 0, 2.2)), 0x64748b);
+    if (S.proj > 0.5) { const lp = arc(C, V3(0, 0, 1), V3(0, Math.sin(th), Math.cos(th)), 0.9, RED); if (lp) label('θ', lp, '#e11d48', 0.45); }
+    label('α', V3(4.3, 0.2, 4.3), '#2563eb');
+  }
+  function textProj() {
+    const th = rad(S.proj), c = Math.cos(th), f = FIG[S.fig];
+    const say = document.getElementById('projSay'), facts = document.getElementById('projFacts');
+    if (S.fig === 'seg') {
+      say.innerHTML = `길이가 l인 선분이 평면과 θ를 이루면 <span class="then">정사영의 길이 l′ = l cos θ</span>`;
+      facts.innerHTML = `<dt>θ</dt><dd><b>${S.proj}°</b> (cos θ = ${fmt(c, 3)})</dd><dt>l</dt><dd>${fmt(f.len)}</dd><dt>l′</dt><dd><b>${fmt(f.len * c, 3)}</b></dd>`;
+    } else {
+      say.innerHTML = `넓이가 S인 ${f.name}이 평면과 θ를 이루면 <span class="then">정사영의 넓이 S′ = S cos θ</span>${S.fig === 'circ' ? ' (그림자는 타원)' : ''}`;
+      facts.innerHTML = `<dt>θ</dt><dd><b>${S.proj}°</b> (cos θ = ${fmt(c, 3)})</dd><dt>S</dt><dd>${S.fig === 'circ' ? 'π × 1.5² = ' : ''}${fmt(f.area, 3)}</dd><dt>S′</dt><dd><b>${fmt(f.area * c, 3)}</b></dd>`;
+    }
+  }
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let rayId = null;
+  function runRays() {
+    if (rayId) cancelAnimationFrame(rayId); rayId = null;
+    if (S.mode !== 'proj' || reduce) return;
+    const step = now => {
+      const t = now / 1600;
+      rays.forEach(r => { const k = (t + r.k) % 1; r.m.position.copy(r.a).lerp(r.b, k); });
+      draw(); rayId = requestAnimationFrame(step);
+    };
+    rayId = requestAnimationFrame(step);
+  }
+
+  // ---------- 다시 그리기 ----------
+  function rebuild() {
+    clearDyn();
+    alpha.visible = S.mode !== 'dihedral';
+    target.y = S.mode === 'proj' ? 1.1 : S.mode === 'dihedral' ? (S.dh === 'cube' ? 1.5 : 1.0) : 1.3;
+    if (S.mode === 'three') { buildThree(); textThree(); }
+    else if (S.mode === 'dihedral') { buildDih(); textDih(); }
+    else { buildProj(); textProj(); }
+    document.getElementById('pThree').hidden = S.mode !== 'three';
+    document.getElementById('pDih').hidden = S.mode !== 'dihedral';
+    document.getElementById('pProj').hidden = S.mode !== 'proj';
+    draw(); runRays();
+  }
+  function pick(attr, key, val) {
+    document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
+    S[key] = val; rebuild();
+  }
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => pick('mode', 'mode', b.dataset.mode)));
+  document.querySelectorAll('[data-thm]').forEach(b => b.addEventListener('click', () => pick('thm', 'thm', Number(b.dataset.thm))));
+  document.querySelectorAll('[data-dh]').forEach(b => b.addEventListener('click', () => pick('dh', 'dh', b.dataset.dh)));
+  document.querySelectorAll('[data-fig]').forEach(b => b.addEventListener('click', () => pick('fig', 'fig', b.dataset.fig)));
+  const sliders = [['hIn', 'hOut', 'h', v => fmt(v, 1)], ['dIn', 'dOut', 'd', v => fmt(v, 1)], ['phiIn', 'phiOut', 'phi', v => v + '°'],
+    ['sIn', 'sOut', 's', v => fmt(v, 1)], ['dihIn', 'dihOut', 'dih', v => v + '°'], ['projIn', 'projOut', 'proj', v => v + '°']];
+  sliders.forEach(([i, o, key, f]) => {
+    const inp = document.getElementById(i), out = document.getElementById(o);
+    const sync = () => { S[key] = Number(inp.value); out.textContent = f(S[key]); };
+    sync(); inp.addEventListener('input', () => { sync(); rebuild(); });
+  });
+
+  // ---------- 돌려 보기 ----------
+  function frame() {
+    const w = box.clientWidth, h = box.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw();
+  }
+  function draw() {
+    const a = cam.aspect || 1, R = (a < 1 ? 16 / a * 0.75 : 16) / zoom, sp = Math.sin(phi);
+    cam.position.set(R * sp * Math.sin(theta), target.y + R * Math.cos(phi), R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target); renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+  let tween = null;
+  const viewChips = () => document.querySelectorAll('.chip[data-view]');
+  function goTo(name) {
+    const [t1, p1] = VIEWS[name];
+    viewChips().forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * e; phi = p0 + (p1 - p0) * e; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  viewChips().forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI - 0.05, p));
+  const setZoom = z => { zoom = Math.max(0.5, Math.min(3, z)); draw(); };
+  const pts = new Map(); let pinch = 0;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); if (pts.size === 2) pinch = pinchDist();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+  });
+  const endDrag = e => { pts.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener('keydown', e => {
+    const d = 0.12, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!m) return; e.preventDefault(); theta += m[0]; phi = clampPhi(phi + m[1]); draw();
+  });
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  rebuild(); frame();
+})();
+</script>
+</body>
+</html>

@@ -55,12 +55,36 @@ export type SchoolStats = {
   special?: { students: number; classes: number; perClass?: number }
   teachers?: number         // 교원 총계(직위별 교원 현황)
   studentsPerTeacher?: number
+  achievement?: Achievement // 교과별 학업성취사항(성취도)
+  /** 학교알리미에서 다시 받을 때 쓰는 열쇠 — lib/schoolinfo.ts 가 채운다 */
+  schoolinfo?: { shl: string; adrcd: string; level: '초' | '중' | '고' }
+}
+
+/** 교과별 학업성취사항 한 줄 — 학교알리미 공시(보통 4월에 지난해 것이 올라온다) */
+export type AchievementRow = {
+  grade: string         // '1학년'
+  term: string          // '1학기'
+  subject: string       // '공통수학1'
+  avg?: number          // 원점수 평균
+  sd?: number           // 표준편차
+  students?: number     // 수강자 수
+  dist?: number[]       // 성취도 비율(%) — A~E 5칸. 3단계 과목은 A~C 3칸
+}
+
+export type Achievement = {
+  year: number          // 어느 해 성적인가(공시 연도가 아니라 성적 연도)
+  rows: AchievementRow[]
+  note?: string
 }
 
 /** 「Wee클래스 설치」처럼 한 줄로 붙는 것 */
 export type Highlight = { label: string; value: string }
 
-export type Source = { name: string; detail?: string }
+export type Source = {
+  name: string
+  detail?: string
+  url?: string          // 그 학교 학교알리미 화면 — Pneiss_b01_s0.do?HG_CD=<학교알리미 학교코드>
+}
 
 export type SchoolProfile = {
   id?: string
@@ -85,4 +109,12 @@ export type SchoolProfile = {
 /** 「공통수학1」 + 4 → 「공통수학1 (4)」. 단위가 없으면 과목만. */
 export function subjectLabel(t: MathTerm): string {
   return t.units ? `${t.subject} (${t.units})` : t.subject
+}
+
+export const SCHOOLINFO_HOME = 'https://www.schoolinfo.go.kr/'
+
+/** 이 학교 학교알리미 화면. 주소를 아직 안 넣은 학교는 첫 화면으로 보낸다(거기서 학교 이름으로 검색). */
+export function schoolinfoLink(p: SchoolProfile): { url: string; direct: boolean } {
+  const url = p.sources?.find(s => s.url)?.url
+  return url ? { url, direct: true } : { url: SCHOOLINFO_HOME, direct: false }
 }
