@@ -16,7 +16,12 @@ description: 수지쌤 개념·증명·공식 쓰기 강의 영상을 만든다 
 - 새 과정(예: 중3, 수학Ⅰ)의 개념 영상·증명 영상을 만들 때
 - 대본만 쓰거나 고칠 때, 썸네일만 다시 만들 때, 유튜브 제목·설명·공개 범위만 맞출 때
 - 유튜브엔 있는데 앱에 안 뜨는 영상을 연결할 때
-- 풀이(필수예제) 영상은 같은 폴더 도구(`solution_youtube.py`, `thumbnails.py --solutions`, `docs/대본/공통수학2/풀이/_대본쓰기_지침.md`)를 쓰지만 이 스킬의 범위 밖이다.
+- 풀이(필수예제) 영상도 같은 도구로 만든다(공통수학1 130편, 2026-10-27):
+  재료 `solution_materials.mjs --grade 공통수학1 --mat <영상폴더>/_재료 --out <영상폴더>/_재료/풀이`(문제은행 그림 + `_목록.json`) →
+  대본 `docs/대본/<과정>/풀이/풀이_<local_no>_….json`(지침 `docs/대본/공통수학2/풀이/_대본쓰기_지침.md`, **`quiz` 객관식 보기를 쓸 때 같이**) →
+  `proof_validate.py` → `render_all.py --solutions` (→ `<영상폴더>/풀이영상/NN_풀이MM_….mp4`) →
+  `solution_youtube.py "<영상폴더>/풀이영상" --grade 공통수학1` → `thumbnails.py "<영상폴더>/풀이영상" --solutions --grade 공통수학1` →
+  업로드 → `sync_quiz.mjs --grade 공통수학1`(보기 → DB). 썸네일 색: 공통수학1 풀이는 증명보다 한 단계 더 진한 파랑.
 
 ## 영상 종류와 다른 점
 
@@ -138,3 +143,4 @@ node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통
 ## 규칙 추가 기록
 > 작업하다 새 규칙이 생기면 여기 날짜와 함께 한 줄씩 추가하고, 위 본문의 해당 자리에도 반영한다.
 - 2026-10-27 스킬 처음 만듦 (지금까지의 커밋·문서 기준)
+- 2026-10-27 풀이 영상도 이 도구로(solution_materials·render_all --solutions·--grade). 객관식 보기는 대본 쓸 때 같이. 행렬은 mathtext 에 pmatrix 가 없어 \genfrac 로 그린다. 단위행렬 E 는 「단위행렬 이」로 읽힌다(숫자 2와 헷갈림)
