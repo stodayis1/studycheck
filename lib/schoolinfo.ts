@@ -153,7 +153,7 @@ export async function fetchSchool(shl: string, level: Level, region: { adrcd?: s
 
 /**
  * 받아 온 값을 기존 한 장에 얹는다.
- * ★ 사람이 정리한 것(수학 편제·정기시험·메모·성취도·손으로 적은 한 줄)은 절대 덮지 않는다.
+ * ★ 사람이 정리한 것(수학 편제·정기시험·메모·성취도·수행평가·손으로 적은 한 줄)은 절대 덮지 않는다.
  */
 export function mergeProfile(prev: SchoolProfile | null, f: Fetched): SchoolProfile {
   const { url, ...rest } = f
@@ -168,7 +168,11 @@ export function mergeProfile(prev: SchoolProfile | null, f: Fetched): SchoolProf
 
   return {
     ...rest,
-    stats: { ...rest.stats, ...(prev?.stats?.achievement ? { achievement: prev.stats.achievement } : {}) },
+    stats: {
+      ...rest.stats,
+      ...(prev?.stats?.achievement ? { achievement: prev.stats.achievement } : {}),
+      ...(prev?.stats?.assessment ? { assessment: prev.stats.assessment } : {}),
+    },
     math_curriculum: prev?.math_curriculum ?? [],
     exam_calendar: prev?.exam_calendar ?? {},
     highlights: [...f.highlights, ...keepHighlights],
