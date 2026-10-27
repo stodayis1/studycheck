@@ -1,0 +1,190 @@
+{
+ "id": "증명_14",
+ "order": "17-증명1",
+ "title": "삼차방정식의 근과 계수의 관계 유도 과정",
+ "concept_no": 17,
+ "chapter": "방정식",
+ "sub_chapter": "여러 가지 방정식",
+ "book_page": 126,
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "삼차방정식도 근과 계수!",
+   "say": "자, 오늘은 삼차방정식의 근과 계수의 관계를 직접 유도해 볼게. // 에이 엑스 세제곱 더하기 비 엑스 제곱 더하기 씨 엑스 더하기 디는 영, / 이 방정식의 세 근을 알파, 베타, 감마라고 하면 // {천천히 세 근의 합은 마이너스 에이분의 비, 두 개씩 곱한 것의 합은 에이분의 씨, 세 근의 곱은 마이너스 에이분의 디.} // 이게 어디서 나오는지 노트에 같이 써 가면서 따라와.",
+   "write": [
+    {
+     "cue": "에이 엑스 세제곱 더하기 비 엑스 제곱",
+     "tex": "$ax^3+bx^2+cx+d=0$ 의 세 근 $\\alpha,\\ \\beta,\\ \\gamma$",
+     "color": "blue"
+    },
+    {
+     "cue": "세 근의 합은 마이너스 에이분의 비",
+     "tex": "$\\alpha+\\beta+\\gamma=-\\dfrac{b}{a}$",
+     "color": "blue",
+     "indent": 1
+    },
+    {
+     "cue": "두 개씩 곱한 것의 합은 에이분의 씨",
+     "tex": "$\\alpha\\beta+\\beta\\gamma+\\gamma\\alpha=\\dfrac{c}{a}$",
+     "color": "blue",
+     "indent": 1
+    },
+    {
+     "cue": "세 근의 곱은 마이너스 에이분의 디",
+     "tex": "$\\alpha\\beta\\gamma=-\\dfrac{d}{a}$",
+     "color": "blue",
+     "indent": 1
+    }
+   ]
+  },
+  {
+   "pose": "wonder",
+   "bubble": "근을 알면 인수를 안다",
+   "say": "그럼 시작을 어떻게 할까? // 알파가 근이면 인수정리에 의해서 / 엑스 빼기 알파를 인수로 가지죠? / 베타, 감마도 마찬가지야. // 그래서 삼차식은 엑스 빼기 알파, 엑스 빼기 베타, 엑스 빼기 감마를 / 인수로 가지는 거다. // {강조 이때 앞에 최고차항의 계수 에이를 꼭 붙여야 돼.} / 안 붙이면 엑스 세제곱의 계수가 안 맞아.",
+   "write": [
+    {
+     "cue": "인수정리에 의해서",
+     "tex": "근이 $\\alpha$ $\\Rightarrow$ $x-\\alpha$ 를 인수로 (인수정리)",
+     "color": "red"
+    },
+    {
+     "cue": "그래서 삼차식은",
+     "tex": "$ax^3+bx^2+cx+d=a(x-\\alpha)(x-\\beta)(x-\\gamma)$"
+    },
+    {
+     "cue": "최고차항의 계수 에이를",
+     "tex": "앞의 $a$ 를 빠뜨리지 말 것!",
+     "color": "red",
+     "indent": 1,
+     "underline": true
+    }
+   ]
+  },
+  {
+   "pose": "pointer",
+   "bubble": "양변을 a로 나누기",
+   "say": "자, 에이는 삼차방정식의 최고차항 계수니까 영이 아니죠. // 그래서 양변을 에이로 나누면 / 왼쪽은 엑스 세제곱 더하기 에이분의 비 엑스 제곱 더하기 에이분의 씨 엑스 더하기 에이분의 디, // 오른쪽은 에이가 사라지고 / {강조 괄호 세 개의 곱만 남는 거다.}",
+   "write": [
+    {
+     "cue": "영이 아니죠",
+     "tex": "$a\\neq 0$ 이므로 양변을 $a$ 로 나누면",
+     "color": "red"
+    },
+    {
+     "cue": "괄호 세 개의 곱만",
+     "tex": "$x^3+\\dfrac{b}{a}x^2+\\dfrac{c}{a}x+\\dfrac{d}{a}=(x-\\alpha)(x-\\beta)(x-\\gamma)$"
+    }
+   ]
+  },
+  {
+   "pose": "write",
+   "bubble": "우변을 전개하자",
+   "say": "이제 오른쪽을 전개할게. // 먼저 앞의 두 괄호를 곱하면 / 엑스 제곱 빼기 알파 더하기 베타 곱하기 엑스 더하기 알파 베타. // 여기에 엑스 빼기 감마를 곱해서 / 같은 차수끼리 모아 볼게. [[쓰기]] 같은 차수끼리 정리하면 / {강조 엑스 세제곱 빼기 세 근의 합 엑스 제곱, 더하기 두 개씩 곱의 합 엑스, 빼기 세 근의 곱.}",
+   "write": [
+    {
+     "cue": "먼저 앞의 두 괄호를 곱하면",
+     "tex": "$(x-\\alpha)(x-\\beta)=x^2-(\\alpha+\\beta)x+\\alpha\\beta$",
+     "indent": 1
+    },
+    {
+     "quiet": true,
+     "tex": "$\\{x^2-(\\alpha+\\beta)x+\\alpha\\beta\\}(x-\\gamma)$",
+     "indent": 1
+    },
+    {
+     "quiet": true,
+     "tex": "$=x^3-(\\alpha+\\beta)x^2+\\alpha\\beta x$",
+     "indent": 1
+    },
+    {
+     "quiet": true,
+     "tex": "$\\quad-\\gamma x^2+(\\alpha+\\beta)\\gamma x-\\alpha\\beta\\gamma$",
+     "indent": 1
+    },
+    {
+     "cue": "같은 차수끼리 정리하면",
+     "tex": "$=x^3-(\\alpha+\\beta+\\gamma)x^2$",
+     "indent": 1
+    },
+    {
+     "cue": "같은 차수끼리 정리하면",
+     "tex": "$\\quad+(\\alpha\\beta+\\beta\\gamma+\\gamma\\alpha)x-\\alpha\\beta\\gamma$",
+     "indent": 1
+    }
+   ]
+  },
+  {
+   "pose": "remember",
+   "bubble": "항등식 → 계수 비교",
+   "say": "자, 여기가 핵심이야. // 이 등식은 엑스에 어떤 값을 넣어도 성립하죠? / {강조 엑스에 대한 항등식이니까 양변의 동류항의 계수를 비교하면 돼.} // 엑스 제곱의 계수를 보면 / 에이분의 비는 마이너스, 세 근의 합. // 엑스의 계수를 보면 에이분의 씨가 두 개씩 곱한 것의 합. // 상수항은 에이분의 디가 마이너스 세 근의 곱이야.",
+   "write": [
+    {
+     "cue": "엑스에 대한 항등식이니까",
+     "tex": "$x$ 에 대한 항등식 $\\Rightarrow$ 동류항의 계수 비교",
+     "color": "red"
+    },
+    {
+     "cue": "엑스 제곱의 계수를 보면",
+     "tex": "$x^2$ 의 계수: $\\dfrac{b}{a}=-(\\alpha+\\beta+\\gamma)$",
+     "indent": 1
+    },
+    {
+     "cue": "엑스의 계수를 보면",
+     "tex": "$x$ 의 계수: $\\dfrac{c}{a}=\\alpha\\beta+\\beta\\gamma+\\gamma\\alpha$",
+     "indent": 1
+    },
+    {
+     "cue": "상수항은 에이분의 디가",
+     "tex": "상수항: $\\dfrac{d}{a}=-\\alpha\\beta\\gamma$",
+     "indent": 1
+    }
+   ]
+  },
+  {
+   "pose": "idea",
+   "bubble": "부호는 -, +, -",
+   "say": "그래서 정리하면 세 근의 합은 마이너스 에이분의 비, / 두 개씩 곱한 것의 합은 에이분의 씨, / 세 근의 곱은 마이너스 에이분의 디가 되는 거다. // {강조 부호가 마이너스, 플러스, 마이너스로 번갈아 나오죠.} // 이차방정식에서 두 근의 합이 마이너스 에이분의 비, 곱이 에이분의 씨였던 것과 똑같은 원리야.",
+   "write": [
+    {
+     "cue": "세 근의 합은 마이너스 에이분의 비",
+     "tex": "$\\therefore\\ \\alpha+\\beta+\\gamma=-\\dfrac{b}{a}$",
+     "color": "blue",
+     "box": true
+    },
+    {
+     "cue": "두 개씩 곱한 것의 합은 에이분의 씨",
+     "tex": "$\\alpha\\beta+\\beta\\gamma+\\gamma\\alpha=\\dfrac{c}{a}$",
+     "color": "blue",
+     "box": true,
+     "indent": 1
+    },
+    {
+     "cue": "세 근의 곱은 마이너스 에이분의 디",
+     "tex": "$\\alpha\\beta\\gamma=-\\dfrac{d}{a}$",
+     "color": "blue",
+     "box": true,
+     "indent": 1
+    },
+    {
+     "cue": "부호가 마이너스, 플러스, 마이너스로",
+     "tex": "부호: $-,\\ +,\\ -$ 순서!",
+     "color": "red",
+     "underline": true
+    }
+   ]
+  },
+  {
+   "pose": "cheer",
+   "bubble": "백지에 혼자 써 보기!",
+   "say": "자, 정리할게. 근을 알면 인수정리로 식을 인수분해된 꼴로 쓰고, / 전개해서 계수를 비교하면 끝이야. // {강조 앞에 에이 붙이는 것, 이거 하나만 조심하면 돼.} // 자, 이제 영상 끄고 백지에 처음부터 혼자 써 봐. / 다 쓰면 사진 찍어서 올려 줘. 수고했어!",
+   "write": [
+    {
+     "cue": "근을 알면 인수정리로",
+     "tex": "인수정리 $\\rightarrow$ 전개 $\\rightarrow$ 계수 비교",
+     "color": "blue",
+     "highlight": true
+    }
+   ]
+  }
+ ]
+}

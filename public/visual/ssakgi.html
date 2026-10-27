@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 원본은 Claude 아티팩트로도 올라가 있다. 고칠 때는 이 파일을 고치고 아티팩트도 같이 다시 올린다 -->
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>쌓기나무 관찰대</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 돌려 보는 3D 모눈 무대 / 오른쪽: 개수 쓰기판. 아래로 위·앞·옆 모양과 층별 모양이 따라 바뀐다 */
+:root {
+  --bg: #f3f5f1;
+  --surface: #ffffff;
+  --ink: #22302a;
+  --muted: #5f6d66;
+  --grid: #d5e1e8;
+  --line: #c4d0cb;
+  --accent: #2c6a88;
+  --accent-soft: #e2eef4;
+  --wood: #e2b877;
+  --wood-edge: #8a5e2c;
+  --ok: #2f7d4f;
+  --warn: #a5621b;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12181b; --surface: #1a2226; --ink: #e5ece8; --muted: #9aa9a2;
+    --grid: #22313a; --line: #2f3d43; --accent: #7cbfdc; --accent-soft: #1d3340;
+    --wood: #d9ad6c; --wood-edge: #f0d2a2; --ok: #6cc893; --warn: #e5a35a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12181b; --surface: #1a2226; --ink: #e5ece8; --muted: #9aa9a2;
+  --grid: #22313a; --line: #2f3d43; --accent: #7cbfdc; --accent-soft: #1d3340;
+  --wood: #d9ad6c; --wood-edge: #f0d2a2; --ok: #6cc893; --warn: #e5a35a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px; }
+.viewbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+.spinbar { position: absolute; bottom: 30px; right: 10px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; z-index: 2; max-width: calc(100% - 20px); }
+.chip { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.chip:focus-visible, .cell:focus-visible, .btn:focus-visible, .vcard:focus-visible, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#canvasBox { height: 470px; position: relative; }
+@media (max-width: 820px) { #canvasBox { height: 380px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.hint { position: absolute; bottom: 8px; left: 12px; margin: 0; font-size: 12px; color: var(--muted); pointer-events: none; }
+#cover { position: absolute; inset: 0; z-index: 3; background: var(--surface); display: grid; place-items: center; padding: 20px; text-align: center;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; }
+#cover .box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; max-width: 360px; display: grid; gap: 12px; }
+#cover .q { font-family: var(--font-display); font-size: 20px; margin: 0; }
+.answerRow { display: flex; gap: 8px; justify-content: center; align-items: center; }
+.answerRow input { width: 84px; font: inherit; font-size: 18px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); text-align: center; }
+#verdict { margin: 0; min-height: 1.5em; font-size: 14px; }
+#verdict.ok { color: var(--ok); } #verdict.no { color: var(--warn); }
+
+.panel { display: grid; gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.card p.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.editorWrap { display: grid; grid-template-columns: auto auto; justify-content: center; gap: 4px 8px; align-items: center; }
+.dirTop, .dirBottom { grid-column: 1; text-align: center; font-size: 12px; color: var(--muted); }
+.dirRight { grid-column: 2; grid-row: 2; font-size: 12px; color: var(--muted); writing-mode: vertical-rl; }
+.dirBottom { color: var(--accent); }
+.editor { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(4, 52px); grid-template-rows: repeat(4, 52px); border: 1.5px solid var(--ink); }
+.cell { font: inherit; font-family: var(--font-display); font-size: 22px; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.cell.on { background: var(--accent-soft); }
+.cell:nth-child(4n) { border-right: 0; } .cell:nth-last-child(-n+4) { border-bottom: 0; }
+.cell.secret { color: transparent; }
+.total { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px dashed var(--line); padding-top: 10px; }
+.total b { font-family: var(--font-display); font-size: 26px; font-variant-numeric: tabular-nums; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+
+.sectionHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; }
+.sectionHead p { margin: 0; color: var(--muted); font-size: 13px; }
+.views { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 600px) { .views { grid-template-columns: minmax(0, 1fr); } }
+.vcard { font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; cursor: pointer; display: grid; gap: 10px; }
+.vcard:hover { border-color: var(--accent); }
+.vcard .t { display: flex; justify-content: space-between; align-items: baseline; }
+.vcard .t span { font-size: 12px; color: var(--muted); }
+.mini { display: grid; justify-content: center; gap: 0; }
+.mini i { display: block; width: 26px; height: 26px; border: 1px dashed var(--grid); margin: 0 -1px -1px 0; }
+.mini i.f { background: var(--wood); border: 1.5px solid var(--wood-edge); position: relative; z-index: 1; }
+.mini.small i { width: 20px; height: 20px; }
+.range { margin: 0; font-size: 13px; color: var(--muted); }
+.range b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.floors { display: flex; flex-wrap: wrap; gap: 12px; }
+.floor { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; justify-items: center; }
+.floor span { font-size: 13px; color: var(--muted); }
+.floor span b { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">초6-2 공간과 입체 · 2-1 여러 가지 도형</div>
+    <h1>쌓기나무 관찰대</h1>
+    <p>오른쪽 판에 칸마다 쌓을 개수를 쓰면 3D로 쌓이고, 위·앞·옆에서 본 모양과 층별 모양이 함께 바뀝니다. 3D는 끌어서 돌려 볼 수 있습니다.</p>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="3D 쌓기나무">
+      <div class="viewbar" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso" aria-pressed="true">비스듬히</button>
+        <button class="chip" data-view="top" aria-pressed="false">위에서</button>
+        <button class="chip" data-view="front" aria-pressed="false">앞에서</button>
+        <button class="chip" data-view="side" aria-pressed="false">옆에서</button>
+      </div>
+      <div class="spinbar" role="group" aria-label="돌리기와 확대">
+        <button class="chip" id="rotL" aria-label="왼쪽으로 90도 돌려 보기">⟲ 90°</button>
+        <button class="chip" id="rotR" aria-label="오른쪽으로 90도 돌려 보기">⟳ 90°</button>
+        <button class="chip" id="auto" aria-pressed="false">자동 회전</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox">
+        <canvas id="c" tabindex="0" aria-label="쌓기나무 3D 모형. 화살표 키로 돌릴 수 있습니다."></canvas>
+        <div id="cover" hidden>
+          <div class="box">
+            <p class="q">쌓기나무는 모두 몇 개일까요?</p>
+            <p class="sub" style="margin:0;color:var(--muted);font-size:13px">아래 위·앞·옆에서 본 모양만 보고 맞혀 보세요.</p>
+            <form class="answerRow" id="answerForm">
+              <input id="answer" type="number" min="1" max="64" inputmode="numeric" aria-label="개수">
+              <button class="btn primary" type="submit">확인</button>
+              <button class="btn" type="button" id="reveal">정답 보기</button>
+            </form>
+            <p id="verdict" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+      <p class="hint">끌어서 돌리기 · 휠·두 손가락으로 확대 · 화살표 키도 됩니다</p>
+    </section>
+
+    <aside class="panel">
+      <div class="card">
+        <h2>위에서 본 모양에 개수 쓰기</h2>
+        <p class="sub">칸을 누를 때마다 1개씩 늘고, 4개 다음은 0개입니다.</p>
+        <div class="editorWrap">
+          <div class="dirTop">뒤</div>
+          <div class="editor" id="editor" role="grid" aria-label="칸별 쌓기나무 개수"></div>
+          <div class="dirRight">오른쪽 옆</div>
+          <div class="dirBottom">앞 (보는 사람)</div>
+        </div>
+        <div class="total"><span>쌓기나무</span><span><b id="total">0</b> 개</span></div>
+      </div>
+      <div class="card">
+        <h2>예시와 문제</h2>
+        <div class="btns" id="presets"></div>
+        <div class="btns">
+          <button class="btn primary" id="quizBtn">문제 내기</button>
+          <button class="btn" id="clearBtn">모두 지우기</button>
+        </div>
+        <div class="btns">
+          <button class="btn" id="turnL">모양 왼쪽으로 90° 돌리기</button>
+          <button class="btn" id="turnR">모양 오른쪽으로 90° 돌리기</button>
+        </div>
+        <p class="sub" style="margin:0">모양을 돌리면 앞·옆에서 본 모양이 어떻게 바뀌는지 비교해 보세요.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section style="display:grid;gap:12px">
+    <div class="sectionHead">
+      <h2>위·앞·옆에서 본 모양</h2>
+      <p>카드를 누르면 3D가 그 방향으로 돌아갑니다.</p>
+    </div>
+    <div class="views">
+      <button class="vcard" data-view="top"><div class="t"><h2>위에서 본 모양</h2><span>위쪽이 뒤</span></div><div class="mini" id="vTop"></div></button>
+      <button class="vcard" data-view="front"><div class="t"><h2>앞에서 본 모양</h2><span>칸마다 가장 높은 줄</span></div><div class="mini" id="vFront"></div></button>
+      <button class="vcard" data-view="side"><div class="t"><h2>옆에서 본 모양</h2><span>오른쪽에서, 왼쪽이 앞</span></div><div class="mini" id="vSide"></div></button>
+    </div>
+    <p class="range" id="range"></p>
+  </section>
+
+  <section style="display:grid;gap:12px">
+    <div class="sectionHead">
+      <h2>층별로 나타낸 모양</h2>
+      <p>위에서 내려다본 각 층의 자리입니다.</p>
+    </div>
+    <div class="floors" id="floors"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const N = 4, MAXH = 4;
+  const zeros = () => Array.from({ length: N }, () => Array(N).fill(0));
+  const PRESETS = {
+    '교과서 예제': [[0,0,0,0],[0,1,0,0],[2,3,1,0],[1,2,1,0]],
+    '계단': [[0,0,0,0],[0,0,0,0],[3,2,1,0],[3,2,1,0]],
+    'ㄴ자 탑': [[3,0,0,0],[2,0,0,0],[1,1,1,0],[0,0,0,0]],
+    '피라미드': [[1,1,1,1],[1,2,2,1],[1,2,2,1],[1,1,1,1]],
+  };
+  let H = PRESETS['교과서 예제'].map(r => r.slice());
+  let quiz = false;
+
+  const front = h => Array.from({ length: N }, (_, c) => Math.max(...h.map(row => row[c])));
+  const side = h => h.map(row => Math.max(...row));          // index = 행(r)
+  const sum = h => h.flat().reduce((a, b) => a + b, 0);
+
+  // 위·앞·옆 모양이 같은 쌓기나무의 최소·최대 개수
+  function bounds(h) {
+    const F = front(h), S = side(h), cells = [];
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (h[r][c] > 0) cells.push([r, c, Math.min(F[c], S[r])]);
+    const max = cells.reduce((a, x) => a + x[2], 0);
+    let best = max + 1, steps = 0, aborted = false;
+    const cf = Array(N).fill(0), cs = Array(N).fill(0);
+    (function dfs(i, s) {
+      if (aborted || s + (cells.length - i) >= best) return;
+      if (++steps > 2e6) { aborted = true; return; }
+      if (i === cells.length) {
+        for (let k = 0; k < N; k++) if (cf[k] !== F[k] || cs[k] !== S[k]) return;
+        best = s; return;
+      }
+      const [r, c, cap] = cells[i];
+      for (let v = 1; v <= cap; v++) {
+        const of = cf[c], os = cs[r];
+        cf[c] = Math.max(of, v); cs[r] = Math.max(os, v);
+        dfs(i + 1, s + v);
+        cf[c] = of; cs[r] = os;
+      }
+    })(0, 0);
+    return { min: aborted ? null : best, max };
+  }
+
+  // ---------- 3D ----------
+  const canvas = document.getElementById('c');
+  const box = document.getElementById('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.58));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(3, 9, 6); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.18); fill.position.set(-6, 2, -3); scene.add(fill);
+
+  const target = new THREE.Vector3(0, 1.4, 0);
+  let theta = 0.62, phi = 1.0, zoom = 1;
+  const VIEWS = { iso: [0.62, 1.0], top: [0, 0.0005], front: [0, Math.PI / 2], side: [Math.PI / 2, Math.PI / 2] };
+
+  const off = (N - 1) / 2;
+  const floorMat = new THREE.MeshBasicMaterial({ color: 0x8fb3c7, transparent: true, opacity: 0.32 });
+  const floorGeo = new THREE.PlaneGeometry(0.94, 0.94);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const m = new THREE.Mesh(floorGeo, floorMat);
+    m.rotation.x = -Math.PI / 2; m.position.set(c - off, 0.001, r - off); scene.add(m);
+  }
+  function label(text, x, z) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+    const g = cv.getContext('2d');
+    g.font = '700 64px "Gowun Batang", serif'; g.fillStyle = '#3b86a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, 128, 64);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(1.2, 0.6, 1); sp.position.set(x, 0.05, z); scene.add(sp);
+  }
+  label('앞', 0, N / 2 + 0.8);
+  label('옆', N / 2 + 0.8, 0);
+
+  const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+  const edgeGeo = new THREE.EdgesGeometry(cubeGeo);
+  const cubeMat = new THREE.MeshLambertMaterial({ color: 0xe6bd7d });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x6b4520 });
+  let cubes = new THREE.Group(); scene.add(cubes);
+
+  function buildCubes() {
+    scene.remove(cubes); cubes = new THREE.Group();
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) for (let k = 0; k < H[r][c]; k++) {
+      const m = new THREE.Mesh(cubeGeo, cubeMat); m.position.set(c - off, k + 0.5, r - off);
+      const e = new THREE.LineSegments(edgeGeo, edgeMat); e.position.copy(m.position);
+      cubes.add(m, e);
+    }
+    scene.add(cubes); draw();
+  }
+
+  function frame() {
+    const w = box.clientWidth, h = box.clientHeight;
+    renderer.setSize(w, h, false);
+    const a = w / h, base = 3.9 / zoom;
+    const hw = a >= 1 ? base * a : base, hh = a >= 1 ? base : base / a;
+    cam.left = -hw; cam.right = hw; cam.top = hh; cam.bottom = -hh; cam.updateProjectionMatrix();
+    draw();
+  }
+  function draw() {
+    const R = 20, sp = Math.sin(phi);
+    cam.position.set(target.x + R * sp * Math.sin(theta), target.y + R * Math.cos(phi), target.z + R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target);
+    renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let tween = null;
+  function goTo(name) {
+    const [t1, p1] = VIEWS[name];
+    stopAuto();
+    document.querySelectorAll('.chip[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    // 가장 가까운 방향으로 돌기
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * e; phi = p0 + (p1 - p0) * e; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI / 2, p));
+  const setZoom = z => { zoom = Math.max(0.5, Math.min(2.6, z)); frame(); };
+  const clearViewChips = () => document.querySelectorAll('.chip[data-view]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  // 한 손가락(마우스)은 돌리기, 두 손가락은 확대·축소
+  const pts = new Map(); let pinch = 0;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); stopAuto();
+    if (pts.size === 2) pinch = pinchDist();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      clearViewChips(); draw();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+  });
+  const endDrag = e => { pts.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  function spinBy(dt) {
+    stopAuto(); clearViewChips();
+    const t0 = theta, start = performance.now(), dur = reduce ? 0 : 420;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1;
+      theta = t0 + dt * (1 - Math.pow(1 - k, 3)); draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  document.getElementById('rotL').addEventListener('click', () => spinBy(-Math.PI / 2));
+  document.getElementById('rotR').addEventListener('click', () => spinBy(Math.PI / 2));
+
+  const autoBtn = document.getElementById('auto'); let autoId = null;
+  function stopAuto() { if (autoId) cancelAnimationFrame(autoId); autoId = null; autoBtn.setAttribute('aria-pressed', 'false'); }
+  autoBtn.addEventListener('click', () => {
+    if (autoId) return stopAuto();
+    autoBtn.setAttribute('aria-pressed', 'true'); clearViewChips();
+    let last = performance.now();
+    const step = now => { theta += (now - last) * 0.0006; last = now; draw(); autoId = requestAnimationFrame(step); };
+    autoId = requestAnimationFrame(step);
+  });
+  canvas.addEventListener('keydown', e => {
+    const d = 0.12, map = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!map) return; e.preventDefault();
+    theta += map[0]; phi = clampPhi(phi + map[1]); draw();
+  });
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+
+  // ---------- 판과 그림 ----------
+  const editor = document.getElementById('editor');
+  const cellBtns = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const b = document.createElement('button'); b.className = 'cell'; b.type = 'button'; b.id = `cell-${r}-${c}`;
+    b.addEventListener('click', () => { if (quiz) return; H[r][c] = (H[r][c] + 1) % (MAXH + 1); update(); });
+    editor.appendChild(b); cellBtns.push([b, r, c]);
+  }
+  function mini(el, cols, rows, filled, small) {
+    el.className = 'mini' + (small ? ' small' : '');
+    el.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+    let html = '';
+    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) html += `<i class="${filled(i, j) ? 'f' : ''}"></i>`;
+    el.innerHTML = html;
+  }
+  function update() {
+    const F = front(H), S = side(H), total = sum(H);
+    cellBtns.forEach(([b, r, c]) => {
+      const v = H[r][c];
+      b.textContent = v || ''; b.classList.toggle('on', v > 0); b.classList.toggle('secret', quiz);
+      b.setAttribute('aria-label', `뒤에서 ${r + 1}째 줄 왼쪽에서 ${c + 1}째 칸, ${quiz ? '?' : v}개`);
+    });
+    document.getElementById('total').textContent = quiz ? '?' : total;
+    mini(document.getElementById('vTop'), N, N, (i, j) => H[i][j] > 0);
+    mini(document.getElementById('vFront'), N, MAXH, (i, j) => MAXH - 1 - i < F[j]);
+    mini(document.getElementById('vSide'), N, MAXH, (i, j) => MAXH - 1 - i < S[N - 1 - j]);
+    const rg = document.getElementById('range');
+    if (quiz || total === 0) rg.textContent = '';
+    else {
+      const b = bounds(H);
+      rg.innerHTML = b.min === null
+        ? `위·앞·옆 모양이 이와 같으면 쌓기나무는 많아야 <b>${b.max}</b>개입니다.`
+        : b.min === b.max
+          ? `위·앞·옆 모양만 보고도 개수가 <b>${b.max}</b>개로 하나로 정해집니다.`
+          : `위·앞·옆 모양이 이와 같은 쌓기나무는 가장 적으면 <b>${b.min}</b>개, 가장 많으면 <b>${b.max}</b>개입니다. 지금은 <b>${total}</b>개.`;
+    }
+    const maxH = Math.max(1, ...H.flat()), fl = document.getElementById('floors');
+    fl.innerHTML = '';
+    for (let k = 1; k <= maxH; k++) {
+      const d = document.createElement('div'); d.className = 'floor';
+      const cnt = H.flat().filter(v => v >= k).length;
+      const g = document.createElement('div'); mini(g, N, N, (i, j) => H[i][j] >= k, true);
+      d.innerHTML = `<span><b>${k}층</b> · ${quiz ? '?' : cnt}개</span>`;
+      if (quiz) g.querySelectorAll('i').forEach(x => x.classList.remove('f'));
+      d.appendChild(g); fl.appendChild(d);
+    }
+    buildCubes();
+  }
+
+  const presetBox = document.getElementById('presets');
+  Object.keys(PRESETS).forEach(name => {
+    const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = name;
+    b.addEventListener('click', () => { endQuiz(); H = PRESETS[name].map(r => r.slice()); update(); });
+    presetBox.appendChild(b);
+  });
+  document.getElementById('clearBtn').addEventListener('click', () => { endQuiz(); H = zeros(); update(); });
+  // 위에서 내려다볼 때 시계 방향(오른쪽) / 반시계 방향(왼쪽)으로 판째 돌린다
+  const turn = cw => { H = Array.from({ length: N }, (_, r) => Array.from({ length: N }, (_, c) => cw ? H[N - 1 - c][r] : H[c][N - 1 - r])); update(); };
+  document.getElementById('turnL').addEventListener('click', () => { if (!quiz) turn(false); });
+  document.getElementById('turnR').addEventListener('click', () => { if (!quiz) turn(true); });
+
+  // ---------- 문제 ----------
+  function randomShape() {
+    const h = zeros(), want = 4 + Math.floor(Math.random() * 5);
+    const start = [1 + Math.floor(Math.random() * 2), 1 + Math.floor(Math.random() * 2)];
+    const cells = [start]; h[start[0]][start[1]] = 1;
+    while (cells.length < want) {
+      const [r, c] = cells[Math.floor(Math.random() * cells.length)];
+      const [dr, dc] = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(Math.random() * 4)];
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nc < 0 || nr >= N || nc >= N || h[nr][nc]) continue;
+      h[nr][nc] = 1; cells.push([nr, nc]);
+    }
+    cells.forEach(([r, c]) => { h[r][c] = 1 + Math.floor(Math.pow(Math.random(), 1.5) * 3); });
+    return h;
+  }
+  function makeQuiz() {
+    let h = null;
+    for (let i = 0; i < 400; i++) {
+      const cand = randomShape(), b = bounds(cand), t = sum(cand);
+      h = cand;
+      if (b.min === b.max && t >= 6 && t <= 14 && Math.max(...cand.flat()) >= 2) break;
+    }
+    H = h; quiz = true;
+    document.getElementById('cover').hidden = false;
+    document.getElementById('answer').value = '';
+    const v = document.getElementById('verdict'); v.textContent = ''; v.className = '';
+    update(); goTo('iso');
+  }
+  function endQuiz() { quiz = false; document.getElementById('cover').hidden = true; }
+  document.getElementById('quizBtn').addEventListener('click', makeQuiz);
+  document.getElementById('answerForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const n = Number(document.getElementById('answer').value), t = sum(H), v = document.getElementById('verdict');
+    if (!n) { v.textContent = '개수를 숫자로 적어 주세요.'; v.className = 'no'; return; }
+    if (n === t) { v.textContent = `맞았어요! ${t}개입니다. 「정답 보기」로 3D를 확인해 보세요.`; v.className = 'ok'; }
+    else { v.textContent = n > t ? '더 적어요. 앞·옆 모양에서 가장 높은 줄이 어디인지 다시 보세요.' : '더 많아요. 뒤에 숨은 쌓기나무가 있는지 보세요.'; v.className = 'no'; }
+  });
+  document.getElementById('reveal').addEventListener('click', () => { endQuiz(); update(); });
+
+  update(); frame();
+})();
+</script>
+
+</html>

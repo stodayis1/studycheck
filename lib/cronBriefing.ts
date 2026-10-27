@@ -24,6 +24,9 @@ import { collectPolishTargets, proposePolish, applyPolish, logPolish } from '@/l
 import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherReminder'
 import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
+import { checkCronRuns, loadRecentCronRuns, type CronProblem } from '@/lib/cronHealth'
+import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
+import { sendSmsViaOps } from '@/lib/opsSms'
 
 /** 한국 시각 'HH:MM'. 서버는 UTC 로 돈다. */
 function kstHhmm() {
@@ -294,4 +297,97 @@ export async function runRemindCron(req: NextRequest) {
     } catch { /* 기록이 안 남아도 문자는 나갔다 */ }
   }
   return NextResponse.json(out)
+}
+
+/**
+ * 12:30 · 21:30 — 위 세 가지가 **조용히 멈추지 않았나** 본다 (원장님 2026-10-26).
+ *
+ * 평소엔 아무것도 안 보낸다. 안 돎 · 늦음 · 멈춤 · 오류 · 알리고 잔액 부족이 있을 때만
+ * **원장님 번호로만** 문자 한 통. 같은 문제는 한 번만 알린다(이미 알린 key 는 감시 기록에 남는다).
+ * 문자가 실패하면 key 를 남기지 않는다 — 다음 감시가 다시 보낸다.
+ *
+ * 감시 자신도 cron_runs 에 watch-noon · watch-night 로 남는다. 감시가 안 돌면
+ * 원장 대시보드의 같은 점검(lib/cronHealth)이 그것을 「안 돎」으로 띄운다.
+ */
+export async function runWatchCron(req: NextRequest) {
+  const secret = process.env.CRON_SECRET
+  const auth = req.headers.get('authorization') ?? ''
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return NextResponse.json(
+      { error: '권한이 없어요.', secretSet: Boolean(secret), authHeaderSent: Boolean(auth) },
+      { status: 401 },
+    )
+  }
+  const q = new URL(req.url).searchParams
+  const force = q.get('force') === '1'
+  const phase = kstHhmm() < '16:00' ? 'watch-noon' : 'watch-night'
+  const out: any = { phase, startedAt: new Date().toISOString() }
+
+  const db = admin()
+
+  // ?test=1 — 문자 경로만 시험한다(원장님 번호 찾기 → OPS 발송). 점검도 기록도 하지 않는다.
+  // 평소엔 문제가 없어 문자가 한 통도 안 나가므로, 이 길이 살아 있는지는 이렇게만 확인된다.
+  if (q.get('test') === '1') {
+    const phones = await ownerPhones(db)
+    if (!phones.length) return NextResponse.json({ ...out, test: true, sms: { error: '원장님 번호를 못 찾았어요' } })
+    const text = '[스터디체크] 자동 발송 점검 — 시험 문자입니다.\n문제가 생기면 이 번호로 이렇게 알려 드려요. 답장하지 않으셔도 됩니다.'
+    const results = await Promise.all(phones.map((to) => sendSmsViaOps({ to, text, refType: 'cron_watch_test' })))
+    return NextResponse.json({
+      ...out, test: true,
+      sms: results.map((r, i) => ({ to: phones[i].replace(/^(\d{3})\d+(\d{4})$/, '$1****$2'), ok: r.ok, dryRun: r.dryRun, error: r.error })),
+    })
+  }
+
+  if (!force) {
+    const { data: claimed } = await db.from('cron_runs')
+      .upsert({ phase, run_date: kstDate(0) }, { onConflict: 'phase,run_date', ignoreDuplicates: true })
+      .select('id')
+    if (!claimed?.length) return NextResponse.json({ ...out, skipped: '오늘은 이미 돌았어요' })
+    out.runId = claimed[0].id
+  }
+
+  try {
+    const rows = await loadRecentCronRuns(db)
+    const problems = checkCronRuns(rows, Date.now())
+    const already = new Set<string>(rows.flatMap((r) => (r.phase.startsWith('watch') ? r.result?.alerted ?? [] : [])))
+    const fresh = problems.filter((p) => !already.has(p.key))
+    out.problems = problems.map((p) => `${p.label} · ${p.kind} · ${p.detail}`)
+    out.alerted = []
+
+    if (fresh.length) {
+      const phones = await ownerPhones(db)
+      if (!phones.length) {
+        out.sms = { error: '원장님 번호를 못 찾았어요 (수학OPS 직원 정보 확인)' }
+      } else {
+        const text = watchText(fresh)
+        const results = await Promise.all(phones.map((to) => sendSmsViaOps({ to, text, refType: 'cron_watch' })))
+        const bad = results.find((r) => !r.ok)
+        if (bad) out.sms = { error: bad.error ?? '문자 발송 실패' }
+        else { out.sms = { 보냄: results.length, dryRun: results.some((r) => r.dryRun) || undefined }; out.alerted = fresh.map((p) => p.key) }
+      }
+    }
+  } catch (e: any) {
+    out.check = { error: e?.message ?? '점검 실패' }
+  }
+
+  out.finishedAt = new Date().toISOString()
+  if (out.runId) {
+    try {
+      await db.from('cron_runs').update({ finished_at: out.finishedAt, result: out }).eq('id', out.runId)
+    } catch { /* 기록이 안 남으면 다음 감시가 같은 문제를 한 번 더 알린다 — 그쪽이 낫다 */ }
+  }
+  return NextResponse.json(out)
+}
+
+/** 원장(users.role=admin) 이름으로 수학OPS 번호를 찾는다. 선생님 번호는 쓰지 않는다. */
+async function ownerPhones(db: ReturnType<typeof admin>) {
+  const { data } = await db.from('users').select('name').eq('role', 'admin')
+  const phones = await fetchOpsTeacherPhones()
+  return [...new Set((data ?? []).map((u: any) => phones.get(String(u.name ?? '').trim())).filter(Boolean) as string[])]
+}
+
+function watchText(ps: CronProblem[]) {
+  const lines = ps.slice(0, 5).map((p) => `· ${p.label} ${p.kind}: ${p.detail}`)
+  if (ps.length > 5) lines.push(`· 그 밖에 ${ps.length - 5}건`)
+  return ['[스터디체크] 자동 발송 점검', ...lines, '대시보드 맨 위에서 자세히 보실 수 있어요.'].join('\n')
 }

@@ -15,8 +15,9 @@ async function shrink(file: File): Promise<Blob> {
   return await new Promise((res) => c.toBlob((b) => res(b!), 'image/jpeg', 0.85))
 }
 
-export function ProofSubmitBox({ studentId, sessionId, videoUrl, watched }: {
-  studentId: string; sessionId: string; videoUrl: string; watched: boolean
+// formula: 「곱셈 공식 한 번씩 써 보기」처럼 증명이 아니라 공식을 외워 쓰는 영상 (원장님 2026-10-26) — 같은 제출 칸, 문구만 다르다
+export function ProofSubmitBox({ studentId, sessionId, videoUrl, watched, formula = false }: {
+  studentId: string; sessionId: string; videoUrl: string; watched: boolean; formula?: boolean
 }) {
   const [sub, setSub] = useState<{ submitted_at: string; photo_paths: string[] } | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -47,11 +48,13 @@ export function ProofSubmitBox({ studentId, sessionId, videoUrl, watched }: {
   return (
     <div className="bg-white rounded-2xl border-2 border-[#9FE1CB] p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-bold text-gray-900">📝 백지 증명 제출</p>
+        <p className="text-sm font-bold text-gray-900">📝 {formula ? '공식 쓰기 제출' : '백지 증명 제출'}</p>
         {sub && <span className="text-xs font-bold text-green-600">제출 완료 ✓</span>}
       </div>
       <p className="text-xs text-gray-500 leading-relaxed">
-        영상을 끄고, <b>백지에 처음부터 혼자</b> 증명을 써 보세요. 다 쓰면 사진을 찍어 올리면 끝이에요. (최대 3장)
+        {formula
+          ? <>영상을 끄고, <b>백지에 공식을 전부 한 번씩</b> 안 보고 써 보세요. 다 쓰면 사진을 찍어 올리면 끝이에요. (최대 3장)</>
+          : <>영상을 끄고, <b>백지에 처음부터 혼자</b> 증명을 써 보세요. 다 쓰면 사진을 찍어 올리면 끝이에요. (최대 3장)</>}
       </p>
       {!watched ? (
         <p className="text-xs font-bold text-[#993C1D]">영상을 끝까지 보면 제출할 수 있어요.</p>

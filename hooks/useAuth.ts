@@ -56,16 +56,23 @@ export function useAuth() {
           .eq('id', session.user.id)
           .single()
 
-        const user = userData ?? {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.email,
-          role: 'teacher'
+        // ★ users 에 없는 사람을 선생님으로 치면 안 된다.
+        //   학생·학부모는 익명 로그인(signInAnonymously)이라 Auth 세션은 있고 users 에는 없다.
+        //   예전에는 그 경우도 role: 'teacher' 로 메워서, 학생이 주소창에 /teacher/dashboard 를
+        //   치면 선생님 화면이 그대로 열렸다 (원장님 2026-10-27).
+        //   익명이면 여기서 멈추고 아래 학생 세션 복원으로 내려간다.
+        if (userData || !session.user.is_anonymous) {
+          const user = userData ?? {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.email,
+            role: 'teacher'
+          }
+          setCurrentUser(user)
+          setRole(user.role)
+          setLoading(false)
+          return
         }
-        setCurrentUser(user)
-        setRole(user.role)
-        setLoading(false)
-        return
       }
 
       try {

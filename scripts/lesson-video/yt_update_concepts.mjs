@@ -1,5 +1,5 @@
 /**
- * 새로 올린 개념 영상의 제목·설명·썸네일을 맞추고 「일부 공개」로 바꾼다 (OAuth — .env.local 의 YOUTUBE_OAUTH_*)
+ * 새로 올린 개념·증명 영상의 제목·설명·썸네일을 맞추고 「일부 공개」로 바꾼다 (OAuth — .env.local 의 YOUTUBE_OAUTH_*)
  *
  *   node scripts/lesson-video/yt_update_concepts.mjs "<영상 폴더>" [--dry]
  *
@@ -36,10 +36,11 @@ const idsPath = path.join(dir, '_유튜브_주소.json')
 const ids = fs.existsSync(idsPath) ? JSON.parse(fs.readFileSync(idsPath, 'utf8')) : {}
 let done = 0
 for (const it of vids) {
-  const m = it.snippet.title.match(/^(\d\d) 개념 /); if (!m) continue
-  const no = m[1], id = it.snippet.resourceId.videoId
-  const txt = files.find((f) => f.startsWith(no + '_개념_') && f.endsWith('.유튜브.txt'))
-  const jpg = files.find((f) => f.startsWith(no + '_개념_') && f.endsWith('.jpg'))
+  // 파일 이름 그대로 올라간 영상: 「01 개념 …」 또는 「02 증명1 …」 (밑줄이 띄어쓰기로 바뀐다)
+  const m = it.snippet.title.match(/^(\d\d) (개념|증명\d+) /); if (!m) continue
+  const no = m[2] === '개념' ? m[1] : `${m[1]}-${m[2]}`, pre = `${m[1]}_${m[2]}_`, id = it.snippet.resourceId.videoId
+  const txt = files.find((f) => f.startsWith(pre) && f.endsWith('.유튜브.txt'))
+  const jpg = files.find((f) => f.startsWith(pre) && f.endsWith('.jpg'))
   if (!txt) { console.log(no, '! 유튜브.txt 없음'); continue }
   const t = fs.readFileSync(path.join(dir, txt), 'utf8').replace(/\r\n/g, '\n')
   const title = t.match(/제목:\n(.*)\n/)[1].trim()

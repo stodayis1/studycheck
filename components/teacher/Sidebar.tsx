@@ -11,7 +11,8 @@ function cx(...classes: (string|boolean|undefined|null)[]) {
 }
 
 type NavItem = { href: string; label: string; icon: string }
-type NavGroup = { title: string | null; items: NavItem[] }
+// collapsed: 가끔 쓰는 메뉴 묶음. 접어 두고 눌러야 펼쳐진다 — 늘 떠 있으면 매일 쓰는 메뉴가 묻힌다.
+type NavGroup = { title: string | null; items: NavItem[]; collapsed?: boolean }
 
 // 아이콘은 전부 Tabler 외곽선 아이콘 한 종류로 통일 (이모지·채운 아이콘 섞지 않기)
 const ITEM = {
@@ -22,40 +23,56 @@ const ITEM = {
   weekly:        { href: '/teacher/weekly',         label: '학습현황',     icon: 'ti-calendar-week' },
   myRecords:     { href: '/teacher/my-records',     label: '내 기록',      icon: 'ti-history' },
   bulk:          { href: '/teacher/bulk-progress',  label: '진도일괄입력', icon: 'ti-list-check' },
+  visualAids:    { href: '/teacher/visual-aids',    label: '수업 시각화',  icon: 'ti-cube' },
   students:      { href: '/teacher/students',       label: '학생관리',     icon: 'ti-users' },
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
-  assignments:   { href: '/teacher/assignments',    label: '학습지관리',   icon: 'ti-file-text' },
+  schools:       { href: '/teacher/schools',        label: '학교 자료집',  icon: 'ti-school' },
+  // ★ 「학습지 배부」(이 화면)와 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
+  //   하는 일을 이름에 넣어 갈랐다 (원장님 2026-10-26).
+  assignments:   { href: '/teacher/assignments',    label: '학습지 배부',  icon: 'ti-file-text' },
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
-  examPrep:      { href: '/teacher/exam-prep',      label: '시험배정',     icon: 'ti-target' },
+  // 화면 제목이 「시험대비 관리」인데 메뉴만 「시험배정」이라 서로 달랐다. 화면 쪽에 맞췄다.
+  examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },
   examAnalysis:  { href: '/teacher/exam-analysis',  label: '시험지 분석',  icon: 'ti-file-analytics' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
   // ★ 「학습지출제」와 「출제한 학습지」를 한 메뉴로 합쳤다 (원장님 2026-10-22).
   //   안에서 탭으로 간다 — 내 학습지 / 개별과제 / 학습지 현황 / 새 학습지 만들기
   //   (components/teacher/WorksheetTabs.tsx).
-  worksheets:    { href: '/teacher/worksheets',     label: '학습지',       icon: 'ti-files' },
+  worksheets:    { href: '/teacher/worksheets',     label: '학습지 출제',  icon: 'ti-files' },
   survey:        { href: '/teacher/survey',         label: '학부모 설문',  icon: 'ti-clipboard-text' },
   typeConcepts:  { href: '/teacher/type-concepts',  label: '대표개념 연결', icon: 'ti-bulb' },
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
   workStatus:    { href: '/teacher/work-status',    label: '업무현황',     icon: 'ti-briefcase' },
-  attendance:    { href: '/teacher/attendance',     label: '학생 출결관리', icon: 'ti-calendar-check' },
+  attendance:    { href: '/teacher/attendance',     label: '출결관리',     icon: 'ti-calendar-check' },
   changeLog:     { href: '/teacher/change-log',     label: '변경 기록',    icon: 'ti-history' },
   settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
 } satisfies Record<string, NavItem>
 
-// 같은 성격끼리 묶는다. 업무현황·학습지출제·채점결과·설정은 원장 전용 화면이라(강사가 들어가면
+// 같은 성격끼리 묶는다. 업무현황·학습지 출제·채점결과·설정은 원장 전용 화면이라(강사가 들어가면
 // "관리자만 접근" 안내만 뜸) 원장(관리자 모드)에게만 '원장 전용' 묶음으로 보인다.
+//
+// 2026-10-26 정리 (원장님) — 메뉴가 23개까지 늘어 매일 쓰는 것이 묻혔다.
+//   · 출결관리는 '보고'가 아니라 '학생' 쪽으로 (학생을 보다가 바로 넘어간다)
+//   · 내 기록은 '수업'이 아니라 '보고' 쪽으로 (남이 아니라 내 것을 돌아보는 화면)
+//   · 학습기록 가져오기·대표개념 연결·변경 기록은 가끔 쓰므로 접어 둔다
 function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
-    { title: '수업', items: [ITEM.notes, ITEM.weekly, ITEM.myRecords, ...(showBulk ? [ITEM.bulk] : [])] },
-    { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.consultations] },
+    { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
+    { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.schools] },
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
-    { title: '보고', items: [ITEM.reports, ITEM.attendance, ITEM.importRecords] },
+    { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
-  if (admin) groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.survey, ITEM.scan, ITEM.gradings, ITEM.typeConcepts, ITEM.workStatus, ITEM.changeLog, ITEM.settings] })
+  if (admin) {
+    groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.workStatus, ITEM.settings] })
+    groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords, ITEM.typeConcepts, ITEM.changeLog] })
+  } else {
+    // 강사도 학습기록 가져오기는 쓴다. 나머지 둘은 원장 전용 화면이라 넣지 않는다.
+    groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords] })
+  }
   return groups
 }
 
@@ -67,6 +84,8 @@ export function TeacherSidebar() {
   const { currentUser, signOut, isAdmin, adminMode, toggleAdminMode, isSupervisorAccount, supervisorMode, toggleSupervisorMode, supervisorLabel } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
   const [bulkEnabled, setBulkEnabled] = useState(false)
+  // 접어 둔 묶음('가끔 쓰는 것')을 펼쳐 놓았는지. 그 안의 화면에 들어가 있으면 저절로 펼친다.
+  const [openRare, setOpenRare] = useState(false)
 
   useEffect(() => {
     async function fetchBulkSetting() {
@@ -132,16 +151,27 @@ export function TeacherSidebar() {
 
         {/* 네비게이션 */}
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-          {navGroups.map((group, gi) => (
+          {navGroups.map((group, gi) => {
+            // 접힌 묶음은 그 안의 화면을 보고 있을 때만 저절로 펼쳐진다
+            const inside = group.collapsed && group.items.some((i) => isActiveHref(i.href))
+            const shown = !group.collapsed || openRare || inside
+            return (
             <div key={group.title ?? 'top'} className={gi > 0 ? 'mt-3 pt-3' : ''}
               style={gi > 0 ? { borderTop: '1px solid #e5e7eb' } : undefined}>
-              {group.title && (
+              {group.title && (group.collapsed ? (
+                <button onClick={() => setOpenRare((v) => !v)}
+                  className="w-full px-3 pb-1 text-[10px] font-bold tracking-wider flex items-center gap-1"
+                  style={{ color: '#9ca3af' }}>
+                  <i className={`ti ${shown ? 'ti-chevron-down' : 'ti-chevron-right'}`} style={{ fontSize: 11 }} />
+                  {group.title}
+                </button>
+              ) : (
                 <p className="px-3 pb-1 text-[10px] font-bold tracking-wider"
                   style={{ color: group.title === '원장 전용' ? '#0F6E56' : '#9ca3af' }}>
                   {group.title}
                 </p>
-              )}
-              <div className="space-y-0.5">
+              ))}
+              <div className="space-y-0.5" style={shown ? undefined : { display: 'none' }}>
                 {group.items.map((item) => {
                   const isActive = isActiveHref(item.href)
                   return (
@@ -164,7 +194,8 @@ export function TeacherSidebar() {
                 })}
               </div>
             </div>
-          ))}
+            )
+          })}
         </nav>
 
         {/* 캐릭터 */}
