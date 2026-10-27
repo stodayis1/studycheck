@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/aligo'
 import { randomBytes } from 'crypto'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
@@ -102,6 +102,8 @@ async function run(opts: {
   date: string; dryRun: boolean; studentIds?: string[]; testPhone?: string
   /** 'elementary' 면 초등부만, 'secondary' 면 중·고등부만. 안 주면 전원. */
   only?: 'elementary' | 'secondary'
+  /** 다시 보낸 사람 이름 — 기록에 남긴다 */
+  by?: string
   /**
    * 저녁 8시 1차인가. 1차에서는 **출결만 찍힌 껍데기**를 보내지 않고 다음 날 오전 11시로 미룬다.
    * ★ 선생님들은 출결을 먼저 찍고 진도·과제·알림장을 나중에 채우신다. 그 사이에 8시가 지나면
@@ -120,6 +122,13 @@ async function run(opts: {
    *   샘플을 못 받으신 이유).
    */
   includeSent?: boolean
+  /**
+   * 원장님이 **일부러** 다시 보내는 것. 「이미 보냄」을 건너뛰지 않는다.
+   * (원장님 2026-10-27 「못 받았다는 사람 다시 보내지」 — 알림톡이 나갔다고 떠도
+   *  카카오 쪽에서 못 닿는 일이 있고, 그건 우리 기록에 안 남는다.)
+   * ★ 자동 발송(저녁 8시·다음 날 11시)은 이 값을 **절대 안 준다.** 두 번 나가면 안 된다.
+   */
+  resend?: boolean
 }): Promise<BriefingSummary> {
   const db = admin()
   const { date, dryRun } = opts
@@ -222,7 +231,7 @@ async function run(opts: {
     //   하시기 때문이다. 예전에는 빼 버려서, 학부모 발송이 끝난 학생은 목록에서 사라졌다
     //   (2026-10-16 조은서 학생이 안 뜬 이유). 보낼 대상 수에는 안 들어간다.
     const already = !opts.testPhone && sentAlready.has(student.id)
-    if (already && !dryRun && !opts.includeSent) { out.skippedAlreadySent++; continue }
+    if (already && !dryRun && !opts.includeSent && !opts.resend) { out.skippedAlreadySent++; continue }
 
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({
@@ -320,10 +329,24 @@ async function run(opts: {
       //   테스트 번호로 보낸 경우와, 알리고 테스트 모드(ALIGO_TEST_MODE 가 N 이 아닐 때)가 그렇다.
       //   테스트 모드에서는 알리고가 실제로 보내지도, 요금을 받지도 않는다.
       if (!opts.testPhone && !cfg!.testMode) {
-        await db.from('briefing_sends').insert({
+        const 보낸기록 = {
           student_id: student.id, session_date: date, session_id: ses.id,
           to_phone: String(student.parent_phone), status: 'sent', body_len: brief.bodyLen,
-        })
+          sent_at: new Date().toISOString(),
+        }
+        if (opts.resend && already) {
+          // 유일 제약 때문에 두 번째 줄은 못 넣는다 — 그 줄을 덮어쓰고 횟수만 올린다.
+          const { data: old } = await db.from('briefing_sends')
+            .select('resend_count').eq('student_id', student.id).eq('session_date', date).maybeSingle()
+          await db.from('briefing_sends').update({
+            ...보낸기록,
+            resend_count: ((old as any)?.resend_count ?? 0) + 1,
+            last_resent_at: new Date().toISOString(),
+            last_resent_by: opts.by ?? null,
+          }).eq('student_id', student.id).eq('session_date', date)
+        } else {
+          await db.from('briefing_sends').insert(보낸기록)
+        }
       }
       out.sent++
     } catch (e: any) {
@@ -505,12 +528,14 @@ async function runTeacherSample(
 
 export async function POST(req: NextRequest) {
   // 실제 요금이 나가고 학부모에게 바로 도착한다. 원장님만.
-  const deny = await denyIfNotStaff(req, { adminOnly: true })
-  if (deny) return deny
+  // ★ 누가 보냈는지도 받는다 — 다시 보낸 기록에 이름을 남긴다.
+  const who = await staffOrDeny(req, { adminOnly: true })
+  if (who.deny) return who.deny
   try {
     const body = (await req.json().catch(() => ({}))) as
       { date?: string; dryRun?: boolean; studentIds?: string[]; testPhone?: string
-        only?: 'elementary' | 'secondary'; teacherSample?: boolean; toTeachers?: string[] }
+        only?: 'elementary' | 'secondary'; teacherSample?: boolean; toTeachers?: string[]
+        resend?: boolean }
     const date = body.date ?? kstDate(-1)
     // 담당 강사에게 본인 글 한 통씩 — 학부모 발송과 섞이지 않게 길을 따로 둔다.
     if (body.teacherSample) return NextResponse.json(await runTeacherSample(date))
@@ -523,6 +548,9 @@ export async function POST(req: NextRequest) {
       // 테스트 번호를 주면 그 번호로만 가고 발송 기록도 남기지 않는다(진짜 발송을 막지 않게).
       testPhone: body.testPhone?.trim() || undefined,
       only: body.only,
+      // ★ 한 사람씩 고른 경우에만 다시 보낼 수 있다. 통째로 다시 돌리는 길은 열지 않는다.
+      resend: body.resend === true && (body.studentIds?.length ?? 0) > 0,
+      by: who.name || undefined,
     })
     return NextResponse.json(summary)
   } catch (e: any) {
