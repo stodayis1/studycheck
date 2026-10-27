@@ -40,6 +40,9 @@ const STAGES: Stage[] = [
       { unit: '기하 · 공간도형', what: '삼수선의 정리, 이면각, 정사영', href: '/visual/gonggan-dohyeong.html' },
       { unit: '기하 · 공간좌표', what: '좌표공간의 점·대칭점·거리, 구의 방정식', href: '/visual/gonggan-jwapyo.html' },
       { unit: '미적분 · 입체의 부피', what: '단면의 넓이로 부피 구하기, 얇은 조각으로 다가가기', href: '/visual/ipche-bupi.html' },
+      { unit: '수학Ⅰ 삼각함수 · 주기', what: '진자 파동 — 주기가 다른 진자들이 갈라졌다 T초 뒤 모두 제자리로', href: '/visual/jinja-jugi.html' },
+      { unit: '수학Ⅰ 등비수열 · 미적분Ⅰ 등비급수', what: '튀어 오르는 공 — 높이는 등비수열, 움직인 거리는 등비급수의 합', href: '/visual/gonggeup.html' },
+      { unit: '기하 · 포물선', what: '평행한 빛이 초점으로 모이는 반사, 초점과 준선까지 거리 PF = PH', href: '/visual/pomulseon.html' },
     ],
   },
 ]
@@ -48,7 +51,7 @@ export default function VisualAidsPage() {
   const ready = STAGES.flatMap((s) => s.units).filter((u) => u.href).length
   return (
     <div>
-      <Header title="수업 시각화" subtitle={`입체·공간 단원 3D 자료 · ${ready}개 준비됨`} />
+      <Header title="수업 시각화" subtitle={`입체·공간·움직임 자료 · ${ready}개 준비됨`} />
       <div className="px-4 py-4 space-y-5 md:px-6 max-w-3xl mx-auto">
         <p className="text-xs text-gray-500 leading-relaxed">
           누르면 새 탭에서 열려요. 끌어서 돌리고, 휠이나 두 손가락으로 확대할 수 있어요. 수업 화면(TV·태블릿)에 띄워 쓰세요.

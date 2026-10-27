@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>포물선의 초점과 반사</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 좌표평면 위 포물선 x² = 4py, 초점 F, 준선. 빛이 들어와 초점으로 모이거나, 점 P 에서 PF = PH 를 보여 준다 / 오른쪽: 단추와 식 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --shape: #f97316;
+  --axis: #e11d48;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row .lbl { font-size: 13px; color: var(--muted); min-width: 5.5em; }
+.group { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.group h3 { margin: 0; font-family: var(--font-display); font-size: 15px; }
+canvas { width: 100%; display: block; touch-action: none; cursor: ew-resize; }
+input[type=range] { width: 100%; accent-color: var(--brand); }
+.math { font-size: 14px; line-height: 1.85; }
+.math .eq { display: block; padding: 6px 10px; margin: 4px 0; background: var(--accent-soft); border-radius: 8px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.math .hl { color: var(--brand); font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">기하 이차곡선 · 포물선</div>
+    <h1>포물선의 초점과 반사</h1>
+    <p>축에 나란하게 들어온 빛은 포물선에 반사되어 모두 초점을 지나요. 거꾸로 초점에서 나온 빛은 반사된 뒤 나란하게 나가요(손전등·위성 안테나). 포물선 위 한 점에서 초점까지와 준선까지의 거리가 같다는 정의도 함께 봐요.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="포물선 그림">
+      <canvas id="cv" role="img" aria-label="포물선과 초점, 반사되는 빛"></canvas>
+      <div class="row"><span class="lbl" id="selLbl">고른 점 P</span><input id="aRange" type="range" min="-100" max="100" value="50" aria-label="고른 점의 x 좌표"></div>
+    </section>
+
+    <aside class="card" aria-label="고르기와 식">
+      <div class="btns" id="modes"></div>
+      <div class="btns">
+        <button class="btn primary" id="btnPlay" type="button">멈춤</button>
+      </div>
+      <div class="group">
+        <div class="row"><span class="lbl">p (초점 0, p)</span><span class="btns" id="pChips"></span></div>
+        <div class="row" id="raysRow"><span class="lbl">빛 줄기 수</span><span class="btns" id="rChips"></span></div>
+      </div>
+      <div class="group math" id="math"></div>
+      <p class="note">그림 위를 좌우로 끌어도 점 P 가 움직여요.</p>
+    </aside>
+  </div>
+</div>
+
+<script id="core">
+// 계산만 한다(화면 없음). 포물선 x² = 4py, 초점 F(0, p), 준선 y = −p.
+// 점 P(a, a²/4p) 에서 접선의 기울기는 a/2p. 들어온 방향 d 를 법선에 대해 반사하면 반사된 방향이 나온다.
+const CORE = (function () {
+  function yOf(a, p) { return a * a / (4 * p); }
+  function reflect(d, a, p) {                          // d: 들어온 방향(단위벡터 아니어도 됨)
+    const m = a / (2 * p), nl = Math.hypot(m, 1), n = [-m / nl, 1 / nl];
+    const dot = d[0] * n[0] + d[1] * n[1];
+    return [d[0] - 2 * dot * n[0], d[1] - 2 * dot * n[1]];
+  }
+  // 위에서 곧장 내려온 빛(0, −1)이 P 에서 반사된 방향과 P→F 방향이 이루는 각(도). 0 이면 초점을 지난다.
+  function missDeg(a, p) {
+    const r = reflect([0, -1], a, p), f = [-a, p - yOf(a, p)];
+    if (Math.hypot(f[0], f[1]) < 1e-12) return 0;
+    const c = (r[0] * f[0] + r[1] * f[1]) / (Math.hypot(r[0], r[1]) * Math.hypot(f[0], f[1]));
+    return Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI;
+  }
+  // 법선과 이루는 각: 들어온 빛 쪽(위)과 초점 쪽. 반사 법칙이면 두 값이 같다.
+  function angles(a, p) {
+    const m = a / (2 * p), nl = Math.hypot(m, 1), n = [-m / nl, 1 / nl];
+    const up = [0, 1], f = [-a, p - yOf(a, p)], fl = Math.hypot(f[0], f[1]) || 1;
+    const deg = (u, v, vl) => Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / vl))) * 180 / Math.PI;
+    return [deg(up, n, 1), deg([f[0] / fl, f[1] / fl], n, 1)];
+  }
+  function PF(a, p) { return Math.hypot(a, yOf(a, p) - p); }
+  function PH(a, p) { return yOf(a, p) + p; }
+  return { yOf: yOf, reflect: reflect, missDeg: missDeg, angles: angles, PF: PF, PH: PH };
+})();
+if (typeof module !== "undefined") module.exports = CORE;
+</script>
+
+<script>
+(function () {
+  const C = CORE;
+  const MODES = [['gather', '빛 모으기'], ['emit', '초점에서 쏘기'], ['def', '정의 PF = PH']];
+  const st = { mode: 'gather', p: 1, rays: 9, a: 2, u: 0, playing: true, dir: 1 };
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { st.playing = false; st.u = 1; }
+  const YTOP = 6, XMAX = 6;
+  const FONT = '"Gowun Dodum","Malgun Gothic",sans-serif';
+  const num = (x) => { const v = Math.round(x * 100) / 100; return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, ''); };
+  const aMax = () => Math.min(5, Math.sqrt(4 * st.p * (YTOP - 0.6)));   // 빛이 포물선 안쪽(화면 안)에 닿는 범위
+
+  function chips(el, items, label, isOn, pick) {
+    el.innerHTML = '';
+    items.forEach(function (it) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = label(it);
+      b.setAttribute('aria-pressed', isOn(it) ? 'true' : 'false');
+      b.onclick = function () { pick(it); st.u = reduce ? 1 : 0; render(); };
+      el.appendChild(b);
+    });
+  }
+  function render() {
+    chips(document.getElementById('modes'), MODES, (m) => m[1], (m) => m[0] === st.mode, (m) => { st.mode = m[0]; });
+    chips(document.getElementById('pChips'), [0.5, 1, 1.5, 2], String, (v) => v === st.p, (v) => { st.p = v; });
+    chips(document.getElementById('rChips'), [5, 9, 13], String, (v) => v === st.rays, (v) => { st.rays = v; });
+    document.getElementById('raysRow').hidden = st.mode === 'def';
+    st.a = Math.max(-aMax(), Math.min(aMax(), st.a));
+    document.getElementById('aRange').value = String(Math.round(st.a / aMax() * 100));
+    mathText();
+  }
+  function mathText() {
+    const p = st.p, a = st.a, y = C.yOf(a, p), ang = C.angles(a, p);
+    const head = '<h3>식으로 보면</h3><span class="eq">x² = ' + num(4 * p) + 'y &nbsp;·&nbsp; 초점 F(0, ' + num(p) + ') &nbsp;·&nbsp; 준선 y = −' + num(p) + '</span>';
+    const P = 'P(' + num(a) + ', ' + num(y) + ')';
+    let body;
+    if (st.mode === 'def') {
+      body = '<div>포물선은 초점과 준선까지의 거리가 같은 점들의 모임이에요.</div>' +
+        '<span class="eq">' + P + '<br>PF = ' + num(C.PF(a, p)) + ' &nbsp; PH = ' + num(y) + ' + ' + num(p) + ' = <span class="hl">' + num(C.PH(a, p)) + '</span></span>';
+    } else {
+      body = '<div>고른 점 ' + P + ' 에서 법선(빨간 점선)과 이루는 각</div>' +
+        '<span class="eq">' + (st.mode === 'gather' ? '들어온 빛' : '나가는 빛') + ' ' + num(ang[0]) + '° &nbsp;=&nbsp; 초점 쪽 ' + num(ang[1]) + '°</span>' +
+        '<div>들어온 빛과 나가는 빛이 법선과 같은 각을 이루니(반사 법칙) 반사된 빛은 F 를 지나요.</div>' +
+        '<div>빛이 출발하는 높이 y = ' + YTOP + ' 에서 F 까지의 길이 = (' + YTOP + ' − y) + PF = (' + YTOP + ' − y) + (y + p) = <span class="hl">' + num(YTOP + p) + '</span>. 어느 줄기든 같아서 빛이 <span class="hl">동시에</span> 초점에 닿아요.</div>';
+    }
+    document.getElementById('math').innerHTML = head + body;
+    document.getElementById('selLbl').textContent = 'P 의 x = ' + num(a);
+  }
+
+  let G = null;                                          // 좌표 → 화면
+  function setup(cv) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = cv.clientWidth, h = Math.round(w * (w < 520 ? 1.05 : 0.68));
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.style.height = h + 'px'; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ylo = -st.p - 1, yhi = YTOP + 0.4;
+    const s = Math.min((w - 20) / (2 * XMAX), (h - 20) / (yhi - ylo));
+    G = { s: s, ox: w / 2, oy: 10 + yhi * s, w: w, h: h };
+    return ctx;
+  }
+  const X = (x) => G.ox + x * G.s, Y = (y) => G.oy - y * G.s;
+  function line(ctx, pts) { ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.stroke(); }
+  // 꺾은선 pts 를 처음부터 길이 len 까지만
+  function partial(pts, len) {
+    const out = [pts[0]]; let left = len;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (left >= d) { out.push(b); left -= d; continue; }
+      const t = Math.max(0, left / d); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); break;
+    }
+    return out;
+  }
+  function rayPath(a) {
+    const p = st.p, P = [a, C.yOf(a, p)], F = [0, p];
+    return st.mode === 'gather' ? [[a, YTOP], P, F] : [F, P, [a, YTOP]];
+  }
+
+  function draw() {
+    const cv = document.getElementById('cv'), ctx = setup(cv), p = st.p;
+    ctx.clearRect(0, 0, G.w, G.h);
+    ctx.strokeStyle = '#eef4fc'; ctx.lineWidth = 1;
+    for (let x = -XMAX; x <= XMAX; x++) line(ctx, [[x, -p - 1], [x, YTOP + 0.4]]);
+    for (let y = Math.ceil(-p - 1); y <= YTOP; y++) line(ctx, [[-XMAX, y], [XMAX, y]]);
+    ctx.strokeStyle = '#9fb4cc'; ctx.lineWidth = 1.2;
+    line(ctx, [[-XMAX, 0], [XMAX, 0]]); line(ctx, [[0, -p - 1], [0, YTOP + 0.4]]);
+    ctx.strokeStyle = '#5b6b7d'; ctx.setLineDash([8, 6]); line(ctx, [[-XMAX, -p], [XMAX, -p]]); ctx.setLineDash([]);
+    ctx.font = '13px ' + FONT; ctx.fillStyle = '#5b6b7d'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('준선 y = −' + num(p), X(-XMAX) + 4, Y(-p) + 12);
+    // 포물선
+    const xs = Math.sqrt(4 * p * (YTOP + 0.4));
+    ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 3; ctx.beginPath();
+    for (let i = 0; i <= 200; i++) { const x = -xs + 2 * xs * i / 200, y = C.yOf(x, p); i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)); }
+    ctx.stroke();
+    ctx.fillStyle = '#2563eb'; ctx.textAlign = 'right'; ctx.fillText('x² = ' + num(4 * p) + 'y', X(xs) - 6, Y(YTOP) + 4);
+
+    const a = st.a, P = [a, C.yOf(a, p)];
+    if (st.mode === 'def') {
+      const H = [a, -p];
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#f26b1d'; line(ctx, [P, [0, p]]);
+      ctx.strokeStyle = '#16a34a'; line(ctx, [P, H]);
+      ctx.fillStyle = '#16a34a'; ctx.beginPath(); ctx.arc(X(H[0]), Y(H[1]), 5, 0, Math.PI * 2); ctx.fill();
+      const pf = C.PF(a, p);
+      ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center';
+      ctx.fillStyle = '#c2410c'; ctx.fillText('PF = ' + num(pf), X(a / 2) + (a >= 0 ? -34 : 34), Y((P[1] + p) / 2));
+      ctx.fillStyle = '#15803d'; ctx.fillText('PH = ' + num(C.PH(a, p)), X(a) + (a >= 0 ? 44 : -44), Y((P[1] - p) / 2));
+      ctx.fillStyle = '#1d2b3a'; ctx.font = '13px ' + FONT; ctx.fillText('H', X(H[0]) + 12, Y(H[1]) + 12);
+    } else {
+      const n = st.rays, am = aMax(), total = YTOP + p;          // 모든 줄기의 길이가 YTOP + p 로 같다
+      for (let i = 0; i < n; i++) {
+        const x = -am + 2 * am * i / (n - 1), path = rayPath(x);
+        ctx.strokeStyle = 'rgba(242,107,29,0.18)'; ctx.lineWidth = 1.5; line(ctx, path);
+        ctx.strokeStyle = 'rgba(242,107,29,0.85)'; ctx.lineWidth = 2; line(ctx, partial(path, st.u * total));
+      }
+      const path = rayPath(a);
+      ctx.strokeStyle = '#c2410c'; ctx.lineWidth = 3.5; line(ctx, partial(path, Math.max(st.u, 0.0001) * total));
+      // 법선
+      const m = a / (2 * p), nl = Math.hypot(m, 1), nv = [-m / nl, 1 / nl];
+      ctx.strokeStyle = '#e11d48'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      line(ctx, [[P[0] - nv[0] * 0.6, P[1] - nv[1] * 0.6], [P[0] + nv[0] * 2.2, P[1] + nv[1] * 2.2]]); ctx.setLineDash([]);
+    }
+    ctx.fillStyle = '#1d2b3a'; ctx.beginPath(); ctx.arc(X(P[0]), Y(P[1]), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('P', X(P[0]) + (a >= 0 ? 14 : -14), Y(P[1]) + 14);
+    ctx.fillStyle = '#e11d48'; ctx.beginPath(); ctx.arc(X(0), Y(p), 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText('F', X(0) + 14, Y(p) - 12);
+  }
+
+  let last = null;
+  function tick(ts) {
+    const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+    if (st.playing) {
+      if (st.mode === 'def') {
+        st.a += st.dir * dt * 1.2;
+        if (Math.abs(st.a) > aMax()) { st.a = Math.sign(st.a) * aMax(); st.dir *= -1; }
+        document.getElementById('aRange').value = String(Math.round(st.a / aMax() * 100));
+        mathText();
+      } else {
+        st.u += dt / 2.6;
+        if (st.u > 1.35) st.u = 0;                          // 다 닿은 뒤 잠깐 보여 주고 다시
+      }
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+  function syncPlay() { document.getElementById('btnPlay').textContent = st.playing ? '멈춤' : '움직이기'; }
+  document.getElementById('btnPlay').onclick = function () { st.playing = !st.playing; syncPlay(); };
+  document.getElementById('aRange').oninput = function (e) { st.a = e.target.value / 100 * aMax(); if (st.mode === 'def') { st.playing = false; syncPlay(); } mathText(); };
+  const cv = document.getElementById('cv');
+  let dragging = false;
+  function dragTo(e) {
+    if (!G) return;
+    const rect = cv.getBoundingClientRect();
+    st.a = Math.max(-aMax(), Math.min(aMax(), (e.clientX - rect.left - G.ox) / G.s));
+    document.getElementById('aRange').value = String(Math.round(st.a / aMax() * 100));
+    if (st.mode === 'def') { st.playing = false; syncPlay(); }
+    mathText();
+  }
+  cv.addEventListener('pointerdown', function (e) { dragging = true; cv.setPointerCapture(e.pointerId); dragTo(e); });
+  cv.addEventListener('pointermove', function (e) { if (dragging) dragTo(e); });
+  cv.addEventListener('pointerup', function () { dragging = false; });
+  window.addEventListener('resize', draw);
+  render(); syncPlay();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
