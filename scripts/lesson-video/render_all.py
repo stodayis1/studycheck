@@ -2,6 +2,7 @@
 
   python scripts/lesson-video/render_all.py <대본 폴더> --pdf <개념편.pdf> --video <영상 폴더> [--only 2,3] [--jobs 3]
   python scripts/lesson-video/render_all.py <증명 대본 폴더> --proofs --video <영상 폴더>      ← 증명 영상(proof_video.py)
+  python scripts/lesson-video/render_all.py <풀이 대본 폴더> --solutions --video <영상 폴더>   ← 필수예제 풀이 → <영상 폴더>/풀이영상
 
 · 영상: <영상 폴더>/NN_개념_<file>.mp4 (+ .구간.json), 토막: <영상 폴더>/_토막/NN, 음성 캐시: <영상 폴더>/_음성캐시
 · 크레딧이 떨어지면(quota) 새 편을 더 시작하지 않고 멈춘다. 받은 음성은 캐시에 남아 다음에 이어진다.
@@ -14,7 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('scripts'); ap.add_argument('--pdf'); ap.add_argument('--video', required=True); ap.add_argument('--proofs', action='store_true')
+    ap.add_argument('scripts'); ap.add_argument('--pdf'); ap.add_argument('--video', required=True); ap.add_argument('--proofs', action='store_true'); ap.add_argument('--solutions', action='store_true')
     ap.add_argument('--only', default=''); ap.add_argument('--jobs', type=int, default=3)
     a = ap.parse_args()
     only = {int(x) for x in a.only.split(',') if x}
@@ -22,6 +23,15 @@ def main():
     for f in sorted(glob.glob(os.path.join(a.scripts, '*.json'))):
         if os.path.basename(f).startswith('_'): continue
         L = json.load(open(f, encoding='utf-8'))
+        if a.solutions:   # 풀이_<local_no>_<…>.json → 풀이영상/<개념 NN>_풀이<개념 안 순번>_<…>.mp4 (순번은 _재료/풀이/_목록.json)
+            sol = {x['local_no']: x for x in json.load(open(os.path.join(a.video, '_재료', '풀이', '_목록.json'), encoding='utf-8'))}
+            x = sol[L['local_no']]; no = int(L['local_no'])
+            if only and no not in only: continue
+            rest = os.path.basename(f)[len('풀이_0000_'):-len('.json')]
+            os.makedirs(os.path.join(a.video, '풀이영상'), exist_ok=True)
+            out = os.path.join(a.video, '풀이영상', f"{x['concept_no']:02d}_풀이{x['sol_no']:02d}_{rest}.mp4")
+            if not os.path.exists(out): todo.append((no, f, out))
+            continue
         if a.proofs:   # 증명_PP_<…>.json → <개념 NN>_증명K_<…>.mp4 (order = 「07-증명1」)
             cn, k = L['order'].split('-증명')
             no = int(L['id'].split('_')[1])
@@ -40,7 +50,10 @@ def main():
     def run(item):
         no, f, out = item
         if stop.is_set(): return no, 'skip'
-        if a.proofs:
+        if a.solutions:
+            cmd = [sys.executable, os.path.join(HERE, 'proof_video.py'), f, '--cuts', os.path.join(a.video, '_재료', '풀이'),
+                   '--out', out, '--cache', os.path.join(a.video, '_음성캐시'), '--bar']
+        elif a.proofs:
             cmd = [sys.executable, os.path.join(HERE, 'proof_video.py'), f, '--cuts', os.path.join(a.video, '_토막'),
                    '--out', out, '--cache', os.path.join(a.video, '_음성캐시'), '--bar']
         else:

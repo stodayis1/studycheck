@@ -32,13 +32,15 @@ export async function GET(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (!data) return NextResponse.json({ error: '아직 정리된 자료가 없어요.' }, { status: 404 })
 
-    // 우리 학생 — 이 학교 다니는 아이들을 학년과 함께
-    // ★ order 없이 range 로 넘기면 행을 놓친다. 정렬 기준을 반드시 준다.
-    const students = await fetchAllRows(() =>
-      db.from('students').select('id, name, grade, school')
-        .eq('school', key).order('grade').order('name')
-    )
-    return NextResponse.json({ profile: data, students })
+    // ★ 우리 학생이 「있나 없나」만 보낸다 — 이름도 인원수도 보내지 않는다.
+    //   이 화면은 상담 때 학부모님께 보여 드린다. 학교별 인원을 다 더하면 학원 전체
+    //   재원생 수가 드러나고, 다른 집 아이 이름까지 보인다. 2026-10-27 원장님 지시.
+    //   (퇴원생은 당연히 제외 — is_active)
+    const { count, error: cErr } = await db.from('students')
+      .select('id', { count: 'exact', head: true })
+      .eq('school', key).eq('is_active', true)
+    if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
+    return NextResponse.json({ profile: data, hasStudents: (count ?? 0) > 0 })
   }
 
   // 목록
@@ -47,15 +49,17 @@ export async function GET(req: Request) {
     .order('school_level').order('school_name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 학교별 우리 학생 수 — 학교 칸만 읽어 센다
-  const rows = await fetchAllRows(() => db.from('students').select('id, school').order('id'))
-  const counts: Record<string, number> = {}
+  // 학교마다 우리 학생이 「있나 없나」만. ★ 인원수는 내보내지 않는다 —
+  // 다 더하면 학원 전체 재원생 수가 되고, 이 화면은 상담 때 학부모님께 보여 드린다.
+  const rows = await fetchAllRows(() =>
+    db.from('students').select('id, school').eq('is_active', true).order('id'))
+  const hasStudents: Record<string, boolean> = {}
   for (const r of rows as any[]) {
     const k = normalizeSchool(r.school)
-    if (k) counts[k] = (counts[k] ?? 0) + 1
+    if (k) hasStudents[k] = true
   }
 
-  return NextResponse.json({ profiles: data ?? [], counts })
+  return NextResponse.json({ profiles: data ?? [], hasStudents })
 }
 
 export async function PUT(req: Request) {

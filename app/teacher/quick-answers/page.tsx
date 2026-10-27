@@ -8,7 +8,7 @@ import QRCode from 'qrcode'
 import { QUICK_ANSWER_CATALOG, QuickAnswerCatalogItem } from './catalog'
 
 // concepts.grade / textbook_catalog와 동일한 학년 순서 (curriculum/page.tsx GRADE_ORDER와 맞춤)
-const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
+const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '중3모의고사', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
 
 const TYPE_ORDER = ['연산서', '개념서', '유형서', '심화서']
 const TYPE_COLOR: Record<string, string> = { '연산서': '#0F6E56', '개념서': '#1D4ED8', '유형서': '#C2680A', '심화서': '#9B1C1C' }

@@ -29,6 +29,9 @@ THEME = {
                     label=(16, 34, 68), title=(12, 26, 50)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
+    # 공통수학1 풀이: 증명(진한 파랑)보다 한 단계 더 진한 파랑
+    'solution_cm1': dict(bg=(84, 126, 196), grid=(74, 114, 184), badge=(10, 28, 64), pill=(208, 224, 248),
+                    label=(12, 28, 60), title=(8, 18, 40), foot=(226, 234, 248)),
     # 풀이: 개념(연한 연두) → 증명(진한 초록) 보다 한 단계 더 진한 초록 (원장님 2026-10-21)
     'solution': dict(bg=(84, 158, 110), grid=(74, 146, 98), badge=(10, 46, 26), pill=(205, 236, 214),
                     label=(12, 40, 24), title=(8, 24, 16), foot=(226, 242, 230)),
@@ -161,7 +164,7 @@ def main():
             G = json.load(open(g, encoding='utf-8'))
             bub = next((st['bubble'] for st in G['steps'][2:] if st.get('lines')), G['steps'][-1]['bubble'])
             # 원장님 2026-10-21: 썸네일에 교재 쪽과 문제 번호가 꼭 있어야 한다 → 배지 「필수예제 05」, 옆에 「개념+유형 60쪽」
-            make('solution', G['label'], '', G['title'], bub, 'ABCD'[k % 4],
+            make('solution' if grade == '공통수학2' else 'solution_cm1', G['label'], '', G['title'], bub, 'ABCD'[k % 4],
                  pill=f"개념+유형 {G['book_page']}쪽").save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
         print(len(made), '장'); [print(' ', m) for m in made]; return

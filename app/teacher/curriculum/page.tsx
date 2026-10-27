@@ -8,7 +8,16 @@ import { cx, fetchAllRows } from '@/lib/utils'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 
 // concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
-const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
+const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '중3모의고사', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
+
+// 모의고사 교재는 회차(1회·2회…)가 진도 단위라서 일반 교재의 학년/학기와 섞이면 안 된다.
+// 그래서 배정할 때 교재 이름만 보고 전용 학년/학기를 박아 넣는다 (concepts 쪽 값과 같아야 한다).
+const MOCK_EXAM_TEXTBOOKS: Record<string, { grade: string; semester: number }> = {
+  '모의고사 1부': { grade: '중2모의고사', semester: 1 },      // 1회~25회
+  '모의고사 2부': { grade: '중2모의고사', semester: 2 },      // 26회~50회
+  '중3 모의고사 1부': { grade: '중3모의고사', semester: 1 },  // 1회~42회 (중2-2·중3-1·중3-2)
+  '중3 모의고사 2부': { grade: '중3모의고사', semester: 2 },  // 43회~50회 (중3 전범위)
+}
 
 interface Student {
   id: string
@@ -364,11 +373,10 @@ export default function TeacherCurriculumPage() {
 
     for (const sid of targetIds) {
       // 같은 종류 교재(개념서/유형서/심화서)도 여러 권 동시에 진행할 수 있도록 자동 교체하지 않고 그대로 추가
-      // 모의고사 1부/2부는 다른 교재와 진도가 섞이지 않도록 학년/학기를 전용 값으로 자동 지정
-      const isMockExam1 = tbName === '모의고사 1부'
-      const isMockExam2 = tbName === '모의고사 2부'
-      const savedGrade = (isMockExam1 || isMockExam2) ? '중2모의고사' : tbGrade
-      const savedSemester = isMockExam1 ? 1 : isMockExam2 ? 2 : tbSemester
+      // 모의고사 교재는 다른 교재와 진도가 섞이지 않도록 학년/학기를 전용 값으로 자동 지정 (MOCK_EXAM_TEXTBOOKS 참고)
+      const mock = MOCK_EXAM_TEXTBOOKS[tbName]
+      const savedGrade = mock ? mock.grade : tbGrade
+      const savedSemester = mock ? mock.semester : tbSemester
 
       // 오토스텝 파일럿: 지금은 윤수지 학생 + 개념유형 라이트 교재일 때만 저장 (다른 학생/교재는 항상 비활성)
       const autostepOn = isAutostepPilot(sid) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
