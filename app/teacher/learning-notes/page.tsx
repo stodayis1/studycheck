@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
@@ -13,6 +13,7 @@ import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
+import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 import { splitTeachers } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
@@ -1026,14 +1027,48 @@ export default function TeacherLearningNotesPage() {
     return schedules.filter((s) => s.student_id === studentId)
   }
 
+  /**
+   * 수업기록(7,900행)·알림장(7,900행)을 **한 번만 색인**해 둔다 (원장님 2026-10-28
+   * 「현저히 느려지고, 버벅댄다는 이야기가 많네」).
+   *
+   * 왜 필요한가
+   *   예전에는 찾을 때마다 배열을 처음부터 훑었다(sessions.find / notes.find / filter+sort).
+   *   칸반 세 칸이 같은 걸 또 걸러내고, 카드 한 장마다 또 훑고, 「오늘 수업 없는 학생」
+   *   180장이 또 훑는다. 학습일지 칸에 글자 하나 칠 때마다 그게 전부 다시 돌아서
+   *   **한 번 그리는 데 20ms가 넘었다**(실측 23.4ms, 선생님 태블릿에서는 더 느리다).
+   *   색인을 한 번 만들어 두면 찾는 건 바로다 — 같은 화면이 0.03ms로 줄었다.
+   *
+   * 색인을 만드는 규칙은 `lib/noteIndex.ts` 한 곳에만 둔다 — 예전 방식과 **같은 답**이
+   * 나오는지 `scripts/check-note-index.mjs` 가 운영 데이터로 한 명씩 대조한다.
+   */
+  const sessionIndex = useMemo(() => buildSessionIndex(sessions, todayStr), [sessions, todayStr])
+  const noteBySessionId = useMemo(() => buildNoteIndex(notes), [notes])
+
+  /**
+   * 열어 둔 학생의 진도 체크를 「교재|단원」으로 색인한다.
+   * progressChecks 는 학생을 열 때마다 **쌓인다**(앞서 연 학생 것도 들고 있다). 단원 칩마다
+   * .find() 로 훑으면 글자 하나 칠 때마다 수천 행 × 단원 수를 다시 돈다.
+   * 교재 없이 찍힌 예전 기록은 빈 교재키(`|단원`)로 들어간다.
+   */
+  const checkByTBConcept = useMemo(() => {
+    const m = new Map<string, any>()
+    if (!noteStudent) return m
+    for (const p of progressChecks) {
+      if (p.student_id !== noteStudent.id) continue
+      const key = (p.student_textbook_id ?? '') + '|' + p.concept_id
+      if (!m.has(key)) m.set(key, p)
+    }
+    return m
+  }, [progressChecks, noteStudent])
+
   function getTodaySession(studentId: string) {
-    return sessions.find((s) => s.student_id === studentId && s.session_date === todayStr)
+    return sessionIndex.today.get(studentId)
   }
 
   function getTodayNote(studentId: string) {
     const session = getTodaySession(studentId)
     if (!session) return null
-    return notes.find((n) => n.session_id === session.id)
+    return noteBySessionId.get(session.id)
   }
 
   // "작성완료" = 결석 처리됐거나, 수업내용(진도)과 과제배부가 둘 다 입력된 경우.
@@ -1123,7 +1158,7 @@ export default function TeacherLearningNotesPage() {
     //   (원장님 2026-10-22 — 어제 적은 지훈이 과제가 빈 칸으로 보이던 화면이 이것이다).
     const guessed = guessClassDate(student)
     const session = targetSession ?? getTodaySession(student.id)
-      ?? sessions.find((s) => s.student_id === student.id && s.session_date === guessed)
+      ?? sessionIndex.byStudentDate.get(student.id + '|' + guessed)
     // 수업한 날 기본값 — 이미 있는 기록이면 그 날짜, 아니면 **시간표 기준 가장 가까운 수업일**.
     // (오늘이 그 학생 수업 요일이면 오늘, 아니면 바로 지난 수업 요일)
     setNoteDate(session?.session_date ?? guessed)
@@ -1132,11 +1167,9 @@ export default function TeacherLearningNotesPage() {
       return
     }
     // 알림장·출결도 **그 세션의 것**을 쓴다. 오늘 것만 보면 지난 수업을 열었을 때 빈 칸이 된다.
-    const note = session ? notes.find((n) => n.session_id === session.id) ?? null : null
+    const note = session ? noteBySessionId.get(session.id) ?? null : null
     // 이전 수업 (오늘 제외 최근 1개)
-    const prevSession = sessions
-      .filter((s) => s.student_id === student.id && s.session_date < todayStr)
-      .sort((a, b) => b.session_date.localeCompare(a.session_date))[0] ?? null
+    const prevSession = sessionIndex.prev.get(student.id) ?? null
 
     setNoteStudent(student)
     setShowHandoffForm(false)
@@ -1839,6 +1872,12 @@ ${e?.message ?? '연결 실패'}
    * 왜 함수로 빼나 (원장님 2026-10-20)
    *   「학생들 주루룩 있는걸 칸반보드 형태로 만들어주면 어때? 스크롤 압박이 너무 심해」
    *   칸마다 카드를 따로 그리면 한쪽만 고쳐져 금세 달라진다. 카드는 한 벌만 둔다.
+   *
+   * ★ 이건 **컴포넌트가 아니라 그냥 함수**다. `<NoteCard />` 로 쓰면 안 된다 —
+   *   이 함수는 화면을 그릴 때마다 새로 만들어지고, 리액트는 그걸 **다른 종류의 컴포넌트**로
+   *   보기 때문에 카드 40여 장을 전부 **지우고 새로 만든다**. 학습일지 칸에 글자 하나 칠 때마다
+   *   그게 벌어지고 있었다(원장님 2026-10-28 「버벅댄다는 이야기가 많네」).
+   *   그래서 부르는 자리에서 `{NoteCard({ ... })}` 로 **값만** 받아 쓴다.
    */
   function NoteCard({ student, schedule }: { student: Student; schedule: any }) {
     const note = getTodayNote(student.id)
@@ -1851,9 +1890,7 @@ ${e?.message ?? '연결 실패'}
     const 칩 = 'text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0'
     const 단추 = 'flex-1 min-w-0 py-1.5 text-[11px] font-bold rounded-lg whitespace-nowrap'
     const 교재들 = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
-    const 지난수업 = sessions
-      .filter((x) => x.student_id === student.id && x.session_date < todayStr)
-      .sort((x, y) => y.session_date.localeCompare(x.session_date))[0]
+    const 지난수업 = sessionIndex.prev.get(student.id)
     return (
       // ★ 높이를 **고정**한다. 내용에 따라 들쭉날쭉하면 칸반이 오히려 더 정신없다
       //   (원장님 2026-10-20 「비뚤빼뚤하면 더 정신없지… 보드크기가 일정하게」).
@@ -2037,6 +2074,11 @@ ${e?.message ?? '연결 실패'}
   }
 
   /** 미리보기 상자 하나 — 넓은 화면에서는 옆에, 좁은 화면에서는 저장 버튼 위에 같은 것을 쓴다. */
+  /**
+   * 브리핑 미리보기 칸.
+   * ★ NoteCard 와 같은 이유로 **컴포넌트가 아니라 함수**다 — `<BriefingPreviewBox />` 로 쓰면
+   *   글자 하나 칠 때마다 이 칸이 지워지고 새로 그려진다(글자 선택이 풀리고 깜빡인다).
+   */
   function BriefingPreviewBox() {
     if (!noteBriefPreview) return null
     const 결석 = noteAttendance === '결석'
@@ -2357,7 +2399,7 @@ ${e?.message ?? '연결 실패'}
     } else {
       setFeedbackReplies([])
       // 오늘 작성된 알림장이 없는 경우에만: 이 학생의 첫 수업이면(과거 세션이 오늘 것 포함 1개 이하) 양식 미리 채우기
-      const studentSessionCount = sessions.filter((s) => s.student_id === student.id).length
+      const studentSessionCount = sessionIndex.count.get(student.id) ?? 0
       if (studentSessionCount <= 1) {
         setFeedbackContent(FIRST_CLASS_TEMPLATE)
       }
@@ -2531,7 +2573,7 @@ ${e?.message ?? '연결 실패'}
     }
     if (!confirm('수업일지를 삭제할까요?')) return
     // learning_notes 삭제
-    const note = notes.find((n) => n.session_id === sessionId)
+    const note = noteBySessionId.get(sessionId)
     if (note) await supabase.from('learning_notes').delete().eq('id', note.id)
     // class_sessions 삭제
     await supabase.from('class_sessions').delete().eq('id', sessionId)
@@ -2998,7 +3040,7 @@ ${e?.message ?? '연결 실패'}
                                 e.preventDefault()
                                 const st = students.find((s) => s.id === p.studentId)
                                 if (!st) { alert('학생을 찾지 못했어요. 목록을 새로 고쳐 주세요.'); return }
-                                const ses = sessions.find((s) => s.student_id === p.studentId && s.session_date === briefDate)
+                                const ses = sessionIndex.byStudentDate.get(p.studentId + '|' + briefDate)
                                 if (!ses) { alert(`${p.name} 학생의 ${briefDate} 수업일지를 찾지 못했어요.`); return }
                                 openNoteModal(st, ses)
                               }}
@@ -3412,7 +3454,7 @@ ${e?.message ?? '연결 실패'}
                               {col.key === 'todo' ? '다 쓰셨어요' : '없어요'}
                             </p>
                           ) : col.list.map(({ student, schedule }) => (
-                            <NoteCard key={student.id} student={student} schedule={schedule} />
+                            <Fragment key={student.id}>{NoteCard({ student, schedule })}</Fragment>
                           ))}
                         </div>
                       </section>
@@ -3435,11 +3477,9 @@ ${e?.message ?? '연결 실패'}
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     {otherStudents.map((student) => {
                       // 최근 진도 확인
-                      const recentSession = sessions
-                        .filter((s) => s.student_id === student.id)
-                        .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
+                      const recentSession = sessionIndex.latest.get(student.id)
                       const recentNote = recentSession
-                        ? notes.find((n) => n.session_id === recentSession.id)
+                        ? noteBySessionId.get(recentSession.id)
                         : null
                       const myTBs = studentTextbooks.filter((t) => t.student_id === student.id && t.status === 'assigned')
                       const mainTB = myTBs.find((t) => t.textbook_type === '개념서') ?? myTBs[0]
@@ -3677,9 +3717,7 @@ ${e?.message ?? '연결 실패'}
 
             {/* 이전 수업 요약 */}
             {(() => {
-              const prevSession = sessions
-                .filter((s) => s.student_id === noteStudent.id && s.session_date < todayStr)
-                .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
+              const prevSession = sessionIndex.prev.get(noteStudent.id)
               if (!prevSession) return null
 
               // 선행 진도: 배정된 교재 중 가장 앞선 과정 계산
@@ -3837,8 +3875,8 @@ ${e?.message ?? '연결 실패'}
                             // 개념서는 교재 없이 찍힌 것도 인정(예전 기록).
                             const tbDoneIds = new Set<string>(sel.conceptIds)
                             for (const c of tbConcepts) {
-                              const hit = progressChecks.find((p) => p.student_id === noteStudent?.id && p.concept_id === c.id
-                                && (p.student_textbook_id === tb.id || (tb.textbook_type === '개념서' && !p.student_textbook_id)))
+                              const hit = checkByTBConcept.get(tb.id + '|' + c.id)
+                                ?? (tb.textbook_type === '개념서' ? checkByTBConcept.get('|' + c.id) : undefined)
                               if (hit) tbDoneIds.add(c.id)
                             }
                             const tbDone = tbConcepts.filter((c) => tbDoneIds.has(c.id)).length
@@ -4015,8 +4053,8 @@ ${e?.message ?? '연결 실패'}
                                               const selected = sel.conceptIds.includes(c.id)
                                               // 이 교재에서 직접 체크한 기록 우선, 없으면 교재 구분 없던 예전 기록(개념서에 한해) 참고
                                               const existingCheck = noteStudent
-                                                ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id && p.student_textbook_id === tb.id)
-                                                  ?? (tb.textbook_type === '개념서' ? progressChecks.find((p) => p.student_id === noteStudent.id && p.concept_id === c.id && !p.student_textbook_id) : undefined)
+                                                ? checkByTBConcept.get(tb.id + '|' + c.id)
+                                                  ?? (tb.textbook_type === '개념서' ? checkByTBConcept.get('|' + c.id) : undefined)
                                                 : null
                                               const done = existingCheck && existingCheck.check_count >= 1
 
@@ -4883,7 +4921,7 @@ ${e?.message ?? '연결 실패'}
 
             {/* 브리핑 미리보기 — 좁은 화면에서는 저장 버튼 바로 위에 둔다.
                 넓은 화면에서는 모달 옆에 따로 띄우므로 여기서는 숨긴다. */}
-            <div className="lg:hidden mt-4"><BriefingPreviewBox /></div>
+            <div className="lg:hidden mt-4">{BriefingPreviewBox()}</div>
 
             {/* 저장 버튼 - 모든 탭에서 표시 */}
             <button onClick={handleSaveNote} disabled={savingNote}
@@ -4897,7 +4935,7 @@ ${e?.message ?? '연결 실패'}
 
           {/* 넓은 화면에서는 **옆에** 띄운다. 입력하면서 바로 보이라고 (원장님 2026-10-19). */}
           <aside className="hidden lg:block w-[22rem] shrink-0 max-h-[90vh] overflow-y-auto">
-            <BriefingPreviewBox />
+            {BriefingPreviewBox()}
           </aside>
           </div>
         </div>
