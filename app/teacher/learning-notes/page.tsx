@@ -13,6 +13,7 @@ import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
+import { computeTextbookLevels } from '@/lib/progressLevel'
 import { splitTeachers } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
@@ -830,6 +831,63 @@ export default function TeacherLearningNotesPage() {
       return
     }
     setStudentTextbooks((prev) => prev.map((t) => t.id === textbookId ? { ...t, progress_percent: percent } : t))
+  }
+
+  // 교재 완료 — 학습일지에서 바로 누른다.
+  //
+  // 왜 여기에 — 진도는 매일 학습일지에서 찍는다. 그런데 「다 끝냈다」는 표시는 과정관리에
+  // 따로 들어가야만 할 수 있었다. 그래서 끝낸 교재가 계속 진행중으로 남아 있다가 결국
+  // 「삭제요청」으로 치워 달라는 일이 생겼다(2026-10-27, 36건 중 31건). 다 체크한 교재는
+  // 그 자리에서 완료로 눌러 치울 수 있어야 한다 (원장님 2026-10-28).
+  //
+  // 완료 처리는 과정관리(handleCompleteTB)와 같은 규칙이다 — 상태를 바꾸고, 그 학기 개념을
+  // 이 교재의 회차로 일괄 반영한다(연산서 제외). 두 화면이 다르게 동작하면 안 된다.
+  async function completeTextbookFromNote(tb: any) {
+    if (!confirm(`「${tb.textbook_name}」을(를) 완료 처리할까요?\n\n`
+      + '진도 기록은 그대로 남고, 교재 목록에서는 완료로 접힙니다.\n'
+      + '다시 진행하려면 과정관리에서 되돌릴 수 있어요.')) return
+
+    const { error } = await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', tb.id)
+    if (error) { alert('완료 처리 실패: ' + error.message); return }
+    setStudentTextbooks((prev) => prev.map((t) => t.id === tb.id ? { ...t, status: 'completed' } : t))
+    if (noteActiveTBId === tb.id) setNoteActiveTBId('')
+
+    if (tb.grade && tb.semester && tb.textbook_type !== '연산서') {
+      const siblings = studentTextbooks.filter((t) =>
+        t.student_id === tb.student_id && t.grade === tb.grade && t.semester === tb.semester && t.textbook_type !== '연산서')
+      const targetLevel = computeTextbookLevels(siblings).get(tb.id)
+      if (targetLevel) await markSemesterMasteredFromNote(tb.student_id, tb.grade, tb.semester, targetLevel)
+    }
+  }
+
+  // 그 학기 전체 개념을 이 교재의 회차로 올린다. 이미 더 높이 찍혀 있으면 낮추지 않는다.
+  async function markSemesterMasteredFromNote(studentId: string, grade: string, semester: number, targetLevel: number) {
+    const semesterConcepts = concepts.filter((c) => c.grade === grade && c.semester === semester)
+    if (semesterConcepts.length === 0) return
+    const existingByConcept = new Map(
+      progressChecks.filter((p) => p.student_id === studentId && !p.student_textbook_id).map((p) => [p.concept_id, p])
+    )
+    const toUpdate = semesterConcepts.filter((c) => {
+      const ex = existingByConcept.get(c.id)
+      return ex && ex.check_count < targetLevel
+    })
+    const toInsert = semesterConcepts.filter((c) => !existingByConcept.has(c.id))
+
+    await Promise.all(toUpdate.map((c) =>
+      supabase.from('progress_checks')
+        .update({ check_count: targetLevel, updated_at: new Date().toISOString() })
+        .eq('id', existingByConcept.get(c.id)!.id)
+    ))
+    if (toUpdate.length > 0) {
+      const updatedIds = new Set(toUpdate.map((c) => existingByConcept.get(c.id)!.id))
+      setProgressChecks((prev) => prev.map((p) => updatedIds.has(p.id) ? { ...p, check_count: targetLevel } : p))
+    }
+    if (toInsert.length > 0) {
+      const { data: insertedRows } = await supabase.from('progress_checks').insert(
+        toInsert.map((c) => ({ student_id: studentId, concept_id: c.id, check_count: targetLevel }))
+      ).select('id,student_id,concept_id,check_count,student_textbook_id')
+      if (insertedRows) setProgressChecks((prev) => [...prev, ...insertedRows])
+    }
   }
 
   // 시험대비 진도 업데이트 (학습일지에서 직접 입력)
@@ -3772,6 +3830,22 @@ ${e?.message ?? '연결 실패'}
                               ? tbConcepts.filter((c) => c.chapter === sel.chapter && sel.subChapters.includes(c.sub_chapter))
                               : []
 
+                            // ── 이 교재를 어디까지 나갔나 ──────────────────────────────
+                            // 저장된 진도 + 오늘 여기서 고른 것까지 같이 센다. 그래야 마지막 단원을
+                            // 체크한 그 자리에서 바로 「교재 완료」가 뜬다 (원장님 2026-10-28).
+                            // 체크 판정은 아래 개념 칩과 같은 규칙이다 — 이 교재로 찍힌 것,
+                            // 개념서는 교재 없이 찍힌 것도 인정(예전 기록).
+                            const tbDoneIds = new Set<string>(sel.conceptIds)
+                            for (const c of tbConcepts) {
+                              const hit = progressChecks.find((p) => p.student_id === noteStudent?.id && p.concept_id === c.id
+                                && (p.student_textbook_id === tb.id || (tb.textbook_type === '개념서' && !p.student_textbook_id)))
+                              if (hit) tbDoneIds.add(c.id)
+                            }
+                            const tbDone = tbConcepts.filter((c) => tbDoneIds.has(c.id)).length
+                            const tbAllDone = tb.textbook_type === '연산서'
+                              ? (tb.progress_percent ?? 0) >= 100
+                              : tbConcepts.length > 0 && tbDone >= tbConcepts.length
+
 
                             const updateSel = (patch: Partial<typeof sel>) => {
                               setNoteProgressByTB((prev) => ({
@@ -3806,8 +3880,28 @@ ${e?.message ?? '연결 실패'}
                                       {sel.conceptIds.length}개 선택
                                     </span>
                                   )}
+                                  {/* 어디까지 나갔나 — 「38/42」. 다 나갔으면 초록으로 바뀐다 */}
+                                  {tb.textbook_type !== '연산서' && tbConcepts.length > 0 && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={tbAllDone
+                                        ? { background: '#9FE1CB', color: '#085041' }
+                                        : { background: '#f3f4f6', color: '#6b7280' }}>
+                                      {tbDone}/{tbConcepts.length}
+                                    </span>
+                                  )}
                                   <span style={{ color: '#1f2937', fontSize: 10 }}>{isActive ? '▲' : '▼'}</span>
                                 </button>
+
+                                {/* ★ 다 나간 교재는 여기서 바로 완료 — 과정관리까지 안 들어가도 되게.
+                                    (끝낸 교재가 진행중으로 남아 있다가 「삭제요청」이 쌓였다. 2026-10-28) */}
+                                {tbAllDone && (
+                                  <button onClick={() => completeTextbookFromNote(tb)}
+                                    className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-bold"
+                                    style={{ background: '#F0FBF7', color: '#085041', borderTop: '1px solid #9FE1CB' }}>
+                                    <i className="ti ti-circle-check" style={{ fontSize: 14 }} />
+                                    이 교재 다 나갔어요 — 교재 완료
+                                  </button>
+                                )}
 
                                 {/* 펼쳐진 선택 영역 */}
                                 {isActive && (
@@ -3983,6 +4077,31 @@ ${e?.message ?? '연결 실패'}
                               </div>
                             )
                           })}
+
+                          {/* 끝낸 교재 — 완료를 누르면 위 목록에서 빠지고 여기로 내려온다.
+                              뭘 끝냈고 뭐가 남았는지 한 화면에서 보이게 (원장님 2026-10-28) */}
+                          {(() => {
+                            const done = noteStudent
+                              ? studentTextbooks.filter((t) => t.student_id === noteStudent.id && t.status === 'completed')
+                              : []
+                            if (done.length === 0) return null
+                            return (
+                              <div className="rounded-xl px-3 py-2" style={{ background: '#F0FBF7', border: '1px solid #9FE1CB' }}>
+                                <p className="text-[11px] font-bold mb-1" style={{ color: '#085041' }}>
+                                  <i className="ti ti-circle-check align-[-0.125em] mr-1" />끝낸 교재 {done.length}권
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {done.map((t) => (
+                                    <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded"
+                                      style={{ background: '#fff', color: '#0F6E56', border: '1px solid #D6F0E6' }}>
+                                      {t.textbook_name}
+                                      {t.grade && <span style={{ color: '#8FB8AA' }}> {t.grade}{t.semester ? ` ${t.semester}학기` : ''}</span>}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </div>
                       )}
                     </div>
