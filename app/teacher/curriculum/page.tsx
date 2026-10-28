@@ -725,17 +725,29 @@ export default function TeacherCurriculumPage() {
       <div className="px-4 py-4 space-y-3 md:px-6">
 
         {/* 메인 탭 */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {[
             { key: 'progress', label: '진도표', icon: 'ti-chart-bar' },
             { key: 'textbook', label: '교재배정', icon: 'ti-books' },
           ].map((t) => (
-            <button key={t.key} onClick={() => setProgressTab(t.key as typeof progressTab)}
+            <button key={t.key} onClick={() => { setProgressTab(t.key as typeof progressTab); setDeleteOnly(false) }}
               className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
-                progressTab === t.key ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
+                progressTab === t.key && !deleteOnly ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
               <i className={`ti ${t.icon} mr-1 align-[-0.125em]`} />{t.label}
             </button>
           ))}
+          {/* ★ 삭제요청 탭 — 사이드바 뱃지로도 들어오지만, 이미 이 화면에 있으면 주소만 바뀌고
+              화면이 다시 안 그려져서 전체 목록이 그대로 떠 있었다(원장님 2026-10-28).
+              그래서 화면 안에도 누를 자리를 둔다. 여기 눌러서 들어오는 길이 가장 확실하다. */}
+          {deleteRequested.length > 0 && (
+            <button onClick={() => { setProgressTab('textbook'); setDeleteOnly(true) }}
+              className="px-4 py-2 rounded-xl text-sm font-bold border transition-all"
+              style={deleteOnly
+                ? { background: '#991B1B', color: '#fff', borderColor: '#991B1B' }
+                : { background: '#FEE2E2', color: '#991B1B', borderColor: '#FCA5A5' }}>
+              <i className="ti ti-trash mr-1 align-[-0.125em]" />삭제요청 {deleteRequested.length}
+            </button>
+          )}
         </div>
 
         {/* 공통 검색/필터 */}

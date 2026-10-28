@@ -204,11 +204,14 @@ export function TeacherSidebar() {
                             color: isActive ? '#085041' : '#6b7280' }} />
                           {item.label}
                         </Link>
-                        <Link href={`${item.href}?delete=1`} title="삭제요청만 모아 보기"
+                        {/* ★ <Link> 가 아니라 <a> 다. 이미 과정관리 화면에 있으면 <Link> 는 주소의 ?delete=1 만
+                            바꾸고 화면을 다시 그리지 않아서, 눌러도 전체 목록이 그대로 떠 있었다(원장님 2026-10-28).
+                            <a> 는 화면을 새로 열어 주므로 어디서 눌러도 같게 동작한다. */}
+                        <a href={`${item.href}?delete=1`} title="삭제요청만 모아 보기"
                           className="text-[10px] font-bold px-1.5 py-0.5 mr-2 rounded-lg shrink-0"
                           style={{ background: '#FEE2E2', color: '#991B1B' }}>
                           삭제요청 {deleteRequests}
-                        </Link>
+                        </a>
                       </div>
                     )
                   }
