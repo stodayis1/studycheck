@@ -468,6 +468,12 @@ export default function TeacherCurriculumPage() {
   async function handleCompleteTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
+    await handleCompleteTBCore(id)
+  }
+
+  // 완료 처리 본체 — 확인창 없이 상태만 바꾸고 학기 진도를 반영한다.
+  // (삭제요청 목록의 「완료로 두기」도 이걸 쓴다)
+  async function handleCompleteTBCore(id: string) {
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'completed' } : t))
     const tb = textbooks.find((t) => t.id === id)
@@ -498,12 +504,45 @@ export default function TeacherCurriculumPage() {
   }
 
   // 교재 완전 삭제 - 원장님(관리자)만 가능. 강사는 삭제 자체가 안 되고 삭제요청만 할 수 있음
+  //
+  // ★ 2026-10-28: 「지웠는데 또 뜬다」의 원인 — 삭제가 실패해도 화면에서만 사라졌다.
+  //   교재를 지우면 그 교재의 진도 기록은 지워지지 않고 교재 연결만 끊어진다(FK SET NULL).
+  //   그런데 그 학생·개념에 「교재 없는 진도」가 이미 있으면(완료 처리 때 학기 전체를 한 번에
+  //   반영하면서 생긴다) 연결을 끊는 순간 progress_checks_uniq_null_tb 와 겹쳐 409 가 난다.
+  //   실측: 10/27~28 삭제 시도 44건 중 15건이 이렇게 막혔고, 그중 10건이 진도 33~58회가 쌓인
+  //   「완료」 교재였다. DB 가 막아 준 덕에 안 지워졌지만, 화면은 지워진 척을 했다.
+  //   지금은 막히면 왜 막혔는지 그대로 말하고, 목록에 그대로 남긴다.
   async function handleDeleteTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!isAdmin()) { alert('교재 삭제는 원장님만 하실 수 있어요. 잘못 입력했다면 "삭제요청"을 눌러주세요.'); return }
     if (!confirm('이 교재 기록을 완전히 삭제할까요? 되돌릴 수 없어요.')) return
-    await supabase.from('student_textbooks').delete().eq('id', id)
+    const { error } = await supabase.from('student_textbooks').delete().eq('id', id)
+    if (error) {
+      alert(error.code === '23505'
+        ? '이 교재는 지울 수 없어요.\n\n'
+          + '쌓인 진도가 이미 학생 진도표에 반영돼 있어서, 교재만 지우면 기록이 어긋납니다.\n\n'
+          + '다 나간 교재라면 「완료로 두기」를 눌러주세요 — 목록에서는 접히고 기록은 그대로 남습니다.'
+        : '지우지 못했어요: ' + error.message)
+      return
+    }
     setTextbooks((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  // 삭제요청 목록에서 바로 「완료로 두기」 — 완료 처리 + 요청 표시 지우기를 한 번에.
+  // 강사가 다 나간 교재에 삭제요청을 누르는 경우가 대부분이라, 원장님이 한 번만 누르면 끝나게 한다.
+  async function completeAndClearRequest(id: string) {
+    if (!isAdmin()) return
+    if (!confirm('이 교재를 「완료」로 두고 삭제요청을 지울까요?\n\n'
+      + '교재와 진도 기록은 그대로 남고, 완료 교재 칸으로 접힙니다.')) return
+    await handleCompleteTBCore(id)
+    const res = await apiFetch('/api/textbook-delete-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textbookId: id, cancel: true }),
+    })
+    if (!res.ok) { alert('완료는 됐지만 요청 표시를 지우지 못했어요. 「요청 취소」를 눌러주세요.'); return }
+    setTextbooks((prev) => prev.map((t) => t.id === id
+      ? { ...t, status: 'completed', delete_requested_by: null, delete_requested_at: null } : t))
   }
 
   // 강사가 잘못 입력한 교재를 발견했을 때 - 직접 지우지 못하고 원장님께 삭제요청만 남김
@@ -1181,6 +1220,13 @@ export default function TeacherCurriculumPage() {
                       </span>
                       {isAdmin() && (
                         <span className="flex items-center gap-1 shrink-0">
+                          {tb.status !== 'completed' && (
+                            <button onClick={() => completeAndClearRequest(tb.id)}
+                              className="text-[11px] px-2.5 py-1 rounded-lg font-bold"
+                              style={{ background: '#9FE1CB', color: '#085041' }}>
+                              완료로 두기
+                            </button>
+                          )}
                           <button onClick={() => handleCancelDeleteRequest(tb.id)}
                             className="text-[11px] px-2.5 py-1 rounded-lg font-semibold"
                             style={{ background: '#F0FBF7', color: '#085041' }}>
