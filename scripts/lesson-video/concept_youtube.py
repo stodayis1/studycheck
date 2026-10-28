@@ -8,6 +8,11 @@
 """
 import argparse, glob, json, os
 
+def school_tag(grade):
+    """공통수학 → 고1수학, 중1-2 → 중1수학"""
+    return '고1수학' if grade.startswith('공통') else grade.split('-')[0] + '수학'
+
+
 REPO = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
 
 
@@ -42,7 +47,7 @@ def main():
                     f"▶ 교재: 개념+유형 개념편 {a.grade} {pg}쪽", '',
                     '[목차]', *toc, '',
                     '모르는 건 스터디체크 질문하기로 물어보세요.', '수학의지혜 · AI선생님 수지쌤', '',
-                    f"#{a.grade} #{'공식' if formula else '증명'} #고1수학 #수학의지혜"]
+                    f"#{a.grade} #{'공식' if formula else '증명'} #{school_tag(a.grade)} #수학의지혜"]
             text = '제목:\n' + title + '\n\n설명:\n' + '\n'.join(body) + '\n'
             if not os.path.exists(out) or a.force: open(out, 'w', encoding='utf-8').write(text)
             allout.append(f"===== {G['order']} =====\n" + text)
@@ -68,9 +73,10 @@ def main():
             f"{a.grade} {G['chapter']} › {G['sub_chapter']} — 「{G['title']}」 개념 강의입니다.", '',
             f"▶ 교재: {G['book']} {pages[0] if pages else ''}쪽 (교재를 펴 놓고 같이 보세요)", '',
             '[목차]', *toc, '',
-            '[이 개념으로 이어서 풀 문제]', *[f"· 필수예제 {e['no']} {L.get('examples', [e['title']])[i] if i < len(L.get('examples', [])) else e['title']}" for i, e in enumerate(ex)], '',
+            '[이 개념으로 이어서 풀 문제]', *[(f"· 필수 문제 · " if a.grade.startswith('중') else f"· 필수예제 {e['no']} ") + (L.get('examples', [e['title']])[i] if i < len(L.get('examples', [])) else e['title'])
+              for i, e in enumerate(ex)], '',   # 중학교: 재료의 번호(01~)가 교재 번호와 달라서 번호는 안 쓴다
             '모르는 건 스터디체크 질문하기로 물어보세요.', '수학의지혜 · AI선생님 수지쌤', '',
-            f"#{a.grade} #{tag} #고1수학 #수학의지혜",
+            f"#{a.grade} #{tag} #{school_tag(a.grade)} #수학의지혜",
         ]
         text = '제목:\n' + title + '\n\n설명:\n' + '\n'.join(body) + '\n'
         if not os.path.exists(out) or a.force:

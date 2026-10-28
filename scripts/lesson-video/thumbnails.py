@@ -22,6 +22,13 @@ THEME = {
     'concept': dict(bg=(221, 245, 230), grid=(204, 234, 214), badge=(22, 72, 40), pill=(196, 232, 206),
                     label=(24, 52, 34), title=(17, 33, 52)),
     # 공통수학1 개념: 하늘색 파스텔 (과정별로 바탕색을 다르게 — 공통수학2 는 연두)
+    # 중학교 개념: 학년마다 다른 파스텔 (중1 노랑 · 중2 분홍 · 중3 보라)
+    'concept_m1': dict(bg=(253, 243, 205), grid=(246, 232, 186), badge=(120, 80, 10), pill=(250, 230, 170),
+                    label=(90, 60, 10), title=(50, 34, 8)),
+    'concept_m2': dict(bg=(252, 226, 232), grid=(244, 210, 218), badge=(130, 30, 60), pill=(248, 206, 216),
+                    label=(100, 24, 46), title=(60, 14, 28)),
+    'concept_m3': dict(bg=(232, 226, 250), grid=(218, 210, 242), badge=(60, 40, 120), pill=(214, 204, 246),
+                    label=(46, 30, 96), title=(28, 18, 60)),
     'concept_cm1': dict(bg=(222, 236, 252), grid=(205, 223, 246), badge=(26, 54, 104), pill=(199, 220, 247),
                     label=(22, 40, 76), title=(16, 30, 56)),
     # 공통수학1 증명: 하늘색(개념)보다 한 단계 진한 파랑 — 공통수학2 의 연두 → 초록과 같은 짜임
@@ -183,7 +190,8 @@ def main():
             if big and not force: continue                      # 원장님이 GPT 로 만든 것은 그대로 둔다
             L = scripts[int(no)]
             bubble = (BUBBLE.get(L['no']) if grade == '공통수학2' else None) or next(s['bubble'] for s in L['scenes'] if s['show'].startswith('cut_'))
-            make('concept' if grade == '공통수학2' else 'concept_cm1', no, L['chapter'], L['title'], bubble, L.get('thumb_pose', 'A'),
+            kind = {'공통수학2': 'concept', '공통수학1': 'concept_cm1'}.get(grade) or 'concept_m' + grade[1]   # 중1-2 → concept_m1
+            make(kind, no, L['chapter'], L['title'], bubble, L.get('thumb_pose', 'A'),
                  grade=grade).save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
     else:

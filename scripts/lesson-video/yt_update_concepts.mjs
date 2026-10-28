@@ -54,7 +54,7 @@ for (const it of vids) {
   if (dry) { console.log('dry', no, id, title); continue }
   const v = (await api(`youtube/v3/videos?part=snippet,status&id=${id}`)).items[0]
   await api('youtube/v3/videos?part=snippet,status', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-    id, snippet: { title, description: desc, categoryId: v.snippet.categoryId, defaultLanguage: 'ko', tags: ['수학의지혜', '수지쌤', '고1수학'] },
+    id, snippet: { title, description: desc, categoryId: v.snippet.categoryId, defaultLanguage: 'ko', tags: ['수학의지혜', '수지쌤', (title.match(/^\[(중\d)/) || [])[1] ? title.match(/^\[(중\d)/)[1] + '수학' : '고1수학'] },
     status: { privacyStatus: 'unlisted', selfDeclaredMadeForKids: v.status.madeForKids ?? false, embeddable: true } }) })
   if (jpg) await api(`upload/youtube/v3/thumbnails/set?videoId=${id}&uploadType=media`, { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: fs.readFileSync(path.join(dir, jpg)) })
   ids[no] = id; fs.writeFileSync(idsPath, JSON.stringify(ids, null, 1))
