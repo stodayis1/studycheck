@@ -50,6 +50,9 @@ for (const it of vids) {
   if (!txt) { console.log(no, '! 유튜브.txt 없음'); continue }
   const t = fs.readFileSync(path.join(dir, txt), 'utf8').replace(/\r\n/g, '\n')
   const title = t.match(/제목:\n(.*)\n/)[1].trim()
+  // 이미 맞춘 영상은 과정까지 같아야 고친다 — 「[공통수학2] 02-증명1.」을 공통수학1 글로 덮어쓰면 안 된다 (2026-10-28 발견)
+  const course = (title.match(/^\[([^\]]+)\]/) || [])[1], cur = (it.snippet.title.match(/^\[([^\]]+)\]/) || [])[1]
+  if (cur && course !== cur) continue
   const desc = t.split('설명:\n')[1].trim().replace(/</g, '＜').replace(/>/g, '＞')
   if (dry) { console.log('dry', no, id, title); continue }
   const v = (await api(`youtube/v3/videos?part=snippet,status&id=${id}`)).items[0]
