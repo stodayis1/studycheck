@@ -81,6 +81,11 @@ const gradeRank = (g?: string | null) => {
 const HOUR_PX = 46
 /** 학생 한 명이 차지하는 세로 칸의 너비(px). 엑셀의 1, 2, 3… 칸과 같다. */
 const LANE_W = 27
+/** 요일 오른쪽 끝에 그 시간 인원을 적는 자리(px). */
+const COUNT_W = 20
+/** 요일 이름 줄 높이 / 칸 번호(1, 2, 3 …) 줄 높이 */
+const DAY_H = 22
+const NUM_H = 16
 
 /** 14 → '14시', 14.5 → '14:30' */
 function hourLabel(h: number) {
@@ -192,6 +197,14 @@ export default function ClassMapPage() {
       for (const d of myDays) {
         packs.set(d, packLanes(arr.filter((s) => s.day === d), (s) => s.student.name) as { slots: Slot[]; lanes: number })
       }
+      // 「그 요일 그 시간에 몇 명」 — 요일 오른쪽 끝에 적는다.
+      const countAt = new Map<string, number>()
+      for (const s of arr) {
+        for (let h = Math.floor(s.start); h < Math.ceil(s.end); h++) {
+          const k = `${s.day}|${h}`
+          countAt.set(k, (countAt.get(k) ?? 0) + 1)
+        }
+      }
       return {
         name,
         count: new Set(arr.map((s) => s.student.id)).size,
@@ -199,6 +212,7 @@ export default function ClassMapPage() {
         hours: myHours,
         idx,
         packs,
+        countAt,
         /** 덩어리의 위치·길이. 안 쓰는 시간대는 접혀 있으므로 **차례(index)** 로 센다. */
         topOf: (t: number) => (idx.get(Math.floor(t)) ?? 0) * HOUR_PX + (t % 1) * HOUR_PX,
         heightOf: (start: number, end: number) => {
@@ -391,7 +405,7 @@ export default function ClassMapPage() {
                   <div className="flex" style={{ minWidth: 'max-content' }}>
                     {/* 시간 — 가로로 밀어도 늘 붙어 있게 */}
                     <div className="sticky left-0 z-10 bg-white shrink-0" style={{ width: 52 }}>
-                      <div style={{ height: 24 }} className="border-b border-gray-100" />
+                      <div style={{ height: DAY_H + NUM_H }} className="border-b border-gray-100" />
                       {b.hours.map((h, i) => (
                         <div key={h} className="text-[11px] font-bold text-gray-400 pr-2 text-right"
                           style={{
@@ -409,12 +423,22 @@ export default function ClassMapPage() {
                       const lanes = pack?.lanes ?? 1
                       return (
                         <div key={d} className="shrink-0 border-l border-gray-100"
-                          style={{ width: Math.max(lanes * LANE_W, 44) }}>
+                          style={{ width: lanes * LANE_W + COUNT_W }}>
                           {/* 짚은 요일은 머리를 칠해 둔다 */}
-                          <div className={cx('text-[11px] font-bold text-center border-b border-gray-100',
+                          <div className={cx('text-[11px] font-bold text-center',
                             pickDay === d ? 'text-white' : 'text-gray-500')}
-                            style={{ height: 24, lineHeight: '24px', background: pickDay === d ? '#0F6E56' : undefined }}>
-                            {d}
+                            style={{ height: DAY_H, lineHeight: `${DAY_H}px`, background: pickDay === d ? '#0F6E56' : undefined }}>
+                            {d} <span className="font-normal opacity-60">{lanes}자리</span>
+                          </div>
+                          {/* ★ 칸 번호 1, 2, 3 … — 엑셀과 같다. 번호 끝이 곧 그 요일 **정원**이다
+                              (원장님 2026-10-28 「맨 위행에 숫자를 써줘 그래야 정원이 몇명인지를 바로 파악」). */}
+                          <div className="flex border-b border-gray-200" style={{ height: NUM_H, background: '#F9FAFB' }}>
+                            {Array.from({ length: lanes }, (_, i) => (
+                              <div key={i} className="text-[9px] font-bold text-gray-400 text-center border-r border-gray-100"
+                                style={{ width: LANE_W, lineHeight: `${NUM_H}px` }}>{i + 1}</div>
+                            ))}
+                            <div className="text-[9px] font-bold text-center text-gray-300"
+                              style={{ width: COUNT_W, lineHeight: `${NUM_H}px` }}>명</div>
                           </div>
                           <div className="relative"
                             style={{
@@ -427,6 +451,21 @@ export default function ClassMapPage() {
                               <div className="absolute left-0 right-0 pointer-events-none"
                                 style={{ top: (b.idx.get(pickHour) ?? 0) * HOUR_PX, height: HOUR_PX, background: '#0F6E5618' }} />
                             )}
+                            {/* ★ 그 시간에 몇 명 — 요일 오른쪽 끝에 적는다.
+                                칸 번호(정원)와 나란히 읽으면 「10자리 중 7명」이 바로 보인다. */}
+                            {b.hours.map((h, i) => {
+                              const n = b.countAt.get(`${d}|${h}`) ?? 0
+                              return (
+                                <div key={h} className="absolute text-[10px] font-bold text-center pointer-events-none"
+                                  style={{
+                                    left: lanes * LANE_W, width: COUNT_W, top: i * HOUR_PX, height: HOUR_PX,
+                                    lineHeight: `${HOUR_PX}px`, color: n === 0 ? '#E5E7EB' : '#9CA3AF',
+                                    borderLeft: '1px solid #F3F4F6',
+                                  }}>
+                                  {n === 0 ? '·' : n}
+                                </div>
+                              )
+                            })}
                             {(pack?.slots ?? []).map((s) => {
                               const c = hueOf(s.student.grade)
                               const 휴 = !!s.student.on_leave
