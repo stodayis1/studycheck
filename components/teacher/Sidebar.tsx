@@ -47,6 +47,9 @@ const ITEM = {
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
   workStatus:    { href: '/teacher/work-status',    label: '업무현황',     icon: 'ti-briefcase' },
+  // 상담 중에 반을 배정하려고 보는 전체 시간표. 학원 전체 인원과 다른 강사 학생이 드러나므로
+  // 원장 전용이다 (원장님 2026-10-28 「나만 보이는 화면으로」).
+  classMap:      { href: '/teacher/class-map',      label: '반배정 시간표', icon: 'ti-calendar-time' },
   attendance:    { href: '/teacher/attendance',     label: '출결관리',     icon: 'ti-calendar-check' },
   changeLog:     { href: '/teacher/change-log',     label: '변경 기록',    icon: 'ti-history' },
   settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
@@ -68,7 +71,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {
-    groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.workStatus, ITEM.settings] })
+    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.workStatus, ITEM.settings] })
     groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords, ITEM.typeConcepts, ITEM.changeLog] })
   } else {
     // 강사도 학습기록 가져오기는 쓴다. 나머지 둘은 원장 전용 화면이라 넣지 않는다.
