@@ -27,6 +27,8 @@ interface Student {
   grade: string
   teacher_name: string
   textbook_grade: string
+  /** 휴원 — is_active=false 와 **같이** 적힌다(휴원의 설계된 표현). docs/OPS연동.md 참고 */
+  on_leave?: boolean | null
 }
 
 interface StudentTextbook {
@@ -213,7 +215,13 @@ export default function TeacherCurriculumPage() {
   async function fetchData() {
     setLoading(true)
     const [{ data: sData }, { data: tData }, { data: cData }, pData, { data: catData }, { data: epData }] = await Promise.all([
-      supabase.from('students').select('*').eq('is_active', true).order('name'),
+      // ★ 휴원 학생도 같이 불러온다 (원장님 2026-10-29 「삭제요청 1 떠서 들어갔는데 0건」).
+      //   휴원은 is_active=false + on_leave=true 로 적힌다(OPS 가 그렇게 쓴다 — docs/OPS연동.md).
+      //   is_active 만 보면 휴원생이 통째로 빠지는데, 교재와 삭제요청은 그대로 남아 있다.
+      //   그래서 사이드바 뱃지(서버가 전부 센다)는 1건인데 화면은 0건이었다 —
+      //   김서율(중3·휴원) 쎈B, 신애진 선생님이 8/14 에 올린 요청이 두 달 반 동안 안 보였다.
+      //   휴원생은 돌아오면 그 교재로 이어서 하므로 교재·진도도 보이는 쪽이 맞다.
+      supabase.from('students').select('*').or('is_active.eq.true,on_leave.eq.true').order('name'),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       // 16,000행+ - 학생 목록의 진도율/회독수 계산에 전체 학생의 진도체크가 다 필요해서(학생별 서버 집계는
@@ -1304,7 +1312,14 @@ export default function TeacherCurriculumPage() {
                       {student.name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900">{student.name}</p>
+                      <p className="text-sm font-bold text-gray-900">
+                        {student.name}
+                        {/* 휴원생도 목록에 있다 — 왜 있는지 바로 보이게 적어 둔다 */}
+                        {student.on_leave && (
+                          <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md align-middle"
+                            style={{ background: '#FEF3C7', color: '#92400E' }}>휴원</span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-400">{student.grade} · {student.teacher_name}</p>
                     </div>
                     <button onClick={() => { setTbStudent(student); setShowTBModal(true)
@@ -1557,7 +1572,13 @@ export default function TeacherCurriculumPage() {
                             {checked && <i className="ti ti-check" style={{ fontSize: 11, color: '#085041' }} />}
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-semibold text-gray-800">{s.name}</p>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {s.name}
+                              {s.on_leave && (
+                                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md align-middle"
+                                  style={{ background: '#FEF3C7', color: '#92400E' }}>휴원</span>
+                              )}
+                            </p>
                             <p className="text-xs text-gray-400">{s.grade} · {s.teacher_name}</p>
                           </div>
                         </button>

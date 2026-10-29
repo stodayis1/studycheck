@@ -82,8 +82,20 @@ export async function GET(req: Request) {
   if (who.deny) return who.deny
   if (who.role !== 'admin') return NextResponse.json({ count: 0 })
 
-  const { count, error } = await admin().from('student_textbooks')
-    .select('id', { count: 'exact', head: true }).not('delete_requested_at', 'is', null)
+  // ★ 화면이 보여 주는 것과 **같은 것**을 센다 (원장님 2026-10-29 「뱃지는 1인데 0건」).
+  //   과정관리는 재원·휴원 학생만 불러온다. 퇴원생 교재에 남은 요청까지 여기서 세면,
+  //   눌러도 아무것도 없는 뱃지가 영영 떠 있게 된다.
+  const db = admin()
+  const { data: rows, error } = await db.from('student_textbooks')
+    .select('id, student_id').not('delete_requested_at', 'is', null)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ count: count ?? 0 })
+  const ids = [...new Set((rows ?? []).map((r: any) => r.student_id).filter(Boolean))]
+  if (ids.length === 0) return NextResponse.json({ count: 0 })
+
+  // 과정관리 화면과 **글자 그대로 같은 조건**으로 묻는다. 한쪽만 고치면 또 어긋난다.
+  const { data: live, error: sErr } = await db.from('students')
+    .select('id').in('id', ids).or('is_active.eq.true,on_leave.eq.true')
+  if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 })
+  const ok = new Set((live ?? []).map((r: any) => r.id))
+  return NextResponse.json({ count: (rows ?? []).filter((r: any) => ok.has(r.student_id)).length })
 }
