@@ -90,7 +90,15 @@ const FRACTION_CELL = /^(\d{1,3})\s*\/\s*(\d{1,3})$/
  *   안 걸린다. 실제로 쎈 학습지 제목(…나눗셈_Lv5)이 통째로 레벨 없음으로 읽혔다.
  */
 const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
-const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사']
+const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사', '데일리', '주말복습']
+/**
+ * 제목 맨 앞 대괄호 머리표 — 「[데일리] 고1 공통수학2 원의 방정식_Lv2.5」.
+ *
+ * ★ 2026-10-29 부터 선생님들과 **제목 규칙을 통일**하기로 했다(원장님 「스터디체크에 맞춰서
+ *   학습지 제목 규칙을 통일하자」). 머리표가 있으면 어디로 갈지 **짐작할 필요가 없다** —
+ *   데일리는 학습일지, 나머지는 학습지. 옛 제목도 그대로 읽히게 둔다(한꺼번에 안 바뀐다).
+ */
+const TITLE_KIND = /^\[\s*([^\]]{1,12}?)\s*\]\s*/
 /** 「공통수학2 (2022 개정)」·「초등 6-2 (2022 개정)」 — 과정 칸은 개정 연도가 붙어 온다 */
 const COURSE_CELL = /\(\s*\d{4}\s*개정\s*\)/
 const NO_HISTORY = /해당 기간 학습 이력이 없습니다/
@@ -204,7 +212,13 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
       if (!course && COURSE_CELL.test(t)) { course = t; continue }
       rest.push(t)
     }
-    const title = rest.join(' ').replace(/\s+/g, ' ').trim()
+    let title = rest.join(' ').replace(/\s+/g, ' ').trim()
+    // 제목 맨 앞 「[데일리]」 같은 머리표는 종류로 쓰고 제목에서 덜어낸다.
+    const th = TITLE_KIND.exec(title)
+    if (th && KINDS.some((k) => th[1].includes(k))) {
+      kind = KINDS.find((k) => th[1].includes(k)) ?? kind
+      title = title.slice(th[0].length).trim()
+    }
     const lv = LEVEL.exec(title)
 
     rows.push({
@@ -230,7 +244,7 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
  *   학습지로 넣으면 **같은 점수가 두 군데에 생기고** 성취도·브리핑이 이중으로 센다.
  */
 export function isDailyTest(row: { title?: string | null; kind?: string | null }): boolean {
-  return /daily\s*test|데일리\s*테스트/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+  return /daily\s*test|데일리/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
 }
 
 // ────────────────────────────────────────────────────────────────────────────

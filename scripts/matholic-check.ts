@@ -257,6 +257,21 @@ T('데일리테스트는 학습지가 아니라 학습일지로 간다', () => {
   return daily.length === 4 && names.join(',') === '강보라,문시후,한지후,홍예람'
 })
 
+T('새 제목 규칙 — 머리표로 어디로 갈지 바로 정해진다', () => {
+  // 2026-10-29 선생님들과 통일한 제목 규칙: [종류] 학년-학기 단원명_Lv레벨
+  const t = `남도윤
+(2/2)
+09/09 16:42
+학습지
+초등 6-2 (2022 개정)
+[데일리] 초6-2 1단원 분수의 나눗셈_Lv5
+28/30
+93점`
+  const r = parseMatholic(t, TODAY)
+  return r.rows.length === 1 && isDailyTest(r.rows[0])
+    && r.rows[0].title === '초6-2 1단원 분수의 나눗셈_Lv5' && r.rows[0].level === 5
+})
+
 T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)', () =>
   !isDailyTest({ title: '공통수학2 주말복습 TEST 0822', kind: '학습지' })
   && isDailyTest({ title: '고1A Daily Test 0903 (lv2.5)', kind: '학습지' })
@@ -351,6 +366,23 @@ T('레벨만 같고 단원이 다르면 「확실함」이 아니다 (엉뚱한 
     ROW({ title: '고1A Daily Test 0903 (lv2.5)', level: 2.5 }),
     [WS({ id: 'x', current_level: 2.5, grade_level: '고1', unit: 'Ⅰ 명제', unit_name: '명제~무리함수' })])
   return ranked.length === 1 && ranked[0].points >= 6 && !isClearWinner(ranked)
+})
+
+T('새 제목 규칙 — 머리표가 오답유사면 오답유사 학습지에 그대로 붙는다', () => {
+  const t = `남도윤
+(1/1)
+09/09 16:42
+학습지
+초등 6-2 (2022 개정)
+[오답유사] 초6-2 1단원 분수의 나눗셈_Lv4
+9/10
+90점`
+  const r = parseMatholic(t, TODAY)
+  const ranked = rankWorksheets(r.rows[0], [
+    WS({ id: 'm', current_level: 4, unit: '1단원', unit_name: '분수의 나눗셈', worksheet_type: 'main' }),
+    WS({ id: 's', current_level: 4, unit: '1단원', unit_name: '분수의 나눗셈', worksheet_type: 'similar' }),
+  ])
+  return !isDailyTest(r.rows[0]) && ranked[0].ws.id === 's' && isClearWinner(ranked)
 })
 
 T('오답유사는 오답유사 학습지에 붙는다', () => {
