@@ -50,7 +50,8 @@ for (const it of raw) {
     const size = +v?.fileDetails?.fileSize, mine = fs.statSync(path.join(dir, mp4)).size
     const oldSize = old.includes(mp4) ? fs.statSync(path.join(oldDir, mp4)).size : -1
     if (!size) errs.push('유튜브 원본 크기 못 읽음')
-    else if (size === oldSize) errs.push('★ _옛판 영상이 올라감')
+    // 다시 렌더해도 바이트가 그대로인 편은 _옛판 과 크기가 같다 — 그 편은 어느 쪽이 올라가도 같은 영상 (중1-2 01~11 중 8편, 2026-10-29)
+    else if (size === oldSize && size !== mine) errs.push('★ _옛판 영상이 올라감')
     else if (size !== mine) errs.push(`크기 다름 (유튜브 ${size} · 파일 ${mine})`)
     const ys = sec(v?.contentDetails?.duration)
     if (ys && Math.abs(ys - G.duration) > 2) errs.push(`길이 다름 (유튜브 ${ys}s · 파일 ${G.duration.toFixed(1)}s)`)
