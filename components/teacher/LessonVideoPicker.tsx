@@ -47,7 +47,7 @@ export function LessonVideoPicker({ picked, onPick, onUnpick, onClose }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-lg max-h-[80vh] flex flex-col rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <p className="text-sm font-bold text-gray-800">수지쌤 강의영상 고르기</p>
+          <p className="text-sm font-bold text-gray-800">강의영상 고르기</p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
         </div>
         <div className="px-5 pb-3 flex gap-2">
