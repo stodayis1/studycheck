@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, pickByRule } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -271,6 +271,31 @@ T('새 제목 규칙 — 머리표로 어디로 갈지 바로 정해진다', () 
   return r.rows.length === 1 && isDailyTest(r.rows[0])
     && r.rows[0].title === '초6-2 1단원 분수의 나눗셈_Lv5' && r.rows[0].level === 5
 })
+
+T('TOMA 수학경시대회는 코어테스트 본고사로 간다', () => {
+  const t = `남도윤
+(1/1)
+08/31 18:22
+월간평가
+초등 6-1 (2022 개정)
+제6회 TOMA 수학경시대회 - 초6(2026.08)
+24/25
+96점`
+  const r = parseMatholic(t, TODAY)
+  return r.rows.length === 1 && coreTestRound(r.rows[0]) === '본고사'
+    && !isDailyTest(r.rows[0]) && r.rows[0].score === 96
+})
+
+T('코어테스트 회차는 제목에서 읽는다 (없으면 본고사)', () =>
+  coreTestRound({ title: '[코어테스트] 예비 1회 초6-2', kind: '학습지' }) === '예비 1회'
+  && coreTestRound({ title: '[코어테스트] 예비2회 초6-2', kind: '학습지' }) === '예비 2회'
+  && coreTestRound({ title: '[코어테스트] 초6-2 전범위', kind: '학습지' }) === '본고사'
+  && coreTestRound({ title: '공통수학2 주말복습 TEST', kind: '학습지' }) === null)
+
+T('이너프원은 학습지로 넣지 않는다 (내신대비교재다)', () =>
+  isEnoughOne({ title: '[이너프원] 중3-2 이차함수', kind: '학습지' })
+  && isEnoughOne({ title: '이너프원 중2 내신대비 3단원', kind: '학습지' })
+  && !isEnoughOne({ title: '[학습지] 중3-2 이차함수_Lv3', kind: '학습지' }))
 
 T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)', () =>
   !isDailyTest({ title: '공통수학2 주말복습 TEST 0822', kind: '학습지' })

@@ -32,17 +32,19 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
-  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule,
+  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, pickByRule,
   type NameRules, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
 /**
  * 한 줄을 어떻게 처리할지. 사람이 바꿀 수 있다.
  *   daily — 학습일지의 데일리테스트 칸에 적는다 (학습지가 아니다)
+ *   core  — 평가관리의 코어테스트로 적는다 (TOMA 수학경시대회가 여기다)
+ *   excluded — 일부러 안 넣는다 (이너프원 = 내신대비교재). 빠진 것과 구분해서 보여 준다
  *   fill  — 이미 있는 학습지의 점수 칸을 채운다
  *   new   — 학습지를 새로 만들어 넣는다
  */
-type Mode = 'daily' | 'fill' | 'new' | 'skip' | 'done'
+type Mode = 'daily' | 'core' | 'fill' | 'new' | 'skip' | 'excluded' | 'done'
 interface Plan {
   row: MatholicRow
   /** 후보 학생들. 둘 이상이면 사람이 골라야 한다 */
@@ -53,6 +55,8 @@ interface Plan {
   wsId: string | null
   /** 데일리테스트일 때 적을 수업 기록 (class_sessions.id) */
   sessionId: string | null
+  /** 코어테스트일 때 회차 이름 (예비 1회 · 예비 2회 · 본고사) */
+  coreRound: string | null
   mode: Mode
   /** 왜 이렇게 골랐는지 — 화면에 그대로 보여 준다 */
   why: string
@@ -67,7 +71,7 @@ export default function MatholicImportPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [reading, setReading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [done, setDone] = useState<{ daily: number; filled: number; created: number; skipped: number; failed: string[] } | null>(null)
+  const [done, setDone] = useState<{ daily: number; core: number; filled: number; created: number; skipped: number; failed: string[] } | null>(null)
 
   /** 붙여넣은 글자를 읽고, 학생과 학습지를 찾아 둔다. 저장은 하지 않는다. */
   async function handleRead() {
@@ -112,17 +116,29 @@ export default function MatholicImportPage() {
             .in('student_id', chunk).in('session_date', dates).order('id'))))).flat()
       const bySession = new Map(sessions.map((c) => [`${c.student_id}|${c.session_date}`, c]))
 
+      // 코어테스트도 이미 들어간 것을 먼저 읽는다 — 같은 날 같은 회차를 두 번 넣지 않는다.
+      const coreDates = [...new Set(res.rows.filter((r) => coreTestRound(r)).map((r) => r.date))]
+      const cores = coreDates.length === 0 || ids.length === 0 ? [] : (await Promise.all(
+        chunks.map((chunk) => fetchAllRows<{ student_id: string; exam_date: string; title: string | null; score: number | null }>(
+          () => supabase.from('exams').select('id, student_id, exam_date, title, score')
+            .eq('exam_type', '코어테스트').in('student_id', chunk).in('exam_date', coreDates).order('id'))))).flat()
+      const coreByKey = new Map(cores.map((e) => [`${e.student_id}|${e.exam_date}|${e.title ?? ''}`, e.score]))
+
       setPlans(res.rows.map((row, i): Plan => {
         const students = found[i]
+        if (isEnoughOne(row)) {
+          return { row, students: [], studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null,
+            mode: 'excluded', why: '이너프원은 내신대비교재라 학습지로 안 넣어요' }
+        }
         if (students.length === 0) {
-          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, mode: 'skip',
+          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
             why: '스터디체크에 그 이름의 학생이 없어요 (또는 제 담당이 아니에요)' }
         }
         // 같은 이름이 여럿이면 설정에 적힌 규칙으로 한 명을 고른다.
         // 규칙에 없으면 아무도 안 고르고 사람에게 묻는다 — 반반 확률로 찍지 않는다.
         const picked = students.length === 1 ? students[0] : pickByRule(row.student, students, rules)
         if (!picked) {
-          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, mode: 'skip',
+          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
             why: `같은 이름이 ${students.length}명이에요 — 누구인지 골라 주세요` }
         }
         const byRule = students.length > 1
@@ -131,17 +147,31 @@ export default function MatholicImportPage() {
         // ★ 데일리테스트는 학습지로 넣지 않는다 (원장님 2026-10-29 「학습일지에 따로 있잖아」).
         //    학습지로도 넣으면 같은 점수가 두 군데 생겨 성취도·브리핑이 이중으로 센다.
         const tag = (why: string) => (byRule ? `${picked.grade} ${picked.teacher_name}T — 규칙으로 골랐어요 · ${why}` : why)
+
+        // ★ 코어테스트(TOMA 수학경시대회 포함)는 학습지가 아니라 **평가관리**로 간다
+        //    (원장님 2026-10-29 「TOMA는 코어테스트 평가로 들어가야돼」).
+        const round = coreTestRound(row)
+        if (round) {
+          const already = coreByKey.get(`${sid}|${row.date}|${round}`)
+          if (already != null) {
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round,
+              mode: 'done', why: tag(`평가관리에 코어테스트 ${round} ${already}점이 이미 있어요`) }
+          }
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round,
+            mode: 'core', why: tag(`평가관리 · 코어테스트 ${round} 로 넣습니다`) }
+        }
+
         if (isDailyTest(row)) {
           const ses = bySession.get(`${sid}|${row.date}`)
           if (!ses) {
-            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, mode: 'skip',
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
               why: tag(`${row.date} 수업 기록이 없어요 — 학습일지를 먼저 쓴 뒤에 넣어 주세요`) }
           }
           if (ses.daily_test_score === row.score) {
-            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, mode: 'done',
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, mode: 'done',
               why: tag('학습일지에 이미 같은 점수가 있어요') }
           }
-          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, mode: 'daily',
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, mode: 'daily',
             why: tag(ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
               : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다`) }
         }
@@ -149,21 +179,23 @@ export default function MatholicImportPage() {
         const list = byStudent.get(sid) ?? []
         // 이미 넣은 것인가 — 같은 점수·같은 날짜면 다시 넣지 않는다
         const dup = list.find((w) => alreadyIn(row, w))
-        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, mode: 'done', why: tag('이미 들어가 있어요') }
+        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, mode: 'done', why: tag('이미 들어가 있어요') }
 
         const ranked = rankWorksheets(row, list)
         if (isClearWinner(ranked)) {
           return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
-            sessionId: null, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
+            sessionId: null, coreRound: null, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
         }
         return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-          mode: 'new', why: tag(ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') }
+          coreRound: null, mode: 'new', why: tag(ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') }
       }))
     } finally { setReading(false) }
   }
 
   const count = useMemo(() => ({
     daily: plans.filter((p) => p.mode === 'daily').length,
+    core: plans.filter((p) => p.mode === 'core').length,
+    excluded: plans.filter((p) => p.mode === 'excluded').length,
     fill: plans.filter((p) => p.mode === 'fill').length,
     neo: plans.filter((p) => p.mode === 'new').length,
     skip: plans.filter((p) => p.mode === 'skip').length,
@@ -176,9 +208,9 @@ export default function MatholicImportPage() {
 
   /** 고른 대로 저장한다. 한 건이 실패해도 나머지는 계속 간다 — 실패한 것은 이름을 남긴다. */
   async function handleSave() {
-    if (!confirm(`학습일지 데일리테스트 ${count.daily}건, 학습지 점수 채우기 ${count.fill}건, 학습지 새로 만들기 ${count.neo}건을 넣습니다. 계속할까요?`)) return
+    if (!confirm(`학습일지 데일리테스트 ${count.daily}건, 코어테스트 ${count.core}건, 학습지 점수 채우기 ${count.fill}건, 학습지 새로 만들기 ${count.neo}건을 넣습니다. 계속할까요?`)) return
     setSaving(true)
-    let daily = 0, filled = 0, created = 0
+    let daily = 0, core = 0, filled = 0, created = 0
     const failed: string[] = []
     for (const p of plans) {
       const who = p.students.find((s) => s.id === p.studentId)
@@ -191,6 +223,15 @@ export default function MatholicImportPage() {
             .update({ daily_test_score: p.row.score }).eq('id', p.sessionId)
           if (error) throw new Error(error.message)
           daily++
+        } else if (p.mode === 'core' && p.studentId && p.coreRound) {
+          // 평가관리의 코어테스트. 점수는 백분율로 적는다 (화면이 그렇게 쓰고 있다 — 만점 100).
+          const { error } = await supabase.from('exams').insert({
+            student_id: p.studentId, exam_type: '코어테스트', exam_date: p.row.date,
+            title: p.coreRound, score: p.row.score, total_score: 100,
+            teacher_name: currentUser?.name ?? null,
+          })
+          if (error) throw new Error(error.message)
+          core++
         } else if (p.mode === 'fill' && p.wsId) {
           // ★ status 는 scored 까지만. passed 로 올리면 초등 70점 미만이 트리거에 막힌다.
           const { error } = await supabase.from('student_worksheets')
@@ -219,9 +260,10 @@ export default function MatholicImportPage() {
       } catch (e: any) { failed.push(`${label} — ${e?.message ?? '실패'}`) }
     }
     setSaving(false)
-    setDone({ daily, filled, created, skipped: count.skip, failed })
+    setDone({ daily, core, filled, created, skipped: count.skip, failed })
     setPlans((prev) => prev.map((p) =>
-      (p.mode === 'daily' || p.mode === 'fill' || p.mode === 'new' ? { ...p, mode: 'done' as Mode, why: '넣었어요' } : p)))
+      (p.mode === 'daily' || p.mode === 'core' || p.mode === 'fill' || p.mode === 'new'
+        ? { ...p, mode: 'done' as Mode, why: '넣었어요' } : p)))
   }
 
   return (
@@ -256,10 +298,12 @@ export default function MatholicImportPage() {
             <p className="text-xs font-bold text-gray-700">② 읽은 것 — 확인하고 고쳐 주세요</p>
             <div className="flex flex-wrap gap-1.5">
               <span className={cx(칩, 'bg-amber-50 text-amber-700')}>학습일지 데일리테스트 {count.daily}</span>
+              <span className={cx(칩, 'bg-purple-50 text-purple-700')}>코어테스트 {count.core}</span>
               <span className={cx(칩, 'bg-green-50 text-green-700')}>학습지 점수 채우기 {count.fill}</span>
               <span className={cx(칩, 'bg-blue-50 text-blue-700')}>새로 만들기 {count.neo}</span>
               <span className={cx(칩, 'bg-gray-100 text-gray-600')}>이미 들어감 {count.done}</span>
               <span className={cx(칩, 'bg-red-50 text-red-600')}>안 넣음 {count.skip}</span>
+              <span className={cx(칩, 'bg-gray-100 text-gray-600')}>제외(이너프원) {count.excluded}</span>
               {parsed.empty.length > 0 && (
                 <span className={cx(칩, 'bg-gray-100 text-gray-500')}>이력 없음 {parsed.empty.join(', ')}</span>
               )}
@@ -278,8 +322,10 @@ export default function MatholicImportPage() {
               {plans.map((p, i) => (
                 <div key={i} className={cx('rounded-xl border p-2.5',
                   p.mode === 'skip' ? 'bg-red-50 border-red-200'
+                    : p.mode === 'excluded' ? 'bg-gray-50 border-gray-200'
                     : p.mode === 'done' ? 'bg-gray-50 border-gray-200'
                       : p.mode === 'daily' ? 'bg-amber-50 border-amber-200'
+                        : p.mode === 'core' ? 'bg-purple-50 border-purple-200'
                         : p.mode === 'new' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200')}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-gray-900">{p.row.student}</span>
@@ -307,7 +353,13 @@ export default function MatholicImportPage() {
                     {p.mode === 'daily' && (
                       <span className={cx(칩, 'bg-amber-100 text-amber-800')}>학습일지 · 데일리테스트</span>
                     )}
-                    {p.mode !== 'done' && p.mode !== 'daily' && p.studentId && (
+                    {p.mode === 'core' && (
+                      <span className={cx(칩, 'bg-purple-100 text-purple-800')}>평가관리 · 코어테스트 {p.coreRound}</span>
+                    )}
+                    {p.mode === 'excluded' && (
+                      <span className={cx(칩, 'bg-gray-200 text-gray-700')}>이너프원 · 넣지 않음</span>
+                    )}
+                    {p.mode !== 'done' && p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'excluded' && p.studentId && (
                       <>
                         <select value={p.wsId ?? ''} onChange={(e) => {
                           const id = e.target.value || null
@@ -333,11 +385,11 @@ export default function MatholicImportPage() {
               ))}
             </div>
 
-            {(count.daily > 0 || count.fill > 0 || count.neo > 0) && (
+            {(count.daily > 0 || count.core > 0 || count.fill > 0 || count.neo > 0) && (
               <button onClick={handleSave} disabled={saving}
                 className="w-full text-sm font-bold py-2.5 rounded-xl disabled:opacity-40"
                 style={{ background: '#9FE1CB', color: '#0f3d2e' }}>
-                {saving ? '넣는 중…' : `③ ${count.daily + count.fill + count.neo}건 넣기`}
+                {saving ? '넣는 중…' : `③ ${count.daily + count.core + count.fill + count.neo}건 넣기`}
               </button>
             )}
           </div>
@@ -346,7 +398,7 @@ export default function MatholicImportPage() {
         {done && (
           <div className="rounded-2xl p-4" style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC' }}>
             <p className="text-xs font-bold" style={{ color: '#166534' }}>
-              끝났어요 — 학습일지 데일리테스트 {done.daily}건 · 학습지 점수 채움 {done.filled}건 ·
+              끝났어요 — 학습일지 데일리테스트 {done.daily}건 · 코어테스트 {done.core}건 · 학습지 점수 채움 {done.filled}건 ·
               학습지 새로 만듦 {done.created}건 · 안 넣음 {done.skipped}건
             </p>
             {done.failed.length > 0 && (

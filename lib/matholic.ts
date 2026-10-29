@@ -90,7 +90,7 @@ const FRACTION_CELL = /^(\d{1,3})\s*\/\s*(\d{1,3})$/
  *   안 걸린다. 실제로 쎈 학습지 제목(…나눗셈_Lv5)이 통째로 레벨 없음으로 읽혔다.
  */
 const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
-const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사', '데일리', '주말복습']
+const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사', '데일리', '주말복습', '코어테스트', '이너프원']
 /**
  * 제목 맨 앞 대괄호 머리표 — 「[데일리] 고1 공통수학2 원의 방정식_Lv2.5」.
  *
@@ -245,6 +245,44 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
  */
 export function isDailyTest(row: { title?: string | null; kind?: string | null }): boolean {
   return /daily\s*test|데일리/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+}
+
+/**
+ * 이너프원으로 만든 것인가.
+ *
+ * ★ 이너프원은 **학습지가 아니라 내신대비교재**다 (원장님 2026-10-29
+ *   「이너프원은 학습지가 아니라 내신대비교재로 들어간거라… 학습지에는 기록되지 않게」).
+ *   중2·중3 학습지 중에 이너프원으로 만든 것이 섞여 있는데, 그대로 넣으면 학습지관리에
+ *   **있지도 않은 레벨학습지**가 쌓이고 레벨 현황판이 틀어진다.
+ *
+ * 그래서 읽기는 하되 **넣지 않는다.** 조용히 버리지 않고 「제외」로 화면에 보여 준다 —
+ * 빠진 것인지 일부러 뺀 것인지 사람이 알아야 한다.
+ * 새 제목 규칙에서는 머리표를 「[이너프원]」으로 적는다.
+ */
+export function isEnoughOne(row: { title?: string | null; kind?: string | null }): boolean {
+  return /이너프\s*원|이너프\s*1|enough\s*one/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+}
+
+/**
+ * 코어테스트인가. 맞으면 **몇 회차**인지 돌려준다.
+ *
+ * ★ TOMA 수학경시대회가 스터디체크의 **코어테스트 본고사**다
+ *   (원장님 2026-10-29 「TOMA는 코어테스트 평가로 들어가야돼」).
+ *   확인도 했다 — 같은 날 같은 점수가 코어테스트 본고사로 **이미 손으로 들어가 있었다.**
+ *
+ * 코어테스트는 학습지도 학습일지도 아니고 **평가관리**로 간다
+ *   (exams 표, exam_type = '코어테스트'). 회차 이름은 화면이 쓰는 그대로 —
+ *   「예비 1회」·「예비 2회」·「본고사」.
+ *
+ * 새 제목 규칙으로는 「[코어테스트] 예비 1회 …」처럼 머리표와 회차를 같이 적는다.
+ * 회차가 안 적혀 있으면 본고사로 본다 (TOMA 가 본고사라서).
+ */
+export function coreTestRound(row: { title?: string | null; kind?: string | null }): string | null {
+  const t = `${row.title ?? ''} ${row.kind ?? ''}`
+  if (!/TOMA|코어\s*테스트/i.test(t)) return null
+  if (/예비\s*2/.test(t)) return '예비 2회'
+  if (/예비\s*1/.test(t)) return '예비 1회'
+  return '본고사'
 }
 
 // ────────────────────────────────────────────────────────────────────────────

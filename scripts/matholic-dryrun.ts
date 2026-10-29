@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
-import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule } from '../lib/matholic'
+import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, pickByRule } from '../lib/matholic'
 
 const env = Object.fromEntries(
   fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)
@@ -52,11 +52,19 @@ const { data: ses } = await db.from('class_sessions')
   .in('session_date', dates.length ? dates : ['1900-01-01'])
 const bySession = new Map((ses ?? []).map((c: any) => [`${c.student_id}|${c.session_date}`, c]))
 
-let daily = 0, fill = 0, neo = 0, ask = 0, none = 0, dup = 0
+const coreDates = [...new Set(res.rows.filter((r) => coreTestRound(r)).map((r) => r.date))]
+const { data: cores } = await db.from('exams').select('student_id, exam_date, title, score')
+  .eq('exam_type', '코어테스트')
+  .in('student_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+  .in('exam_date', coreDates.length ? coreDates : ['1900-01-01'])
+const coreByKey = new Map((cores ?? []).map((e: any) => [`${e.student_id}|${e.exam_date}|${e.title ?? ''}`, e.score]))
+
+let daily = 0, core = 0, fill = 0, neo = 0, ask = 0, none = 0, dup = 0, excl = 0
 console.log('')
 res.rows.forEach((row, i) => {
   const cand = found[i]
   const head = `${row.student.padEnd(6)} ${row.date} ${String(row.score).padStart(3)}점  ${row.title.slice(0, 38).padEnd(38)}`
+  if (isEnoughOne(row)) { excl++; console.log(`${head} → — 이너프원이라 넣지 않음 (내신대비교재)`); return }
   if (cand.length === 0) { none++; console.log(`${head} → ✗ 그 이름의 학생이 없어요`); return }
   const picked: any = cand.length === 1 ? cand[0] : pickByRule(row.student, cand as any, rules)
   if (!picked) {
@@ -66,6 +74,14 @@ res.rows.forEach((row, i) => {
   }
   if (cand.length > 1) console.log(`${' '.repeat(6)}↳ 규칙으로 고름: ${picked.grade}/${picked.teacher_name}`)
   const sid = picked.id
+  const round = coreTestRound(row)
+  if (round) {
+    const had = coreByKey.get(`${sid}|${row.date}|${round}`)
+    if (had != null) { dup++; console.log(`${head} → ◦ 평가관리에 코어테스트 ${round} ${had}점이 이미 있어요`); return }
+    core++
+    console.log(`${head} → ★ 평가관리 · 코어테스트 ${round}`)
+    return
+  }
   if (isDailyTest(row)) {
     const c = bySession.get(`${sid}|${row.date}`)
     if (!c) { none++; console.log(`${head} → ✗ 학습일지(수업기록)가 없어요 — 데일리테스트를 적을 데가 없음`); return }
@@ -86,5 +102,5 @@ res.rows.forEach((row, i) => {
   }
 })
 
-console.log(`\n학습일지 데일리테스트 ${daily} · 학습지 점수 채우기 ${fill} · 학습지 새로 만들기 ${neo} · 사람이 골라야 ${ask} · 못 넣음 ${none} · 이미 들어감 ${dup}`)
+console.log(`\n학습일지 데일리테스트 ${daily} · 코어테스트 ${core} · 학습지 점수 채우기 ${fill} · 학습지 새로 만들기 ${neo} · 사람이 골라야 ${ask} · 못 넣음 ${none} · 이미 들어감 ${dup} · 제외(이너프원) ${excl}`)
 console.log('※ 이 스크립트는 한 줄도 쓰지 않았습니다.')
