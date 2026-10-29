@@ -1,0 +1,167 @@
+{
+ "id": "증명_11",
+ "order": "29-증명1",
+ "title": "직각삼각형의 닮음에서 변의 길이 사이의 관계가 성립하는 이유",
+ "concept_no": 29,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 75,
+ "figure": {
+  "image": "29/cut_02.png",
+  "crop": [
+   885,
+   190,
+   1095,
+   615
+  ]
+ },
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "닮은 직각삼각형 세 개",
+   "say": "자, 오늘은 직각삼각형의 닮음에서 나오는 식 세 개를 증명할게. // 각 에이가 구십 도인 직각삼각형 에이비씨에서 / 꼭짓점 에이에서 빗변 비씨에 내린 수선의 발을 디라고 하자. // {강조 그럼 크고 작은 직각삼각형 세 개가 생기는데, 이 셋은 모두 닮음이야.}",
+   "write": [
+    {
+     "cue": "빗변 비씨에 내린 수선의 발을",
+     "tex": "$\\angle A=90^\\circ$, $\\overline{AD}\\perp\\overline{BC}$",
+     "color": "blue"
+    },
+    {
+     "cue": "크고 작은 직각삼각형 세 개가",
+     "tex": "$\\triangle ABC,\\ \\triangle DBA,\\ \\triangle DAC$ 는 모두 닮음",
+     "color": "blue"
+    }
+   ]
+  },
+  {
+   "pose": "pointer",
+   "bubble": "첫째: 각 B가 공통",
+   "say": "먼저 삼각형 에이비씨와 삼각형 디비에이를 보자. // 여기서 각 비는 공통이고 / 각 비에이씨와 각 비디에이는 둘 다 구십 도죠. // 두 쌍의 각이 같으니까 {강조 에이에이 닮음이다.} // 대응변의 길이의 비는 같으니까 / 에이비 대 디비는 비씨 대 비에이. // 내항의 곱과 외항의 곱이 같으니까 / {천천히 에이비의 제곱은 비디 곱하기 비씨.}",
+   "write": [
+    {
+     "cue": "각 비는 공통이고",
+     "tex": "$\\angle B$ 공통, $\\angle BAC=\\angle BDA=90^\\circ$"
+    },
+    {
+     "cue": "에이에이 닮음이다",
+     "tex": "$\\triangle ABC\\sim\\triangle DBA$ (AA 닮음)",
+     "color": "red"
+    },
+    {
+     "cue": "에이비 대 디비는 비씨 대 비에이",
+     "tex": "$\\overline{AB}:\\overline{DB}=\\overline{BC}:\\overline{BA}$",
+     "indent": 1
+    },
+    {
+     "cue": "에이비의 제곱은 비디 곱하기 비씨",
+     "tex": "$\\therefore\\ \\overline{AB}^2=\\overline{BD}\\times\\overline{BC}$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "둘째: 각 C가 공통",
+   "say": "두 번째는 삼각형 에이비씨와 삼각형 디에이씨야. // 이번엔 각 씨가 공통이고 / 각 비에이씨와 각 에이디씨가 구십 도로 같아. // {강조 그래서 이것도 에이에이 닮음이야.} // 에이씨 대 디씨는 비씨 대 에이씨니까 / {천천히 에이씨의 제곱은 씨디 곱하기 씨비.}",
+   "write": [
+    {
+     "cue": "각 씨가 공통이고",
+     "tex": "$\\angle C$ 공통, $\\angle BAC=\\angle ADC=90^\\circ$"
+    },
+    {
+     "cue": "이것도 에이에이 닮음",
+     "tex": "$\\triangle ABC\\sim\\triangle DAC$ (AA 닮음)",
+     "color": "red"
+    },
+    {
+     "cue": "에이씨 대 디씨는 비씨 대 에이씨",
+     "tex": "$\\overline{AC}:\\overline{DC}=\\overline{BC}:\\overline{AC}$",
+     "indent": 1
+    },
+    {
+     "cue": "에이씨의 제곱은 씨디 곱하기 씨비",
+     "tex": "$\\therefore\\ \\overline{AC}^2=\\overline{CD}\\times\\overline{CB}$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "wonder",
+   "bubble": "셋째: 공통인 각이 없다?",
+   "say": "세 번째는 작은 두 삼각형, 디비에이와 디에이씨야. // 각 비디에이와 각 에이디씨는 둘 다 구십 도인데 / 이번엔 공통인 각이 없죠? // 삼각형 에이디씨에서 각 디에이씨는 구십 도 빼기 각 씨이고 / 삼각형 에이비씨에서 각 비도 구십 도 빼기 각 씨야. // {강조 그래서 각 디에이씨와 각 비는 크기가 같다.}",
+   "write": [
+    {
+     "cue": "각 디에이씨는 구십 도 빼기 각 씨",
+     "tex": "$\\angle DAC=90^\\circ-\\angle C=\\angle B$"
+    }
+   ]
+  },
+  {
+   "pose": "point",
+   "bubble": "작은 두 삼각형도 닮음",
+   "say": "그래서 삼각형 디비에이와 디에이씨도 {강조 에이에이 닮음이야.} // 대응하는 꼭짓점을 맞춰 보면 / 디비 대 디에이는 디에이 대 디씨. // 내항의 곱과 외항의 곱이 같으니까 / {천천히 에이디의 제곱은 디비 곱하기 디씨.}",
+   "write": [
+    {
+     "cue": "디비에이와 디에이씨도",
+     "tex": "$\\triangle DBA\\sim\\triangle DAC$ (AA 닮음)",
+     "color": "red"
+    },
+    {
+     "cue": "디비 대 디에이는 디에이 대 디씨",
+     "tex": "$\\overline{DB}:\\overline{DA}=\\overline{DA}:\\overline{DC}$",
+     "indent": 1
+    },
+    {
+     "cue": "에이디의 제곱은 디비 곱하기 디씨",
+     "tex": "$\\therefore\\ \\overline{AD}^2=\\overline{DB}\\times\\overline{DC}$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "B",
+   "bubble": "외우는 요령",
+   "say": "이 세 식, 그냥 외우면 헷갈리죠. // 오른쪽 그림의 색칠한 선을 봐. // {강조 제곱하는 변의 한 끝점에서 출발해서 빗변 위의 두 선분을 곱하는 거야.} // 에이비는 비에서 출발해서 비디와 비씨, / 에이씨는 씨에서 출발해서 씨디와 씨비, / 에이디는 디에서 출발해서 디비와 디씨.",
+   "write": [
+    {
+     "cue": "제곱하는 변의 한 끝점에서",
+     "tex": "제곱하는 변의 끝점에서 출발하는 두 선분의 곱",
+     "color": "red"
+    }
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "넓이로 하나 더",
+   "say": "하나 더 알아 둘 식이 있어. // 삼각형 에이비씨의 넓이를 두 가지로 구해 볼게. / 밑변을 에이비로 보면 이분의 일 곱하기 에이비 곱하기 에이씨, / 밑변을 비씨로 보면 이분의 일 곱하기 비씨 곱하기 에이디. // 같은 삼각형의 넓이니까 두 값이 같죠. // {강조 그래서 에이디 곱하기 비씨는 에이비 곱하기 에이씨.}",
+   "write": [
+    {
+     "cue": "이분의 일 곱하기 에이비 곱하기 에이씨",
+     "tex": "$\\dfrac{1}{2}\\times\\overline{AB}\\times\\overline{AC}=\\dfrac{1}{2}\\times\\overline{BC}\\times\\overline{AD}$"
+    },
+    {
+     "cue": "에이디 곱하기 비씨는 에이비 곱하기 에이씨",
+     "tex": "$\\therefore\\ \\overline{AD}\\times\\overline{BC}=\\overline{AB}\\times\\overline{AC}$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "cheer",
+   "bubble": "닮음 → 비례식",
+   "say": "자, 정리할게. 세 식 모두 / 직각 하나와 같은 각 하나로 에이에이 닮음을 찾고 / {강조 대응변의 비에서 내항의 곱과 외항의 곱을 같게 놓은 거야.} // 닮음을 쓸 때는 대응하는 꼭짓점의 순서를 꼭 맞춰야 해. // 자, 영상 끄고 세 식을 혼자 다시 써 봐. 수고했어!",
+   "write": [
+    {
+     "cue": "대응변의 비에서 내항의 곱과",
+     "tex": "AA 닮음 $\\rightarrow$ 비례식 $\\rightarrow$ 내항의 곱 $=$ 외항의 곱",
+     "color": "red",
+     "highlight": true
+    }
+   ]
+  }
+ ]
+}
