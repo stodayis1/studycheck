@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -332,6 +332,27 @@ T('레벨이 제목에 있으면 읽어서 레벨 칸으로 간다', () => {
   const t = parseWorksheetTitle(r.rows[0].title)
   return r.rows[0].level === 5 && t.unit === '1단원' && t.unitName === '분수의 나눗셈'
 })
+
+const SES = (d: string, score: number | null = null) => ({ id: d, student_id: 's', session_date: d, daily_test_score: score })
+
+T('데일리테스트는 그날 수업에 적는다', () => {
+  const hit = pickSessionForDaily('2026-09-03', [SES('2026-09-01'), SES('2026-09-03'), SES('2026-09-05')])
+  return hit?.session.session_date === '2026-09-03' && hit?.gapDays === 0
+})
+
+T('그날 수업이 없으면 **그 뒤** 가장 가까운 수업에 붙인다 (집에서 푼 경우)', () => {
+  const hit = pickSessionForDaily('2026-09-02', [SES('2026-09-01'), SES('2026-09-05'), SES('2026-09-08')])
+  return hit?.session.session_date === '2026-09-05' && hit?.gapDays === 3
+})
+
+T('앞의 수업에는 절대 붙이지 않는다 (아직 풀지도 않은 날이다)', () =>
+  pickSessionForDaily('2026-09-10', [SES('2026-09-01'), SES('2026-09-08')]) === null)
+
+T('그 뒤 수업이 너무 멀면 적지 않는다', () =>
+  pickSessionForDaily('2026-09-02', [SES('2026-10-01')]) === null)
+
+T('수업이 아예 없으면 적지 않는다', () =>
+  pickSessionForDaily('2026-09-02', []) === null)
 
 T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)', () =>
   !isDailyTest({ title: '공통수학2 주말복습 TEST 0822', kind: '학습지' })

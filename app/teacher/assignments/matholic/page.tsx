@@ -32,8 +32,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
-  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule,
-  type NameRules, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
+  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS,
+  type NameRules, type SessionLite, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
 /**
@@ -108,13 +108,22 @@ export default function MatholicImportPage() {
         arr.push(w); byStudent.set(w.student_id, arr)
       }
 
-      // 데일리테스트는 **그 날짜 그 학생의 수업 기록**에 적는다. 날짜만 읽어 온다.
-      const dates = [...new Set(res.rows.filter(isDailyTest).map((r) => r.date))]
+      // 데일리테스트는 그 학생의 수업 기록에 적는다. 그날 수업이 없으면 **그 뒤** 가장
+      // 가까운 수업에 붙이므로(집에서 풀고 다음 수업에 가져오는 경우), 날짜 하나가 아니라
+      // 그 뒤 2주까지를 같이 읽어 온다.
+      const dates = [...new Set(res.rows.filter(isDailyTest).map((r) => r.date))].sort()
+      const until = dates.length
+        ? new Date(Date.parse(dates[dates.length - 1]) + DAILY_MAX_GAP_DAYS * 86400_000).toISOString().slice(0, 10)
+        : ''
       const sessions = dates.length === 0 || ids.length === 0 ? [] : (await Promise.all(
-        chunks.map((chunk) => fetchAllRows<{ id: string; student_id: string; session_date: string; daily_test_score: number | null }>(
+        chunks.map((chunk) => fetchAllRows<SessionLite>(
           () => supabase.from('class_sessions').select('id, student_id, session_date, daily_test_score')
-            .in('student_id', chunk).in('session_date', dates).order('id'))))).flat()
-      const bySession = new Map(sessions.map((c) => [`${c.student_id}|${c.session_date}`, c]))
+            .in('student_id', chunk).gte('session_date', dates[0]).lte('session_date', until).order('id'))))).flat()
+      const sessionsOf = new Map<string, SessionLite[]>()
+      for (const c of sessions) {
+        const arr = sessionsOf.get(c.student_id) ?? []
+        arr.push(c); sessionsOf.set(c.student_id, arr)
+      }
 
       // 코어테스트도 이미 들어간 것을 먼저 읽는다 — 같은 날 같은 회차를 두 번 넣지 않는다.
       const coreDates = [...new Set(res.rows.filter((r) => coreTestRound(r)).map((r) => r.date))]
@@ -162,18 +171,22 @@ export default function MatholicImportPage() {
         }
 
         if (isDailyTest(row)) {
-          const ses = bySession.get(`${sid}|${row.date}`)
-          if (!ses) {
+          // 그날 수업이 있으면 그 수업에. 없으면 **그 뒤** 가장 가까운 수업에
+          // (집에서 풀고 다음 수업에 가져오는 경우). 앞은 보지 않는다.
+          const hit = pickSessionForDaily(row.date, sessionsOf.get(sid) ?? [])
+          if (!hit) {
             return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
-              why: tag(`${row.date} 수업 기록이 없어요 — 학습일지를 먼저 쓴 뒤에 넣어 주세요`) }
+              why: tag(`${row.date} 뒤로 수업이 없어요 — 적을 데가 없어 넘어갑니다`) }
           }
+          const { session: ses, gapDays } = hit
+          const 어디 = gapDays === 0 ? '' : ` (${ses.session_date} 수업에 붙입니다 · ${gapDays}일 뒤)`
           if (ses.daily_test_score === row.score) {
             return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, mode: 'done',
-              why: tag('학습일지에 이미 같은 점수가 있어요') }
+              why: tag(`학습일지에 이미 같은 점수가 있어요${어디}`) }
           }
           return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, mode: 'daily',
-            why: tag(ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
-              : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다`) }
+            why: tag((ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
+              : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다`) + 어디) }
         }
 
         const list = byStudent.get(sid) ?? []

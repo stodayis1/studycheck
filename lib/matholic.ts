@@ -356,6 +356,40 @@ export function needsLevel(row: { title?: string | null; kind?: string | null })
   return /학습지|오답유사/.test(t)
 }
 
+export interface SessionLite { id: string; student_id: string; session_date: string; daily_test_score: number | null }
+
+/** 집에서 푼 것을 수업에 붙일 때, 이만큼 넘게 떨어져 있으면 **붙이지 않는다.** */
+export const DAILY_MAX_GAP_DAYS = 14
+
+/**
+ * 데일리테스트 점수를 **어느 수업 기록에 적을지** 고른다.
+ *
+ * 규칙 (원장님 2026-10-29)
+ *   「학습지 점수가 기록되는 날짜는 학원에 와서 채점을 받은 날이야. 그래서 당연히 수업날로
+ *    기록되면 됨. 아, 다만 학생에게 과제로 아예 답안 입력해서 점수가 나오게 하는 경우도
+ *    있거든. 그럴때 그 뒤(앞이 아니라) 가장 가까운 수업에 붙여줘. 수업이 없을때는 당연히
+ *    작성되면 안 되는거고.」
+ *
+ *   ① 그날 수업이 있으면 **그 수업**에 적는다 (거의 다 이 경우다 — 와서 채점받는다)
+ *   ② 없으면 **그 뒤** 가장 가까운 수업. 집에서 풀고 다음 수업에 가져오는 경우다
+ *   ③ **앞은 보지 않는다.** 아직 풀지도 않은 날에 점수가 생기면 안 된다
+ *   ④ 그 뒤로도 수업이 없거나 너무 멀면 **적지 않는다**
+ */
+export function pickSessionForDaily(
+  date: string, sessions: SessionLite[], maxGapDays = DAILY_MAX_GAP_DAYS,
+): { session: SessionLite; gapDays: number } | null {
+  const same = sessions.find((c) => c.session_date === date)
+  if (same) return { session: same, gapDays: 0 }
+  let best: SessionLite | null = null
+  for (const c of sessions) {
+    if (c.session_date <= date) continue            // 앞은 보지 않는다
+    if (!best || c.session_date < best.session_date) best = c
+  }
+  if (!best) return null
+  const gap = Math.round((Date.parse(best.session_date) - Date.parse(date)) / 86400_000)
+  return gap <= maxGapDays ? { session: best, gapDays: gap } : null
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // 학생 찾기
 // ────────────────────────────────────────────────────────────────────────────

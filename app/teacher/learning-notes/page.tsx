@@ -4222,6 +4222,47 @@ ${e?.message ?? '연결 실패'}
                     )}
                   </div>
                   <PctPicker value={noteScorePct} onChange={setNoteScorePct} disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM} />
+
+                  {/* 매쓰홀릭에서 들어온 그날 학습지 점수 (원장님 2026-10-29 「점수칩으로 보여줘」).
+                        · 선생님이 **이미 들어왔다는 것을 바로 알게** 하려는 것이다. 붙여넣기로 들어오면
+                          학습지관리에는 쌓이는데 이 화면에서는 보이지 않아 한 번 더 찾아봐야 했다.
+                        · 성취도는 **고쳐 주지 않는다.** 그건 선생님 판단값이다(5% 단위로 직접 고르신다).
+                          다만 「단원·레벨 넣기」를 누르면 아래 두 칸만 채워 준다 —
+                          그 두 칸은 학부모 브리핑에 그대로 나가는데 지금은 손으로 적고 계신다.
+                        · 읽기만 한다. 이 칩이 뭔가를 저장하는 일은 없다. */}
+                  {(() => {
+                    const day = noteDate || todayStr
+                    const todays = worksheets.filter((w) =>
+                      w.student_id === noteStudent?.id && w.score != null
+                      && String(w.submitted_at ?? '').slice(0, 10) === day)
+                    if (todays.length === 0) return null
+                    return (
+                      <div className="mt-2 rounded-xl p-2" style={{ background: '#EAF3DE', border: '1px solid #9FE1CB' }}>
+                        <p className="text-[10px] font-bold mb-1" style={{ color: '#3B6D11' }}>
+                          <i className="ti ti-check align-[-0.125em]" /> 오늘 학습지 점수가 이미 들어와 있어요
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {todays.map((w) => {
+                            const 단원 = [w.unit, w.unit_name].filter(Boolean).join(' ')
+                            const 레벨 = w.current_level != null ? `Lv${w.current_level}` : ''
+                            return (
+                              <button key={w.id} type="button"
+                                onClick={() => { setNoteWorksheetUnit(단원); setNoteWorksheetLevel(레벨) }}
+                                title="누르면 아래 단원·레벨 칸에 넣어요"
+                                className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-white"
+                                style={{ border: '1px solid #9FE1CB', color: '#27500A' }}>
+                                {단원 || '학습지'} {레벨} · <b>{w.score}점</b>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="text-[10px] mt-1" style={{ color: '#639922' }}>
+                          칩을 누르면 아래 단원·레벨 칸에 넣어 드려요. 과제 성취도는 선생님이 직접 고르시는 값이라 그대로 둡니다.
+                        </p>
+                      </div>
+                    )
+                  })()}
+
                   {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
                   <div className="flex gap-2 mt-2">
                     <input type="text" value={noteWorksheetUnit} onChange={(e) => setNoteWorksheetUnit(e.target.value)}
