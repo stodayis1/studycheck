@@ -391,6 +391,116 @@ export function pickSessionForDaily(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 제목에 적힌 단원 이름을 **개념 사전에 대고 찾기**
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ConceptRow {
+  grade: string | null
+  semester: number | null
+  chapter: string | null
+  sub_chapter: string | null
+  concept_name: string | null
+}
+
+/** 어느 층에서 찾았나. 소개념이 가장 좁고 대단원이 가장 넓다. */
+export type UnitLevel = '소개념' | '중단원' | '대단원'
+
+export interface ResolvedUnit {
+  chapter: string | null
+  subChapter: string | null
+  conceptName: string | null
+  level: UnitLevel
+  /** 얼마나 확실한가 — 2 글자 그대로 같으면 10, 한쪽이 다른 쪽을 품으면 6, 겹치는 만큼이면 그 아래 */
+  score: number
+}
+
+/**
+ * 비교하려고 글자를 고른다. 번호·로마숫자·띄어쓰기·기호를 떼어
+ * 「Ⅱ 문자와 식」·「2. 문자와 식」·「문자와식」이 **같은 말**이 되게 한다.
+ */
+function normUnit(s: string): string {
+  return String(s ?? '')
+    .replace(/[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, ' ')
+    .replace(/\d+\s*[.)\-]/g, ' ')
+    .replace(/단원|파트|part/gi, ' ')
+    .replace(/[^가-힣a-zA-Z0-9]/g, '')
+}
+
+/** 두 글자씩 끊어 겹치는 비율 — 「일차방정식」과 「일차방정식의 활용」처럼 반만 같은 것을 가린다. */
+function overlap(a: string, b: string): number {
+  if (a.length < 2 || b.length < 2) return 0
+  const grams = (x: string) => new Set(Array.from({ length: x.length - 1 }, (_, i) => x.slice(i, i + 2)))
+  const A = grams(a), B = grams(b)
+  let hit = 0
+  for (const g of A) if (B.has(g)) hit++
+  return hit / Math.min(A.size, B.size)
+}
+
+function compare(want: string, got: string | null | undefined): number {
+  const g = normUnit(got ?? '')
+  if (!want || !g) return 0
+  if (want === g) return 10
+  if (want.length >= 3 && g.length >= 3 && (want.includes(g) || g.includes(want))) return 6
+  const r = overlap(want, g)
+  return r >= 0.6 ? 2 + r * 2 : 0
+}
+
+/**
+ * 제목에 적힌 단원 이름을 **개념 사전(concepts)** 에 대고 찾는다.
+ *
+ * 왜 (원장님 2026-10-29)
+ *   「단원이름을 스터디체크 그대로 어떻게 쓰냐. 소개념일수도 있고 소단원일수도 있고
+ *    중단원일수도 있는데 여튼 그 제목을 쓰면 너가 알아서 매칭해서 붙여줘야지」
+ *
+ *   맞는 말이다. 선생님께 스터디체크의 글자를 그대로 옮겨 적으라고 하는 것은
+ *   **기계가 할 일을 사람에게 떠넘기는 것**이다. 개념 사전이 대단원·중단원·소개념
+ *   세 층으로 다 들어 있으니, 어느 층의 이름을 쓰시든 여기서 찾아 올린다.
+ *
+ *   「원의 방정식」(소개념) 이라고 쓰시면 → 대단원 「Ⅱ 도형의 방정식」까지 같이 알아낸다.
+ *   「도형의 방정식」(대단원) 이라고 쓰시면 → 그 대단원으로 바로 잡힌다.
+ *
+ * ★ 못 찾으면 **null** 이다. 억지로 비슷한 것을 집지 않는다 —
+ *   엉뚱한 단원에 점수가 들어가면 레벨 현황판이 조용히 틀어진다.
+ */
+/**
+ * 과정 칸(「중등 1-1 (2022 개정)」)에서 **진짜 학년**을 읽는다.
+ *
+ * ★ 학생의 학년을 쓰면 안 된다. 선행하는 학생이 많다 — 초6 학생이 중1-1 학습지를 푼다.
+ *   그 학생의 학년(초6)으로 개념 사전을 뒤지면 중1 단원을 영영 못 찾는다
+ *   (2026-10-29 예행에서 「2. 문자와 식」이 통째로 「못 찾음」으로 나왔다).
+ * ★ 고등은 과정 이름이 과목명(공통수학2 …)이라 학년이 안 적혀 있다. 그때는 null 을
+ *   돌려주고 부르는 쪽이 학생 학년으로 메운다 — 고등은 선행이 학년을 넘지 않는다.
+ */
+export function gradeFromCourse(course?: string | null): { grade: string; semester: number | null } | null {
+  const m = /(초등|중등|고등|초|중|고)\s*([1-6])(?:\s*-\s*([12]))?/.exec(String(course ?? ''))
+  if (!m) return null
+  const head = m[1][0]
+  return { grade: `${head}${m[2]}`, semester: head === '초' && m[3] ? Number(m[3]) : null }
+}
+
+export function resolveUnit(text: string, grade: string | null, concepts: ConceptRow[]): ResolvedUnit | null {
+  const want = normUnit(text)
+  if (want.length < 2) return null
+  const pool = grade ? concepts.filter((c) => c.grade === grade) : concepts
+  const rows = pool.length ? pool : concepts
+
+  let best: ResolvedUnit | null = null
+  const take = (c: ConceptRow, level: UnitLevel, score: number) => {
+    if (score <= 0) return
+    // 같은 점수면 **좁은 층**을 고른다 — 소개념으로 적으셨으면 그 뜻이다.
+    const rank = (l: UnitLevel) => (l === '소개념' ? 3 : l === '중단원' ? 2 : 1)
+    if (best && (best.score > score || (best.score === score && rank(best.level) >= rank(level)))) return
+    best = { chapter: c.chapter, subChapter: c.sub_chapter, conceptName: c.concept_name, level, score }
+  }
+  for (const c of rows) {
+    take(c, '소개념', compare(want, c.concept_name))
+    take(c, '중단원', compare(want, c.sub_chapter))
+    take(c, '대단원', compare(want, c.chapter))
+  }
+  return best
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 학생 찾기
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -505,7 +615,7 @@ function titleWords(title: string): string[] {
  * 화면이 물어본다. 아무것도 안 나오면 새로 만든다(주한 선생님 고1처럼 스터디체크에
  * 배정이 아예 없는 반이 있다).
  */
-export function rankWorksheets(row: MatholicRow, list: WsCandidate[]): Scored[] {
+export function rankWorksheets(row: MatholicRow, list: WsCandidate[], unit?: ResolvedUnit | null): Scored[] {
   const words = titleWords(row.title)
   const out: Scored[] = []
   for (const ws of list) {
@@ -519,6 +629,22 @@ export function rankWorksheets(row: MatholicRow, list: WsCandidate[]): Scored[] 
     const hay = `${ws.unit ?? ''} ${ws.unit_name ?? ''}`
     const hit = words.filter((w) => hay.includes(w))
     if (hit.length) { points += Math.min(hit.length, 3) * 2; why.push(`단원 ${hit.slice(0, 3).join('·')}`) }
+
+    // ★ 개념 사전에서 찾아낸 단원이 있으면 그걸로 한 번 더 본다. 선생님이 소개념 이름을
+    //   쓰셔도(「원과 직선의 위치 관계」) 그 대단원의 학습지에 붙게 하려는 것이다.
+    let unitHitByDict = false
+    if (unit) {
+      const n = (x?: string | null) => normUnit(x ?? '')
+      const 같나 = (a?: string | null, b?: string | null) => {
+        const x = n(a), y = n(b)
+        return !!x && !!y && (x === y || (x.length >= 3 && y.length >= 3 && (x.includes(y) || y.includes(x))))
+      }
+      if (같나(ws.unit_name, unit.subChapter) || 같나(ws.unit_name, unit.conceptName)) {
+        points += 5; unitHitByDict = true; why.push(`중단원 ${unit.subChapter ?? ''}`.trim())
+      } else if (같나(ws.unit, unit.chapter) || 같나(ws.unit_name, unit.chapter)) {
+        points += 3; unitHitByDict = true; why.push(`대단원 ${unit.chapter ?? ''}`.trim())
+      }
+    }
 
     const wantsSimilar = /오답유사/.test(row.title) || row.kind === '오답유사'
     if (wantsSimilar && ws.worksheet_type === 'similar') { points += 3; why.push('오답유사') }
@@ -534,7 +660,7 @@ export function rankWorksheets(row: MatholicRow, list: WsCandidate[]): Scored[] 
       const gap = Math.abs(Date.parse(base.slice(0, 10)) - Date.parse(row.date)) / 86400_000
       if (gap <= 14) { points += 1; why.push(`${Math.round(gap)}일 차이`) }
     }
-    if (points > 0) out.push({ ws, points, why, unitHit: hit.length > 0 })
+    if (points > 0) out.push({ ws, points, why, unitHit: hit.length > 0 || unitHitByDict })
   }
   return out.sort((a, b) => b.points - a.points)
 }

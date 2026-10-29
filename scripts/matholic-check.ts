@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -353,6 +353,60 @@ T('그 뒤 수업이 너무 멀면 적지 않는다', () =>
 
 T('수업이 아예 없으면 적지 않는다', () =>
   pickSessionForDaily('2026-09-02', []) === null)
+
+// 개념 사전 한 토막 (스터디체크 concepts 와 같은 꼴: 대단원 / 중단원 / 소개념)
+const CONCEPTS = [
+  { grade: '중1', semester: 1, chapter: 'Ⅰ 수와 연산', sub_chapter: '1. 소인수 분해', concept_name: '소인수분해' },
+  { grade: '중1', semester: 1, chapter: 'Ⅰ 수와 연산', sub_chapter: '2. 정수와  유리수', concept_name: '절댓값' },
+  { grade: '중1', semester: 1, chapter: 'Ⅱ 문자와 식', sub_chapter: '1. 문자의 사용과 식의 계산', concept_name: '일차식의 계산' },
+  { grade: '중1', semester: 1, chapter: 'Ⅱ 문자와 식', sub_chapter: '2. 일차방정식', concept_name: '일차방정식의 활용' },
+  { grade: '고1', semester: 1, chapter: 'Ⅱ 도형의 방정식', sub_chapter: '2. 원의 방정식', concept_name: '원과 직선의 위치 관계' },
+  { grade: '초6', semester: 2, chapter: '1단원', sub_chapter: '분수의 나눗셈', concept_name: '분수의 나눗셈의 활용' },
+]
+
+T('소개념 이름으로 써도 대단원까지 찾아 올린다', () => {
+  const r = resolveUnit('원과 직선의 위치 관계', '고1', CONCEPTS as any)
+  return r?.level === '소개념' && r?.chapter === 'Ⅱ 도형의 방정식' && r?.subChapter === '2. 원의 방정식'
+})
+
+T('중단원 이름으로 써도 찾는다 (번호가 있든 없든)', () => {
+  const a = resolveUnit('원의 방정식', '고1', CONCEPTS as any)
+  const b = resolveUnit('2. 원의 방정식', '고1', CONCEPTS as any)
+  return a?.chapter === 'Ⅱ 도형의 방정식' && b?.chapter === 'Ⅱ 도형의 방정식'
+})
+
+T('대단원 이름으로 써도 찾는다 (로마숫자·띄어쓰기 달라도)', () => {
+  const a = resolveUnit('문자와 식', '중1', CONCEPTS as any)
+  const b = resolveUnit('Ⅱ문자와식', '중1', CONCEPTS as any)
+  return a?.chapter === 'Ⅱ 문자와 식' && b?.chapter === 'Ⅱ 문자와 식'
+})
+
+T('초등 단원 이름도 같은 규칙으로 찾는다', () => {
+  const r = resolveUnit('분수의 나눗셈', '초6', CONCEPTS as any)
+  return r?.chapter === '1단원' && r?.subChapter === '분수의 나눗셈'
+})
+
+T('상관없는 말은 억지로 집지 않는다 (엉뚱한 단원에 점수가 들어가면 안 된다)', () =>
+  resolveUnit('주말복습 TEST', '중1', CONCEPTS as any) === null
+  && resolveUnit('가나다라마바사', '중1', CONCEPTS as any) === null)
+
+T('학년이 다르면 그 학년 것에서 찾는다', () => {
+  const r = resolveUnit('일차방정식', '중1', CONCEPTS as any)
+  return r?.chapter === 'Ⅱ 문자와 식'
+})
+
+T('과정 칸에서 진짜 학년을 읽는다 (선행하는 학생은 학년과 과정이 다르다)', () => {
+  const a = gradeFromCourse('중등 1-1 (2022 개정)')
+  const b = gradeFromCourse('초등 6-2 (2022 개정)')
+  return a?.grade === '중1' && a?.semester === null && b?.grade === '초6' && b?.semester === 2
+    && gradeFromCourse('공통수학2 (2022 개정)') === null
+})
+
+T('초6 학생이 푼 중1 단원도 찾아낸다 (학생 학년으로 뒤지면 못 찾는다)', () => {
+  const g = gradeFromCourse('중등 1-1 (2022 개정)')?.grade ?? '초6'
+  const r = resolveUnit('문자와 식', g, CONCEPTS as any)
+  return r?.chapter === 'Ⅱ 문자와 식'
+})
 
 T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)', () =>
   !isDailyTest({ title: '공통수학2 주말복습 TEST 0822', kind: '학습지' })
