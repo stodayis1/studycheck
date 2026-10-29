@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
-import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, pickByRule } from '../lib/matholic'
+import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, pickByRule } from '../lib/matholic'
 
 const env = Object.fromEntries(
   fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)
@@ -92,6 +92,9 @@ res.rows.forEach((row, i) => {
   }
   const list = byStudent.get(sid) ?? []
   if (list.find((w) => alreadyIn(row, w as any))) { dup++; console.log(`${head} → ◦ 이미 들어가 있어요`); return }
+  if (needsLevel(row) && row.level == null) {
+    none++; console.log(`${head} → ✗ 레벨이 없어요 — 제목 끝에 _Lv3.5 처럼 붙여야 넣습니다`); return
+  }
   const ranked = rankWorksheets(row, list as any)
   if (isClearWinner(ranked)) {
     fill++

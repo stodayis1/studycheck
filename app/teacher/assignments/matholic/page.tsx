@@ -32,7 +32,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
-  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, pickByRule,
+  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule,
   type NameRules, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
@@ -181,6 +181,15 @@ export default function MatholicImportPage() {
         const dup = list.find((w) => alreadyIn(row, w))
         if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, mode: 'done', why: tag('이미 들어가 있어요') }
 
+        // ★ 학습지는 **레벨학습지**다 (원장님 2026-10-29 「반드시 레벨이 제목에 있어야」).
+        //    레벨 없이 들어가면 레벨 현황판과 초등 70점 규칙이 조용히 멈춘다.
+        //    ★ 이 확인은 **이미 들어갔는지 본 뒤**에 한다 — 예전에 넣어 둔 것까지
+        //      「레벨이 없어요」로 막으면 멀쩡한 기록이 빨갛게 뜬다(2026-10-29 예행에서 걸렸다).
+        if (needsLevel(row) && row.level == null) {
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null,
+            mode: 'skip', why: tag('레벨이 없어요 — 매쓰홀릭 제목 끝에 _Lv3.5 처럼 붙여 주세요') }
+        }
+
         const ranked = rankWorksheets(row, list)
         if (isClearWinner(ranked)) {
           return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
@@ -240,19 +249,25 @@ export default function MatholicImportPage() {
           if (error) throw new Error(error.message)
           filled++
         } else if (p.mode === 'new' && p.studentId) {
+          // ★ 단원과 레벨을 **칸에 제대로** 넣는다. 제목을 통째로 unit_name 에 넣으면
+          //   레벨 현황판(학년 × 단원 표)과 초등 70점 규칙이 조용히 멈춘다.
+          const t = parseWorksheetTitle(p.row.title)
           const { error } = await supabase.from('student_worksheets').insert({
             student_id: p.studentId, subject: '수학',
-            // 과정(공통수학2 …)은 스터디체크의 학년 표기와 달라서, 학생의 학년을 쓴다.
-            grade_level: who?.grade ?? null,
-            unit: p.row.course || p.row.kind || '매쓰홀릭',
-            unit_name: p.row.title,
+            // 제목에 학년이 적혀 있으면 그걸 쓰고, 없으면 학생의 학년으로 메운다.
+            grade_level: t.gradeLevel ?? who?.grade ?? null,
+            semester: t.semester,
+            unit: t.unit ?? p.row.course ?? '매쓰홀릭',
+            unit_name: t.unitName ?? p.row.title,
             current_level: p.row.level,
             worksheet_type: /오답유사/.test(p.row.title) || p.row.kind === '오답유사' ? 'similar' : 'main',
             status: 'scored', score: p.row.score,
             assigned_at: `${p.row.date}T12:00:00+09:00`,
             submitted_at: `${p.row.date}T12:00:00+09:00`,
             // 어디서 온 것인지 남긴다 — 되돌릴 때 이 글자로 찾는다.
-            memo: `매쓰홀릭${p.row.right != null ? ` ${p.row.right}/${p.row.total}` : ''}`,
+            memo: [`매쓰홀릭`,
+              parseWorksheetTitle(p.row.title).round ? `${parseWorksheetTitle(p.row.title).round}차` : '',
+              p.row.right != null ? `${p.row.right}/${p.row.total}` : ''].filter(Boolean).join(' '),
           })
           if (error) throw new Error(error.message)
           created++

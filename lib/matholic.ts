@@ -90,7 +90,7 @@ const FRACTION_CELL = /^(\d{1,3})\s*\/\s*(\d{1,3})$/
  *   안 걸린다. 실제로 쎈 학습지 제목(…나눗셈_Lv5)이 통째로 레벨 없음으로 읽혔다.
  */
 const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
-const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사', '데일리', '주말복습', '코어테스트', '이너프원']
+const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사', '데일리', '주말복습', '코어테스트', '이너프원', '교재']
 /**
  * 제목 맨 앞 대괄호 머리표 — 「[데일리] 고1 공통수학2 원의 방정식_Lv2.5」.
  *
@@ -283,6 +283,77 @@ export function coreTestRound(row: { title?: string | null; kind?: string | null
   if (/예비\s*2/.test(t)) return '예비 2회'
   if (/예비\s*1/.test(t)) return '예비 1회'
   return '본고사'
+}
+
+/** 제목에서 떼어낸 것들. 학습지를 새로 만들 때 이 값들이 그대로 칸에 들어간다. */
+export interface TitleParts {
+  /** '초6' · '중1' · '고1' — students.grade 와 같은 꼴 */
+  gradeLevel: string | null
+  /** 초등만 학기를 쓴다 (중·고는 과정 이름 자체가 한 학기라 비운다) */
+  semester: number | null
+  /** '1단원' · 'Ⅱ 문자와 식' */
+  unit: string | null
+  /** '분수의 나눗셈' — 단원 뒤에 이름이 더 있으면 그것 */
+  unitName: string | null
+  /** 3.5 */
+  level: number | null
+  /** '-2차' 의 2 (재도전 몇 번째인가) */
+  round: number | null
+}
+
+/**
+ * 「[학습지] 초6-2 1단원 분수의 나눗셈_Lv5」 같은 제목을 칸별로 떼어낸다.
+ *
+ * ★ **학습지는 레벨학습지다** (원장님 2026-10-29 「레벨별 학습지가 중요하거든… 거기에는
+ *   반드시 레벨이 제목에 있어야 하고 단원별 레벨별로 점수 기록해야 하는 거 알지?」).
+ *   단원과 레벨이 칸에 제대로 들어가야 **레벨 현황판**과 **초등 70점 규칙**이 돈다.
+ *   제목을 통째로 unit_name 에 넣으면 그 두 가지가 조용히 멈춘다 — 에러는 안 난다.
+ *
+ * 떼는 규칙 (순서대로 덜어낸다)
+ *   ① 「초6-2」·「중1-1」·「고1」  → 학년과 학기
+ *   ② 「_Lv3.5」                → 레벨
+ *   ③ 「-2차」                  → 재도전 차수
+ *   ④ 남은 것이 단원. 첫 토막이 「1단원」 꼴이면 거기서 한 번 더 가른다
+ *      ('1단원 분수의 나눗셈' → unit '1단원' / unitName '분수의 나눗셈')
+ */
+export function parseWorksheetTitle(title: string): TitleParts {
+  let t = String(title ?? '').trim()
+
+  const g = /(초|중|고)\s*([1-6])(?:\s*-\s*([12]))?/.exec(t)
+  const gradeLevel = g ? `${g[1]}${g[2]}` : null
+  // 학기는 초등만 쓴다 — 중·고는 student_worksheets.semester 를 비워 두는 것이 기존 방식이다.
+  const semester = g && g[3] && g[1] === '초' ? Number(g[3]) : null
+  if (g) t = (t.slice(0, g.index) + ' ' + t.slice(g.index + g[0].length)).trim()
+
+  const lv = LEVEL.exec(t)
+  const level = lv ? Number(lv[1]) : null
+  if (lv) t = (t.slice(0, lv.index) + ' ' + t.slice(lv.index + lv[0].length)).trim()
+
+  const rd = /[-_\s]\s*([0-9]+)\s*차/.exec(t)
+  const round = rd ? Number(rd[1]) : null
+  if (rd) t = (t.slice(0, rd.index) + ' ' + t.slice(rd.index + rd[0].length)).trim()
+
+  t = t.replace(/^[\s_\-·]+|[\s_\-·]+$/g, '').replace(/\s+/g, ' ')
+  let unit: string | null = t || null
+  let unitName: string | null = t || null
+  const head = /^(\d+\s*단원)\s+(.+)$/.exec(t)
+  if (head) { unit = head[1].replace(/\s+/g, ''); unitName = head[2] }
+  return { gradeLevel, semester, unit, unitName, level, round }
+}
+
+/**
+ * 레벨이 **반드시 있어야 하는** 종류인가.
+ * 학습지와 오답유사는 레벨학습지라 레벨 없이 넣으면 레벨 현황판이 틀어진다.
+ * 주말복습·단원평가 같은 것은 레벨이 있으면 쓰고 없어도 괜찮다.
+ */
+export function needsLevel(row: { title?: string | null; kind?: string | null }): boolean {
+  const t = `${row.title ?? ''} ${row.kind ?? ''}`
+  if (/주말복습|단원평가|진단평가|월간평가|주간평가/.test(t)) return false
+  // ★ 교재연계로 낸 것은 레벨 개념이 없다 — 교재와 쪽 범위로 낸다
+  //   (「[쎈] 중등 1-1 (2022개정) P.18 ~ P.80」). 새 제목 규칙에서는 머리표를 「[교재]」로 쓴다.
+  //   여기를 안 빼 두면 교재 과제가 통째로 「레벨이 없어요」로 막힌다 (2026-10-29 예행에서 걸렸다).
+  if (/교재/.test(t) || /\bP\.?\s*\d+\s*[~\-]/i.test(t)) return false
+  return /학습지|오답유사/.test(t)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
