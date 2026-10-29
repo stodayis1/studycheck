@@ -61,6 +61,12 @@ const kstToMs = (date: string, hhmm: string) => Date.parse(`${date}T${hhmm}:00+0
 const hhmmKst = (iso: string) => new Date(Date.parse(iso) + KST).toISOString().slice(11, 16)
 const short = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`
 
+/**
+ * 샘플이 안 나갔지만 **고칠 것이 없는** 경우. 오류로 올리지 않는다.
+ * 늘어나면 여기에만 더한다(scripts/cron-health-check.ts 에 시험도 같이).
+ */
+const NOT_A_SAMPLE_FAILURE = /결석이라 보낼 글이 없어요/
+
 /** 한 번 돈 기록 안의 오류를 찾는다. 「보낼 학생이 없음(0건)」·「건너뜀」은 오류가 아니다. */
 export function runErrors(result: any): string[] {
   const out: string[] = []
@@ -88,8 +94,17 @@ export function runErrors(result: any): string[] {
   }
   const picks = result.sample?.picks
   if (Array.isArray(picks)) {
-    const bad = picks.filter((p: any) => p && p.ok === false)
-    if (bad.length) out.push(`샘플 실패 ${bad.length}건`)
+    // ★ 「그날 담당 학생이 전부 결석」은 **보낼 글이 없었던 것**이지 실패가 아니다.
+    //   (원장님 2026-10-29 「이거 뭐지」 — 10/28 빨간 띠가 이것 하나 때문에 떴다.
+    //    10/27 화요일 윤지혜 선생님 담당 수업 기록이 윤수지 한 명뿐이었고 결석이었다.)
+    //   빨간 띠는 「손을 써야 하는 것」만 담아야 한다. 안 그러면 보고도 넘기게 된다.
+    const bad = picks.filter((p: any) =>
+      p && p.ok === false && !NOT_A_SAMPLE_FAILURE.test(String(p.error ?? '')))
+    // 누구 것이 왜 안 갔는지까지 적는다 — 「1건」만으로는 뭘 해야 할지 알 수 없다.
+    if (bad.length) {
+      const who = bad.map((p: any) => `${p.teacher ?? '?'}: ${p.error ?? '발송 실패'}`).join(', ')
+      out.push(`샘플 실패 ${bad.length}건 (${who})`)
+    }
   }
   return out
 }
