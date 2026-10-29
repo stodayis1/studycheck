@@ -29,9 +29,10 @@ const ITEM = {
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
   schools:       { href: '/teacher/schools',        label: '학교 자료집',  icon: 'ti-school' },
-  // ★ 「학습지 배부」(이 화면)와 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
-  //   하는 일을 이름에 넣어 갈랐다 (원장님 2026-10-26).
-  assignments:   { href: '/teacher/assignments',    label: '학습지 배부',  icon: 'ti-file-text' },
+  // ★ 이 화면과 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
+  //   2026-10-26 에 「학습지 배부」로 갈랐다가, 배부만 하는 곳이 아니라 배정·점수·다음 단계까지
+  //   하는 곳이라 2026-10-29 에 화면 제목과 같은 「학습지관리」로 되돌렸다 (원장님 지시).
+  assignments:   { href: '/teacher/assignments',    label: '학습지관리',   icon: 'ti-file-text' },
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
   // 화면 제목이 「시험대비 관리」인데 메뉴만 「시험배정」이라 서로 달랐다. 화면 쪽에 맞췄다.
   examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },

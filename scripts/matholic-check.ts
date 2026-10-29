@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, pickByRule } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -296,6 +296,63 @@ T('이너프원은 학습지로 넣지 않는다 (내신대비교재다)', () =>
   isEnoughOne({ title: '[이너프원] 중3-2 이차함수', kind: '학습지' })
   && isEnoughOne({ title: '이너프원 중2 내신대비 3단원', kind: '학습지' })
   && !isEnoughOne({ title: '[학습지] 중3-2 이차함수_Lv3', kind: '학습지' }))
+
+T('제목에서 학년·학기·단원·레벨·차수를 칸별로 떼어낸다 (초등)', () => {
+  const t = parseWorksheetTitle('초6-2 1단원 분수의 나눗셈_Lv5')
+  return t.gradeLevel === '초6' && t.semester === 2 && t.unit === '1단원'
+    && t.unitName === '분수의 나눗셈' && t.level === 5 && t.round === null
+})
+
+T('제목에서 칸별로 떼어낸다 (중등 · 재도전)', () => {
+  const t = parseWorksheetTitle('중1-1 Ⅱ 문자와 식_Lv3.5-2차')
+  // 중·고는 학기를 비워 둔다 (지금까지 그렇게 쌓여 있다)
+  return t.gradeLevel === '중1' && t.semester === null && t.unit === 'Ⅱ 문자와 식'
+    && t.level === 3.5 && t.round === 2
+})
+
+T('교재연계로 낸 것은 레벨이 없어도 된다 (쪽 범위로 낸다)', () =>
+  !needsLevel({ title: '[쎈] 중등 1-1 (2022개정) P.18 ~ P.80[01-04]', kind: '학습지' })
+  && !needsLevel({ title: '[교재] 중1-1 쎈 P.18~P.80', kind: '학습지' }))
+
+T('학습지·오답유사는 레벨이 반드시 있어야 한다', () =>
+  needsLevel({ title: '[학습지] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
+  && needsLevel({ title: '[오답유사] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
+  && !needsLevel({ title: '[주말복습] 고1 공통수학2 도형의 방정식', kind: '학습지' })
+  && !needsLevel({ title: '[단원평가] 초6-2 1단원', kind: '단원평가' }))
+
+T('레벨이 제목에 있으면 읽어서 레벨 칸으로 간다', () => {
+  const r = parseMatholic(`남도윤
+(1/1)
+09/09 16:42
+학습지
+초등 6-2 (2022 개정)
+[학습지] 초6-2 1단원 분수의 나눗셈_Lv5
+28/30
+93점`, TODAY)
+  const t = parseWorksheetTitle(r.rows[0].title)
+  return r.rows[0].level === 5 && t.unit === '1단원' && t.unitName === '분수의 나눗셈'
+})
+
+const SES = (d: string, score: number | null = null) => ({ id: d, student_id: 's', session_date: d, daily_test_score: score })
+
+T('데일리테스트는 그날 수업에 적는다', () => {
+  const hit = pickSessionForDaily('2026-09-03', [SES('2026-09-01'), SES('2026-09-03'), SES('2026-09-05')])
+  return hit?.session.session_date === '2026-09-03' && hit?.gapDays === 0
+})
+
+T('그날 수업이 없으면 **그 뒤** 가장 가까운 수업에 붙인다 (집에서 푼 경우)', () => {
+  const hit = pickSessionForDaily('2026-09-02', [SES('2026-09-01'), SES('2026-09-05'), SES('2026-09-08')])
+  return hit?.session.session_date === '2026-09-05' && hit?.gapDays === 3
+})
+
+T('앞의 수업에는 절대 붙이지 않는다 (아직 풀지도 않은 날이다)', () =>
+  pickSessionForDaily('2026-09-10', [SES('2026-09-01'), SES('2026-09-08')]) === null)
+
+T('그 뒤 수업이 너무 멀면 적지 않는다', () =>
+  pickSessionForDaily('2026-09-02', [SES('2026-10-01')]) === null)
+
+T('수업이 아예 없으면 적지 않는다', () =>
+  pickSessionForDaily('2026-09-02', []) === null)
 
 T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)', () =>
   !isDailyTest({ title: '공통수학2 주말복습 TEST 0822', kind: '학습지' })
