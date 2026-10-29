@@ -11,6 +11,38 @@ import { apiFetch } from '@/lib/apiFetch'
 import { normalizeSchool } from '@/lib/school'
 import { splitTeachers } from '@/lib/teachers'
 
+// 시간표 칸 — 원장님 편집 화면과 선생님 「변경 요청」 화면이 **같은 목록**을 쓴다.
+const DAYS = ['월', '화', '수', '목', '금', '토', '일']
+const DAY_ORDER = DAYS
+const TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30',
+  '14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30',
+  '19:00','19:30','20:00','20:30','21:00']
+const PERIODS = [1, 1.5, 2, 2.5, 3, 3.5, 4]
+
+type SchedRow = { day: string; time: string; periods: number }
+
+/** 학생 시간표 변경 요청 (docs/sql/시간표변경요청_2026-10-29.sql) */
+interface SchedReq {
+  id: string
+  student_id: string
+  requested_by_name: string | null
+  requested_at: string
+  before_text: string | null
+  want: SchedRow[]
+  want_text: string | null
+  note: string | null
+  status: string
+}
+
+/** [{월,16:00,2}] → 「월16:00·2교시」 */
+function schedText(rows: SchedRow[]) {
+  return [...rows]
+    .filter((r) => r.day && r.time)
+    .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))
+    .map((r) => `${r.day}${String(r.time).slice(0, 5)}·${r.periods}교시`)
+    .join(', ')
+}
+
 interface Student {
   id?: string
   name: string
@@ -107,6 +139,13 @@ export default function TeacherStudentsPage() {
     name: '', school: '', grade: '', class_time: '', teacher_name: '',
     parent_name: '', parent_phone: '', is_active: true, textbook_grade: 'B', wise_step: 'W',
   }
+  // 시간표 변경 요청 — 원장님은 전부, 선생님은 본인이 올린 것만 보인다(RLS).
+  const [schedReqs, setSchedReqs] = useState<SchedReq[]>([])
+  const [schedReqFor, setSchedReqFor] = useState<Student | null>(null)
+  const [reqRows, setReqRows] = useState<SchedRow[]>([])
+  const [reqNote, setReqNote] = useState('')
+  const [reqBusy, setReqBusy] = useState(false)
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [newStudent, setNewStudent] = useState<Student>(EMPTY_STUDENT)
   const [newSchedules, setNewSchedules] = useState<{day: string, time: string, periods: number}[]>([])
@@ -125,7 +164,13 @@ export default function TeacherStudentsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchStudents() }, [])
+  async function fetchSchedReqs() {
+    const { data } = await supabase.from('schedule_change_requests')
+      .select('*').eq('status', 'open').order('requested_at', { ascending: false })
+    setSchedReqs((data ?? []) as SchedReq[])
+  }
+
+  useEffect(() => { fetchStudents(); fetchSchedReqs() }, [])
 
   // 담당 학생 필터 - 관리자와 직원(행정 업무상 전체 학생을 다뤄야 함)은 전체, 주임모드면 담당 학년 범위,
   // 강사는 본인 담당만 (canViewStudent가 이 우선순위를 그대로 반영함)
@@ -240,6 +285,39 @@ export default function TeacherStudentsPage() {
     fetchStudents()
   }
 
+  // 시간표를 실제로 쓰는 **한 곳**. 원장님의 학생관리 저장과 「시간표 변경 요청」 반영이
+  // 같은 길을 쓴다 — 두 군데서 따로 쓰면 한쪽만 OPS 에 안 넘어가는 일이 생긴다.
+  //
+  // ★ 끈 행을 남기지 않고 지운다. 예전에는 기존 행을 is_active=false 로 끄고 새 행을 넣어서
+  //   저장할 때마다 줄이 쌓였다(이도윤 학생 39줄, 2026-10-14). 끈 행은 아무도 읽지 않는다.
+  async function writeSchedules(s: Student, rows: SchedRow[]) {
+    if (!s.id) return { error: '학생을 알 수 없어요.' }
+    const clean = rows.filter((sc) => sc.day && sc.time)
+    const { error: delErr } = await supabase.from('schedules').delete().eq('student_id', s.id)
+    if (delErr) return { error: delErr.message }
+    if (clean.length) {
+      const { error: insErr } = await supabase.from('schedules').insert(clean.map((sc) => ({
+        student_id: s.id, day_of_week: sc.day, start_time: sc.time, periods: sc.periods, is_active: true,
+      })))
+      if (insErr) return { error: insErr.message }
+    }
+    // class_time 글자는 목록 표시용이다 — 시간표를 바꿀 때마다 같이 고쳐야 한다.
+    const sorted = [...clean].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))
+    const classTimeText = schedText(sorted)
+    const { error: upErr } = await supabase.from('students')
+      .update({ class_time: classTimeText }).eq('id', s.id)
+    if (upErr) return { error: upErr.message }
+    // OPS 동기화 — 학생목록 카드는 class_time 글자가 아니라 schedule_days 배열로 요일을
+    // 보여 주므로, 이걸 빼먹으면 OPS 화면엔 예전 요일이 그대로 남는다.
+    const syncResult = await syncStudentToOps(s.ops_student_id, {
+      name: s.name, school: s.school, grade: s.grade,
+      parent_name: s.parent_name, parent_phone: s.parent_phone,
+      class_time: classTimeText, schedule_days: [...new Set(sorted.map((sc) => sc.day))],
+      weekly_sessions: sorted.length,
+    }, s.teacher_name)
+    return { classTimeText, syncResult }
+  }
+
   async function handleSaveEdit() {
     if (!editStudent?.id) return
     // 학교 이름은 저장 직전에 한 가지로 모은다. 「신원중」/「신원중학교」가 섞이면
@@ -258,50 +336,123 @@ export default function TeacherStudentsPage() {
       .eq('id', editStudent.id)
     if (error) { alert('수정 중 오류가 발생했습니다.'); return }
 
-    // 시간표를 다시 쓴다 — **끈 행을 남기지 않고 지운다.**
-    //
-    // ★ 예전에는 기존 행을 is_active=false 로 끄고 새 행을 넣었다. 저장할 때마다 줄이
-    //   쌓여서, 이도윤 학생은 39줄까지 늘어나 있었다(2026-10-14 확인. 그날 조윤희 선생님이
-    //   3초 동안 13번 저장하면서 11줄이 한꺼번에 늘었다). 끈 행은 아무도 읽지 않는다 —
-    //   오늘 수업 목록도 시간표 화면도 is_active 가 참인 것만 본다. 남겨 둘 이유가 없다.
-    const rows = editSchedules
-      .filter((sc) => sc.day && sc.time)
-      .map((sc) => ({
-        student_id: editStudent.id,
-        day_of_week: sc.day,
-        start_time: sc.time,
-        periods: sc.periods,
-        is_active: true,
-      }))
-    await supabase.from('schedules').delete().eq('student_id', editStudent.id)
-    if (rows.length) await supabase.from('schedules').insert(rows)
-
-    // class_time 텍스트 자동 업데이트 (목록 표시용)
-    const DAY_ORDER = ['월','화','수','목','금','토','일']
-    const sortedSchedules = [...editSchedules]
-      .filter(sc => sc.day && sc.time)
-      .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))
-    const classTimeText = sortedSchedules
-      .map(sc => `${sc.day}${sc.time.slice(0,5)}·${sc.periods}교시`)
-      .join(', ')
-    await supabase.from('students').update({ class_time: classTimeText }).eq('id', editStudent.id)
-
-    // OPS 동기화 (연동된 학생만)
-    // schedule_days/weekly_sessions도 같이 보내야 한다 - OPS 학생목록 카드는 class_time 텍스트가 아니라
-    // schedule_days 배열로 요일을 표시해서, 이걸 빼먹으면 시간표 요일을 바꿔도 OPS 화면엔 예전 요일이 그대로 남는다.
-    const scheduleDays = [...new Set(sortedSchedules.map(sc => sc.day))]
-    const syncResult = await syncStudentToOps(editStudent.ops_student_id, {
-      name: editStudent.name, school, grade: editStudent.grade,
-      parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
-      class_time: classTimeText, schedule_days: scheduleDays, weekly_sessions: sortedSchedules.length,
-    }, editStudent.teacher_name)
+    // 시간표는 writeSchedules 한 곳에서 쓴다 (class_time 글자·OPS 동기화까지 같이).
+    const w = await writeSchedules({ ...editStudent, school }, editSchedules)
 
     setShowEditModal(false)
     fetchStudents()
 
-    if (!syncResult.ok) {
-      alert(`학생 정보는 저장됐지만, OPS(행정시스템)로 반영은 실패했어요.\n\n${syncResult.error}\n\nOPS 쪽에는 이 수정사항이 안 보일 수 있어요 — 원장님께 알려주세요.`)
+    if (w.error) {
+      alert(`학생 정보는 저장됐지만 시간표를 고치지 못했어요.\n\n${w.error}`)
+      return
     }
+    if (w.syncResult && !w.syncResult.ok) {
+      alert(`학생 정보는 저장됐지만, OPS(행정시스템)로 반영은 실패했어요.\n\n${w.syncResult.error}\n\nOPS 쪽에는 이 수정사항이 안 보일 수 있어요 — 원장님께 알려주세요.`)
+    }
+  }
+
+  // ───────── 시간표 변경 요청 (원장님 2026-10-29) ─────────
+  // 선생님은 시간표를 직접 못 바꾼다(2026-10-14 부터 원장님 전용). 그래서 바뀐 시간을
+  // 말로 전하다 잊히는 일이 있었다. 요청으로 남기고, 원장님이 「반영」을 누르면 바뀐다.
+
+  function openSchedReq(s: Student) {
+    if (!s.id) return
+    const open = schedReqs.find((r) => r.student_id === s.id)
+    if (open) {
+      alert(`이 학생은 이미 올라간 요청이 있어요 (${open.requested_by_name ?? ''}).\n\n`
+        + `${open.before_text || '시간표 없음'} → ${open.want_text || ''}\n\n`
+        + '원장님이 보시면 사라집니다.')
+      return
+    }
+    setSchedReqFor(s)
+    setReqNote('')
+    // 지금 시간표에서 고쳐 나가게 미리 채운다
+    supabase.from('schedules').select('day_of_week, start_time, periods')
+      .eq('student_id', s.id).eq('is_active', true)
+      .then(({ data }) => {
+        const rows = (data ?? []).map((r: any) => ({
+          day: r.day_of_week, time: String(r.start_time).slice(0, 5), periods: Number(r.periods) || 1,
+        }))
+        setReqRows(rows.length ? rows : [{ day: '월', time: '16:00', periods: 2 }])
+      })
+  }
+
+  async function submitSchedReq() {
+    if (!schedReqFor?.id) return
+    const rows = reqRows.filter((r) => r.day && r.time)
+    if (!rows.length) { alert('바꿀 시간표를 한 줄 이상 넣어주세요.'); return }
+    if (!confirm(`${schedReqFor.name} 학생 시간표 변경을 원장님께 요청합니다.\n\n`
+      + `지금: ${schedReqFor.class_time || '없음'}\n`
+      + `바꿀 것: ${schedText(rows)}\n\n`
+      + '원장님이 확인하고 「반영」을 누르면 바뀝니다.')) return
+    setReqBusy(true)
+    const res = await apiFetch('/api/schedule-change-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: schedReqFor.id, want: rows, note: reqNote.trim() || null }),
+    })
+    const j = await res.json().catch(() => ({}))
+    setReqBusy(false)
+    if (!res.ok) { alert('요청을 올리지 못했어요: ' + (j?.error ?? '알 수 없는 오류')); return }
+    setSchedReqFor(null)
+    fetchSchedReqs()
+    alert('원장님께 요청을 올렸어요.'
+      + ((j?.push?.sent ?? 0) > 0 ? ' 알림도 갔습니다.' : ' (원장님 기기 알림이 꺼져 있으면 메뉴 뱃지로 보십니다.)'))
+  }
+
+  async function applySchedReq(r: SchedReq) {
+    if (!isAdmin()) return
+    const s = students.find((x) => x.id === r.student_id)
+    if (!s) { alert('학생을 찾을 수 없어요. 목록을 새로 고쳐 주세요.'); return }
+    if (!confirm(`${s.name} 학생 시간표를 바꿉니다.\n\n`
+      + `지금: ${r.before_text || '없음'}\n바꿀 것: ${r.want_text || ''}\n\n`
+      + '반영하면 수업일지·주간현황·OPS 까지 이 시간표로 바뀝니다.')) return
+    setReqBusy(true)
+    const w = await writeSchedules(s, r.want ?? [])
+    if (w.error) { alert('시간표를 바꾸지 못했어요: ' + w.error); setReqBusy(false); return }
+    const { error } = await supabase.from('schedule_change_requests')
+      .update({ status: 'applied', decided_by: currentUser?.name ?? null, decided_at: new Date().toISOString() })
+      .eq('id', r.id)
+    if (error) alert('시간표는 바뀌었지만 요청 표시를 지우지 못했어요: ' + error.message)
+    await apiFetch('/api/schedule-change-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: r.id, notifyDecision: true }),
+    }).catch(() => {})
+    setReqBusy(false)
+    fetchSchedReqs(); fetchStudents()
+    if (w.syncResult && !w.syncResult.ok) {
+      alert(`시간표는 바뀌었지만 OPS(행정시스템)로 반영은 실패했어요.\n\n${w.syncResult.error}`)
+    }
+  }
+
+  async function rejectSchedReq(r: SchedReq) {
+    if (!isAdmin()) return
+    const why = prompt('바꾸지 않는 이유를 적어 주세요 (선생님께 그대로 전해집니다).', '')
+    if (why === null) return
+    setReqBusy(true)
+    const { error } = await supabase.from('schedule_change_requests')
+      .update({ status: 'rejected', decided_by: currentUser?.name ?? null,
+                decided_at: new Date().toISOString(), decided_note: why.trim() || null })
+      .eq('id', r.id)
+    if (error) { alert('처리하지 못했어요: ' + error.message); setReqBusy(false); return }
+    await apiFetch('/api/schedule-change-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: r.id, notifyDecision: true }),
+    }).catch(() => {})
+    setReqBusy(false)
+    fetchSchedReqs()
+  }
+
+  async function cancelSchedReq(r: SchedReq) {
+    if (!confirm('이 요청을 취소할까요?')) return
+    setReqBusy(true)
+    const res = await apiFetch('/api/schedule-change-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: r.id, cancel: true }),
+    })
+    setReqBusy(false)
+    if (!res.ok) { alert('취소하지 못했어요.'); return }
+    fetchSchedReqs()
   }
 
   async function handleAddStudent() {
@@ -505,6 +656,71 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" />
 
       <div className="px-4 py-4 space-y-4 md:px-6">
+
+        {/* 시간표 변경요청 — 원장님은 올라온 전부, 선생님은 본인이 올린 것만 보인다 */}
+        {schedReqs.length > 0 && (
+          <div className="bg-white rounded-2xl border-2 shadow-sm overflow-hidden"
+            style={{ borderColor: '#9FE1CB' }}>
+            <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#F0FBF7' }}>
+              <div>
+                <h3 className="text-sm font-bold" style={{ color: '#085041' }}>
+                  <i className="ti ti-clock-edit align-[-0.125em]" /> 시간표 변경요청 {schedReqs.length}건
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: '#0F6E56' }}>
+                  {isAdmin()
+                    ? '「반영」을 누르면 수업일지·주간현황·OPS 까지 이 시간표로 바뀝니다.'
+                    : '원장님이 보시면 사라집니다. 잘못 올렸으면 취소해 주세요.'}
+                </p>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {schedReqs.map((r) => {
+                const st = students.find((x) => x.id === r.student_id)
+                return (
+                  <div key={r.id} className="px-4 py-3 flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-800">
+                        {st?.name ?? '(목록에 없는 학생)'}
+                        <span className="ml-1.5 text-xs font-normal text-gray-400">{st?.grade ?? ''}</span>
+                        <span className="ml-2 text-xs font-normal text-gray-500">
+                          {r.requested_by_name ?? ''} 선생님
+                        </span>
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        <span className="text-gray-400">{r.before_text || '시간표 없음'}</span>
+                        <span className="mx-1.5">→</span>
+                        <b style={{ color: '#085041' }}>{r.want_text}</b>
+                      </p>
+                      {r.note && <p className="text-xs text-gray-500 mt-1">“{r.note}”</p>}
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      {isAdmin() ? (
+                        <>
+                          <button disabled={reqBusy} onClick={() => applySchedReq(r)}
+                            className="text-[11px] px-2.5 py-1 rounded-lg font-bold disabled:opacity-50"
+                            style={{ background: '#9FE1CB', color: '#085041' }}>
+                            반영
+                          </button>
+                          <button disabled={reqBusy} onClick={() => rejectSchedReq(r)}
+                            className="text-[11px] px-2.5 py-1 rounded-lg font-bold disabled:opacity-50"
+                            style={{ background: '#fff', color: '#991B1B', border: '1px solid #FECACA' }}>
+                            안 바꿈
+                          </button>
+                        </>
+                      ) : (
+                        <button disabled={reqBusy} onClick={() => cancelSchedReq(r)}
+                          className="text-[11px] px-2.5 py-1 rounded-lg text-gray-500 disabled:opacity-50"
+                          style={{ background: '#f3f4f6' }}>
+                          취소
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 엑셀 업로드 미리보기 */}
         {showImport && importedStudents.length > 0 && (
@@ -875,15 +1091,20 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                 선생님은 보기만 한다. RLS 도 schedules 쓰기를 is_admin() 으로 막아 뒀다. */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-600">
-                  수업 시간표
-                  {!isAdmin() && <span className="ml-1.5 font-normal text-gray-400">· 변경은 원장님께 말씀해 주세요</span>}
-                </label>
-                {isAdmin() && (
+                <label className="text-xs font-semibold text-gray-600">수업 시간표</label>
+                {isAdmin() ? (
                   <button
                     onClick={() => setEditSchedules([...editSchedules, { day: '월', time: '16:00', periods: 2 }])}
                     className="text-xs font-bold text-gray-800 bg-blue-50 px-2 py-1 rounded-lg">
                     + 추가
+                  </button>
+                ) : (
+                  /* 선생님은 시간표를 직접 못 바꾼다(원장님 전용). 말로 전하다 잊히는 일이
+                     있어서, 여기서 바로 요청을 올리게 한다 (원장님 2026-10-29). */
+                  <button onClick={() => { if (editStudent) openSchedReq(editStudent) }}
+                    className="text-xs font-bold px-2 py-1 rounded-lg"
+                    style={{ background: '#9FE1CB', color: '#085041' }}>
+                    시간표 변경 요청
                   </button>
                 )}
               </div>
@@ -899,7 +1120,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       setEditSchedules(updated)
                     }}
                     className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
-                    {['월','화','수','목','금','토','일'].map((d) => (
+                    {DAYS.map((d) => (
                       <option key={d} value={d}>{d}요일</option>
                     ))}
                   </select>
@@ -910,7 +1131,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       setEditSchedules(updated)
                     }}
                     className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none flex-1">
-                    {['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30','21:00'].map((t) => (
+                    {TIMES.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
@@ -921,7 +1142,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                       setEditSchedules(updated)
                     }}
                     className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
-                    {[1, 1.5, 2, 2.5, 3, 3.5, 4].map((p) => (
+                    {PERIODS.map((p) => (
                       <option key={p} value={p}>{p}교시</option>
                     ))}
                   </select>
@@ -941,6 +1162,82 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                 className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">취소</button>
               <button onClick={handleSaveEdit}
                 className="flex-1 py-3 bg-[#9FE1CB] text-white font-bold rounded-xl">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 시간표 변경 요청 모달 — 선생님용 */}
+      {schedReqFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSchedReqFor(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">시간표 변경 요청</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {schedReqFor.name} <span className="text-gray-400">{schedReqFor.grade}</span>
+                {' · 지금 '}
+                <b className="text-gray-600">{schedReqFor.class_time || '시간표 없음'}</b>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                올리면 원장님께 알림이 갑니다. <b>원장님이 「반영」을 누를 때</b> 바뀝니다.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-600">바꿀 시간표</label>
+                <button onClick={() => setReqRows([...reqRows, { day: '월', time: '16:00', periods: 2 }])}
+                  className="text-xs font-bold text-gray-800 bg-blue-50 px-2 py-1 rounded-lg">+ 추가</button>
+              </div>
+              {reqRows.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-2">한 줄 이상 넣어주세요</p>
+              )}
+              {reqRows.map((sc, idx) => (
+                <div key={idx} className="flex items-center gap-2 mb-2">
+                  <select value={sc.day}
+                    onChange={(e) => {
+                      const up = [...reqRows]; up[idx] = { ...up[idx], day: e.target.value }; setReqRows(up)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
+                    {DAYS.map((d) => <option key={d} value={d}>{d}요일</option>)}
+                  </select>
+                  <select value={sc.time}
+                    onChange={(e) => {
+                      const up = [...reqRows]; up[idx] = { ...up[idx], time: e.target.value }; setReqRows(up)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none flex-1">
+                    {TIMES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select value={sc.periods}
+                    onChange={(e) => {
+                      const up = [...reqRows]; up[idx] = { ...up[idx], periods: parseFloat(e.target.value) }; setReqRows(up)
+                    }}
+                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none">
+                    {PERIODS.map((pp) => <option key={pp} value={pp}>{pp}교시</option>)}
+                  </select>
+                  <button onClick={() => setReqRows(reqRows.filter((_, i) => i !== idx))}
+                    className="text-red-400 hover:text-red-600 text-sm font-bold px-1">✕</button>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-600">원장님께 한마디 (선택)</label>
+              <input type="text" value={reqNote} onChange={(e) => setReqNote(e.target.value)}
+                placeholder="예: 학교 방과후 때문에 월요일만 한 시간 늦게"
+                className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setSchedReqFor(null)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">닫기</button>
+              <button onClick={submitSchedReq} disabled={reqBusy}
+                className="flex-1 py-3 text-white font-bold rounded-xl disabled:opacity-50"
+                style={{ background: '#085041' }}>
+                {reqBusy ? '올리는 중...' : '요청 올리기'}
+              </button>
             </div>
           </div>
         </div>

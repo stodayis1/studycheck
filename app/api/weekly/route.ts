@@ -3,7 +3,8 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { staffOrDeny } from '@/lib/apiAuth'
+import { staffCanSeeStudent } from '@/lib/teachers'
 import { fetchAll } from '@/lib/fetchAll'
 
 export const dynamic = 'force-dynamic'
@@ -19,8 +20,8 @@ function db() {
 
 // 1000행 제한을 넘기지 않게 나눠서 전부 읽는다
 export async function GET(req: Request) {
-  const deny = await denyIfNotStaff(req)
-  if (deny) return deny
+  const who = await staffOrDeny(req)
+  if (who.deny) return who.deny
 
   const supabase = db()
   const q = new URL(req.url).searchParams
@@ -29,8 +30,8 @@ export async function GET(req: Request) {
   if (!from || !to)
     return NextResponse.json({ error: '기간을 지정해 주세요.' }, { status: 400 })
 
-  // 1) 학생 — 화면에서 담당/학년으로 다시 거른다
-  const students = await fetchAll<any>((f, t) =>
+  // 1) 학생 — 내 범위만. 화면에서도 한 번 더 거른다.
+  const allStudents = await fetchAll<any>((f, t) =>
     supabase
       .from('students')
       .select('id, name, grade, school, teacher_name, class_time, is_active, on_leave')
@@ -40,6 +41,11 @@ export async function GET(req: Request) {
       .order('id')          // 쪽을 나눠 읽으므로 순서를 못박는다
       .range(f, t)
   )
+
+  // ★ 강사에게는 **본인 담당(주임이면 담당 학년)만** 내려준다. 예전에는 전체를 내려주고
+  //   화면에서만 걸렀기 때문에, 강사 브라우저에 재원생 전원의 이름·수업시간이 들어 있었다.
+  const students = allStudents.filter((s: any) => staffCanSeeStudent(who, s))
+  const allowed = new Set(students.map((s: any) => s.id))
 
   // 2) 그 기간의 수업 기록
   const sessions = await fetchAll<any>((f, t) =>
@@ -117,6 +123,7 @@ export async function GET(req: Request) {
   // cells[studentId][YYYY-MM-DD] = 배지 배열
   const cells: Record<string, Record<string, any[]>> = {}
   const push = (sid: string, date: string, badge: any) => {
+    if (!allowed.has(sid)) return     // 내 범위 밖 학생의 기록은 아예 담지 않는다
     ;(cells[sid] ??= {})[date] ??= []
     cells[sid][date].push(badge)
   }

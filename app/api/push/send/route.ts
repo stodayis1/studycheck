@@ -13,7 +13,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'title/body가 필요해요.' }, { status: 400 })
     }
     // 예전에는 target이 없으면 전체 발송이었다. 실수·악용으로 전체에 나가는 걸 막기 위해 이제는 명시해야 한다.
-    if (!target || (!target.broadcast && !target.studentIds?.length)) {
+    if (!target || (!target.broadcast && !target.studentIds?.length
+                    && !(target.schoolGrades?.school && target.schoolGrades?.grades?.length))) {
       return NextResponse.json(
         { error: 'target이 필요해요. 전체 발송은 { broadcast: true }를 명시해주세요.' },
         { status: 400 }
