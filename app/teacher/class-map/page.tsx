@@ -14,9 +14,17 @@
  *   길이로 바로 보인다. 글씨는 엑셀처럼 세워서 쓴다(가로로 쓰면 한 요일이 화면을 다 먹는다).
  *   색은 **학년별**이다. 색만 보고 외우게 하면 안 되므로 맨 위에 범례를 같이 둔다.
  *
- * ★ 원장 전용인 까닭
- *   전체 시간표는 **학원 전체 인원**과 다른 강사 학생 이름이 그대로 드러난다. 학교 자료집에서
- *   인원수를 감춘 것과 같은 이유로(원장님 2026-10-28) 강사·직원에게는 메뉴도 화면도 열지 않는다.
+ * 누가 무엇을 보나 (원장님 2026-10-29 「각 선생님들도 본인 시간표 볼 수 있도록. 본인 학생만.
+ * 형태는 내가 보는 것과 똑같이」)
+ *   · 원장·행정 — 전체. 신규 상담 때 어느 시간이 비는지 보는 **반배정 시간표**.
+ *   · 선생님   — **본인 담당 학생만**(주임모드면 담당 학년). 메뉴 이름은 「내 시간표」.
+ *   그리는 꼴은 똑같다 — 「어느 시간에 몇 명」도, 선생님별 표도, 색도 그대로다.
+ *
+ * ★ 전체 인원이 새지 않는 까닭
+ *   이 화면은 `students` 를 그대로 그린다. 2026-10-29 부터 조회 정책이 **강사는 담당 학생만**
+ *   읽히게 조여져 있어서(docs/보안.md), 인원·요일 인원·범례 숫자가 전부 본인 범위에서만 세진다.
+ *   화면에서 또 `canViewStudent()` 로 거르는 것은 **주임모드 토글을 따르기 위한 것**이다
+ *   (정책은 주임에게 중등 전체를 열어 주므로, 강사모드로 보실 때 본인 학생만 보이게 한다).
  */
 
 import { useState, useEffect, useMemo } from 'react'
@@ -109,7 +117,8 @@ type Slot = {
 }
 
 export default function ClassMapPage() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, canViewStudent, currentUser, adminMode, supervisorMode,
+          isSupervisorModeActive, supervisorLabel } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
@@ -125,21 +134,40 @@ export default function ClassMapPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, scData] = await Promise.all([
-      supabase.from('students').select('id, name, grade, school, teacher_name, on_leave')
-        .eq('is_active', true).order('name'),
-      // 시간표는 600줄이 넘어 PostgREST 기본 상한(1000행)에 곧 닿는다 — 끝까지 돈다.
+    // 학생을 먼저 받는다. 조회 정책이 이미 **내 범위**로 걸러 준다(원장·행정은 전체).
+    const { data: sData } = await supabase
+      .from('students').select('id, name, grade, school, teacher_name, on_leave')
+      .eq('is_active', true).order('name')
+    const list = (sData ?? []) as Student[]
+    setStudents(list)
+
+    // ★ 시간표는 **그 학생들 것만** 받는다.
+    //   전체를 받으면(정책상 직원에게는 다 열려 있다) 행 수와 student_id 가지 수로
+    //   학원 전체 인원이 그대로 드러난다 — 선생님에게는 보이면 안 되는 숫자다.
+    //   in() 은 한 번에 100개씩 끊는다. 쪽을 나눠 읽을 땐 order 를 못박아야 행을 안 놓친다.
+    const ids = list.map((x) => x.id)
+    const chunks: string[][] = []
+    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100))
+    const parts = await Promise.all(chunks.map((chunk) =>
       fetchAllRows<Schedule>(() => supabase.from('schedules')
-        .select('id, student_id, day_of_week, start_time, periods').eq('is_active', true).order('id')),
-    ])
-    if (sData) setStudents(sData as Student[])
-    if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
+        .select('id, student_id, day_of_week, start_time, periods')
+        .eq('is_active', true).in('student_id', chunk).order('id'))))
+    const scData = parts.flat()
+    setSchedules(scData.map((x: any) => ({ ...x, periods: Number(x.periods) })))
     setLoading(false)
   }
 
+  /**
+   * 내가 볼 수 있는 학생. 원장·행정은 전부, 선생님은 담당 학생, 주임모드면 담당 학년.
+   * ★ DB 정책이 이미 한 번 걸러 주지만, **주임모드 토글**은 화면 쪽 규칙이라 여기서 따른다
+   *   (주임 선생님이 강사모드로 보실 때 본인 학생만 보이게).
+   */
+  const visible = useMemo(() => students.filter((s) => canViewStudent(s)),
+    [students, currentUser, adminMode, supervisorMode])
+
   /** 시간표 한 줄 = 학생 한 명이 그 요일 그 시각에 앉아 있는 것. */
   const rawSlots = useMemo(() => {
-    const byId = new Map(students.map((s) => [s.id, s]))
+    const byId = new Map(visible.map((s) => [s.id, s]))
     const out: Omit<Slot, 'lane'>[] = []
     for (const sc of schedules) {
       const st = byId.get(sc.student_id)
@@ -155,14 +183,14 @@ export default function ClassMapPage() {
       })
     }
     return out
-  }, [students, schedules])
+  }, [visible, schedules])
 
   const divRaw = useMemo(
     () => rawSlots.filter((s) => divisionOf(s.student.grade) === division && (showLeave || !s.student.on_leave)),
     [rawSlots, division, showLeave],
   )
 
-  /** 맨 위 「어느 시간에 몇 명」 은 부 전체를 본다 — 선생님끼리 견주는 자리라서. */
+  /** 맨 위 「어느 시간에 몇 명」 — 원장님은 부 전체, 선생님은 본인 범위에서 센다. */
   const days = useMemo(() => DAY_ORDER.filter((d) => divRaw.some((s) => s.day === d)), [divRaw])
   const hours = useMemo(() => {
     const set = new Set<number>()
@@ -245,8 +273,8 @@ export default function ClassMapPage() {
   /** 그 부인데 시간표가 한 줄도 없는 학생 — 조용히 빠지면 반배정이 어긋난다. */
   const noSchedule = useMemo(() => {
     const has = new Set(rawSlots.map((s) => s.student.id))
-    return students.filter((s) => divisionOf(s.grade) === division && !has.has(s.id))
-  }, [students, rawSlots, division])
+    return visible.filter((s) => divisionOf(s.grade) === division && !has.has(s.id))
+  }, [visible, rawSlots, division])
 
   /** 범례에 띄울 학년 — 그 부에 실제로 있는 학년만. */
   const gradesShown = useMemo(() => {
@@ -261,22 +289,27 @@ export default function ClassMapPage() {
   const pickedCell = (d: string, h: number) =>
     (!!pickDay || pickHour !== null) && (!pickDay || pickDay === d) && (pickHour === null || pickHour === h)
 
-  if (!isAdmin()) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-500">관리자만 접근할 수 있습니다.</p>
-    </div>
-  )
+  // ★ 선생님도 들어온다(원장님 2026-10-29). 역할 확인을 지운 것이 아니라,
+  //   **보이는 학생 범위**로 가른다 — 위 visible 과 students 조회 정책이 그 일을 한다.
+  //   직원이 아닌 사람은 app/teacher/layout.tsx 의 AccessGate 가 이미 막는다.
+  const 전체보기 = isAdmin() || currentUser?.role === 'staff'
 
   return (
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
-      <Header title="반배정 시간표" subtitle="상담할 때 보는 전체 시간표 · 원장님만 보입니다" />
+      <Header
+        title={전체보기 ? '반배정 시간표' : '내 시간표'}
+        subtitle={전체보기
+          ? '상담할 때 보는 전체 시간표 · 원장님만 보입니다'
+          : isSupervisorModeActive()
+            ? `${supervisorLabel()} 범위 · 담당 학년 시간표`
+            : '내 담당 학생 시간표'} />
 
       <div className="px-4 py-4 space-y-4 md:px-6">
 
         {/* 부 고르기 · 찾기 */}
         <div className="flex flex-wrap items-center gap-2">
           {DIVISIONS.map((d) => {
-            const n = students.filter((s) => divisionOf(s.grade) === d).length
+            const n = visible.filter((s) => divisionOf(s.grade) === d).length
             return (
               <button key={d} onClick={() => setDivision(d)}
                 className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
@@ -328,7 +361,9 @@ export default function ClassMapPage() {
               <div className="flex items-center gap-2 flex-wrap mb-3">
                 <i className="ti ti-clock-hour-4" style={{ fontSize: 16, color: '#0F6E56' }} />
                 <span className="text-sm font-bold text-gray-800">어느 시간에 몇 명</span>
-                <span className="text-[11px] text-gray-400">{division} 전체 {divCount}명 · 칸을 누르면 아래에서 그 자리를 짚어 줘요</span>
+                <span className="text-[11px] text-gray-400">
+                  {전체보기 ? `${division} 전체` : '내 담당'} {divCount}명 · 칸을 누르면 아래에서 그 자리를 짚어 줘요
+                </span>
                 {(pickDay || pickHour !== null) && (
                   <button onClick={() => { setPickDay(''); setPickHour(null) }}
                     className="ml-auto text-[11px] font-semibold text-gray-500 underline">짚은 것 풀기</button>
