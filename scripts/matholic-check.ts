@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -278,6 +278,28 @@ T('「정우찬2」 같은 꼬리 숫자도 혼자 정하지 않는다', () => {
   const got = findStudents('정우찬2', ALL)
   return got.length === 2
 })
+
+T('꼬리 붙은 이름이 스터디체크에 따로 저장돼 있으면 둘 다 후보다', () => {
+  const two = [
+    { id: 'p1', name: '한지후', grade: '중2', teacher_name: '신애진' },
+    { id: 'p2', name: '한지후2', grade: '중2', teacher_name: '박경미' },
+  ]
+  return findStudents('한지후2', two as any).length === 2
+})
+
+// 규칙은 설정(app_settings)에서 오므로 시험에서는 그냥 넘겨준다 — 실명을 쓸 일이 없다.
+const RULE_CASE = [
+  { id: 'hi', name: '정우찬', grade: '고1', teacher_name: '주한' },
+  { id: 'mi', name: '정우찬', grade: '중1', teacher_name: '신애진' },
+]
+const RULES = { '정우찬2': '주한' }
+
+T('규칙이 있으면 그걸로 고른다 (꼬리2 → 그 담당 강사)', () =>
+  pickByRule('정우찬2', RULE_CASE as any, RULES)?.id === 'hi')
+
+T('규칙에 없는 이름은 아무도 고르지 않는다 (사람이 골라야)', () =>
+  pickByRule('아무개2', RULE_CASE as any, RULES) === null
+  && pickByRule('정우찬2', RULE_CASE as any, {}) === null)
 
 T('같은 이름이 하나뿐이면 바로 찾는다', () => {
   const got = findStudents('문시후', ALL)
