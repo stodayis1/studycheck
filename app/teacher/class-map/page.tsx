@@ -33,7 +33,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import { mainTeacher } from '@/lib/teacherColors'
-import { packLanes, toHours, divisionOf, type Division } from '@/lib/classMap'
+import { packLanes, toHours, divisionOf } from '@/lib/classMap'
 
 interface Student {
   id: string
@@ -54,11 +54,19 @@ interface Schedule {
 /** 요일은 늘 이 순서로 그린다. 그 요일 수업이 하나도 없으면 칸을 아예 안 만든다. */
 const DAY_ORDER = ['월', '화', '수', '목', '금', '토', '일']
 
-const DIVISIONS = ['초등부', '중등부', '고등부'] as const
+/** 「전체」가 맨 앞이다 — 담당 학생이 초·중에 걸쳐 있으면 한 화면에서 같이 봐야 한다. */
+const DIVISIONS = ['전체', '초등부', '중등부', '고등부'] as const
+type View = (typeof DIVISIONS)[number]
 
 /**
- * 학년 색 — **학년마다 다른 색**(원장님 2026-10-28).
- * 부마다 따로 보니 색을 돌려써도 섞이지 않는다. 범례를 반드시 같이 띄운다.
+ * 학년 색 — **학년 12개가 전부 다른 색**이다.
+ *
+ * ★ 2026-10-29 에 중·고 색을 바꿨다. 예전에는 부마다 따로 보니 색을 돌려써도 섞이지
+ *   않는다고 보고 초3=중1=연두, 초5=중2=하늘, 초2=중3=분홍, 초1=고2=노랑, 초6=고3=보라로
+ *   썼다. 그런데 「내 학생이 초중등 있어도 같이 보이게」(원장님 2026-10-29) 하려면
+ *   한 화면에 초3과 중1이 같이 놓인다 — 같은 색이면 어느 학년인지 알 수 없다.
+ *   그래서 초등은 그대로 두고 중·고를 안 쓰던 색으로 옮겼다.
+ *   범례는 반드시 같이 띄운다 — 색만 보고 외우게 하면 안 된다.
  */
 type Hue = { bg: string; border: string; text: string }
 const GRADE_COLOR: Record<string, Hue> = {
@@ -68,12 +76,12 @@ const GRADE_COLOR: Record<string, Hue> = {
   초4: { bg: '#CFFAFE', border: '#67E8F9', text: '#155E75' }, // 청록
   초5: { bg: '#DBEAFE', border: '#93C5FD', text: '#1E40AF' }, // 하늘
   초6: { bg: '#EDE9FE', border: '#C4B5FD', text: '#5B21B6' }, // 보라
-  중1: { bg: '#DCFCE7', border: '#86EFAC', text: '#166534' }, // 연두
-  중2: { bg: '#DBEAFE', border: '#93C5FD', text: '#1E40AF' }, // 하늘
-  중3: { bg: '#FFE4E6', border: '#FDA4AF', text: '#9F1239' }, // 분홍
-  고1: { bg: '#FFEDD5', border: '#FDBA74', text: '#9A3412' }, // 주황
-  고2: { bg: '#FEF3C7', border: '#FCD34D', text: '#92400E' }, // 노랑
-  고3: { bg: '#EDE9FE', border: '#C4B5FD', text: '#5B21B6' }, // 보라
+  중1: { bg: '#FFEDD5', border: '#FB923C', text: '#9A3412' }, // 주황
+  중2: { bg: '#E0E7FF', border: '#818CF8', text: '#3730A3' }, // 남청
+  중3: { bg: '#FAE8FF', border: '#E879F9', text: '#86198F' }, // 자주
+  고1: { bg: '#ECFCCB', border: '#BEF264', text: '#3F6212' }, // 라임
+  고2: { bg: '#CCFBF1', border: '#2DD4BF', text: '#115E59' }, // 민트
+  고3: { bg: '#E2E8F0', border: '#94A3B8', text: '#334155' }, // 회청
 }
 const NO_GRADE: Hue = { bg: '#F3F4F6', border: '#D1D5DB', text: '#4B5563' }
 const hueOf = (grade?: string | null) => GRADE_COLOR[String(grade ?? '')] ?? NO_GRADE
@@ -122,7 +130,10 @@ export default function ClassMapPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
-  const [division, setDivision] = useState<Division>('중등부')
+  /** 무엇을 보고 있나. 선생님은 「전체」로 시작한다(담당이 초·중·고에 걸칠 수 있어서). */
+  const [division, setDivision] = useState<View>('전체')
+  /** 원장님은 상담용이라 중등부로 시작하신다. 한 번 고르신 뒤에는 건드리지 않는다. */
+  const [divPicked, setDivPicked] = useState(false)
   const [q, setQ] = useState('')
   /** 상담 중에 「목요일 5시」를 짚으면 그 자리만 또렷하게 보이게 한다. */
   const [pickDay, setPickDay] = useState<string>('')
@@ -131,6 +142,11 @@ export default function ClassMapPage() {
   const [showLeave, setShowLeave] = useState(true)
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    if (divPicked || !currentUser) return
+    if (currentUser.role === 'admin' || currentUser.role === 'staff') setDivision('중등부')
+  }, [currentUser, divPicked])
 
   async function fetchData() {
     setLoading(true)
@@ -186,7 +202,9 @@ export default function ClassMapPage() {
   }, [visible, schedules])
 
   const divRaw = useMemo(
-    () => rawSlots.filter((s) => divisionOf(s.student.grade) === division && (showLeave || !s.student.on_leave)),
+    () => rawSlots.filter((s) =>
+      (division === '전체' || divisionOf(s.student.grade) === division)
+      && (showLeave || !s.student.on_leave)),
     [rawSlots, division, showLeave],
   )
 
@@ -273,7 +291,8 @@ export default function ClassMapPage() {
   /** 그 부인데 시간표가 한 줄도 없는 학생 — 조용히 빠지면 반배정이 어긋난다. */
   const noSchedule = useMemo(() => {
     const has = new Set(rawSlots.map((s) => s.student.id))
-    return visible.filter((s) => divisionOf(s.grade) === division && !has.has(s.id))
+    return visible.filter((s) =>
+      (division === '전체' || divisionOf(s.grade) === division) && !has.has(s.id))
   }, [visible, rawSlots, division])
 
   /** 범례에 띄울 학년 — 그 부에 실제로 있는 학년만. */
@@ -309,9 +328,14 @@ export default function ClassMapPage() {
         {/* 부 고르기 · 찾기 */}
         <div className="flex flex-wrap items-center gap-2">
           {DIVISIONS.map((d) => {
-            const n = visible.filter((s) => divisionOf(s.grade) === d).length
+            const n = d === '전체'
+              ? visible.length
+              : visible.filter((s) => divisionOf(s.grade) === d).length
+            // 담당 학생이 한 명도 없는 부는 단추를 안 만든다 — 눌러도 빈 화면이다.
+            // (「전체」는 늘 둔다. 원장님은 전부 보이므로 달라지는 것이 없다.)
+            if (n === 0 && d !== '전체') return null
             return (
-              <button key={d} onClick={() => setDivision(d)}
+              <button key={d} onClick={() => { setDivPicked(true); setDivision(d) }}
                 className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
                   division === d ? 'text-white' : 'bg-white text-gray-600 border-gray-200')}
                 style={division === d ? { background: '#0F6E56', borderColor: '#0F6E56' } : undefined}>
@@ -336,7 +360,9 @@ export default function ClassMapPage() {
         {loading ? (
           <p className="text-sm text-gray-400 py-10 text-center">시간표를 불러오는 중이에요…</p>
         ) : divRaw.length === 0 ? (
-          <p className="text-sm text-gray-400 py-10 text-center">{division} 시간표가 아직 없어요.</p>
+          <p className="text-sm text-gray-400 py-10 text-center">
+            {division === '전체' ? '시간표가 아직 없어요.' : `${division} 시간표가 아직 없어요.`}
+          </p>
         ) : (
           <>
             {/* 학년 범례 — 색만 보고 외우게 하지 않는다 */}
@@ -362,7 +388,9 @@ export default function ClassMapPage() {
                 <i className="ti ti-clock-hour-4" style={{ fontSize: 16, color: '#0F6E56' }} />
                 <span className="text-sm font-bold text-gray-800">어느 시간에 몇 명</span>
                 <span className="text-[11px] text-gray-400">
-                  {전체보기 ? `${division} 전체` : '내 담당'} {divCount}명 · 칸을 누르면 아래에서 그 자리를 짚어 줘요
+                  {division === '전체' ? (전체보기 ? '학원 전체' : '내 담당 전체')
+                    : 전체보기 ? `${division} 전체` : `내 담당 ${division}`} {divCount}명
+                  {' · 칸을 누르면 아래에서 그 자리를 짚어 줘요'}
                 </span>
                 {(pickDay || pickHour !== null) && (
                   <button onClick={() => { setPickDay(''); setPickHour(null) }}
@@ -427,7 +455,7 @@ export default function ClassMapPage() {
                 <div className="px-4 py-2.5 flex items-center gap-2 flex-wrap bg-gray-50 border-b border-gray-100">
                   <span className="text-sm font-bold text-gray-800">{b.name} 선생님</span>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">
-                    {division} {b.count}명
+                    {division === '전체' ? '' : `${division} `}{b.count}명
                   </span>
                   {b.days.map((d) => (
                     <span key={d} className="text-[11px] text-gray-400">
@@ -556,7 +584,7 @@ export default function ClassMapPage() {
               <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <p className="text-sm font-bold text-amber-900">
                   <i className="ti ti-alert-triangle mr-1 align-[-0.125em]" />
-                  시간표가 없는 {division} 학생 {noSchedule.length}명 — 위 표에 안 나와요
+                  시간표가 없는 {division === '전체' ? '' : `${division} `}학생 {noSchedule.length}명 — 위 표에 안 나와요
                 </p>
                 <p className="text-[11px] text-amber-700 mt-1">학습관리 → 「+ 시간표」에서 요일·시각을 넣어 주세요.</p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
