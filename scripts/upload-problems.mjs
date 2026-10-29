@@ -57,7 +57,7 @@ const DATA = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 // 저장소 경로는 한글을 못 쓰므로 영문 코드로 바꾼다
 const GRADE_CODE = { '중1': 'm1', '중2': 'm2', '중3': 'm3', '공통수학1': 'hc1', '공통수학2': 'hc2' };
 // ※ 공통수학2 가 빠져 있던 동안 올라간 개념+유형 두 종은 경로가 x-1/… 이다. 그대로 두면 잘 돈다.
-const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '일품': 'ilpum', '기출단계별': 'step', '핵심유형': 'core', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh', '개념+유형 유형편 라이트': 'ky_mid', '라이트쎈': 'light', '마플시너지': 'mapl' };
+const BOOK_CODE = { '쎈': 'ssen', '쎈B': 'ssenb', '베이직쎈': 'basic', '교과서-NE능률': 'tb_ne', '풍산자 필수유형': 'psj_pilsu', '풍산자 라이트유형': 'psj_light', '유형만렙': 'mr', 'RPM': 'rpm', '일품': 'ilpum', '기출단계별': 'step', '핵심유형': 'core', '개념+유형 개념편': 'ky_gn', '개념+유형 유형편': 'ky_yh', '개념+유형 유형편 라이트': 'ky_mid', '라이트쎈': 'light', '마플시너지': 'mapl', '쎈(15개정)': 'ssen15' };
 const key = (r, kind) =>
   `${GRADE_CODE[r.g] || 'x'}-${r.s}/${BOOK_CODE[r.b] || 'etc'}/${String(r.n).padStart(2, '0')}/${r.l}${kind === 'a' ? '_a' : ''}.${r.x}`;
 
