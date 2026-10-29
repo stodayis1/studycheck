@@ -1,0 +1,163 @@
+{
+ "id": "증명_14",
+ "order": "35-증명1",
+ "title": "삼각형의 두 변의 중점을 이은 선분의 성질이 성립하는 이유",
+ "concept_no": 35,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "평행선 사이의 선분의 길이의 비",
+ "book_page": 96,
+ "figure": {
+  "image": "35/cut_03.png",
+  "crop": [
+   890,
+   275,
+   1080,
+   440
+  ]
+ },
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "중점연결정리",
+   "say": "자, 오늘은 삼각형의 중점연결정리를 증명할게. // 삼각형 에이비씨에서 에이비의 중점을 엠, 에이씨의 중점을 엔이라고 하자. // {강조 그러면 엠엔은 비씨와 평행하고, 그 길이는 비씨의 이분의 일이다.} // 평행과 길이, 두 가지를 한 번에 보일 거야.",
+   "write": [
+    {
+     "cue": "에이비의 중점을 엠, 에이씨의 중점을",
+     "tex": "$\\overline{AM}=\\overline{MB},\\ \\overline{AN}=\\overline{NC}$",
+     "color": "blue"
+    },
+    {
+     "cue": "엠엔은 비씨와 평행하고",
+     "tex": "$\\Rightarrow\\ \\overline{MN}\\parallel\\overline{BC},\\ \\overline{MN}=\\dfrac{1}{2}\\overline{BC}$",
+     "color": "blue"
+    }
+   ]
+  },
+  {
+   "pose": "wonder",
+   "bubble": "닮음을 찾자",
+   "say": "길이의 비가 나오면 닮음이 떠오르죠? // 오른쪽 그림에서 큰 삼각형 에이비씨와 작은 삼각형 에이엠엔을 비교해 볼게. // 엠과 엔이 중점이니까 / {강조 에이비는 에이엠의 두 배, 에이씨는 에이엔의 두 배야.}",
+   "write": [
+    {
+     "cue": "큰 삼각형 에이비씨와 작은 삼각형",
+     "tex": "$\\triangle ABC$ 와 $\\triangle AMN$ 에서"
+    },
+    {
+     "cue": "에이비는 에이엠의 두 배",
+     "tex": "$\\overline{AB}:\\overline{AM}=\\overline{AC}:\\overline{AN}=2:1$",
+     "indent": 1
+    }
+   ]
+  },
+  {
+   "pose": "pointer",
+   "bubble": "SAS 닮음",
+   "say": "그리고 각 에이는 두 삼각형에 공통이야. // 에스에이에스 닮음은 / 두 쌍의 대응변의 길이의 비가 같고 그 끼인각의 크기가 같을 때였죠. // 지금 두 쌍의 변의 길이의 비가 같고 그 끼인각이 같으니까 / {강조 두 삼각형은 에스에이에스 닮음이고, 닮음비는 이 대 일이다.}",
+   "write": [
+    {
+     "cue": "각 에이는 두 삼각형에 공통",
+     "tex": "$\\angle A$ 는 공통",
+     "indent": 1
+    },
+    {
+     "cue": "두 삼각형은 에스에이에스 닮음",
+     "tex": "$\\therefore\\ \\triangle ABC\\sim\\triangle AMN$ (SAS 닮음)",
+     "color": "red"
+    }
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "동위각이 같으니 평행",
+   "say": "닮은 도형에서 대응각의 크기는 같으니까 / 각 에이비씨와 각 에이엠엔이 같아. // 이 두 각은 직선 에이비 위에서 동위각의 자리에 있죠. // {강조 동위각의 크기가 같으니까 엠엔은 비씨와 평행하다.}",
+   "write": [
+    {
+     "cue": "각 에이비씨와 각 에이엠엔이 같아",
+     "tex": "$\\angle ABC=\\angle AMN$ (동위각)"
+    },
+    {
+     "cue": "엠엔은 비씨와 평행하다",
+     "tex": "$\\therefore\\ \\overline{MN}\\parallel\\overline{BC}$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "point",
+   "bubble": "길이는 절반",
+   "say": "또 대응변의 길이의 비는 닮음비와 같으니까 / 비씨 대 엠엔은 이 대 일. // 내항의 곱과 외항의 곱이 같으니까 / 이 곱하기 엠엔은 비씨, / {강조 엠엔은 비씨의 이분의 일이다.}",
+   "write": [
+    {
+     "cue": "비씨 대 엠엔은 이 대 일",
+     "tex": "$\\overline{BC}:\\overline{MN}=2:1$"
+    },
+    {
+     "cue": "이 곱하기 엠엔은 비씨",
+     "tex": "$2\\overline{MN}=\\overline{BC}$",
+     "indent": 1
+    },
+    {
+     "cue": "엠엔은 비씨의 이분의 일이다",
+     "tex": "$\\therefore\\ \\overline{MN}=\\dfrac{1}{2}\\overline{BC}$",
+     "color": "blue",
+     "indent": 1,
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "거꾸로도 성립",
+   "say": "이번엔 반대 방향으로 가 볼게. // 에이비의 중점 엠을 지나고 비씨에 평행한 직선이 / 에이씨와 만나는 점을 엔이라고 하면 / 엠엔과 비씨가 평행하니까 / 에이엠 대 엠비는 에이엔 대 엔씨야. // 에이엠과 엠비가 같으니까 {강조 에이엔과 엔씨도 같다}, 즉 엔은 에이씨의 중점이야. // 여기서는 앞에서 증명한 평행선과 선분의 길이의 비를 쓴 거야.",
+   "write": [
+    {
+     "cue": "비씨에 평행한 직선이",
+     "tex": "$\\overline{AM}=\\overline{MB},\\ \\overline{MN}\\parallel\\overline{BC}$ 이면",
+     "color": "blue"
+    },
+    {
+     "cue": "에이엠 대 엠비는 에이엔 대 엔씨",
+     "tex": "$\\overline{AM}:\\overline{MB}=\\overline{AN}:\\overline{NC}$",
+     "indent": 1
+    },
+    {
+     "cue": "에이엔과 엔씨도 같다",
+     "tex": "$\\therefore\\ \\overline{AN}=\\overline{NC}$",
+     "color": "blue",
+     "indent": 1,
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "point",
+   "bubble": "숫자로 확인",
+   "say": "숫자로 한번 확인해 볼까? // 비씨가 십이라면 엠엔은 그 절반인 육이야. / 반대로 엠엔이 칠이면 비씨는 두 배인 십사가 되고. // 그리고 이 성질 덕분에 / 세 변의 중점을 이어서 생기는 삼각형의 둘레는 / {강조 원래 삼각형의 둘레의 절반이 돼.} // 세 변이 모두 절반이니까 당연하죠?",
+   "write": [
+    {
+     "cue": "비씨가 십이라면 엠엔은",
+     "tex": "$\\overline{BC}=12\\ \\Rightarrow\\ \\overline{MN}=6$"
+    },
+    {
+     "cue": "원래 삼각형의 둘레의 절반",
+     "tex": "세 중점을 이은 삼각형의 둘레 $=$ 원래 둘레의 $\\dfrac{1}{2}$",
+     "color": "blue"
+    }
+   ]
+  },
+  {
+   "pose": "cheer",
+   "bubble": "중점 두 개 → 평행 + 절반",
+   "say": "자, 정리할게. 두 변의 중점을 이으면 / {강조 에스에이에스 닮음으로 평행과 절반이 한 번에 나와.} // 그리고 한 변의 중점에서 다른 한 변에 평행한 직선을 그으면 / 나머지 변의 중점을 지나. // 자, 영상 끄고 두 성질을 혼자 다시 써 봐. 수고했어!",
+   "write": [
+    {
+     "cue": "에스에이에스 닮음으로 평행과 절반이",
+     "tex": "중점 두 개 $\\rightarrow$ SAS 닮음 $\\rightarrow$ 평행 $+$ 절반",
+     "color": "red",
+     "highlight": true
+    }
+   ]
+  }
+ ]
+}
