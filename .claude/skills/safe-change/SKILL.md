@@ -140,6 +140,15 @@ description: StudyCheck 앱 코드를 바꾸는 작업을 끝내기 전에 반�
 `next.config.ts`에 `typescript.ignoreBuildErrors: true`, `eslint.ignoreDuringBuilds: true`. 기존 에러가 여러 개 있다.
 **내가 만든 에러만** 골라 본다.
 
+- [ ] **`TS2393 Duplicate function implementation` 은 「원래 있던 에러」로 넘기지 않는다.**
+      한 화면 안에 같은 이름의 헬퍼가 둘이면 **나중 선언이 이기고**, 먼저 것을 부르던 자리는 전부
+      엉뚱한 함수로 간다. 타입이 달라도 빌드가 통과하므로(`ignoreBuildErrors`) **에러도 안 나고 조용히 틀린다.**
+      ```bash
+      npx tsc --noEmit 2>&1 | grep TS2393
+      ```
+      이름이 겹쳤으면 「무엇으로 판정하는지」를 이름에 넣어 가른다
+      (`isHighStudent(student)` = 학년으로 / `isHighSchoolName(school)` = 학교 이름으로).
+
 ```bash
 npm install                     # node_modules 가 없으면
 npx tsc --noEmit 2>&1 | grep -F -f <(git diff --name-only HEAD; git ls-files --others --exclude-standard)
@@ -262,6 +271,9 @@ git worktree remove /tmp/sc-base
 - **「지웠는데 또 뜬다」 — 삭제가 실패해도 화면에서만 사라졌다** (2026-10-28). 과정관리 교재 삭제가 409 로
   막혔는데 `await supabase...delete()` 결과를 안 봤다. 막힌 15건 중 10건이 진도 33~58회가 쌓인 완료 교재였다 —
   DB 가 막아 준 덕에 살았다. → 결과의 `error` 를 확인하고, 막히면 「완료로 두기」로 보낸다 (11번).
+- **같은 이름 헬퍼 둘이 고등학생 판정을 조용히 죽였다** (2026-10-08~10-29). 시험대비 화면에 `isHighSchool` 이
+  학생용·학교명용으로 둘 있었다. 나중 것(학교명용 `/고$/`)이 이겨서 학생 객체가 `"[object Object]"` 로 검사돼
+  **늘 false** — 고1~고3 16명에게 「고등 공통범위」 칸이 3주 동안 안 떴다. `tsc` 는 TS2393 으로 알려 주고 있었다.
 - **매뉴얼 고치기가 커밋에서 빠졌다** (2026-10-21, 6e83a86). 메뉴/버튼을 바꾼 커밋에 매뉴얼이 같이 있는지 본다.
 
 ## 규칙 추가 기록
@@ -274,3 +286,4 @@ git worktree remove /tmp/sc-base
 - 2026-10-28 배포 확인은 **화면 주소가 불러오는 묶음 목록**을 받아 뒤진다. 내 빌드 파일 이름을 운영에 대입하면 404 가 나서 「배포 안 됨」으로 잘못 읽는다 (10번)
 - 2026-10-28 화면에서 지우고 고치는 단추는 `const { error } =` 로 받아 확인한다. 실패하면 setState 하지 말고 사유를 말한다 (11번)
 - 2026-10-28 교재는 완료 처리를 거치면 사실상 삭제가 막힌다(uniq_null_tb). 지우는 길을 뚫지 말고 「완료로 두기」 (11번)
+- 2026-10-29 `TS2393 Duplicate function implementation` 은 넘기지 않는다. 같은 이름 헬퍼 둘이면 나중 것이 이겨 조용히 틀린다 — 판정 기준을 이름에 넣어 가른다 (7번)

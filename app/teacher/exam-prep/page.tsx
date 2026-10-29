@@ -164,8 +164,11 @@ export default function TeacherExamPrepPage() {
     return m ? m[0] : ''
   }
 
-  function isHighSchool(student: Student) {
-    return student.grade.includes('고')
+  // 고등학생인가 — 학생의 '학년'으로 본다 (고1·고2·고3).
+  // ★학교 이름으로 보는 isHighSchoolName() 과 이름을 섞지 말 것. 한때 둘 다 isHighSchool 이라
+  //   나중 선언이 이겨서 학생 객체가 /고$/ 검사에 걸려 늘 false 였다 (2026-10-08~10-29).
+  function isHighStudent(student: Student) {
+    return String(student.grade ?? '').includes('고')
   }
 
   // 고등 공통 범위 목록
@@ -174,7 +177,7 @@ export default function TeacherExamPrepPage() {
     .map(ie => ie.school_name))]
 
   const availableLevels = selStudent
-    ? isHighSchool(selStudent)
+    ? isHighStudent(selStudent)
       ? selHighRange
         ? [...new Set(innerEnough.filter(ie => ie.school_name === selHighRange).map(ie => ie.level))]
         : []
@@ -186,7 +189,7 @@ export default function TeacherExamPrepPage() {
   const availableUnits = selStudent && selLevel
     ? innerEnough
         .filter(ie =>
-          isHighSchool(selStudent)
+          isHighStudent(selStudent)
             ? ie.school_name === selHighRange && ie.level === selLevel
             : ie.school_name === getSchoolName(selStudent) &&
               ie.grade === getSchoolGrade(selStudent) &&
@@ -278,7 +281,7 @@ export default function TeacherExamPrepPage() {
     const schoolName = normalizeSchool(schSchool)
     // ★ 고등학교는 같은 학교면 1·2·3학년 시험일이 모두 같다(원장님). 학년을 세 번 고르게
     //   하면 두 번 빠뜨리고, 그러면 그 학년은 시험대비 배정이 영원히 안 뜬다.
-    const grades = isHighSchool(schoolName) ? ['1', '2', '3'] : [schGrade]
+    const grades = isHighSchoolName(schoolName) ? ['1', '2', '3'] : [schGrade]
     if (!schoolName || !schDate || grades.some((g) => !g)) return
     setSavingSchedule(true)
 
@@ -326,9 +329,9 @@ export default function TeacherExamPrepPage() {
     fetchAll()
   }
 
-  // 고등학교인가 — 이름이 「고」로 끝난다(normalizeSchool 을 거친 값 기준).
-  // 「○○여고」도 걸린다.
-  function isHighSchool(school: string) {
+  // 고등학교인가 — 「학교 이름」이 「고」로 끝난다(normalizeSchool 을 거친 값 기준).
+  // 「○○여고」도 걸린다. 학생 객체는 isHighStudent() 로 본다.
+  function isHighSchoolName(school: string) {
     return /고$/.test(school)
   }
 
@@ -956,7 +959,7 @@ export default function TeacherExamPrepPage() {
               </div>
 
               {/* 고등 범위 선택 */}
-              {selStudent && isHighSchool(selStudent) && (
+              {selStudent && isHighStudent(selStudent) && (
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">시험 범위 *</label>
                   <div className="flex flex-col gap-2">
@@ -978,10 +981,10 @@ export default function TeacherExamPrepPage() {
               )}
 
               {/* 레벨 */}
-              {selStudent && (!isHighSchool(selStudent) || selHighRange) && (
+              {selStudent && (!isHighStudent(selStudent) || selHighRange) && (
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2">
-                    반(레벨) * {isHighSchool(selStudent) && <span className="font-normal text-gray-400">S=상위반 · B=기본반</span>}
+                    반(레벨) * {isHighStudent(selStudent) && <span className="font-normal text-gray-400">S=상위반 · B=기본반</span>}
                   </label>
                   {availableLevels.length === 0 ? (
                     <p className="text-xs text-red-400">해당 학교/학년 데이터가 없어요</p>
@@ -1206,7 +1209,7 @@ export default function TeacherExamPrepPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-2">학년 *</label>
-              {isHighSchool(normalizeSchool(schSchool)) ? (
+              {isHighSchoolName(normalizeSchool(schSchool)) ? (
                 /* 고등학교는 학년별로 시험일이 다르지 않다 — 세 학년을 한 번에 넣는다 */
                 <div className="rounded-xl px-4 py-3 text-xs" style={{ background: '#FDF4F0', color: '#712B13' }}>
                   <b>1·2·3학년 모두 같은 날</b>로 등록됩니다.
@@ -1247,7 +1250,7 @@ export default function TeacherExamPrepPage() {
             </div>
             <button onClick={handleSaveSchedule}
               disabled={!schSchool || !schDate || savingSchedule
-                || (!isHighSchool(normalizeSchool(schSchool)) && !schGrade)}
+                || (!isHighSchoolName(normalizeSchool(schSchool)) && !schGrade)}
               className="w-full py-3.5 font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: '#F5C4B3', color: '#712B13' }}>
               {savingSchedule ? '저장중...' : <><i className="ti ti-calendar-plus" style={{ fontSize: 16 }} />일정 저장</>}
