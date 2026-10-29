@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
-import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest } from '../lib/matholic'
+import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule } from '../lib/matholic'
 
 const env = Object.fromEntries(
   fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)
@@ -31,6 +31,9 @@ res.skipped.forEach((s) => console.log(`  ✗ ${s.line}번째 줄: ${s.text} (${
 const { data: students } = await db.from('students')
   .select('id, name, grade, teacher_name').or('is_active.eq.true,on_leave.eq.true')
 const all = students ?? []
+
+const { data: setting } = await db.from('app_settings').select('value').eq('key', 'matholic_name_rules').maybeSingle()
+const rules = (setting?.value as any) ?? {}
 
 const found = res.rows.map((r) => findStudents(r.student, all as any))
 const ids = [...new Set(found.flat().map((s: any) => s.id))]
@@ -55,12 +58,14 @@ res.rows.forEach((row, i) => {
   const cand = found[i]
   const head = `${row.student.padEnd(6)} ${row.date} ${String(row.score).padStart(3)}점  ${row.title.slice(0, 38).padEnd(38)}`
   if (cand.length === 0) { none++; console.log(`${head} → ✗ 그 이름의 학생이 없어요`); return }
-  if (cand.length > 1) {
+  const picked: any = cand.length === 1 ? cand[0] : pickByRule(row.student, cand as any, rules)
+  if (!picked) {
     ask++
     console.log(`${head} → ❓ 같은 이름 ${cand.length}명 (${cand.map((s: any) => `${s.grade}/${s.teacher_name}`).join(', ')}) — 사람이 골라야`)
     return
   }
-  const sid = (cand[0] as any).id
+  if (cand.length > 1) console.log(`${' '.repeat(6)}↳ 규칙으로 고름: ${picked.grade}/${picked.teacher_name}`)
+  const sid = picked.id
   if (isDailyTest(row)) {
     const c = bySession.get(`${sid}|${row.date}`)
     if (!c) { none++; console.log(`${head} → ✗ 학습일지(수업기록)가 없어요 — 데일리테스트를 적을 데가 없음`); return }

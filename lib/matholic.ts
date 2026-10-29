@@ -90,7 +90,15 @@ const FRACTION_CELL = /^(\d{1,3})\s*\/\s*(\d{1,3})$/
  *   안 걸린다. 실제로 쎈 학습지 제목(…나눗셈_Lv5)이 통째로 레벨 없음으로 읽혔다.
  */
 const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
-const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사']
+const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단원평가', '오답유사', '데일리', '주말복습']
+/**
+ * 제목 맨 앞 대괄호 머리표 — 「[데일리] 고1 공통수학2 원의 방정식_Lv2.5」.
+ *
+ * ★ 2026-10-29 부터 선생님들과 **제목 규칙을 통일**하기로 했다(원장님 「스터디체크에 맞춰서
+ *   학습지 제목 규칙을 통일하자」). 머리표가 있으면 어디로 갈지 **짐작할 필요가 없다** —
+ *   데일리는 학습일지, 나머지는 학습지. 옛 제목도 그대로 읽히게 둔다(한꺼번에 안 바뀐다).
+ */
+const TITLE_KIND = /^\[\s*([^\]]{1,12}?)\s*\]\s*/
 /** 「공통수학2 (2022 개정)」·「초등 6-2 (2022 개정)」 — 과정 칸은 개정 연도가 붙어 온다 */
 const COURSE_CELL = /\(\s*\d{4}\s*개정\s*\)/
 const NO_HISTORY = /해당 기간 학습 이력이 없습니다/
@@ -204,7 +212,13 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
       if (!course && COURSE_CELL.test(t)) { course = t; continue }
       rest.push(t)
     }
-    const title = rest.join(' ').replace(/\s+/g, ' ').trim()
+    let title = rest.join(' ').replace(/\s+/g, ' ').trim()
+    // 제목 맨 앞 「[데일리]」 같은 머리표는 종류로 쓰고 제목에서 덜어낸다.
+    const th = TITLE_KIND.exec(title)
+    if (th && KINDS.some((k) => th[1].includes(k))) {
+      kind = KINDS.find((k) => th[1].includes(k)) ?? kind
+      title = title.slice(th[0].length).trim()
+    }
     const lv = LEVEL.exec(title)
 
     rows.push({
@@ -230,7 +244,7 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
  *   학습지로 넣으면 **같은 점수가 두 군데에 생기고** 성취도·브리핑이 이중으로 센다.
  */
 export function isDailyTest(row: { title?: string | null; kind?: string | null }): boolean {
-  return /daily\s*test|데일리\s*테스트/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+  return /daily\s*test|데일리/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -250,13 +264,50 @@ export interface StudentLite { id: string; name: string; grade: string | null; t
  *   누구인지는 매쓰홀릭만 아는 것이므로, 꼬리가 붙어 있으면 **후보를 전부 돌려주고
  *   사람이 고르게 한다.** 숫자만 떼고 아무나 집으면 반반 확률로 틀린다.
  */
+/**
+ * 매쓰홀릭 이름 → **담당 강사** 규칙.
+ *
+ * 왜 이런 표가 필요한가
+ *   같은 이름이 둘일 때 매쓰홀릭은 꼬리를 붙여 가른다 — 「…2」·「…h」. 그런데
+ *   **그 꼬리가 누구를 가리키는지는 매쓰홀릭만 안다.** 스터디체크에는 둘 다 꼬리 없이
+ *   들어 있어서, 꼬리만 떼면 반반 확률로 틀린다. 꼬리가 없는 쪽이 누구인지도 마찬가지다.
+ *
+ * ★ **표는 코드에 두지 않는다.** 학생 실명이 저장소에 들어가면 안 되고(커밋이 막힌다),
+ *   원장님이 직접 고치실 수 있어야 한다. `app_settings` 의 `matholic_name_rules` 에
+ *   `{ "이름2": "강사이름" }` 꼴로 넣고 화면이 읽어 온다.
+ * ★ 규칙대로 골라도 **화면에는 「규칙으로 골랐어요」라고 적고 바꿀 수 있게 둔다.**
+ *   규칙이 바뀌었는데 설정이 안 바뀐 경우가 있을 수 있어서다.
+ * ★ 규칙에 없는 이름은 **사람이 고른다.** 모르면 묻는 쪽이 맞다.
+ */
+export type NameRules = Record<string, string>
+
 export function findStudents(name: string, all: StudentLite[]): StudentLite[] {
   const raw = String(name ?? '').trim()
   if (!raw) return []
   const exact = all.filter((s) => s.name === raw)
-  if (exact.length) return exact
-  const bare = raw.replace(/\s*\d+\s*$/, '').trim()   // 「정우찬2」 → 「정우찬」
-  return bare && bare !== raw ? all.filter((s) => s.name === bare) : []
+  // 꼬리를 뗀 이름으로도 찾는다. 숫자뿐 아니라 영문 꼬리(「…h」)도 쓰인다.
+  const bare = raw.replace(/[0-9A-Za-z]+$/, '').trim()
+  const loose = bare && bare !== raw ? all.filter((s) => s.name === bare) : []
+  // 이름이 똑같이 적힌 학생이 있어도, 꼬리를 뗀 이름의 학생이 따로 더 있으면 **둘 다** 후보다.
+  // (스터디체크에 꼬리 붙은 이름이 **따로 저장돼 있는** 학생들이 있다 — 어느 쪽인지 사람이 봐야 한다.)
+  const seen = new Set<string>()
+  return [...exact, ...loose].filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)))
+}
+
+/**
+ * 후보가 여럿일 때 **원장님 규칙으로** 한 명을 고른다. 규칙에 없으면 아무도 안 고른다.
+ * 고른 뒤에도 화면에서 바꿀 수 있어야 한다 — 규칙은 거들 뿐 사람을 대신하지 않는다.
+ */
+export function pickByRule(name: string, candidates: StudentLite[], rules: NameRules): StudentLite | null {
+  const teacher = (rules ?? {})[String(name ?? '').trim()]
+  if (!teacher) return null
+  const hit = candidates.filter((s) => splitTeacherNames(s.teacher_name).includes(teacher))
+  return hit.length === 1 ? hit[0] : null
+}
+
+/** 「조윤희, 이규숙」·「조윤희 이규숙」 → ['조윤희','이규숙'] (lib/teachers.ts 와 같은 규칙) */
+function splitTeacherNames(t?: string | null): string[] {
+  return String(t ?? '').split(/[,，、·/\s]+/).map((x) => x.trim()).filter(Boolean)
 }
 
 // ────────────────────────────────────────────────────────────────────────────

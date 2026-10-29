@@ -32,8 +32,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
-  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest,
-  type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
+  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule,
+  type NameRules, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
 /**
@@ -73,6 +73,12 @@ export default function MatholicImportPage() {
   async function handleRead() {
     setReading(true); setDone(null)
     try {
+      // 동명이인 규칙은 코드가 아니라 설정에 둔다 (원장님이 직접 고치실 수 있게).
+      //   app_settings.key = 'matholic_name_rules', value = { "이름2": "강사이름" }
+      const { data: setting } = await supabase.from('app_settings')
+        .select('value').eq('key', 'matholic_name_rules').maybeSingle()
+      const rules: NameRules = (setting?.value as any) ?? {}
+
       const res = parseMatholic(text)
       setParsed(res)
       if (res.rows.length === 0) { setPlans([]); return }
@@ -112,41 +118,46 @@ export default function MatholicImportPage() {
           return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, mode: 'skip',
             why: '스터디체크에 그 이름의 학생이 없어요 (또는 제 담당이 아니에요)' }
         }
-        if (students.length > 1) {
+        // 같은 이름이 여럿이면 설정에 적힌 규칙으로 한 명을 고른다.
+        // 규칙에 없으면 아무도 안 고르고 사람에게 묻는다 — 반반 확률로 찍지 않는다.
+        const picked = students.length === 1 ? students[0] : pickByRule(row.student, students, rules)
+        if (!picked) {
           return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, mode: 'skip',
             why: `같은 이름이 ${students.length}명이에요 — 누구인지 골라 주세요` }
         }
-        const sid = students[0].id
+        const byRule = students.length > 1
+        const sid = picked.id
 
         // ★ 데일리테스트는 학습지로 넣지 않는다 (원장님 2026-10-29 「학습일지에 따로 있잖아」).
         //    학습지로도 넣으면 같은 점수가 두 군데 생겨 성취도·브리핑이 이중으로 센다.
+        const tag = (why: string) => (byRule ? `${picked.grade} ${picked.teacher_name}T — 규칙으로 골랐어요 · ${why}` : why)
         if (isDailyTest(row)) {
           const ses = bySession.get(`${sid}|${row.date}`)
           if (!ses) {
             return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, mode: 'skip',
-              why: `${row.date} 수업 기록이 없어요 — 학습일지를 먼저 쓴 뒤에 넣어 주세요` }
+              why: tag(`${row.date} 수업 기록이 없어요 — 학습일지를 먼저 쓴 뒤에 넣어 주세요`) }
           }
           if (ses.daily_test_score === row.score) {
             return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, mode: 'done',
-              why: '학습일지에 이미 같은 점수가 있어요' }
+              why: tag('학습일지에 이미 같은 점수가 있어요') }
           }
           return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, mode: 'daily',
-            why: ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
-              : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다` }
+            why: tag(ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
+              : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다`) }
         }
 
         const list = byStudent.get(sid) ?? []
         // 이미 넣은 것인가 — 같은 점수·같은 날짜면 다시 넣지 않는다
         const dup = list.find((w) => alreadyIn(row, w))
-        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, mode: 'done', why: '이미 들어가 있어요' }
+        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, mode: 'done', why: tag('이미 들어가 있어요') }
 
         const ranked = rankWorksheets(row, list)
         if (isClearWinner(ranked)) {
           return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
-            sessionId: null, mode: 'fill', why: ranked[0].why.join(' · ') }
+            sessionId: null, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
         }
         return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-          mode: 'new', why: ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다' }
+          mode: 'new', why: tag(ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') }
       }))
     } finally { setReading(false) }
   }

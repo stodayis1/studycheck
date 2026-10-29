@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, pickByRule } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -257,6 +257,21 @@ T('데일리테스트는 학습지가 아니라 학습일지로 간다', () => {
   return daily.length === 4 && names.join(',') === '강보라,문시후,한지후,홍예람'
 })
 
+T('새 제목 규칙 — 머리표로 어디로 갈지 바로 정해진다', () => {
+  // 2026-10-29 선생님들과 통일한 제목 규칙: [종류] 학년-학기 단원명_Lv레벨
+  const t = `남도윤
+(2/2)
+09/09 16:42
+학습지
+초등 6-2 (2022 개정)
+[데일리] 초6-2 1단원 분수의 나눗셈_Lv5
+28/30
+93점`
+  const r = parseMatholic(t, TODAY)
+  return r.rows.length === 1 && isDailyTest(r.rows[0])
+    && r.rows[0].title === '초6-2 1단원 분수의 나눗셈_Lv5' && r.rows[0].level === 5
+})
+
 T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)', () =>
   !isDailyTest({ title: '공통수학2 주말복습 TEST 0822', kind: '학습지' })
   && isDailyTest({ title: '고1A Daily Test 0903 (lv2.5)', kind: '학습지' })
@@ -278,6 +293,28 @@ T('「정우찬2」 같은 꼬리 숫자도 혼자 정하지 않는다', () => {
   const got = findStudents('정우찬2', ALL)
   return got.length === 2
 })
+
+T('꼬리 붙은 이름이 스터디체크에 따로 저장돼 있으면 둘 다 후보다', () => {
+  const two = [
+    { id: 'p1', name: '한지후', grade: '중2', teacher_name: '신애진' },
+    { id: 'p2', name: '한지후2', grade: '중2', teacher_name: '박경미' },
+  ]
+  return findStudents('한지후2', two as any).length === 2
+})
+
+// 규칙은 설정(app_settings)에서 오므로 시험에서는 그냥 넘겨준다 — 실명을 쓸 일이 없다.
+const RULE_CASE = [
+  { id: 'hi', name: '정우찬', grade: '고1', teacher_name: '주한' },
+  { id: 'mi', name: '정우찬', grade: '중1', teacher_name: '신애진' },
+]
+const RULES = { '정우찬2': '주한' }
+
+T('규칙이 있으면 그걸로 고른다 (꼬리2 → 그 담당 강사)', () =>
+  pickByRule('정우찬2', RULE_CASE as any, RULES)?.id === 'hi')
+
+T('규칙에 없는 이름은 아무도 고르지 않는다 (사람이 골라야)', () =>
+  pickByRule('아무개2', RULE_CASE as any, RULES) === null
+  && pickByRule('정우찬2', RULE_CASE as any, {}) === null)
 
 T('같은 이름이 하나뿐이면 바로 찾는다', () => {
   const got = findStudents('문시후', ALL)
@@ -329,6 +366,23 @@ T('레벨만 같고 단원이 다르면 「확실함」이 아니다 (엉뚱한 
     ROW({ title: '고1A Daily Test 0903 (lv2.5)', level: 2.5 }),
     [WS({ id: 'x', current_level: 2.5, grade_level: '고1', unit: 'Ⅰ 명제', unit_name: '명제~무리함수' })])
   return ranked.length === 1 && ranked[0].points >= 6 && !isClearWinner(ranked)
+})
+
+T('새 제목 규칙 — 머리표가 오답유사면 오답유사 학습지에 그대로 붙는다', () => {
+  const t = `남도윤
+(1/1)
+09/09 16:42
+학습지
+초등 6-2 (2022 개정)
+[오답유사] 초6-2 1단원 분수의 나눗셈_Lv4
+9/10
+90점`
+  const r = parseMatholic(t, TODAY)
+  const ranked = rankWorksheets(r.rows[0], [
+    WS({ id: 'm', current_level: 4, unit: '1단원', unit_name: '분수의 나눗셈', worksheet_type: 'main' }),
+    WS({ id: 's', current_level: 4, unit: '1단원', unit_name: '분수의 나눗셈', worksheet_type: 'similar' }),
+  ])
+  return !isDailyTest(r.rows[0]) && ranked[0].ws.id === 's' && isClearWinner(ranked)
 })
 
 T('오답유사는 오답유사 학습지에 붙는다', () => {
