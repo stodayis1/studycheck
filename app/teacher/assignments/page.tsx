@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/common/Header'
 import { WorksheetTabs } from '@/components/teacher/WorksheetTabs'
 import { supabase } from '@/lib/supabase'
@@ -870,11 +871,20 @@ export default function TeacherAssignmentsPage() {
         subtitle={isAdmin() ? '전체 관리자' : isSupervisorModeActive() ? `${supervisorLabel()} (보기 전용)` : `${currentUser?.name} 선생님`}
         action={
           tab === 'worksheet' ? (
-            <button onClick={() => { setWsUnitNameTouched(false); setWsSemester(1); setShowWSModal(true) }}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg"
-              style={{ background: '#F5C4B3', color: '#712B13' }}>
-              + 학습지 배정
-            </button>
+            <div className="flex gap-1.5">
+              {/* 매쓰홀릭 점수를 손으로 치지 않고 붙여넣어 받아 적는 길 (원장님 2026-10-29).
+                  배정은 매쓰홀릭에서 하고 스터디체크는 받아 적기만 한다. */}
+              <Link href="/teacher/assignments/matholic"
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg"
+                style={{ background: '#EAF3DE', color: '#3B6D11', border: '1px solid #9FE1CB' }}>
+                매쓰홀릭 붙여넣기
+              </Link>
+              <button onClick={() => { setWsUnitNameTouched(false); setWsSemester(1); setShowWSModal(true) }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg"
+                style={{ background: '#F5C4B3', color: '#712B13' }}>
+                + 학습지 배정
+              </button>
+            </div>
           ) : undefined
         }
       />
