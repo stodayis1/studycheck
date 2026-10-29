@@ -46,6 +46,16 @@ const TEACHER_CAMPUS: Record<string, '코어관' | '프라임관'> = {
   '신애진': '프라임관', '김은수': '프라임관', '박경미': '프라임관', '윤지혜': '프라임관', '승민정': '프라임관',
 }
 
+/**
+ * 영상 과제 칸을 쓸 수 있는 **선생님 이름**. 원장님(role=admin)은 늘 쓸 수 있고, 여기 적힌
+ * 선생님께도 열린다.
+ *
+ * 왜 이름으로 두나: 아직 테스트 중이라 전체에 열지 않고 한 분씩 늘린다
+ * (원장님 2026-10-20 「다른 강사들한테는 안보이게」 → 2026-10-29 「주한강사에게 열어줘」).
+ * 다 되면 이 목록과 아래 `canVideoHw` 조건을 지우면 모두에게 열린다.
+ */
+const VIDEO_HW_TEACHERS = ['주한']
+
 // 오토스텝 파일럿 2단계: 소단원(=concepts의 chapter+sub_chapter) 안의 모든 개념을 다 체크하면
 // 그 소단원에 해당하는 유형편 숙제를 자동으로 과제 화면에 알림으로 띄운다. 지금은 윤수지 학생 한 명 +
 // autostep_workbook_map에 실제로 페이지 매핑을 입력해둔 소단원에 대해서만 동작한다 (없으면 조용히 무시).
@@ -4772,8 +4782,10 @@ ${e?.message ?? '연결 실패'}
                         때문에, 원장님이 강사모드로 화면을 보시는 동안 **원장님께도 사라졌다**
                         (원장님 2026-10-21 「영상과제 추가 탭이 없어졌어」). 원장 계정이면 모드와
                         상관없이 보이는 것이 맞다 — 숨기려던 대상은 다른 강사들이다.
+                      ★ 2026-10-29 부터 VIDEO_HW_TEACHERS 에 적힌 선생님께도 열린다(주한 선생님).
                       테스트가 끝나면 이 한 줄만 지우면 모두에게 열린다. */}
-                {currentUser?.role === 'admin' && (
+                {(currentUser?.role === 'admin'
+                  || (!!currentUser?.name && VIDEO_HW_TEACHERS.includes(currentUser.name))) && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700">영상 과제 링크</label>
@@ -4781,7 +4793,7 @@ ${e?.message ?? '연결 실패'}
                       <button onClick={() => setShowVideoPicker(true)}
                         className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
                         style={{ background: '#EAF3DE', color: '#3B6D11', border: '1px solid #9FE1CB' }}>
-                        수지쌤 강의 고르기
+                        강의 첨부하기
                       </button>
                       <button onClick={() => setHwVideoUrls((prev) => [...prev, ''])}
                         className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
@@ -4842,7 +4854,7 @@ ${e?.message ?? '연결 실패'}
                     </p>
                   )}
                   <p className="text-[11px] mt-1" style={{ color: '#B45309' }}>
-                    <i className="ti ti-flask align-[-0.125em]" /> 지금은 원장님께만 보입니다 (테스트 중)
+                    <i className="ti ti-flask align-[-0.125em]" /> 아직 일부 선생님만 쓰는 칸이에요 (테스트 중)
                   </p>
                 </div>
                 )}
