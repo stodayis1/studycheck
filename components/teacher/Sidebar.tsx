@@ -50,6 +50,9 @@ const ITEM = {
   // 상담 중에 반을 배정하려고 보는 전체 시간표. 학원 전체 인원과 다른 강사 학생이 드러나므로
   // 원장 전용이다 (원장님 2026-10-28 「나만 보이는 화면으로」).
   classMap:      { href: '/teacher/class-map',      label: '반배정 시간표', icon: 'ti-calendar-time' },
+  // 같은 화면인데 선생님에게는 **본인 담당 학생만** 그려진다(원장님 2026-10-29).
+  // 이름이 「반배정」이면 전체가 보이는 줄로 읽히므로 선생님 쪽만 「내 시간표」로 적는다.
+  myClassMap:    { href: '/teacher/class-map',      label: '내 시간표',     icon: 'ti-calendar-time' },
   attendance:    { href: '/teacher/attendance',     label: '출결관리',     icon: 'ti-calendar-check' },
   changeLog:     { href: '/teacher/change-log',     label: '변경 기록',    icon: 'ti-history' },
   settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
@@ -65,7 +68,8 @@ const ITEM = {
 function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
-    { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
+    { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
+      ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.schools] },
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
