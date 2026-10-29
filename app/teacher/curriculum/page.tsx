@@ -488,6 +488,24 @@ export default function TeacherCurriculumPage() {
     }
   }
 
+  // 완료 되돌리기 — 잘못 눌렀을 때.
+  // ★ 2026-10-28: 강사가 다른 학생 것과 헷갈려 강윤우 학생 초능력연산에 「완료」를 눌렀는데,
+  //   완료 교재 줄에는 되돌리는 단추가 없어서 화면에서는 손도 못 댔다(DB 로 고쳤다).
+  //   「완료」가 한 번 누르면 끝인 단추인 이상, 되돌리는 길도 같은 자리에 있어야 한다.
+  //   다만 완료할 때 학기 전체로 올라간 회독은 되돌리지 않는다 — 이전 값을 알 수 없다. 그래서 미리 말해 준다.
+  async function handleUncompleteTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
+    const t = textbooks.find((x) => x.id === id)
+    const 회독반영 = !!(t && t.grade && t.semester && t.textbook_type !== '연산서')
+    if (!confirm('이 교재를 다시 「진행중」으로 되돌릴까요?'
+      + (회독반영
+        ? '\n\n완료할 때 이 학기 진도표에 올라간 회독은 그대로 남습니다 — 교재 상태만 되돌아갑니다.'
+        : ''))) return
+    const { error } = await supabase.from('student_textbooks').update({ status: 'assigned' }).eq('id', id)
+    if (error) { alert('되돌리지 못했어요: ' + error.message); return }
+    setTextbooks((prev) => prev.map((x) => x.id === id ? { ...x, status: 'assigned' } : x))
+  }
+
   // 교재 중단
   async function handlePauseTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
@@ -1373,6 +1391,12 @@ export default function TeacherCurriculumPage() {
                               </span>
                             )}
                           </div>
+                          {/* 잘못 누른 「완료」를 여기서 되돌린다 (원장님 2026-10-28) */}
+                          <button onClick={() => handleUncompleteTB(t.id)}
+                            className="text-[10px] px-2 py-1 rounded-lg transition-all shrink-0"
+                            style={{ background: '#fff', color: '#085041', border: '1px solid #9FE1CB' }}>
+                            되돌리기
+                          </button>
                           {renderDeleteControl(t)}
                         </div>
                       ))}

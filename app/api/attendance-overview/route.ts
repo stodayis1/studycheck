@@ -11,7 +11,8 @@
 // 보강·대체·추가는 수학OPS 가 들고 있어서 서버에서만 읽을 수 있다.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { staffOrDeny } from '@/lib/apiAuth'
+import { staffCanSeeStudent } from '@/lib/teachers'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
 import { fetchOpsExtraClasses } from '@/lib/opsExtraClasses'
 import { fetchAllRows } from '@/lib/utils'
@@ -20,8 +21,8 @@ import { isExamAbsence } from '@/lib/attendance'
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
-  const deny = await denyIfNotStaff(req)
-  if (deny) return deny
+  const who = await staffOrDeny(req)
+  if (who.deny) return who.deny
 
   const month = new URL(req.url).searchParams.get('month')
     ?? new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7)
@@ -35,9 +36,12 @@ export async function GET(req: NextRequest) {
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } })
 
-  const { data: students } = await db.from('students')
+  const { data: allStudents } = await db.from('students')
     .select('id, name, grade, teacher_name, ops_student_id')
     .eq('is_active', true).order('name')
+  // ★ 강사에게는 **본인 담당(주임이면 담당 학년)만** 내려준다. 예전에는 전체를 내려주고
+  //   화면에서만 걸렀기 때문에, 강사 브라우저에 재원생 전원의 이름이 들어 있었다.
+  const students = (allStudents ?? []).filter((s: any) => staffCanSeeStudent(who, s))
 
   const sessions = await fetchAllRows<any>((f, t) => db.from('class_sessions')
     .select('id, student_id, session_date, session_type')

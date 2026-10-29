@@ -29,3 +29,23 @@ export function isTeacherOf(teacherName: string | null | undefined, who?: string
   if (!who) return false
   return splitTeachers(teacherName).includes(who)
 }
+
+/**
+ * 서버에서 「이 직원이 이 학생을 봐도 되나」.
+ *
+ * students 조회 정책(docs/sql/학생조회_강사담당만_2026-10-29.sql)과 **같은 규칙**이다.
+ * API 는 service_role 로 돌아 RLS 를 비껴가므로, 정책만 조여도 API 로는 전체가 그대로
+ * 내려간다 — 그래서 학생 명단을 내려주는 API 는 여기서 한 번 더 걸러야 한다.
+ *
+ * 화면의 useAuth.canViewStudent 는 주임모드 토글까지 보지만, 서버는 **그 계정이 볼 수
+ * 있는 가장 넓은 범위**로 판단한다. 모드는 보기 편의일 뿐이라 서버가 알 필요가 없다.
+ */
+export function staffCanSeeStudent(
+  who: { role?: string | null; name?: string | null; supervisorGrades?: string[] | null },
+  student: { grade?: string | null; teacher_name?: string | null },
+): boolean {
+  if (who.role === 'admin' || who.role === 'staff') return true
+  if (isTeacherOf(student.teacher_name, who.name)) return true
+  const g = String(student.grade ?? '').trim()
+  return !!g && (who.supervisorGrades ?? []).includes(g)
+}

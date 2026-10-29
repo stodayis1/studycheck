@@ -92,6 +92,8 @@ export function TeacherSidebar() {
   const [openRare, setOpenRare] = useState(false)
   // 강사가 올린 교재 삭제요청 건수(원장님만). 푸시를 못 받는 기기에서도 눈에 띄게 하려고 메뉴에 달아 둔다.
   const [deleteRequests, setDeleteRequests] = useState(0)
+  // 선생님이 올린 시간표 변경요청 건수(원장님만) — 같은 이유로 메뉴에 달아 둔다.
+  const [schedRequests, setSchedRequests] = useState(0)
 
   useEffect(() => {
     async function fetchBulkSetting() {
@@ -104,11 +106,15 @@ export function TeacherSidebar() {
   useEffect(() => {
     // 모드를 따른다 — 강사 모드로 보실 때는 강사 화면과 같아야 하고,
     // 그때는 목록도 담당 학생것만 뜨기 때문에 숫자가 안 맞는다.
-    if (!isAdmin()) { setDeleteRequests(0); return }
+    if (!isAdmin()) { setDeleteRequests(0); setSchedRequests(0); return }
     let alive = true
     apiFetch('/api/textbook-delete-request')
       .then((r) => r.json())
       .then((j) => { if (alive) setDeleteRequests(Number(j?.count ?? 0)) })
+      .catch(() => {})
+    apiFetch('/api/schedule-change-request')
+      .then((r) => r.json())
+      .then((j) => { if (alive) setSchedRequests(Number(j?.count ?? 0)) })
       .catch(() => {})
     return () => { alive = false }
   }, [currentUser, adminMode, pathname])
@@ -215,6 +221,27 @@ export function TeacherSidebar() {
                           style={{ background: '#FEE2E2', color: '#991B1B' }}>
                           삭제요청 {deleteRequests}
                         </a>
+                      </div>
+                    )
+                  }
+                  // 시간표 변경요청도 교재 삭제요청과 같은 꼴로 보여 준다. 학생관리 화면
+                  // 맨 위에 요청 목록이 뜨므로 주소는 그대로 둔다.
+                  if (item.href === ITEM.students.href && schedRequests > 0) {
+                    return (
+                      <div key={item.href} className="flex items-center gap-1 rounded-xl"
+                        style={isActive ? { background: '#9FE1CB', borderLeft: '3px solid #085041' }
+                                        : { borderLeft: '3px solid transparent' }}>
+                        <Link href={item.href}
+                          className="flex items-center gap-2.5 pl-3 py-2 text-sm font-medium flex-1 min-w-0"
+                          style={{ color: isActive ? '#085041' : '#4b5563', fontWeight: isActive ? 600 : 500 }}>
+                          <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
+                            color: isActive ? '#085041' : '#6b7280' }} />
+                          {item.label}
+                        </Link>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 mr-2 rounded-lg shrink-0"
+                          style={{ background: '#D7F3E8', color: '#085041' }}>
+                          시간표요청 {schedRequests}
+                        </span>
                       </div>
                     )
                   }
