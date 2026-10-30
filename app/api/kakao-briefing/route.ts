@@ -156,6 +156,27 @@ async function run(opts: {
 
   const studentBy = new Map((students ?? []).map((s: any) => [s.id, s]))
 
+  // ★ 그날 점수가 들어온 학습지 — 브리핑의 점수 칸 뒤에 붙는다 (원장님 2026-10-30).
+  //   매쓰홀릭 붙여넣기로 들어온 것도, QR 채점으로 들어온 것도 다 여기 잡힌다.
+  //   submitted_at 은 timestamptz 다. 앞 10글자로 자르면 한국시간 오전 9시 이전에
+  //   들어온 것이 하루 전 것으로 잡힌다 — 알림장과 같이 +09:00 범위로 거른다.
+  //   in() 은 100개씩 끊는다 (학생이 100명 넘는 날이 있다).
+  const wsBy = new Map<string, any[]>()
+  for (let i = 0; i < studentIds.length; i += 100) {
+    const { data: ws } = await db.from('student_worksheets')
+      .select('student_id, unit, unit_name, current_level, score, submitted_at')
+      .in('student_id', studentIds.slice(i, i + 100))
+      .not('score', 'is', null)
+      .gte('submitted_at', `${date}T00:00:00+09:00`)
+      .lt('submitted_at', `${date}T24:00:00+09:00`)
+      .order('submitted_at', { ascending: true })
+    for (const w of (ws ?? []) as any[]) {
+      const list = wsBy.get(w.student_id) ?? []
+      list.push(w)
+      wsBy.set(w.student_id, list)
+    }
+  }
+
   // ★ 영상 과제를 브리핑의 「다음 시간까지 과제」에 적으려면 **몇 편이고 그중 증명이 몇 편인지**를
   //   알아야 한다. 어떤 영상이 증명인지는 lesson_videos 만 안다 — 그날치를 한 번에 읽어 둔다
   //   (학생마다 부르면 60번 왕복한다).
@@ -237,6 +258,7 @@ async function run(opts: {
     const brief = buildBriefing({
       studentName: student.name, studentGrade: student.grade, session: ses, note, feedbacks: dayFbs,
       videos: videosOf(ses),
+      worksheets: wsBy.get(student.id) ?? [],
       makeup: makeupFor(student),
       // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
       // ★ 「알림장 없는 판」은 **쓰는 판에 맞는 코드가 있을 때만** 쓴다.

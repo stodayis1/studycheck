@@ -238,6 +238,81 @@ export interface BriefingNote {
   makeup_note?: string | null
 }
 
+/**
+ * 그날 점수가 매겨진 학습지 한 장. 매쓰홀릭 붙여넣기로 들어온 것도, QR 채점으로 들어온 것도
+ * 다 여기로 온다 (student_worksheets 에서 submitted_at 이 그날인 것).
+ */
+export interface BriefingWorksheet {
+  unit?: string | null
+  unit_name?: string | null
+  current_level?: string | number | null
+  score?: number | null
+}
+
+/** 레벨 글자. 「4.0」 → 「4」, 「3.5」 → 「3.5」. */
+function lvText(v?: string | number | null) {
+  const t = String(v ?? '').trim()
+  return t.endsWith('.0') ? t.slice(0, -2) : t
+}
+
+/**
+ * 단원 이름을 **브리핑에 쓸 길이로** 줄인다.
+ *
+ * 왜 (2026-10-30 실데이터)
+ *   매쓰홀릭 학습지 제목이 그대로 들어와 있어서 중등은 단원 한 줄이 40자를 넘는다 —
+ *   「2. 식의 계산(단항식의곱셈과나눗셈~다항식과단항식의혼합계산의도형에의활용)」.
+ *   그대로 내보내면 학부모 문자가 낱말 한가운데서 「…」로 끊긴다. 8명 중 2명이 그랬다.
+ *   괄호 안은 설명이라 떼고, 매쓰홀릭이 붙인 별표·「레벨학습지」 군더더기도 뗀다.
+ */
+function unitText(raw: string, cap: number) {
+  // 괄호 안 설명은 뗀다. ★ 빈칸이 아니라 **없애야** 한다 —
+  //   「이차함수(일반형)의 그래프」를 빈칸으로 바꾸면 「이차함수 의 그래프」가 된다.
+  let t = raw.replace(/[(（\[][^)）\]]*[)）\]]/g, '')
+  t = t.replace(/[*＊]/g, ' ').replace(/레벨학습지/g, ' ')
+  t = t.replace(/\s+/g, ' ').trim().replace(/^[-·,.]+|[-·,~]+$/g, '').trim()
+  if (t.length <= cap) return t
+  // ★ 낱말 한가운데가 아니라 **마디에서** 끊는다. 단원 이름은 「가~나」·「가, 나, 다」 꼴이 많다.
+  const cut = Math.max(t.lastIndexOf('~', cap), t.lastIndexOf(',', cap), t.lastIndexOf(' ', cap))
+  return (cut >= 4 ? t.slice(0, cut) : t.slice(0, cap)).trimEnd().replace(/[,·~]$/, '') + '…'
+}
+
+/**
+ * 그날 학습지 점수를 **한 조각**으로 만든다 — 「학습지 전범위 Lv4 90점」.
+ *
+ * 왜 줄을 안 늘리나 (원장님 2026-10-30 「붙여서 점수를 넣었는데 알림장에는 안뜨는데?」)
+ *   어떤 판에도 「▶ 학습지」 줄이 없다. 줄을 새로 쓰려면 알리고에 템플릿을 등록해
+ *   심사를 또 받아야 한다. 변수 칸 **안의 글자는 심사와 무관**하므로, 데일리테스트와
+ *   똑같이 점수 칸 뒤에 붙인다 — 그래야 오늘부터 나간다.
+ *
+ * ★ budget 안에 들어오는 가장 자세한 꼴을 고른다. 두 장 → 단원을 더 줄여 두 장 →
+ *   한 장 + 「외 N장」 순이다. **말줄임표로 끊긴 글을 내보내지 않으려는 것**이다.
+ *   점수 큰 것부터가 아니라 들어온 차례대로 적는다 (골라 보이면 안 된다).
+ */
+export function worksheetTail(rows: BriefingWorksheet[], budget = 60): string {
+  const scored = (rows ?? []).filter((w) => w && w.score != null)
+  if (scored.length === 0) return ''
+  const make = (take: number, unitCap: number) => {
+    const head = scored.slice(0, take).map((w) => {
+      const 단원 = unitText(((w.unit_name || w.unit) ?? '').trim(), unitCap)
+      const lv = lvText(w.current_level)
+      return [단원, lv ? `Lv${lv}` : '', `${w.score}점`].filter(Boolean).join(' ')
+    }).join(' · ')
+    const rest = scored.length - take
+    return `학습지 ${head}${rest > 0 ? ` 외 ${rest}장` : ''}`
+  }
+  for (const [take, cap] of [[2, 22], [2, 13], [1, 26], [1, 15]] as const) {
+    const t = make(Math.min(take, scored.length), cap)
+    if (t.length <= budget) return t
+  }
+  // 그래도 안 들어가면 단원을 한 글자씩 더 줄여 본다 (데일리테스트 단원이 아주 긴 날).
+  for (let cap = 14; cap >= 4; cap--) {
+    const t = make(1, cap)
+    if (t.length <= budget) return t
+  }
+  // ★ 여기까지 와서 안 들어가면 **쓰지 않는다.** 낱말이 반 토막 난 글을 학부모께 보내지 않는다.
+  return ''
+}
+
 export interface BriefingFeedback {
   content?: string | null
   ai_message?: string | null   // 글이 아니라 {"images":[...]} 다
@@ -371,6 +446,11 @@ export function buildBriefing(args: {
   noNoteTemplateV3?: boolean
   /** 그날 영상 과제 (편수·증명 편수). 부르는 쪽이 lesson_videos 를 보고 넣는다. */
   videos?: BriefingVideos
+  /**
+   * 그날 점수가 들어온 학습지. 부르는 쪽이 student_worksheets 에서
+   * submitted_at 이 그날(한국시간)인 것을 넣는다. 없으면 아무것도 안 붙는다.
+   */
+  worksheets?: BriefingWorksheet[]
 }): BriefingResult {
   const { studentName, session: ses, note } = args
   // ★ 결석한 날은 진도도 과제도 **안 적는 것이 정상**이다(10/7 결석 17명 전원 비어 있었다).
@@ -383,6 +463,15 @@ export function buildBriefing(args: {
   const 날짜 = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`
 
   const 출결 = note?.attendance ?? '기록 없음'
+
+  // ★ 그날 학습지 점수가 있는가. 결석한 날은 볼 수 없으니 없는 것으로 둔다.
+  //   글자는 **맨 아래에서** 만든다 — 남은 칸이 얼마인지 그때라야 알 수 있다.
+  const 학습지있음 = !결석 && (args.worksheets ?? []).some((w) => w && w.score != null)
+
+  // ★ 꼬리가 붙는 날은 단원·레벨을 **꼬리가 들고 간다.** 학습일지의 그 두 칸은 선생님이
+  //   칩을 눌러 채우시는 값인데, 꼬리에는 같은 단원·레벨이 **점수까지** 들어 있다.
+  //   둘 다 쓰면 「70% · 전범위 · Lv4.0 · 학습지 전범위 Lv4 90점」처럼 두 번 읽힌다.
+  const 성취도단원 = 학습지있음 ? [] : [note?.worksheet_unit, note?.worksheet_level]
 
   // 「이수아(고1)」 — 학년을 모르면 이름만. 템플릿 골격은 그대로다(변수 칸이다).
   const 학년 = (args.studentGrade ?? '').trim()
@@ -397,9 +486,10 @@ export function buildBriefing(args: {
             : note ? '미제출' : '기록 없음'
 
   // 고등부는 학습지보다 데일리테스트 위주라 학습지 점수가 없으면 그걸로 대신한다.
+  // ★ 꼬리가 붙는 날은 단원·레벨을 **꼬리가 들고 간다** (아래 과제성취도와 같은 까닭).
   const 학습지결과 =
     note?.worksheet_score != null
-      ? [`${note.worksheet_score}점`, note.worksheet_unit, note.worksheet_level].filter(Boolean).join(' · ')
+      ? [`${note.worksheet_score}점`, ...성취도단원].filter(Boolean).join(' · ')
       : ses.daily_test_score != null
         ? `${ses.daily_test_score}점 (데일리테스트)`
         : '해당 없음'
@@ -440,7 +530,7 @@ export function buildBriefing(args: {
   //   예전 판 「지난 학습지 90점」 · 새 판 「과제 성취도 90%」(학습일지 화면과 같은 꼴).
   const 과제성취도 =
     note?.worksheet_score != null
-      ? [`${note.worksheet_score}%`, note.worksheet_unit, note.worksheet_level].filter(Boolean).join(' · ')
+      ? [`${note.worksheet_score}%`, ...성취도단원].filter(Boolean).join(' · ')
       : '해당 없음'
 
   // ★ 데일리테스트 — 점수가 **있을 때만** 쓴다. 범위를 적어 두셨으면 뒤에 붙인다.
@@ -496,6 +586,19 @@ export function buildBriefing(args: {
       vars[slot] = clip(base ? base + 꼬리 : 꼬리.replace(/^ · /, ''), CAP[slot])
     }
   }
+  // ── 그날 학습지 점수를 붙인다 (원장님 2026-10-30) ───────────────────────
+  // 데일리테스트를 먼저 붙이고 이걸 붙인다 — 칸이 모자라면 **학습지 쪽이 잘리게** 하려는 것이다.
+  // 고등부는 데일리테스트가 더 중요하다(원장님 2026-10-17).
+  if (학습지있음) {
+    const slot: VarName = v2 ? '과제성취도' : '학습지결과'
+    const base = vars[slot] === '해당 없음' ? '' : vars[slot]
+    // 남은 칸만큼만 쓴다. ★ 18자도 안 남으면 **아예 안 붙인다** — 낱말 한가운데서
+    //   「…」로 끊긴 글을 학부모께 보내느니 안 쓰는 편이 낫다 (데일리테스트가 먼저다).
+    const budget = CAP[slot] - (base ? base.length + 3 : 0)
+    const 꼬리 = budget >= 18 ? worksheetTail(args.worksheets ?? [], budget) : ''
+    if (꼬리) vars[slot] = clip(base ? `${base} · ${꼬리}` : 꼬리, CAP[slot])
+  }
+
   // 「알림장 없는 판」을 쓸 수 있는지는 **지금 쓰는 판**에 달렸다 — V3 로 가면 V3 의 것을 본다.
   const useNoNote = !hasNotice && (v3 ? !!args.noNoteTemplateV3 : !!args.noNoteTemplate)
   const tpl = v3
