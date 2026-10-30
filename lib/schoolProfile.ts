@@ -56,6 +56,9 @@ export type SchoolStats = {
   teachers?: number         // 교원 총계(직위별 교원 현황)
   studentsPerTeacher?: number
   achievement?: Achievement // 교과별 학업성취사항(성취도)
+  assessment?: Assessment   // 교과별 평가계획 중 수학 — 지필·수행 반영 비율과 수행평가 영역
+  /** 학교알리미에서 다시 받을 때 쓰는 열쇠 — lib/schoolinfo.ts 가 채운다 */
+  schoolinfo?: { shl: string; adrcd: string; level: '초' | '중' | '고' }
 }
 
 /** 교과별 학업성취사항 한 줄 — 학교알리미 공시(보통 4월에 지난해 것이 올라온다) */
@@ -72,6 +75,37 @@ export type AchievementRow = {
 export type Achievement = {
   year: number          // 어느 해 성적인가(공시 연도가 아니라 성적 연도)
   rows: AchievementRow[]
+  note?: string
+}
+
+/** 평가 한 칸 — 정기시험의 「1차 선택형」이나 수행평가 영역 하나 */
+export type AssessPart = {
+  label: string         // '1차 선택형' | '삼각형과 사각형의 성질 이해하기'
+  kind?: string         // '논술형' | '구술·발표' | '프로젝트' … (수행평가 방식)
+  points?: number       // 영역 만점 20
+  ratio?: number        // 반영 비율(%) 20
+  when?: string         // '9월 3주 ~ 9월 4주' — 원문 그대로
+  elements?: string[]   // 평가요소 (원문 그대로, 길면 줄인다)
+}
+
+/** 학년·학기·과목 하나의 평가계획 */
+export type AssessmentPlan = {
+  grade: string         // '2학년'
+  term: string          // '2학기'
+  subject: string       // '수학'
+  examRatio?: number    // 정기시험(지필) 반영 비율 60
+  perfRatio?: number    // 수행평가 반영 비율 40
+  essayRatio?: number   // 논술형 평가 반영 비율 합(정기시험+수행) 43
+  exams?: AssessPart[]
+  tasks: AssessPart[]   // 수행평가 영역
+  page?: string         // 원문 위치 — '2학년 2학기 교수학습 및 평가 운영 계획.pdf 117쪽'
+  note?: string
+}
+
+/** 교과별(학년별) 교수·학습 및 평가계획 — 학교알리미 공시 4-가 (학기마다 4월·9월에 올라온다) */
+export type Assessment = {
+  year: number          // 학년도
+  plans: AssessmentPlan[]
   note?: string
 }
 

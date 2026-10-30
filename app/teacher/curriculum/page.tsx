@@ -5,10 +5,20 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
+import { apiFetch } from '@/lib/apiFetch'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 
 // concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
-const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
+const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '중3모의고사', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
+
+// 모의고사 교재는 회차(1회·2회…)가 진도 단위라서 일반 교재의 학년/학기와 섞이면 안 된다.
+// 그래서 배정할 때 교재 이름만 보고 전용 학년/학기를 박아 넣는다 (concepts 쪽 값과 같아야 한다).
+const MOCK_EXAM_TEXTBOOKS: Record<string, { grade: string; semester: number }> = {
+  '모의고사 1부': { grade: '중2모의고사', semester: 1 },      // 1회~25회
+  '모의고사 2부': { grade: '중2모의고사', semester: 2 },      // 26회~50회
+  '중3 모의고사 1부': { grade: '중3모의고사', semester: 1 },  // 1회~42회 (중2-2·중3-1·중3-2)
+  '중3 모의고사 2부': { grade: '중3모의고사', semester: 2 },  // 43회~50회 (중3 전범위)
+}
 
 interface Student {
   id: string
@@ -17,6 +27,8 @@ interface Student {
   grade: string
   teacher_name: string
   textbook_grade: string
+  /** 휴원 — is_active=false 와 **같이** 적힌다(휴원의 설계된 표현). docs/OPS연동.md 참고 */
+  on_leave?: boolean | null
 }
 
 interface StudentTextbook {
@@ -145,6 +157,17 @@ export default function TeacherCurriculumPage() {
   const [progressGrade, setProgressGrade] = useState<string | null>(null) // null이면 학생 본인 학년을 기본값으로 사용 (선행 등으로 다른 학년 진도표도 볼 수 있게)
   const [progressSubGrade, setProgressSubGrade] = useState<string | null>(null) // 학생 선택 화면에서 초등/중등/고등 안의 특정 학년만 볼 때 사용 (null이면 대분류 전체 블렌디드)
   const [progressChecks, setProgressChecks] = useState<ProgressCheck[]>([])
+  // 사이드바 「삭제요청 N」 뱃지로 들어오면 그 건들만 모아 보여 준다 (/teacher/curriculum?delete=1).
+  // ★ useSearchParams 는 Suspense 경계가 필요해서 화면 하나 때문에 쓰기에 번거롭다. 주소만 읽는다.
+  const [deleteOnly, setDeleteOnly] = useState(false)
+  const [bulkCancelling, setBulkCancelling] = useState(false)
+  // 「완료 vs 삭제요청」 안내 — 강사에게 한 번만 띄운다. 본 적이 있으면 이 기기에 적어 두고 다시 안 띄운다.
+  const [showDeleteGuide, setShowDeleteGuide] = useState(false)
+  const DELETE_GUIDE_KEY = 'tbDeleteGuideSeen.v1'
+  function dismissDeleteGuide() {
+    setShowDeleteGuide(false)
+    try { localStorage.setItem(DELETE_GUIDE_KEY, '1') } catch {}
+  }
   const [updatingProgress, setUpdatingProgress] = useState<string | null>(null)
 
   // 교재 카탈로그
@@ -174,10 +197,31 @@ export default function TeacherCurriculumPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('delete') === '1') {
+      setDeleteOnly(true)
+      setProgressTab('textbook')
+    }
+  }, [])
+
+  // 안내는 강사에게만 한 번. 원장님은 삭제요청을 하는 쪽이 아니라 받는 쪽이라 안 띄운다.
+  useEffect(() => {
+    if (!currentUser || isAdmin()) return
+    let seen = '1'
+    try { seen = localStorage.getItem(DELETE_GUIDE_KEY) ?? '' } catch { seen = '1' }
+    if (!seen) setShowDeleteGuide(true)
+  }, [currentUser])
+
   async function fetchData() {
     setLoading(true)
     const [{ data: sData }, { data: tData }, { data: cData }, pData, { data: catData }, { data: epData }] = await Promise.all([
-      supabase.from('students').select('*').eq('is_active', true).order('name'),
+      // ★ 휴원 학생도 같이 불러온다 (원장님 2026-10-29 「삭제요청 1 떠서 들어갔는데 0건」).
+      //   휴원은 is_active=false + on_leave=true 로 적힌다(OPS 가 그렇게 쓴다 — docs/OPS연동.md).
+      //   is_active 만 보면 휴원생이 통째로 빠지는데, 교재와 삭제요청은 그대로 남아 있다.
+      //   그래서 사이드바 뱃지(서버가 전부 센다)는 1건인데 화면은 0건이었다 —
+      //   김서율(중3·휴원) 쎈B, 신애진 선생님이 8/14 에 올린 요청이 두 달 반 동안 안 보였다.
+      //   휴원생은 돌아오면 그 교재로 이어서 하므로 교재·진도도 보이는 쪽이 맞다.
+      supabase.from('students').select('*').or('is_active.eq.true,on_leave.eq.true').order('name'),
       supabase.from('student_textbooks').select('*').order('assigned_at', { ascending: false }).limit(5000),
       supabase.from('concepts').select('*').order('grade').order('semester').order('concept_order'),
       // 16,000행+ - 학생 목록의 진도율/회독수 계산에 전체 학생의 진도체크가 다 필요해서(학생별 서버 집계는
@@ -364,11 +408,10 @@ export default function TeacherCurriculumPage() {
 
     for (const sid of targetIds) {
       // 같은 종류 교재(개념서/유형서/심화서)도 여러 권 동시에 진행할 수 있도록 자동 교체하지 않고 그대로 추가
-      // 모의고사 1부/2부는 다른 교재와 진도가 섞이지 않도록 학년/학기를 전용 값으로 자동 지정
-      const isMockExam1 = tbName === '모의고사 1부'
-      const isMockExam2 = tbName === '모의고사 2부'
-      const savedGrade = (isMockExam1 || isMockExam2) ? '중2모의고사' : tbGrade
-      const savedSemester = isMockExam1 ? 1 : isMockExam2 ? 2 : tbSemester
+      // 모의고사 교재는 다른 교재와 진도가 섞이지 않도록 학년/학기를 전용 값으로 자동 지정 (MOCK_EXAM_TEXTBOOKS 참고)
+      const mock = MOCK_EXAM_TEXTBOOKS[tbName]
+      const savedGrade = mock ? mock.grade : tbGrade
+      const savedSemester = mock ? mock.semester : tbSemester
 
       // 오토스텝 파일럿: 지금은 윤수지 학생 + 개념유형 라이트 교재일 때만 저장 (다른 학생/교재는 항상 비활성)
       const autostepOn = isAutostepPilot(sid) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
@@ -433,6 +476,12 @@ export default function TeacherCurriculumPage() {
   async function handleCompleteTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!confirm('이 교재를 완료 처리할까요? 완료된 교재는 보고서에 이력으로 남아요.')) return
+    await handleCompleteTBCore(id)
+  }
+
+  // 완료 처리 본체 — 확인창 없이 상태만 바꾸고 학기 진도를 반영한다.
+  // (삭제요청 목록의 「완료로 두기」도 이걸 쓴다)
+  async function handleCompleteTBCore(id: string) {
     await supabase.from('student_textbooks').update({ status: 'completed' }).eq('id', id)
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'completed' } : t))
     const tb = textbooks.find((t) => t.id === id)
@@ -445,6 +494,24 @@ export default function TeacherCurriculumPage() {
       const targetLevel = computeTextbookLevels(siblings).get(tb.id)
       if (targetLevel) await markSemesterMastered(tb.student_id, tb.grade, tb.semester, targetLevel)
     }
+  }
+
+  // 완료 되돌리기 — 잘못 눌렀을 때.
+  // ★ 2026-10-28: 강사가 다른 학생 것과 헷갈려 강윤우 학생 초능력연산에 「완료」를 눌렀는데,
+  //   완료 교재 줄에는 되돌리는 단추가 없어서 화면에서는 손도 못 댔다(DB 로 고쳤다).
+  //   「완료」가 한 번 누르면 끝인 단추인 이상, 되돌리는 길도 같은 자리에 있어야 한다.
+  //   다만 완료할 때 학기 전체로 올라간 회독은 되돌리지 않는다 — 이전 값을 알 수 없다. 그래서 미리 말해 준다.
+  async function handleUncompleteTB(id: string) {
+    if (!canEditTextbook(id)) { alert(NOT_MINE); return }
+    const t = textbooks.find((x) => x.id === id)
+    const 회독반영 = !!(t && t.grade && t.semester && t.textbook_type !== '연산서')
+    if (!confirm('이 교재를 다시 「진행중」으로 되돌릴까요?'
+      + (회독반영
+        ? '\n\n완료할 때 이 학기 진도표에 올라간 회독은 그대로 남습니다 — 교재 상태만 되돌아갑니다.'
+        : ''))) return
+    const { error } = await supabase.from('student_textbooks').update({ status: 'assigned' }).eq('id', id)
+    if (error) { alert('되돌리지 못했어요: ' + error.message); return }
+    setTextbooks((prev) => prev.map((x) => x.id === id ? { ...x, status: 'assigned' } : x))
   }
 
   // 교재 중단
@@ -463,32 +530,124 @@ export default function TeacherCurriculumPage() {
   }
 
   // 교재 완전 삭제 - 원장님(관리자)만 가능. 강사는 삭제 자체가 안 되고 삭제요청만 할 수 있음
+  //
+  // ★ 2026-10-28: 「지웠는데 또 뜬다」의 원인 — 삭제가 실패해도 화면에서만 사라졌다.
+  //   교재를 지우면 그 교재의 진도 기록은 지워지지 않고 교재 연결만 끊어진다(FK SET NULL).
+  //   그런데 그 학생·개념에 「교재 없는 진도」가 이미 있으면(완료 처리 때 학기 전체를 한 번에
+  //   반영하면서 생긴다) 연결을 끊는 순간 progress_checks_uniq_null_tb 와 겹쳐 409 가 난다.
+  //   실측: 10/27~28 삭제 시도 44건 중 15건이 이렇게 막혔고, 그중 10건이 진도 33~58회가 쌓인
+  //   「완료」 교재였다. DB 가 막아 준 덕에 안 지워졌지만, 화면은 지워진 척을 했다.
+  //   지금은 막히면 왜 막혔는지 그대로 말하고, 목록에 그대로 남긴다.
   async function handleDeleteTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!isAdmin()) { alert('교재 삭제는 원장님만 하실 수 있어요. 잘못 입력했다면 "삭제요청"을 눌러주세요.'); return }
     if (!confirm('이 교재 기록을 완전히 삭제할까요? 되돌릴 수 없어요.')) return
-    await supabase.from('student_textbooks').delete().eq('id', id)
+    const { error } = await supabase.from('student_textbooks').delete().eq('id', id)
+    if (error) {
+      alert(error.code === '23505'
+        ? '이 교재는 지울 수 없어요.\n\n'
+          + '쌓인 진도가 이미 학생 진도표에 반영돼 있어서, 교재만 지우면 기록이 어긋납니다.\n\n'
+          + '다 나간 교재라면 「완료로 두기」를 눌러주세요 — 목록에서는 접히고 기록은 그대로 남습니다.'
+        : '지우지 못했어요: ' + error.message)
+      return
+    }
     setTextbooks((prev) => prev.filter((t) => t.id !== id))
   }
 
+  // 삭제요청 목록에서 바로 「완료로 두기」 — 완료 처리 + 요청 표시 지우기를 한 번에.
+  // 강사가 다 나간 교재에 삭제요청을 누르는 경우가 대부분이라, 원장님이 한 번만 누르면 끝나게 한다.
+  async function completeAndClearRequest(id: string) {
+    if (!isAdmin()) return
+    if (!confirm('이 교재를 「완료」로 두고 삭제요청을 지울까요?\n\n'
+      + '교재와 진도 기록은 그대로 남고, 완료 교재 칸으로 접힙니다.')) return
+    await handleCompleteTBCore(id)
+    const res = await apiFetch('/api/textbook-delete-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textbookId: id, cancel: true }),
+    })
+    if (!res.ok) { alert('완료는 됐지만 요청 표시를 지우지 못했어요. 「요청 취소」를 눌러주세요.'); return }
+    setTextbooks((prev) => prev.map((t) => t.id === id
+      ? { ...t, status: 'completed', delete_requested_by: null, delete_requested_at: null } : t))
+  }
+
   // 강사가 잘못 입력한 교재를 발견했을 때 - 직접 지우지 못하고 원장님께 삭제요청만 남김
+  //
+  // ★ 2026-10-27: 「다 끝낸 교재」에 삭제요청을 누르는 일이 많았다(36건 중 31건이 이미 완료 상태였다).
+  //   끝낸 교재는 지우는 게 아니라 「완료」로 눌러 두어야 진도 기록이 남는다. 그래서
+  //   ① 완료된 교재·진도가 찍힌 교재는 한 번 더 막아서 설명하고
+  //   ② 요청은 서버를 거쳐 원장님께 바로 알림이 가게 한다 (app/api/textbook-delete-request).
   async function handleRequestDeleteTB(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
-    if (!confirm('이 교재 삭제를 원장님께 요청할까요?')) return
-    const requestedBy = currentUser?.name ?? '강사'
-    const requestedAt = new Date().toISOString()
-    await supabase.from('student_textbooks')
-      .update({ delete_requested_by: requestedBy, delete_requested_at: requestedAt })
-      .eq('id', id)
-    setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: requestedBy, delete_requested_at: requestedAt } : t))
+    const t = textbooks.find((x) => x.id === id)
+    const checks = t ? progressChecks.filter((p) => p.student_textbook_id === id).length : 0
+
+    if (t?.status === 'completed') {
+      alert('이 교재는 이미 「완료」로 되어 있어요.\n\n'
+        + '끝낸 교재는 지우는 게 아니라 완료로 두시면 됩니다 — 완료 교재는 아래 초록색 칸에 따로 접혀서 목록을 어지럽히지 않아요.\n'
+        + '지우면 지금까지 쌓인 진도 기록이 같이 사라집니다.\n\n'
+        + '정말 잘못 넣은 교재라면 원장님께 직접 말씀해주세요.')
+      return
+    }
+    if (checks > 0 && !confirm(
+      `이 교재에는 진도가 ${checks}회 찍혀 있어요.\n\n`
+      + '다 끝낸 교재라면 삭제요청이 아니라 「완료」를 눌러주세요 — 기록이 그대로 남습니다.\n\n'
+      + '그래도 삭제를 요청할까요?')) return
+    if (checks === 0 && !confirm('이 교재 삭제를 원장님께 요청할까요?')) return
+
+    const res = await apiFetch('/api/textbook-delete-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textbookId: id }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(json.error ?? '요청을 보내지 못했어요.'); return }
+    setTextbooks((prev) => prev.map((x) => x.id === id
+      ? { ...x, delete_requested_by: json.requestedBy, delete_requested_at: json.requestedAt } : x))
   }
 
   // 삭제요청 취소 (원장님이 확인해보니 삭제할 필요는 없었던 경우)
   async function handleCancelDeleteRequest(id: string) {
     if (!canEditTextbook(id)) { alert(NOT_MINE); return }
     if (!isAdmin()) return
-    await supabase.from('student_textbooks').update({ delete_requested_by: null, delete_requested_at: null }).eq('id', id)
+    const res = await apiFetch('/api/textbook-delete-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textbookId: id, cancel: true }),
+    })
+    if (!res.ok) { alert('취소하지 못했어요.'); return }
     setTextbooks((prev) => prev.map((t) => t.id === id ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
+  }
+
+  // 삭제요청이 걸린 교재들 — 최근 요청순. 진도 회수는 이미 받아 둔 progressChecks 로 센다.
+  const deleteRequested = textbooks
+    .filter((t) => t.delete_requested_at && canEditTextbook(t.id))
+    .map((tb) => ({
+      tb,
+      student: students.find((s) => s.id === tb.student_id),
+      checks: progressChecks.filter((p) => p.student_textbook_id === tb.id).length,
+    }))
+    .sort((a, b) => (b.tb.delete_requested_at ?? '').localeCompare(a.tb.delete_requested_at ?? ''))
+
+  // 「완료된 교재인데 삭제요청」을 한 번에 걷어낸다. 지우는 게 아니라 요청 표시만 지운다.
+  async function cancelAllCompletedRequests() {
+    const target = deleteRequested.filter((r) => r.tb.status === 'completed')
+    if (target.length === 0) return
+    if (!confirm(`이미 「완료」된 교재 ${target.length}건의 삭제요청을 취소할까요?\n\n`
+      + '교재와 진도 기록은 그대로 두고, 빨간 요청 표시만 걷어냅니다.')) return
+    setBulkCancelling(true)
+    for (const r of target) {
+      const res = await apiFetch('/api/textbook-delete-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ textbookId: r.tb.id, cancel: true }),
+      })
+      if (!res.ok) { alert('일부를 취소하지 못했어요. 다시 눌러주세요.'); break }
+    }
+    const ids = new Set(target.map((r) => r.tb.id))
+    setTextbooks((prev) => prev.map((t) => ids.has(t.id)
+      ? { ...t, delete_requested_by: null, delete_requested_at: null } : t))
+    setBulkCancelling(false)
   }
 
   // 교재 카탈로그 추가 (관리자)
@@ -584,6 +743,29 @@ export default function TeacherCurriculumPage() {
 
   return (
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
+      {showDeleteGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-5" style={{ background: '#fff' }}>
+            <h3 className="text-base font-bold mb-3" style={{ color: '#085041' }}>
+              <i className="ti ti-info-circle align-[-0.125em] mr-1" /> 끝낸 교재는 「완료」를 눌러주세요
+            </h3>
+            <div className="text-sm leading-relaxed space-y-2" style={{ color: '#374151' }}>
+              <p>다 나간 교재에 <b>삭제요청</b>을 누르시는 경우가 많았어요.
+                삭제하면 그동안 찍어 둔 <b>진도 기록이 같이 사라집니다.</b></p>
+              <p className="rounded-xl p-3" style={{ background: '#F0FBF7' }}>
+                <b>완료</b> — 다 나간 교재. 초록색 칸으로 접혀서 목록을 어지럽히지 않아요.<br />
+                <b>중단</b> — 쉬었다 다시 할 교재.<br />
+                <b>삭제요청</b> — <u>잘못 넣은 교재만</u>.
+              </p>
+            </div>
+            <button onClick={dismissDeleteGuide}
+              className="mt-4 w-full py-2.5 rounded-xl text-sm font-bold"
+              style={{ background: '#0F6E56', color: '#fff' }}>
+              알겠습니다
+            </button>
+          </div>
+        </div>
+      )}
       <Header
         title="과정관리"
         subtitle={isAdmin() ? '전체 관리자' : `${currentUser?.name} 선생님`}
@@ -608,17 +790,29 @@ export default function TeacherCurriculumPage() {
       <div className="px-4 py-4 space-y-3 md:px-6">
 
         {/* 메인 탭 */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {[
             { key: 'progress', label: '진도표', icon: 'ti-chart-bar' },
             { key: 'textbook', label: '교재배정', icon: 'ti-books' },
           ].map((t) => (
-            <button key={t.key} onClick={() => setProgressTab(t.key as typeof progressTab)}
+            <button key={t.key} onClick={() => { setProgressTab(t.key as typeof progressTab); setDeleteOnly(false) }}
               className={cx('px-4 py-2 rounded-xl text-sm font-semibold border transition-all',
-                progressTab === t.key ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
+                progressTab === t.key && !deleteOnly ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
               <i className={`ti ${t.icon} mr-1 align-[-0.125em]`} />{t.label}
             </button>
           ))}
+          {/* ★ 삭제요청 탭 — 사이드바 뱃지로도 들어오지만, 이미 이 화면에 있으면 주소만 바뀌고
+              화면이 다시 안 그려져서 전체 목록이 그대로 떠 있었다(원장님 2026-10-28).
+              그래서 화면 안에도 누를 자리를 둔다. 여기 눌러서 들어오는 길이 가장 확실하다. */}
+          {deleteRequested.length > 0 && (
+            <button onClick={() => { setProgressTab('textbook'); setDeleteOnly(true) }}
+              className="px-4 py-2 rounded-xl text-sm font-bold border transition-all"
+              style={deleteOnly
+                ? { background: '#991B1B', color: '#fff', borderColor: '#991B1B' }
+                : { background: '#FEE2E2', color: '#991B1B', borderColor: '#FCA5A5' }}>
+              <i className="ti ti-trash mr-1 align-[-0.125em]" />삭제요청 {deleteRequested.length}
+            </button>
+          )}
         </div>
 
         {/* 공통 검색/필터 */}
@@ -996,8 +1190,91 @@ export default function TeacherCurriculumPage() {
           })()
         )}
 
+        {/* ── 삭제요청만 모아 보기 (사이드바 뱃지로 들어온다) ── */}
+        {progressTab === 'textbook' && deleteOnly && (
+          <div className="rounded-2xl border p-3" style={{ background: '#fff', borderColor: '#FCA5A5' }}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-sm font-bold" style={{ color: '#991B1B' }}>
+                <i className="ti ti-trash align-[-0.125em] mr-1" />삭제요청 {deleteRequested.length}건
+              </p>
+              <button onClick={() => { setDeleteOnly(false); history.replaceState(null, '', '/teacher/curriculum') }}
+                className="text-xs px-2.5 py-1.5 rounded-lg font-semibold"
+                style={{ background: '#f3f4f6', color: '#4b5563' }}>
+                전체 교재 보기
+              </button>
+            </div>
+
+            {/* 「완료된 교재인데 삭제요청」이 대부분이다 — 한 번에 걷어낼 수 있게 해 둔다 */}
+            {deleteRequested.filter((r) => r.tb.status === 'completed').length > 0 && (
+              <button onClick={cancelAllCompletedRequests} disabled={bulkCancelling}
+                className="w-full mb-2 py-2 rounded-xl text-xs font-bold"
+                style={{ background: '#F0FBF7', color: '#085041', border: '1px solid #9FE1CB' }}>
+                {bulkCancelling ? '처리 중…'
+                  : `이미 「완료」된 교재 ${deleteRequested.filter((r) => r.tb.status === 'completed').length}건 요청 한 번에 취소`}
+              </button>
+            )}
+
+            {deleteRequested.length === 0 ? (
+              <p className="text-xs py-6 text-center" style={{ color: '#6b7280' }}>남은 삭제요청이 없어요.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {deleteRequested.map(({ tb, student, checks }) => (
+                  <div key={tb.id} className="rounded-xl border px-3 py-2"
+                    style={{ background: tb.status === 'completed' ? '#F0FBF7' : '#fff', borderColor: '#e5e7eb' }}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold" style={{ color: '#111827' }}>{student?.name ?? '?'}</span>
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{student?.grade}</span>
+                      {tb.status === 'completed' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#9FE1CB', color: '#085041' }}>완료</span>
+                      )}
+                      {tb.status === 'paused' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#e5e7eb', color: '#6b7280' }}>중단</span>
+                      )}
+                      <span className="text-xs" style={{ color: '#374151' }}>{tb.textbook_name}</span>
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>
+                        {tb.grade}{tb.semester ? ` ${tb.semester}학기` : ''}
+                      </span>
+                      {checks > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                          진도 {checks}회
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>
+                        {tb.delete_requested_by} · {tb.delete_requested_at?.slice(0, 10)}
+                      </span>
+                      {isAdmin() && (
+                        <span className="flex items-center gap-1 shrink-0">
+                          {tb.status !== 'completed' && (
+                            <button onClick={() => completeAndClearRequest(tb.id)}
+                              className="text-[11px] px-2.5 py-1 rounded-lg font-bold"
+                              style={{ background: '#9FE1CB', color: '#085041' }}>
+                              완료로 두기
+                            </button>
+                          )}
+                          <button onClick={() => handleCancelDeleteRequest(tb.id)}
+                            className="text-[11px] px-2.5 py-1 rounded-lg font-semibold"
+                            style={{ background: '#F0FBF7', color: '#085041' }}>
+                            요청 취소
+                          </button>
+                          <button onClick={() => handleDeleteTB(tb.id)}
+                            className="text-[11px] px-2.5 py-1 rounded-lg font-semibold"
+                            style={{ background: '#FEE2E2', color: '#991B1B' }}>
+                            삭제
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── 교재배정 탭 ── */}
-        {progressTab === 'textbook' && (loading ? (
+        {progressTab === 'textbook' && !deleteOnly && (loading ? (
           <div className="text-center py-8">
             <span className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin inline-block" />
           </div>
@@ -1035,7 +1312,14 @@ export default function TeacherCurriculumPage() {
                       {student.name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900">{student.name}</p>
+                      <p className="text-sm font-bold text-gray-900">
+                        {student.name}
+                        {/* 휴원생도 목록에 있다 — 왜 있는지 바로 보이게 적어 둔다 */}
+                        {student.on_leave && (
+                          <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md align-middle"
+                            style={{ background: '#FEF3C7', color: '#92400E' }}>휴원</span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-400">{student.grade} · {student.teacher_name}</p>
                     </div>
                     <button onClick={() => { setTbStudent(student); setShowTBModal(true)
@@ -1122,6 +1406,12 @@ export default function TeacherCurriculumPage() {
                               </span>
                             )}
                           </div>
+                          {/* 잘못 누른 「완료」를 여기서 되돌린다 (원장님 2026-10-28) */}
+                          <button onClick={() => handleUncompleteTB(t.id)}
+                            className="text-[10px] px-2 py-1 rounded-lg transition-all shrink-0"
+                            style={{ background: '#fff', color: '#085041', border: '1px solid #9FE1CB' }}>
+                            되돌리기
+                          </button>
                           {renderDeleteControl(t)}
                         </div>
                       ))}
@@ -1282,7 +1572,13 @@ export default function TeacherCurriculumPage() {
                             {checked && <i className="ti ti-check" style={{ fontSize: 11, color: '#085041' }} />}
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-semibold text-gray-800">{s.name}</p>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {s.name}
+                              {s.on_leave && (
+                                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md align-middle"
+                                  style={{ background: '#FEF3C7', color: '#92400E' }}>휴원</span>
+                              )}
+                            </p>
                             <p className="text-xs text-gray-400">{s.grade} · {s.teacher_name}</p>
                           </div>
                         </button>

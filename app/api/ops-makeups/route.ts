@@ -8,12 +8,13 @@
 // 학부모에게는 이 내용을 따로 보내지 않는다. 의무수업(추가·대체)만 학부모까지 간다.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { denyIfNotStaff } from '@/lib/apiAuth'
+import { staffOrDeny } from '@/lib/apiAuth'
+import { staffCanSeeStudent } from '@/lib/teachers'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
 
 export async function POST(req: NextRequest) {
-  const deny = await denyIfNotStaff(req)
-  if (deny) return deny
+  const who = await staffOrDeny(req)
+  if (who.deny) return who.deny
 
   try {
     const body = (await req.json().catch(() => ({}))) as { studentIds?: string[]; fromDate?: string }
@@ -25,8 +26,10 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false } },
     )
-    const { data: students } = await db.from('students')
-      .select('id, name, grade, ops_student_id').in('id', ids)
+    const { data: asked } = await db.from('students')
+      .select('id, name, grade, teacher_name, ops_student_id').in('id', ids)
+    // 보낸 id 를 그대로 믿지 않는다 — 내 담당(주임이면 담당 학년) 학생만 답한다.
+    const students = (asked ?? []).filter((s: any) => staffCanSeeStudent(who, s))
 
     const opsIds = (students ?? []).map((s: any) => s.ops_student_id).filter(Boolean)
     // 기본 30일 — 담당 강사가 보는 것은 「최근에 무엇을 했나」다.

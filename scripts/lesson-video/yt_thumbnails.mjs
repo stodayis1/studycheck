@@ -43,7 +43,12 @@ async function token() {
     const j = await (await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({
       client_id: CID, client_secret: SECRET, device_code: d.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }) })).json()
     if (j.access_token) {
-      if (j.refresh_token) fs.appendFileSync(ENV, `\nYOUTUBE_OAUTH_REFRESH_TOKEN=${j.refresh_token}\n`)
+      // 덧붙이면 만료된 옛 줄이 먼저 읽혀 계속 실패한다 (2026-10-29) → 그 줄을 바꿔 쓴다
+      if (j.refresh_token) {
+        const lines = fs.readFileSync(ENV, 'utf8').split(/\r?\n/).filter((l) => !/^\s*YOUTUBE_OAUTH_REFRESH_TOKEN\s*=/.test(l))
+        while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+        fs.writeFileSync(ENV, [...lines, `YOUTUBE_OAUTH_REFRESH_TOKEN=${j.refresh_token}`, ''].join('\n'))
+      }
       console.log('로그인 완료'); return j.access_token
     }
     if (j.error && j.error !== 'authorization_pending' && j.error !== 'slow_down') throw new Error('로그인 실패: ' + j.error)

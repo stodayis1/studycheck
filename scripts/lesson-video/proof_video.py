@@ -3,7 +3,7 @@
   python scripts/lesson-video/proof_video.py <증명 대본.json> --out <out.mp4> --cuts <토막 폴더> [--cache <음성 캐시>]
 
 대본 형식 (docs/대본/공통수학2/증명/*.json)
-  { "id": "증명_01", "title": "...", "concept_no": 27, "chapter": "...", "sub_chapter": "...", "book_page": 166,
+  { "id": "증명_01", "title": "...", "concept_no": 27, "chapter": "...", "sub_chapter": "...", "book_page": 166, "book_pages": [165, 166] (선택 — 여러 쪽에 걸칠 때),
     "figure": {"image": "cut_04.png 경로(선택)", "crop": [x0,y0,x1,y1] (그림 픽셀)},     ← 그림이 필요한 증명만
     "steps": [ {"pose": "A|B|C|D|E", "bubble": "...", "say": "... (lesson_video 와 같은 표시 / // {강조 …})",
                 "newpage": false,
@@ -41,12 +41,18 @@ _CAPS = 'C:/Windows/Fonts/comic.ttf'
 _CN = _PN
 if os.path.exists(_CAPS):
     fm.fontManager.addfont(_CAPS); _CN = fm.FontProperties(fname=_CAPS).get_name()
+# 수식 안 소문자 l 은 손글씨 글꼴에서 숫자 1 과 똑같은 막대다(부채꼴 호의 길이 l=2πr 이 「1=2πr」로 읽힘, 2026-10-29)
+# → 필기체 ℓ (Segoe Script) 로. \ell 은 손글씨 글꼴에서 다시 막대로 나와서 안 된다
+_ELL = 'C:/Windows/Fonts/segoesc.ttf'
+_TT = _PN
+if os.path.exists(_ELL):
+    fm.fontManager.addfont(_ELL); _TT = fm.FontProperties(fname=_ELL).get_name()
 rcParams.update({'mathtext.fontset': 'custom', 'mathtext.rm': _PN, 'mathtext.it': _PN, 'mathtext.bf': _PN,
-                 'mathtext.sf': _CN, 'font.family': _PN})
+                 'mathtext.sf': _CN, 'mathtext.tt': _TT, 'font.family': _PN})
 
 
 def caps(tex):
-    r"""$…$ 안의 대문자를 \mathsf{} 로 감싼다 (\geq 같은 명령어 이름은 그대로)"""
+    r"""$…$ 안의 대문자를 \mathsf{} 로, 소문자 l 을 필기체 ℓ(\mathtt) 로 감싼다 (\geq·\left 같은 명령어 이름은 그대로)"""
     import re
     def fix(m):
         body, out, i = m.group(1), [], 0
@@ -56,7 +62,7 @@ def caps(tex):
                 j = i + 1
                 while j < len(body) and body[j].isalpha(): j += 1
                 out.append(body[i:j]); i = j; continue
-            out.append(BS + 'mathsf{' + ch + '}' if 'A' <= ch <= 'Z' else ch); i += 1
+            out.append(BS + 'mathsf{' + ch + '}' if 'A' <= ch <= 'Z' else BS + 'mathtt{ℓ}' if ch == 'l' and _TT != _PN else ch); i += 1
         return '$' + ''.join(out) + '$'
     return re.sub(r'[$]([^$]*)[$]', fix, tex)
 
@@ -90,6 +96,7 @@ def paper():
 
 
 PROB = None                                   # 풀이 영상: 노트 위에 고정한 문제 그림 (main 에서 채움)
+FIG = None                                    # 증명 그림: 오른쪽 말풍선 아래에 고정 (main 에서 채움)
 
 
 def right_panel(im, P, step):
@@ -105,11 +112,16 @@ def right_panel(im, P, step):
     d.polygon([(R0 + 250, by0 + bh - 2), (R0 + 300, by0 + bh - 2), (R0 + 290, by0 + bh + 34)], fill=CARD)
     d.line([(R0 + 250, by0 + bh), (R0 + 290, by0 + bh + 34), (R0 + 300, by0 + bh)], fill=LINE, width=3)
     for k, ln in enumerate(bl): d.text((R0 + 24, by0 + 18 + k * 48), ln, font=bf, fill=INK)
+    top = by0 + bh + 40
+    if FIG is not None:                       # 증명 그림: 말풍선 아래에 늘 보이게 (노트에 두면 줄이 밀려 올라가며 사라진다, 2026-10-29)
+        fx = R0 + (RW - FIG.width) // 2
+        d.rounded_rectangle((fx - 8, top, fx + FIG.width + 8, top + FIG.height + 24), 16, fill=(255, 255, 255), outline=LINE, width=2)
+        im.paste(FIG, (fx, top + 12)); top += FIG.height + 24 + 24
     if PROB is not None:                      # 문제 카드 (흰 바탕 · 연한 테두리)
         px0, py0 = NOTE[0], 100
         d.rounded_rectangle((px0, py0, px0 + PROB.width + 40, py0 + PROB.height + 30), 16, fill=(255, 255, 255), outline=LINE, width=2)
         im.paste(PROB, (px0 + 20, py0 + 15))
-    return by0 + bh + 40
+    return top
 
 
 _SUJI = {}
@@ -135,9 +147,12 @@ def main():
     a = ap.parse_args()
     P = json.load(open(a.proof, encoding='utf-8'))
     # 과정 이름: 대본에 grade 가 없으면 대본 폴더(docs/대본/<과정>/…)에서 읽는다
+    # (예전엔 공통수학1·2 만 찾아서 중학교 증명이 「공통수학2」로 찍혔다, 2026-10-29)
     if not P.get('grade'):
-        P['grade'] = next((g for g in ('공통수학1', '공통수학2') if g in os.path.abspath(a.proof).replace(os.sep, '/')), '공통수학2')
-    global NOTE, PROB
+        import re
+        m = re.search(r'/대본/([^/]+)/', os.path.abspath(a.proof).replace(os.sep, '/'))
+        P['grade'] = m.group(1) if m else '공통수학2'
+    global NOTE, PROB, FIG
     if P.get('problem'):
         fp = P['problem']['image']
         if not os.path.isabs(fp): fp = os.path.join(a.cuts or os.path.dirname(os.path.abspath(a.proof)), fp)
@@ -158,21 +173,19 @@ def main():
     VX0, VY0, VX1, VY1 = x0 + 4, y0 + 4, x1 - 4, y1 - 4        # 노트 안쪽 창
     VH = VY1 - VY0
     lines = []; page = 0; cy = 46                               # cy: 그 장 캔버스 안 y
-    fig_im = None
     if P.get('figure'):
         fp = P['figure']['image']
         if not os.path.isabs(fp): fp = os.path.join(a.cuts or '.', fp)
         fg = Image.open(fp).convert('RGB')
         if P['figure'].get('crop'): fg = fg.crop(P['figure']['crop'])
-        s = min(460 / fg.width, 400 / fg.height); fig_im = fg.resize((int(fg.width * s), int(fg.height * s)), Image.LANCZOS)
+        s = min(410 / fg.width, 340 / fg.height); FIG = fg.resize((int(fg.width * s), int(fg.height * s)), Image.LANCZOS)
     step_lines = []
     for k, st in enumerate(steps):
         if st.get('newpage') and lines: page += 1; cy = 46
         mine = []
         for wr in st.get('write', []):
             img = render_line(wr['tex'], COLORS[wr.get('color', 'ink')], wr.get('size', 60))
-            beside_fig = fig_im is not None and page == 0 and cy < fig_im.height + 60
-            maxw = (VX1 - VX0) - 130 - 40 - (fig_im.width + 30 if beside_fig else 0)
+            maxw = (VX1 - VX0) - 130 - 40
             if img.width > maxw:
                 img = img.resize((maxw, int(img.height * maxw / img.width)), Image.LANCZOS)
             dur = max(0.8, min(3.6, img.width / 480))
@@ -259,8 +272,6 @@ def main():
             for x in range(26, cw, 34): d.line([(x, 0), (x, chh)], fill=GRID, width=1)
             for yy in range(26, chh, 34): d.line([(0, yy), (cw, yy)], fill=GRID, width=1)
             d.line([(92, 0), (92, chh)], fill=MARGIN, width=2)
-            if fig_im is not None and pg == 0:
-                L.paste(fig_im, (cw - fig_im.width - 30, 30))
             for ln in lines[:upto]:
                 if ln['page'] != pg: continue
                 if ln.get('hl'):                    # 형광 마커: 글씨 아래쪽 반을 노랗게 (글씨가 위에 오게 먼저 칠한다)
@@ -318,7 +329,7 @@ def main():
 
     # 4) 단계별 구간 (개념 영상의 .구간.json 과 같은 꼴)
     seg = dict(id=P['id'], order=P.get('order'), kind=P.get('kind', '증명'), label=P.get('label'), type_code=P.get('type_code'), title=P['title'], concept_no=P.get('concept_no'), chapter=P.get('chapter'),
-               sub_chapter=P.get('sub_chapter'), book_page=P.get('book_page'), duration=round(total, 3),
+               sub_chapter=P.get('sub_chapter'), book_page=P.get('book_page'), book_pages=P.get('book_pages'), duration=round(total, 3),
                steps=[dict(step=i + 1, start=round(offs[i], 3), end=round(offs[i + 1] if i + 1 < len(offs) else total, 3),
                            pose=s.get('pose', 'A'), bubble=s['bubble'],
                            lines=[dict(at=round(l['t0'], 3), tex=w['tex']) for w, l in

@@ -7,7 +7,15 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 
-const OPS_URL = 'https://sumath-admin.vercel.app/instructions'
+// 가는 곳이 **둘**이다. 하나로 묶으면 안 된다 (원장님 2026-10-29):
+//   전달사항(staff_notes) → OPS **첫 화면**의 「오늘 할 일」. 여기서만 「확인」을 누를 수 있다.
+//                           첫 화면은 역할에 따라 갈린다(원장·행정 /dashboard, 강사 /teacher) —
+//                           그래서 뿌리(/)로 보내 OPS 가 알아서 고르게 한다.
+//   업무메모(work_instructions) → /instructions
+// 예전엔 둘 다 /instructions 로 보냈는데, 그 화면엔 전달사항이 **아예 없어서**
+// 출결 알림을 보고 눌러 들어간 원장님께 「표시할 업무메모가 없습니다」만 떴다.
+const OPS_HOME = 'https://sumath-admin.vercel.app/'
+const OPS_TASKS = 'https://sumath-admin.vercel.app/instructions'
 
 interface Instruction {
   id: string
@@ -45,21 +53,27 @@ export function OpsTaskNotice() {
           <i className="ti ti-clipboard-check" style={{ fontSize: 14, color: '#1E3A8A' }} />
           <span className="text-xs font-bold" style={{ color: '#1E3A8A' }}>업무메모 · 전달사항</span>
         </div>
-        <a href={OPS_URL} target="_blank" rel="noreferrer" className="text-[10px] font-semibold" style={{ color: '#1E3A8A' }}>
+        <a href={data.notes.length ? OPS_HOME : OPS_TASKS} target="_blank" rel="noreferrer"
+          className="text-[10px] font-semibold" style={{ color: '#1E3A8A' }}>
           수학OPS에서 처리 ›
         </a>
       </div>
 
       <div className="divide-y" style={{ borderColor: '#BFDBFE60' }}>
+        {/* 전달사항 — 누르면 OPS 첫 화면. 「확인」은 거기에만 있다(기록이 한 곳에만 남아야 한다) */}
         {data.notes.map((n) => (
-          <div key={n.id} className="px-4 py-2.5">
-            <p className="text-[11px] font-bold" style={{ color: '#1D4ED8' }}>전달사항</p>
+          <a key={n.id} href={OPS_HOME} target="_blank" rel="noreferrer" className="block px-4 py-2.5 hover:bg-[#EFF6FF]">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold" style={{ color: '#1D4ED8' }}>전달사항</p>
+              <span className="text-[10px] font-semibold shrink-0" style={{ color: '#6B8FD6' }}>수학OPS 「오늘 할 일」에서 확인 ›</span>
+            </div>
             <p className="text-xs mt-0.5 whitespace-pre-wrap" style={{ color: '#1E3A8A' }}>{n.content}</p>
-          </div>
+          </a>
         ))}
 
+        {/* 업무메모 — 누르면 OPS 업무메모 화면 */}
         {data.instructions.map((it) => (
-          <div key={it.id} className="px-4 py-2.5">
+          <a key={it.id} href={OPS_TASKS} target="_blank" rel="noreferrer" className="block px-4 py-2.5 hover:bg-[#EFF6FF]">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="text-xs font-bold" style={{ color: '#1E3A8A' }}>{it.title}</p>
               {it.due_date && (
@@ -91,7 +105,7 @@ export function OpsTaskNotice() {
                 )}
               </ul>
             )}
-          </div>
+          </a>
         ))}
       </div>
     </div>

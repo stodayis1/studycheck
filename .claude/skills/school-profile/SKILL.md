@@ -1,6 +1,6 @@
 ---
 name: school-profile
-description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 숫자 지표 + 교육과정 편제표·학사일정 첨부)를 학교별 한 장(data/school-profiles/<학교>.json → school_profiles 표 → /teacher/schools 화면)으로 정리한다. "학교 자료집", "학교알리미", "○○구 학교 추가", "○○고 자료집 넣어줘", "수학 편제", "편제표", "학교 정보 정리", "공시 갱신" 같은 말이 나오면 쓴다. Use when adding or refreshing per-school profile pages (student counts, math curriculum by grade, exam calendar) from Korean 학교알리미 public disclosures in StudyCheck.
+description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 숫자 지표 + 교육과정 편제표·학사일정 첨부)를 학교별 한 장(data/school-profiles/<학교>.json → school_profiles 표 → /teacher/schools 화면)으로 정리한다. "학교 자료집", "학교알리미", "○○구 학교 추가", "○○고 자료집 넣어줘", "수학 편제", "편제표", "학교 정보 정리", "공시 갱신", "수행평가 정리해줘", "○○중 수행평가", "평가계획", "반영 비율" 같은 말이 나오면 쓴다. Use when adding or refreshing per-school profile pages (student counts, math curriculum by grade, exam calendar, math assessment plan / 수행평가) from Korean 학교알리미 public disclosures in StudyCheck.
 ---
 
 # 학교 자료집 추가·갱신
@@ -27,6 +27,33 @@ description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 
 | 화면 | `app/teacher/schools/page.tsx`(목록), `app/teacher/schools/[name]/page.tsx`(한 장) |
 | 메뉴·매뉴얼 | `components/teacher/Sidebar.tsx`(「학생」 묶음 `ITEM.schools`), `app/teacher/manual/page.tsx` |
 
+## 앱에서 바로 추가 (2026-10-27~) — 먼저 이걸 쓴다
+선생님이 `/teacher/schools` 의 **「학교 추가」** 에서 학교급 → 시도 → 시군구 → 학교를 누르면 몇 초 만에 한 장이 생긴다.
+학교 화면의 **「학교알리미에서 숫자 새로 받기」** 는 숫자만 다시 받는다. 미리 정리해 둘 필요가 없다.
+| 무엇 | 경로 |
+|---|---|
+| 학교알리미 호출·조립 | `lib/schoolinfo.ts` — `listSidos/listSigungus/listSchools`, `fetchSchool`, `mergeProfile` |
+| 학교 찾기 API | `app/api/school-profiles/lookup/route.ts` (GET `step=sido·sigungu·school`, 직원) |
+| 만들기·새로 받기 API | `app/api/school-profiles/import/route.ts` (POST `{shl, level, sigungu}` 또는 `{school_name}`, 직원) |
+- 인증키: Vercel 환경변수 **`SCHOOLINFO_API_KEY`**. 없으면 「인증키가 서버에 아직 없어요」가 뜬다.
+  **2026-10-27 원장님이 넣음 — 운영에서 신원고로 동작 확인**(전교생 737 · 32학급 · 교원 73 · 신입생 244, 편제 3개 학년과 손으로 적은 한 줄은 그대로).
+  공개 견본 키 `sample` 도 실제 값을 주지만 **한 번에 20곳까지만** 준다 → 운영에 쓰지 않는다(시험용으로만).
+- 다시 받을 때의 열쇠는 `stats.schoolinfo = {shl, adrcd(행정동 10자리), level}`. OpenAPI 지역 코드는 adrcd 앞 2자리/5자리.
+- **★ `mergeProfile` 은 사람이 정리한 것을 덮지 않는다**: `math_curriculum`, `exam_calendar`, `notes`, `stats.achievement`,
+  손으로 적은 한 줄(`highlights` 중 자동 이름이 아닌 것). 자동 이름: 교내 Wee클래스 · 창의적체험활동 동아리 · 학생 자율동아리 · 「YYYY 신입생」.
+- 올해 공시가 비어 있으면 작년 것을 쓴다(`source_year` 에 실제로 쓴 해).
+- 편제가 빈 한 장에는 「아직 정리 전이에요」 카드가 뜬다 → 아래 순서로 사람이(Claude가) 채운다.
+- OpenAPI 칸 뜻 (고양일고 손 정리값과 숫자까지 맞대 확인함):
+  | apiType | 칸 → 자료집 |
+  |---|---|
+  | 0 기본정보 | `SCHUL_NM` 공식이름 · `SHL_IDF_CD` · `SCHUL_CODE`(다른 항목과 잇는 열쇠) · `ADRCD_CD`/`ADRCD_NM` · `FOND_SC_CODE` · `HS_KND_SC_NM` · `COEDU_SC_CODE` · `DGHT_SC_CODE` |
+  | 09 학생수 | `COL_S1~6` 학년 학생 · `COL_C1~6` 학급 · `COL_1~6` 학급당 · `7` 은 특수학급 · `COL_S_SUM` 전교생(특수 포함) · `COL_C_SUM` · `COL_SUM` · `TEACH_CAL` 교원 1인당 · `JU_ORG_NM` 교육지원청 |
+  | 22 교원 | `COL_S` 교원 총계 |
+  | 51 입학생 | `ALL_SUM` · `MAN_SUM` · `WOMAN_SUM` |
+  | 56 동아리 | `CREAT_EXPER_ACT_CCCLU_FGR` 창체동아리 수 · `CREAT_EXPER_ACT_STDNT_FGR` 참여 · `STDNT_SLCTL_CCCLU_FGR`/`STDNT_SLCTL_FGR` 자율동아리 |
+  | 61 상담 | `WEE_CINSTL_YN` |
+- 이 컨테이너에서 Node 로 시험할 때는 프록시를 켠다: `NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt SCHOOLINFO_API_KEY=sample node --import ./scripts/ts-resolve.mjs <시험.mts>`
+
 ## 데이터 출처와 무엇을 뽑는지
 1. **학교알리미 OpenAPI** — 숫자 지표. 손으로 옮기지 않는다(15곳 중 한 곳쯤은 틀리고, 틀려도 아무도 모른다).
    - 학년별·학급별 학생수 → `stats.total / classes / perClass / byGrade[] / special`
@@ -52,7 +79,40 @@ description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 
      3. **원장님 브라우저를 같이 쓰기** — 데스크톱 앱 + Claude in Chrome 세션이면 Claude가 화면을 열고 **캡차 숫자는 원장님이 직접 입력**, 표는 Claude가 읽는다.
      4. **정보공개청구** — 지역 전체를 파일로: 정보공개포털(open.go.kr) → 한국교육학술정보원에 「○○구 고등학교 교과별 학업성취 사항 파일」 청구.
    - 옮긴 뒤 과목 수·학년·학기를 원본과 맞대고, `dist` 합이 100 근처인지 보고, note 에 어디서 옮겼는지 적는다. 캡차를 문자 인식으로 풀지 않는다.
-4. **학교알리미 바로가기 주소** — `sources[]` 의 「학교알리미 공시」 줄에 `url` 을 붙인다:
+4. **수행평가 — 교과별(학년별) 교수·학습 및 평가계획 (공시 4-가)** → `stats.assessment` (2026-10-27~)
+   - 형식(`lib/schoolProfile.ts` 의 `Assessment`): `{year, plans[{grade, term, subject, examRatio, perfRatio, essayRatio,
+     exams[{label, points, ratio, when}], tasks[{label, kind, points, ratio, when, elements[]}], page, note}], note}`.
+     성취도처럼 `stats` 안에 두므로 **표(DB 칸)를 새로 만들지 않는다.** `mergeProfile` 이 덮지 않는다. 화면은 「○○학년도 수학 수행평가」 카드.
+   - **캡차 없이 받아진다.** 학교마다 학년별 PDF(전 과목, 150~180쪽)가 학기마다(4월 = 1학기, 9월 = 2학기) 올라온다.
+     ```
+     python .claude/skills/school-profile/scripts/fetch_eval_plan.py <SHL_IDF_CD> <폴더>      # 받고 수학 「반영 비율」 쪽 후보까지
+     python .claude/skills/school-profile/scripts/check_assessment.py <assessment.json> <폴더>  # 옮긴 값 ↔ 원문 쪽 대조
+     ```
+     부르는 주소: 목록 `POST /ei/pp/Pneipp_b43_s0p.do` (GS_HANGMOK_CD=43 · JG_BURYU_CD=JG040 · JG_HANGMOK_CD=14, 응답 cp949,
+     숨은 칸 `JG_CHASU` 가 차수), 파일 `POST /servlets/EiFileDownLoad.do` (`FILE_SEQ` 0,1,2…). 받은 PDF 는 git 에 넣지 않는다.
+   - 파일 모양은 학교마다 다르다: 화수중은 학년별 PDF 3개(150~180쪽), **신원중은 전 학년 한 파일(507쪽)**.
+     받기 스크립트는 「수학과 평가 세부 계획」 머리말마다 그 뒤 첫 「평가의 종류와 반영 비율」 쪽을 「머리말→표」로 알려 준다
+     (신원중 60→65, 232→237, 410→413). 한 파일이면 학년은 표 내용(단원)으로 맞춘다 — 머리말 순서가 1·2·3학년이었다.
+   - **한글(.hwp/.hwpx)로만 올리는 학교가 많다**(재원생 학교 12곳 중 6곳). 받기 스크립트가 이 컴퓨터의 한글 2022
+     (`HWPFrame.HwpObject`)로 같은 이름의 PDF 를 만들어 같은 길로 읽는다(경로는 UTF-8 목록 파일로 넘긴다 — 명령줄로 넘기면 한글이 깨져 조용히 실패한다).
+     한글이 없는 컴퓨터면 「PDF 로 못 바꿈」이 뜬다 → 원장님 컴퓨터에서 돌리거나 한글로 열어 PDF 저장.
+   - 머리말이 「수학과 평가 세부」가 아닌 학교도 있다(봉일천고 「<과목>과 교수학습 및 평가 운영 계획」, 고양중은 머리말 없이 「<평가의 종류와 반영비율>」).
+     「표 쪽 없음」이면 get_text 로 「반영」+「선택형」+「수행」이 있는 쪽을 훑는다. 고등학교는 과목마다 표가 있다 — 수학 교과 과목을 빠짐없이.
+   - 표가 두 쪽에 걸치면 `page` 를 「47~48쪽」으로 적는다(점검기가 두 쪽을 함께 본다, 세 쪽까지).
+   - **표에 글자로 없는 값은 넣지 않는다** — 방식 칸이 없으면 `kind` 를 빼고, 논술형 합 칸이 없으면 `essayRatio` 를 뺀다.
+     다른 칸에서 추정하거나(「논술형 반영비율이 잡혀 있으니 논술형」) 괄호 값을 더해 만들지 않는다. 그런 관찰은 `note` 에.
+     (2026-10-27 작업자가 고양중 방식·고양일고 논술형 합을 이렇게 만들어 넣었다가 뺐다.)
+   - 표에 「전기학교 반영비율」 같은 줄이 더 있으면(신원중 3학년) 해당 plan 의 `note` 에 원문 그대로 적는다.
+   - 읽는 곳: 수학 「평가 세부계획」의 **「평가의 종류와 반영 비율」 표** 한 쪽. 정기시험(1차·2차 × 선택형·논술형)과 수행평가 영역마다
+     만점·반영비율·시기, 논술형 반영비율 합, 성취기준, 평가요소가 다 있다.
+   - **그림으로 한 번 보고 옮긴다**(pymupdf 로 그 쪽을 PNG). 글자 뽑기는 칸이 섞여 나온다 — 값은 그림 표에서, 글자는 대조용.
+     시기·영역 이름은 **원문 그대로**(「12월2주」처럼 붙여 쓴 것도 그대로 — 점검기는 띄어쓰기를 무시한다).
+   - `page` 는 「<파일 이름> <N>쪽」, N 은 **PDF 파일 안의 순서**(화수중 3학년은 84번째 쪽에 「- 63 -」이 인쇄돼 있었다 → 둘 다 적음).
+   - 점검기: 영역 이름·방식·N점·N%·시기가 그 쪽에 글자 그대로 있는지, 정기+수행 = 100, 수행 영역 합 = 수행 비율, 정기 칸 합 = 정기 비율.
+     **값을 다른 칸에 잘못 붙인 것(1차 시기를 2차에)은 못 잡는다** → 카드를 그림 표와 한 번 맞대 본다.
+     일부러 틀린 사본에서 실패하는 것 확인함(화수중: 정상 101/101, 네 군데 바꾼 사본 63/101).
+   - 학생·학부모 안내문이 필요하면 계정 스킬 `performance-notice`(원문 값만 쓰고 대조)를 이 값·원문으로 돌린다.
+5. **학교알리미 바로가기 주소** — `sources[]` 의 「학교알리미 공시」 줄에 `url` 을 붙인다:
    `https://www.schoolinfo.go.kr/ei/ss/Pneiss_b01_s0.do?SHL_IDF_CD=<학교 UUID>` (이게 정식 주소. 옛 `HG_CD=` 주소도 이리로 넘어간다)
    - **전국 어디든 도구로 찾는다** (같은 폴더 `scripts/find_schools.py`, 표준 라이브러리만):
      ```
@@ -73,10 +133,10 @@ description: 학교 자료집 추가·갱신 — 학교알리미 공시(OpenAPI 
    - 학교알리미 화면은 **EUC-KR(cp949)** 이다. 읽을 때 `iconv -f cp949 -t utf-8`.
    - 화면 맨 위 「학교알리미에서 성취도 보기」 버튼이 이 주소로 간다. 성취도 표까지 바로 여는 주소는 없다(캡차 때문) —
      버튼 옆에 「학업성취사항 → 교과별 학업성취 사항 → 숫자 입력」 안내가 뜬다. `url` 이 없으면 첫 화면 + 검색 안내.
-5. `sources[]` — 공공누리 출처표시 의무가 있어 화면 아래에 그대로 나온다. 기존 파일처럼 두 줄을 적는다:
+6. `sources[]` — 공공누리 출처표시 의무가 있어 화면 아래에 그대로 나온다. 기존 파일처럼 두 줄을 적는다:
    `{"name":"학교알리미 공시","detail":"학교교육과정 편성·운영 및 평가에 관한 사항 (2026)"}`,
    `{"name":"학교알리미 OpenAPI","detail":"학년별·학급별 학생수 / 직위별 교원 현황 / 동아리 / 상담 / 입학생 (2026)"}`
-6. `notes` — 공시에 없는 설명, 그리고 **확인 못 한 것**을 적는 자리 (화면에 초록 글씨로 그대로 나온다).
+7. `notes` — 공시에 없는 설명, 그리고 **확인 못 한 것**을 적는 자리 (화면에 초록 글씨로 그대로 나온다).
 
 ※ 저장소에는 OpenAPI를 불러오는 스크립트가 **없다**(지난번엔 작업 중에 직접 호출해 JSON에 적었다).
 API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하면 원장님께 받는다.
@@ -146,6 +206,11 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 - 성취도(`stats.achievement`)는 **15곳 모두 비어 있다** — 자동으로 못 가져온다(위 3번, 캡차). 원장님이 표를 붙여넣어 주시면(1순위) 또는 캡처를 주시면 채운다.
   ※ 클라우드 세션은 환경 설정의 허용 도메인에 `www.schoolinfo.go.kr` 이 있어야 접속된다(2026-10-27 추가함).
 - 중학교·초등학교, 덕양구 밖 지역은 아직 없다.
+- 수행평가(`stats.assessment`)는 **재원생이 있는 학교만** 한다(원장님 2026-10-27). **2026 2학기 12곳 모두 넣음**(DB·`data/school-assessment/*.json`):
+  중 7곳(신원중·원흥중·고양중·지축중·고양제일중·목암중·도래울중), 고 5곳(신원고·고양일고·고양동산고·백양고·봉일천고).
+  고양제일중 3학년은 학교 파일에 수학 계획이 없다(원문 누락). 봉일천고는 이때 한 장을 새로 만들어 숫자가 비어 있다 → 「숫자 새로 받기」.
+  2027 1학기(4월 공시)에 같은 12곳 + 새로 생긴 재원생 학교를 다시 한다. 화수중(재원생 없음)은 시험용(101/101)이라 넣지 않았다.
+  재원생 학교 목록: `select school, count(*) from students where is_active group by school`.
 - 커밋: e117b40(화면·표·스크립트, 고양일고) → a5d0dd0(15곳 숫자, 6곳 편제) → 81cb573(15곳 편제 완료).
 
 ## 끝났다고 말하기 전 확인
@@ -155,6 +220,7 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 - [ ] 확인 못 한 칸은 비우고 notes 에 「확인하지 못했다」를 적음 (짐작 0)
 - [ ] `sources` 두 줄, `source_year` 맞음, 학교알리미 `url` 은 실제로 열어 본 주소
 - [ ] 성취도를 넣었으면 `year` 가 성적 연도이고 `dist` 합이 100 근처
+- [ ] 수행평가를 넣었으면 `check_assessment.py` 가 「통과 N / 전체 N」이고, 카드를 원문 그림 표와 맞대 봤음
 - [ ] 화면 한 장에서 우리 학생 이름이 보임(안 보이면 학교 이름 불일치 의심)
 - [ ] 아래 진행 현황과 규칙 추가 기록을 갱신함
 
@@ -173,3 +239,8 @@ API 키도 저장소·`.env.local` 에 정해진 이름이 없다 — 필요하�
 - 2026-10-27 성취도 — `stats.achievement` 형식, 학교알리미 바로가기 `sources[].url`(HG_CD), 「학교알리미에서 성취도 보기」 버튼, 코드 짐작 금지
 - 2026-10-27 학교알리미 주소 15곳 채움 — SHL_IDF_CD 찾는 json 주소, title 확인, cp949, DB 는 jsonb 부분 수정. 성취도는 OpenAPI·공개용 데이터에 없고 화면은 캡차 → 원장님 캡처로만 채운다
 - 2026-10-27 전국 학교 찾기 도구 `scripts/find_schools.py`(지역·이름, --check). 성취도는 「표 붙여넣기 → 캡처 → 브라우저 같이 쓰기(캡차는 원장님) → 정보공개청구」 순. 다른 학원용 사본을 따로 만들어 드림
+- 2026-10-27 앱에서 바로 추가 — 「학교 추가」·「숫자 새로 받기」, lib/schoolinfo.ts, SCHOOLINFO_API_KEY(견본 키는 20곳 제한), stats.schoolinfo 열쇠, 사람이 정리한 칸은 덮지 않음, OpenAPI 칸 뜻표
+- 2026-10-27 운영 인증키로 「숫자 새로 받기」 동작 확인(신원고). 다른 학원용 사본에 앱 「학교 추가」 본보기 코드·칸 뜻표 넣어 다시 보냄
+- 2026-10-27 수행평가 — 공시 4-가 평가계획 PDF 는 캡차 없이 받아진다. `stats.assessment` 형식, fetch_eval_plan.py(받기·쪽 찾기)·check_assessment.py(원문 대조), 화면 카드
+- 2026-10-27 수행평가는 재원생이 있는 학교만(원장님). 전 학년 한 파일 PDF(신원중)는 「수학과 평가 세부」 머리말→첫 반영 비율 표로 찾는다
+- 2026-10-27 한글 파일은 한글 2022 로 PDF 변환(받기 스크립트), 두 쪽 걸친 표는 page 「N~M쪽」, 표에 없는 값(방식·논술형 합)은 추정·합산해 넣지 않는다

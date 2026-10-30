@@ -300,17 +300,15 @@ export default function TeacherExamPrepPage() {
     }
 
     // 해당 학교+학년 학생(및 학부모)에게 새 시험 일정 등록 푸시 알림
-    const { data: targetStudents } = await supabase
-      .from('students').select('id, grade').eq('school', schoolName).eq('is_active', true)
-    const targetIds = (targetStudents ?? [])
-      .filter((s: any) => toAdd.includes(String(s.grade ?? '').replace(/[^0-9]/g, '')))
-      .map((s: any) => s.id)
-    if (targetIds.length > 0) {
+    // ★ 대상 학생은 **서버에서** 찾는다. 2026-10-29 부터 강사·주임 계정은 본인 범위
+    //   학생만 읽히기 때문에, 여기서 명단을 만들면 주임이 담당 학년 밖 학교 일정을
+    //   올렸을 때 나머지 학부모에게 알림이 **조용히 안 간다.**
+    if (toAdd.length > 0) {
       apiFetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target: { studentIds: targetIds },
+          target: { schoolGrades: { school: schoolName, grades: toAdd } },
           payload: {
             title: `${schoolName} ${schName} 일정 등록`,
             body: `시험일: ${schDate}. 눌러서 시험대비 현황을 확인해보세요.`,

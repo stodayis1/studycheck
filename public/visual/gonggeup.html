@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>튀어 오르는 공과 등비급수</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 떨어졌다 튀어 오르는 공(높이 눈금) / 아래: 움직인 거리를 한 칸씩 쌓은 막대와 부분합 / 오른쪽: 고르는 단추와 식 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --shape: #f97316;
+  --axis: #e11d48;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 18px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row .lbl { font-size: 13px; color: var(--muted); min-width: 6.5em; }
+.group { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.group h3 { margin: 0; font-family: var(--font-display); font-size: 15px; }
+canvas { width: 100%; display: block; }
+.read { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 520px) { .read { grid-template-columns: minmax(0, 1fr); } }
+.read div { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.read small { display: block; font-size: 12px; color: var(--muted); }
+.read b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.read .lim b { color: var(--brand); }
+.math { font-size: 14px; line-height: 1.9; }
+.math .eq { display: block; padding: 6px 10px; margin: 4px 0; background: var(--accent-soft); border-radius: 8px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.math .hl { color: var(--brand); font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">수학Ⅰ 등비수열 · 미적분Ⅰ 등비급수</div>
+    <h1>튀어 오르는 공과 등비급수</h1>
+    <p>공이 바닥에 닿을 때마다 바로 전 높이의 r배만큼 튀어 올라요. 튀어 오르는 높이는 등비수열이 되고, 공이 움직인 거리를 끝까지 더하면 등비급수가 돼요. 튀는 횟수는 끝이 없는데 움직인 거리는 일정한 값에 다가가요.</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <section class="card" aria-label="튀어 오르는 공">
+        <canvas id="ball" role="img" aria-label="공이 떨어졌다 튀어 오르는 모습과 높이 눈금"></canvas>
+        <div class="read">
+          <div><small>바닥에 닿은 횟수</small><b id="rHits">0번</b></div>
+          <div><small>지금까지 움직인 거리</small><b id="rDist">0 m</b></div>
+          <div class="lim"><small>끝까지 움직이면</small><b id="rLim">70 m</b></div>
+        </div>
+      </section>
+      <section class="card" aria-label="움직인 거리 쌓기">
+        <h2>움직인 거리 한 칸씩 쌓기</h2>
+        <p class="sub">막대 하나가 한 번 내려오거나(첫 칸) 한 번 올라갔다 내려온 거리예요. 꺾은선은 지금까지 더한 값(부분합)이고, 주황 점선이 끝까지 더한 값이에요.</p>
+        <canvas id="chart" role="img" aria-label="이동 거리 막대와 부분합 꺾은선"></canvas>
+      </section>
+    </div>
+
+    <aside class="card" aria-label="고르기와 식">
+      <div class="btns">
+        <button class="btn primary" id="btnDrop" type="button">다시 떨어뜨리기</button>
+        <button class="btn" id="btnPause" type="button" aria-pressed="false">멈춤</button>
+      </div>
+      <div class="group">
+        <div class="row"><span class="lbl">처음 높이 h₀</span><span class="btns" id="hChips"></span></div>
+        <div class="row"><span class="lbl">튀어 오르는 비율 r</span><span class="btns" id="rChips"></span></div>
+        <div class="row"><span class="lbl">빠르기</span><span class="btns" id="sChips"></span></div>
+      </div>
+      <div class="group math" id="math"></div>
+      <p class="note">공이 공중에 머무는 시간도 공비 √r 인 등비급수라서, 튀는 횟수는 끝이 없어도 공은 정해진 시간 안에 멈춰요.</p>
+    </aside>
+  </div>
+</div>
+
+<script id="core">
+// 계산만 한다(화면 없음). 높이는 처음 높이를 1로 둔 비율, 시각은 처음 떨어지는 데 걸리는 시간 t0 를 기준으로 잰다.
+// 튀어 오르는 높이 비율이 r 이면 속도 비율은 √r 이다(높이는 속도의 제곱에 비례).
+const CORE = (function () {
+  function peak(n, r) { return Math.pow(r, n); }                       // n번째로 튀어 오른 높이 h_n = r^n
+  function totalDistance(r) { return (1 + r) / (1 - r); }             // 1 + 2(r + r² + …)
+  function partialSum(n, r) {                                          // 첫 n+1 칸(낙하 1칸 + 왕복 n칸)의 합
+    return 1 + 2 * r * (1 - Math.pow(r, n)) / (1 - r);
+  }
+  function stopTime(r, t0) { const e = Math.sqrt(r); return t0 * (1 + e) / (1 - e); }
+  // t초에서의 높이 h, 바닥에 닿은 횟수 hits, 지금까지 움직인 거리 dist (모두 처음 높이 1 기준)
+  function state(t, r, t0) {
+    const e = Math.sqrt(r), g = 2 / (t0 * t0), v0 = g * t0;
+    if (t <= 0) return { h: 1, hits: 0, dist: 0, done: false };
+    if (t < t0) { const h = 1 - 0.5 * g * t * t; return { h: h, hits: 0, dist: 1 - h, done: false }; }
+    const c = 2 * v0 / g * e / (1 - e);                // 첫 충돌 뒤 튕김이 모두 끝나는 데 걸리는 시간
+    const tau = t - t0;
+    if (tau >= c) return { h: 0, hits: Infinity, dist: totalDistance(r), done: true };
+    let k = Math.floor(Math.log(1 - tau / c) / Math.log(e));          // 첫 충돌 뒤 이미 끝난 튕김 수
+    if (k < 0) k = 0;
+    const start = c * (1 - Math.pow(e, k));
+    const vm = v0 * Math.pow(e, k + 1), dm = 2 * vm / g;
+    const s = Math.min(Math.max(tau - start, 0), dm);
+    const h = vm * s - 0.5 * g * s * s, top = peak(k + 1, r);
+    const part = s <= dm / 2 ? h : 2 * top - h;
+    return { h: h, hits: k + 1, dist: partialSum(k, r) + part, done: false };
+  }
+  return { peak: peak, totalDistance: totalDistance, partialSum: partialSum, stopTime: stopTime, state: state };
+})();
+if (typeof module !== "undefined") module.exports = CORE;
+</script>
+
+<script>
+(function () {
+  const C = CORE;
+  const HS = [10, 12, 20];
+  const RS = [[1, 2], [2, 3], [3, 4], [4, 5]];
+  const SP = [['느리게', 0.5], ['보통', 1], ['빠르게', 2]];
+  const T0 = 1.1;                                      // 처음 떨어지는 데 걸리는 시간(화면용 초)
+  const st = { h0: 10, rf: [3, 4], speed: 1, t: 0, paused: false, hold: 0 };
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const r = () => st.rf[0] / st.rf[1];
+  const fr = (f) => f[0] + '/' + f[1];
+  function num(x) {
+    if (!isFinite(x)) return '∞';
+    const v = Math.round(x * 100) / 100;
+    return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, '');
+  }
+  const limitExact = () => st.h0 * (st.rf[1] + st.rf[0]) / (st.rf[1] - st.rf[0]);
+
+  function chips(el, items, label, isOn, pick) {
+    el.innerHTML = '';
+    items.forEach(function (it) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = label(it);
+      b.setAttribute('aria-pressed', isOn(it) ? 'true' : 'false');
+      b.onclick = function () { pick(it); renderControls(); restart(); };
+      el.appendChild(b);
+    });
+  }
+  function renderControls() {
+    chips(document.getElementById('hChips'), HS, (h) => h + ' m', (h) => h === st.h0, (h) => { st.h0 = h; });
+    chips(document.getElementById('rChips'), RS, fr, (f) => f[0] === st.rf[0] && f[1] === st.rf[1], (f) => { st.rf = f; });
+    chips(document.getElementById('sChips'), SP, (s) => s[0], (s) => s[1] === st.speed, (s) => { st.speed = s[1]; });
+    const R = fr(st.rf), h0 = st.h0;
+    document.getElementById('math').innerHTML =
+      '<h3>식으로 보면</h3>' +
+      '<div>n번째로 튀어 오르는 높이</div>' +
+      '<span class="eq">h<sub>n</sub> = ' + h0 + ' × (' + R + ')<sup>n</sup> → ' +
+        [1, 2, 3].map((n) => num(h0 * C.peak(n, r())) + ' m').join(', ') + ', …</span>' +
+      '<div>움직인 거리 = 처음 내려온 거리 + (올라갔다 내려온 거리)의 합</div>' +
+      '<span class="eq">' + h0 + ' + 2 × (' + num(h0 * r()) + ' + ' + num(h0 * r() * r()) + ' + …)</span>' +
+      '<span class="eq">= ' + h0 + ' + 2 × <span style="display:inline-block;text-align:center;vertical-align:middle;line-height:1.3">' +
+        num(h0 * r()) + '<br>―――<br>1 − ' + R + '</span> = <span class="hl">' + num(limitExact()) + ' m</span></span>' +
+      '<div>등비급수의 합: 첫째항 a, 공비 r (|r| &lt; 1) 이면 a + ar + ar² + … = a ÷ (1 − r)</div>';
+    document.getElementById('rLim').textContent = num(limitExact()) + ' m';
+  }
+  function restart() { st.t = 0; st.hold = 0; if (reduce) st.t = C.stopTime(r(), T0); }
+
+  function setup(cv, ratio) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = cv.clientWidth, h = Math.round(w * ratio);
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.style.height = h + 'px'; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, w: w, h: h };
+  }
+  const FONT = '"Gowun Dodum","Malgun Gothic",sans-serif';
+
+  function drawBall(s) {
+    const cv = document.getElementById('ball');
+    const { ctx, w, h } = setup(cv, w0() < 520 ? 0.95 : 0.62);
+    const floorY = h - 34, topY = 30, rad = Math.max(10, Math.min(22, w * 0.025));
+    const S = floorY - rad - topY, bx = Math.round(w * 0.32);
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = '13px ' + FONT; ctx.textBaseline = 'middle';
+    // 높이 눈금: 처음 높이와 1·2·3·4번째로 튀어 오른 높이
+    for (let n = 0; n <= 4; n++) {
+      const y = floorY - rad - C.peak(n, r()) * S;
+      ctx.strokeStyle = n === 0 ? '#bcd5f2' : 'rgba(242,107,29,' + (0.75 - n * 0.12) + ')';
+      ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(bx - 60, y); ctx.lineTo(w - 16, y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = n === 0 ? '#5b6b7d' : '#c2410c'; ctx.textAlign = 'right';
+      ctx.fillText((n === 0 ? 'h₀' : 'h' + '₁₂₃₄'[n - 1]) + ' = ' + num(st.h0 * C.peak(n, r())) + ' m', w - 18, y - 10);
+    }
+    ctx.strokeStyle = '#1d2b3a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(16, floorY); ctx.lineTo(w - 16, floorY); ctx.stroke();
+    const y = floorY - rad - s.h * S;
+    ctx.fillStyle = 'rgba(29,43,58,0.12)';
+    ctx.beginPath(); ctx.ellipse(bx, floorY + 6, rad * (1 - 0.5 * Math.min(1, s.h)), 4, 0, 0, Math.PI * 2); ctx.fill();
+    const grad = ctx.createRadialGradient(bx - rad * 0.35, y - rad * 0.35, rad * 0.2, bx, y, rad);
+    grad.addColorStop(0, '#93b8ff'); grad.addColorStop(1, '#2563eb');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(bx, y, rad, 0, Math.PI * 2); ctx.fill();
+  }
+  function w0() { return document.getElementById('ball').clientWidth; }
+
+  function drawChart(s) {
+    const cv = document.getElementById('chart');
+    const { ctx, w, h } = setup(cv, cv.clientWidth < 520 ? 0.7 : 0.42);
+    const n = 10, L = C.totalDistance(r());
+    const left = 46, right = w - 12, top = 18, bottom = h - 26;
+    const bw = (right - left) / n, sy = (v) => bottom - v / L * (bottom - top) * 0.92;
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = '12px ' + FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'right'; ctx.fillStyle = '#5b6b7d';
+    ctx.strokeStyle = '#dceafa'; ctx.lineWidth = 1;
+    for (let k = 0; k <= 4; k++) {
+      const v = L * k / 4, y = sy(v);
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+      ctx.fillText(num(v * st.h0), left - 6, y);
+    }
+    // 끝까지 더한 값
+    ctx.strokeStyle = '#f26b1d'; ctx.setLineDash([7, 5]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(left, sy(L)); ctx.lineTo(right, sy(L)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#c2410c'; ctx.textAlign = 'left';
+    ctx.fillText('합 → ' + num(limitExact()) + ' m', left + 6, sy(L) - 11);
+    const done = s.done ? n : s.hits;                  // 다 지나간 칸 수
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const term = i === 0 ? 1 : 2 * C.peak(i, r());
+      const x = left + i * bw + bw * 0.18, bwid = bw * 0.64;
+      ctx.fillStyle = i < done ? '#2563eb' : (i === done ? '#93b8ff' : '#e3edff');
+      ctx.fillRect(x, sy(term), bwid, bottom - sy(term));
+      ctx.fillStyle = '#5b6b7d'; ctx.textAlign = 'center';
+      ctx.fillText(String(i + 1), x + bwid / 2, bottom + 12);
+      if (i < done) pts.push([x + bwid / 2, sy(C.partialSum(i, r()))]);
+    }
+    if (pts.length) {
+      ctx.strokeStyle = '#1d2b3a'; ctx.lineWidth = 2; ctx.beginPath();
+      pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+      ctx.fillStyle = '#1d2b3a'; pts.forEach((p) => { ctx.beginPath(); ctx.arc(p[0], p[1], 3.5, 0, Math.PI * 2); ctx.fill(); });
+    }
+  }
+
+  function draw() {
+    const s = C.state(st.t, r(), T0);
+    drawBall(s); drawChart(s);
+    document.getElementById('rHits').textContent = s.done ? '끝없이' : s.hits + '번';
+    document.getElementById('rDist').textContent = num(s.dist * st.h0) + ' m';
+  }
+
+  let last = null;
+  function tick(ts) {
+    const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+    if (!st.paused && !reduce) {
+      const end = C.stopTime(r(), T0);
+      if (st.t < end) st.t = Math.min(end, st.t + dt * st.speed);
+      else if ((st.hold += dt) > 2.5) restart();       // 멈춘 뒤 잠깐 보여 주고 다시 떨어뜨린다
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  document.getElementById('btnDrop').onclick = function () { restart(); st.paused = false; syncPause(); };
+  document.getElementById('btnPause').onclick = function () { st.paused = !st.paused; syncPause(); };
+  function syncPause() {
+    const b = document.getElementById('btnPause');
+    b.setAttribute('aria-pressed', st.paused ? 'true' : 'false'); b.textContent = st.paused ? '이어서' : '멈춤';
+  }
+  renderControls(); restart();
+  window.addEventListener('resize', draw);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

@@ -22,13 +22,30 @@ THEME = {
     'concept': dict(bg=(221, 245, 230), grid=(204, 234, 214), badge=(22, 72, 40), pill=(196, 232, 206),
                     label=(24, 52, 34), title=(17, 33, 52)),
     # 공통수학1 개념: 하늘색 파스텔 (과정별로 바탕색을 다르게 — 공통수학2 는 연두)
+    # 중학교 개념: 학년마다 다른 파스텔 (중1 노랑 · 중2 분홍 · 중3 보라)
+    'concept_m1': dict(bg=(253, 243, 205), grid=(246, 232, 186), badge=(120, 80, 10), pill=(250, 230, 170),
+                    label=(90, 60, 10), title=(50, 34, 8)),
+    'concept_m2': dict(bg=(252, 226, 232), grid=(244, 210, 218), badge=(130, 30, 60), pill=(248, 206, 216),
+                    label=(100, 24, 46), title=(60, 14, 28)),
+    'concept_m3': dict(bg=(232, 226, 250), grid=(218, 210, 242), badge=(60, 40, 120), pill=(214, 204, 246),
+                    label=(46, 30, 96), title=(28, 18, 60)),
     'concept_cm1': dict(bg=(222, 236, 252), grid=(205, 223, 246), badge=(26, 54, 104), pill=(199, 220, 247),
                     label=(22, 40, 76), title=(16, 30, 56)),
     # 공통수학1 증명: 하늘색(개념)보다 한 단계 진한 파랑 — 공통수학2 의 연두 → 초록과 같은 짜임
     'proof_cm1': dict(bg=(160, 196, 238), grid=(144, 182, 228), badge=(18, 42, 86), pill=(205, 224, 248),
                     label=(16, 34, 68), title=(12, 26, 50)),
+    # 중학교 증명: 학년 개념색보다 한 단계 진하게 (중1 노랑 → 진한 노랑 · 중2 분홍 → 진한 분홍 · 중3 보라 → 진한 보라)
+    'proof_m1': dict(bg=(246, 214, 120), grid=(236, 200, 100), badge=(96, 60, 4), pill=(252, 236, 186),
+                     label=(80, 50, 6), title=(46, 30, 4)),
+    'proof_m2': dict(bg=(240, 168, 186), grid=(230, 152, 172), badge=(110, 18, 48), pill=(250, 214, 224),
+                     label=(92, 16, 40), title=(56, 10, 24)),
+    'proof_m3': dict(bg=(186, 172, 236), grid=(172, 158, 226), badge=(46, 28, 104), pill=(222, 214, 248),
+                     label=(40, 24, 86), title=(24, 14, 54)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
+    # 공통수학1 풀이: 증명(진한 파랑)보다 한 단계 더 진한 파랑
+    'solution_cm1': dict(bg=(84, 126, 196), grid=(74, 114, 184), badge=(10, 28, 64), pill=(208, 224, 248),
+                    label=(12, 28, 60), title=(8, 18, 40), foot=(226, 234, 248)),
     # 풀이: 개념(연한 연두) → 증명(진한 초록) 보다 한 단계 더 진한 초록 (원장님 2026-10-21)
     'solution': dict(bg=(84, 158, 110), grid=(74, 146, 98), badge=(10, 46, 26), pill=(205, 236, 214),
                     label=(12, 40, 24), title=(8, 24, 16), foot=(226, 242, 230)),
@@ -161,7 +178,7 @@ def main():
             G = json.load(open(g, encoding='utf-8'))
             bub = next((st['bubble'] for st in G['steps'][2:] if st.get('lines')), G['steps'][-1]['bubble'])
             # 원장님 2026-10-21: 썸네일에 교재 쪽과 문제 번호가 꼭 있어야 한다 → 배지 「필수예제 05」, 옆에 「개념+유형 60쪽」
-            make('solution', G['label'], '', G['title'], bub, 'ABCD'[k % 4],
+            make('solution' if grade == '공통수학2' else 'solution_cm1', G['label'], '', G['title'], bub, 'ABCD'[k % 4],
                  pill=f"개념+유형 {G['book_page']}쪽").save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
         print(len(made), '장'); [print(' ', m) for m in made]; return
@@ -180,7 +197,8 @@ def main():
             if big and not force: continue                      # 원장님이 GPT 로 만든 것은 그대로 둔다
             L = scripts[int(no)]
             bubble = (BUBBLE.get(L['no']) if grade == '공통수학2' else None) or next(s['bubble'] for s in L['scenes'] if s['show'].startswith('cut_'))
-            make('concept' if grade == '공통수학2' else 'concept_cm1', no, L['chapter'], L['title'], bubble, L.get('thumb_pose', 'A'),
+            kind = {'공통수학2': 'concept', '공통수학1': 'concept_cm1'}.get(grade) or 'concept_m' + grade[1]   # 중1-2 → concept_m1
+            make(kind, no, L['chapter'], L['title'], bubble, L.get('thumb_pose', 'A'),
                  grade=grade).save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
     else:
@@ -189,7 +207,7 @@ def main():
             G = json.load(open(g, encoding='utf-8'))
             if only and G['order'] not in only: continue
             if os.path.exists(base + '.jpg') and not force: continue
-            kind = 'proof' if grade == '공통수학2' else 'proof_cm1'
+            kind = {'공통수학2': 'proof', '공통수학1': 'proof_cm1'}.get(grade) or 'proof_m' + grade[1]   # 중2-2 → proof_m2
             tag = ' 공식 쓰기' if G.get('label') == '공식 쓰기' else ' 증명'
             make(kind, G['order'], G['chapter'] + tag, G['title'], G['steps'][0]['bubble'], 'D', grade=grade).save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))

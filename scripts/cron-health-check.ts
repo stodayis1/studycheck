@@ -123,6 +123,23 @@ T('OPS 반영의 「건너뜀」·보낼 학생 0명은 오류가 아니다', ()
   return checkCronRuns(rows, Date.parse(NOW)).length === 0
 })
 
+T('담당 학생이 다 결석이라 샘플을 못 만든 것은 오류가 아니다', () => {
+  const rows = healthy(DAYS, NOW)
+  find(rows, 'morning', '2026-10-27').result.sample = {
+    sent: 4, picks: [{ ok: true }, { ok: false, teacher: '윤지혜', error: '그날 담당 학생이 모두 결석이라 보낼 글이 없어요' }],
+  }
+  return checkCronRuns(rows, Date.parse(NOW)).length === 0
+})
+
+T('샘플이 정말 못 나갔으면 「오류」 — 누구 것인지까지 적는다', () => {
+  const rows = healthy(DAYS, NOW)
+  find(rows, 'morning', '2026-10-27').result.sample = {
+    sent: 4, picks: [{ ok: false, teacher: '주한', error: '연락처가 없어요(수학OPS 직원 정보)' }],
+  }
+  const ps = checkCronRuns(rows, Date.parse(NOW))
+  return kinds(ps) === 'morning:오류' && ps[0].detail.includes('주한') && ps[0].detail.includes('연락처가 없어요')
+})
+
 T('토요일 저녁은 18:00 기준 — 19:10 에 기록이 없으면 「안 돎」', () => {
   const now = at('2026-10-24', '19:10')
   const rows = healthy(['2026-10-23', '2026-10-24'], now).filter((r) => r.phase !== 'evening' || r.run_date !== '2026-10-24')

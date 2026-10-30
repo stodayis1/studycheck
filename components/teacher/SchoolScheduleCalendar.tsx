@@ -8,8 +8,10 @@
  * 사람이 넣은 건은 다음 자동 갱신 때 지워지지 않는다.
  */
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { normalizeSchool } from '@/lib/school'
 import { loadHolidays, dateKey, type Holiday } from '@/lib/holidays'
 
 interface Period {
@@ -49,6 +51,12 @@ export default function SchoolScheduleCalendar() {
   const { currentUser } = useAuth()
   const canEdit = currentUser?.role === 'admin' || ['신애진', '승민정'].includes(currentUser?.name || '')
   const [periods, setPeriods] = useState<Period[]>([])
+  // 자료집이 있는 학교 — 달력에서 바로 건너갈 수 있게.
+  //
+  // 수행평가는 여기(달력)에 안 띄운다(원장님 2026-10-27). 나이스가 수행평가를 거의 안 주고,
+  // 평가계획의 시기는 「10월 4주」·「10월 1주~11월 3주」 같은 **주 단위**라 날짜 칸에 꽂으면
+  // 없는 날짜를 지어내게 된다. 수행평가는 학교 자료집에 두고, 달력에서는 **건너가기만** 한다.
+  const [profiled, setProfiled] = useState<Map<string, string>>(new Map())
   const [holidays, setHolidays] = useState<Map<string, Holiday>>(new Map())
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d })
   const [loading, setLoading] = useState(true)
@@ -57,9 +65,21 @@ export default function SchoolScheduleCalendar() {
   const [saving, setSaving] = useState(false)
 
   async function load() {
-    const { data } = await supabase.from('school_schedule_periods').select('*').order('start_date')
+    const [{ data }, { data: profs }] = await Promise.all([
+      supabase.from('school_schedule_periods').select('*').order('start_date'),
+      supabase.from('school_profiles').select('school_name'),
+    ])
     setPeriods((data || []) as Period[])
+    // 달력의 학교 이름은 「신원중학교」로 들어오기도 한다 — 자료집 이름과 맞추려면 꼭 거쳐야 한다.
+    setProfiled(new Map((profs || []).map((p: { school_name: string }) =>
+      [normalizeSchool(p.school_name), p.school_name])))
     setLoading(false)
+  }
+
+  /** 그 학교 자료집 주소. 자료집이 없으면 null — 없는 곳으로 보내지 않는다. */
+  function profileHref(school: string): string | null {
+    const name = profiled.get(normalizeSchool(school))
+    return name ? `/teacher/schools/${encodeURIComponent(name)}` : null
   }
   useEffect(() => { load(); loadHolidays().then(setHolidays) }, [])
 
@@ -201,7 +221,15 @@ export default function SchoolScheduleCalendar() {
                   <div key={p.id} className="flex items-center gap-2 text-xs">
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
                       style={{ background: kindOf(p.kind).bg, color: kindOf(p.kind).color }}>{kindOf(p.kind).label}</span>
-                    <span className="font-bold text-gray-700 shrink-0">{p.school}</span>
+                    {profileHref(p.school) ? (
+                      <Link href={profileHref(p.school)!} className="font-bold shrink-0 underline decoration-dotted underline-offset-2"
+                        style={{ color: '#9a3412' }}
+                        title={`${p.school} 자료집 — 수학 편제·정기시험·수행평가`}>
+                        {p.school}
+                      </Link>
+                    ) : (
+                      <span className="font-bold text-gray-700 shrink-0">{p.school}</span>
+                    )}
                     <span className="text-gray-500 truncate">{p.event_name}{gradeLabel(p) && ` (${gradeLabel(p)})`}</span>
                     <span className="text-gray-400 ml-auto shrink-0">
                       {p.start_date.slice(5).replace('-', '/')}~{p.end_date.slice(5).replace('-', '/')}
@@ -222,10 +250,13 @@ export default function SchoolScheduleCalendar() {
         {/* 안내 문구 — 자동으로 들어오지만 비어 있는 학교는 손으로 넣어야 한다 */}
         <div className="mt-3 rounded-xl px-3 py-2" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
           <p className="text-[11px] leading-relaxed" style={{ color: '#92400e' }}>
-            학교 학사일정(시험·수행평가·방학)은 나이스에서 <b>자동으로 반영</b>돼요(매주 월요일 갱신).
+            학교 학사일정(시험·방학)은 나이스에서 <b>자동으로 반영</b>돼요(매주 월요일 갱신).
             다만 <b>나이스에 미등록된 학교는 비어 있을 수 있어요.</b> 그런 학교는 아래에서 직접 입력해주세요.
             <b>학원 행사</b>도 여기서 넣으면 선생님들 화면에 함께 떠요.
             {!canEdit && ' 일정 입력은 원장님·중등주임·승민정 선생님만 할 수 있어요.'}
+            <br />
+            <b>수행평가</b>는 날짜가 아니라 「10월 4주」처럼 주 단위로 나와서 달력에 안 띄워요.
+            학교 이름을 누르면 그 학교 <b>자료집</b>이 열리고, 거기에 학년별 수학 수행평가가 있어요.
           </p>
           {!canEdit ? null : adding ? (
             <div className="mt-2 space-y-1.5">

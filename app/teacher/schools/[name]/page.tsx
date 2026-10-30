@@ -8,7 +8,7 @@
 import { use, useEffect, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { apiFetch } from '@/lib/apiFetch'
-import type { SchoolProfile, MathYear, Achievement } from '@/lib/schoolProfile'
+import type { SchoolProfile, MathYear, Achievement, Assessment } from '@/lib/schoolProfile'
 import { subjectLabel, schoolinfoLink } from '@/lib/schoolProfile'
 
 export default function SchoolProfilePage({ params }: { params: Promise<{ name: string }> }) {
@@ -16,9 +16,12 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
   const school = decodeURIComponent(name)
 
   const [profile, setProfile] = useState<SchoolProfile | null>(null)
-  const [students, setStudents] = useState<any[]>([])
+  // ★ 인원수·이름은 받지 않는다 — 상담 때 보여 드리는 화면이다
+  const [hasStudents, setHasStudents] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
 
   useEffect(() => { load() }, [school])
 
@@ -28,8 +31,21 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
     const json = await res.json().catch(() => ({}))
     if (!res.ok) { setError(json.error ?? '불러오지 못했어요.'); setLoading(false); return }
     setProfile(json.profile)
-    setStudents(json.students ?? [])
+    setHasStudents(!!json.hasStudents)
     setLoading(false)
+  }
+
+  // 학교알리미에서 숫자(학생수·교원·신입생·동아리)만 다시 받는다. 편제·시험·메모·성취도는 그대로 둔다.
+  async function refresh() {
+    setRefreshing(true); setRefreshMsg('')
+    const res = await apiFetch('/api/school-profiles/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ school_name: school }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setRefreshing(false)
+    setRefreshMsg(res.ok ? '새로 받았어요.' : (json.error ?? '받지 못했어요.'))
+    if (res.ok) load()
   }
 
   if (loading) return <Shell school={school}><p style={{ color: '#0F6E56' }}>불러오는 중…</p></Shell>
@@ -52,10 +68,10 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
               {[profile.region, profile.office].filter(Boolean).join(' · ')}
             </p>
           </div>
-          {students.length > 0 && (
+          {hasStudents && (
             <span className="text-sm font-bold px-3 py-1.5 rounded-xl"
               style={{ background: '#E6F7F0', color: '#0F6E56' }}>
-              우리 학생 {students.length}명
+              재원생 있음
             </span>
           )}
         </div>
@@ -73,18 +89,19 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
               ? '열린 화면에서 「학업성취사항」 → 「교과별 학업성취 사항」 → 보이는 숫자 입력'
               : `「${profile.official_name || profile.school_name}」 검색 → 공시정보 → 학업성취사항`}
           </span>
+          {s.schoolinfo && (
+            <button onClick={refresh} disabled={refreshing}
+              className="ml-auto inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-xl"
+              style={{ background: '#fff', color: '#0F6E56', border: '1px solid #9FE1CB' }}>
+              <i className="ti ti-refresh" /> {refreshing ? '받는 중…' : '학교알리미에서 숫자 새로 받기'}
+            </button>
+          )}
         </div>
+        {refreshMsg && <p className="text-xs mt-2" style={{ color: '#5A8E7E' }}>{refreshMsg}</p>}
 
-        {students.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {students.map(st => (
-              <span key={st.id} className="text-xs px-2 py-1 rounded-lg"
-                style={{ background: '#F0FBF7', color: '#0F6E56', border: '1px solid #D6F0E6' }}>
-                {st.name} <span style={{ color: '#8FB8AA' }}>{st.grade}</span>
-              </span>
-            ))}
-          </div>
-        )}
+        {/* ★ 재원생 이름 칩이 여기 있었다. 상담 때 학부모님께 보여 드리는 화면이라
+            다른 집 아이 이름이 보이면 안 된다. 2026-10-27 원장님 지시로 뺐다.
+            어느 학생인지는 학생 관리·시험대비 화면에서 본다. */}
       </Card>
 
       {/* 한눈에 */}
@@ -171,8 +188,23 @@ export default function SchoolProfilePage({ params }: { params: Promise<{ name: 
         </Card>
       )}
 
+      {/* 학교 추가로 막 만든 한 장 — 사람이 읽어야 하는 칸이 비어 있다고 알려 준다 */}
+      {!profile.math_curriculum?.length && (
+        <Card title="아직 정리 전이에요">
+          <p className="text-sm leading-relaxed" style={{ color: '#0F6E56' }}>
+            수학 편제와 정기시험 날짜는 학교마다 모양이 다른 공시 첨부라 사람이 읽어 정리해요.
+            Claude에게 「{profile.school_name} 편제 정리해줘」라고 하면 채워져요.
+            성취도는 위 버튼으로 학교알리미 표를 연 뒤, 표를 복사해 Claude에게 붙여넣으면 돼요.
+            수학 수행평가(반영 비율·영역·시기)는 「{profile.school_name} 수행평가 정리해줘」라고 하면 학교알리미 평가계획에서 옮겨 와요.
+          </p>
+        </Card>
+      )}
+
       {/* 성취도 */}
       {!!s.achievement?.rows?.length && <AchievementCard a={s.achievement} />}
+
+      {/* 수행평가 — 교과별 평가계획에서 수학만 */}
+      {!!s.assessment?.plans?.length && <AssessmentCard a={s.assessment} />}
 
       {/* 시험 */}
       {!!profile.exam_calendar?.rounds?.length && (
@@ -257,6 +289,62 @@ function AchievementCard({ a }: { a: Achievement }) {
             ))}
           </tbody>
         </table>
+      </div>
+      {a.note && <p className="text-xs mt-2 leading-relaxed" style={{ color: '#5A8E7E' }}>{a.note}</p>}
+    </Card>
+  )
+}
+
+// 원문 값만 보여 준다. 학교가 바꿀 수 있으니 출처 쪽수를 같이 적는다.
+function AssessmentCard({ a }: { a: Assessment }) {
+  return (
+    <Card title={`${a.year}학년도 수학 수행평가`}>
+      <div className="flex flex-col gap-3">
+        {a.plans.map((p, i) => (
+          <div key={i} className="rounded-xl p-3" style={{ background: '#F0FBF7', border: '1px solid #D6F0E6' }}>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="font-bold" style={{ color: '#085041' }}>{p.grade} {p.term} {p.subject}</span>
+              <span className="text-xs" style={{ color: '#5A8E7E' }}>
+                {[p.examRatio != null && `정기시험 ${p.examRatio}%`, p.perfRatio != null && `수행평가 ${p.perfRatio}%`,
+                  p.essayRatio != null && `논술형 합 ${p.essayRatio}%`].filter(Boolean).join(' · ')}
+              </span>
+            </div>
+            {!!p.tasks.length && (
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-sm" style={{ borderCollapse: 'collapse', minWidth: 480 }}>
+                  <thead>
+                    <tr><Th>수행평가 영역</Th><Th>방식</Th><Th>만점(반영)</Th><Th>시기</Th></tr>
+                  </thead>
+                  <tbody>
+                    {p.tasks.map((t, j) => (
+                      <tr key={j}>
+                        <td className="px-2 py-2 text-left" style={{ border: '1px solid #D6F0E6', background: '#fff', color: '#085041', fontWeight: 700 }}>
+                          {t.label}
+                          {!!t.elements?.length && (
+                            <div className="text-xs font-normal mt-1 leading-relaxed" style={{ color: '#5A8E7E' }}>{t.elements.join(' · ')}</div>
+                          )}
+                        </td>
+                        <Td>{t.kind ?? '-'}</Td>
+                        <Td>{t.points != null ? `${t.points}점` : '-'}{t.ratio != null && ` (${t.ratio}%)`}</Td>
+                        <Td>{t.when ?? '-'}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!!p.exams?.length && (
+              <div className="text-xs mt-2 leading-relaxed" style={{ color: '#5A8E7E' }}>
+                정기시험 · {p.exams.map(e => `${e.label}${e.points != null ? ` ${e.points}점` : ''}${e.ratio != null ? `(${e.ratio}%)` : ''}${e.when ? ` ${e.when}` : ''}`).join(' / ')}
+              </div>
+            )}
+            {(p.note || p.page) && (
+              <div className="text-xs mt-1 leading-relaxed" style={{ color: '#8FB8AA' }}>
+                {p.note}{p.note && p.page ? ' · ' : ''}{p.page && `원문: ${p.page}`}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
       {a.note && <p className="text-xs mt-2 leading-relaxed" style={{ color: '#5A8E7E' }}>{a.note}</p>}
     </Card>

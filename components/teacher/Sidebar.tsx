@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
   return classes.filter(Boolean).join(' ')
@@ -28,9 +29,10 @@ const ITEM = {
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
   schools:       { href: '/teacher/schools',        label: '학교 자료집',  icon: 'ti-school' },
-  // ★ 「학습지 배부」(이 화면)와 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
-  //   하는 일을 이름에 넣어 갈랐다 (원장님 2026-10-26).
-  assignments:   { href: '/teacher/assignments',    label: '학습지 배부',  icon: 'ti-file-text' },
+  // ★ 이 화면과 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
+  //   2026-10-26 에 「학습지 배부」로 갈랐다가, 배부만 하는 곳이 아니라 배정·점수·다음 단계까지
+  //   하는 곳이라 2026-10-29 에 화면 제목과 같은 「학습지관리」로 되돌렸다 (원장님 지시).
+  assignments:   { href: '/teacher/assignments',    label: '학습지관리',   icon: 'ti-file-text' },
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
   // 화면 제목이 「시험대비 관리」인데 메뉴만 「시험배정」이라 서로 달랐다. 화면 쪽에 맞췄다.
   examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },
@@ -46,6 +48,12 @@ const ITEM = {
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
   workStatus:    { href: '/teacher/work-status',    label: '업무현황',     icon: 'ti-briefcase' },
+  // 상담 중에 반을 배정하려고 보는 전체 시간표. 학원 전체 인원과 다른 강사 학생이 드러나므로
+  // 원장 전용이다 (원장님 2026-10-28 「나만 보이는 화면으로」).
+  classMap:      { href: '/teacher/class-map',      label: '반배정 시간표', icon: 'ti-calendar-time' },
+  // 같은 화면인데 선생님에게는 **본인 담당 학생만** 그려진다(원장님 2026-10-29).
+  // 이름이 「반배정」이면 전체가 보이는 줄로 읽히므로 선생님 쪽만 「내 시간표」로 적는다.
+  myClassMap:    { href: '/teacher/class-map',      label: '내 시간표',     icon: 'ti-calendar-time' },
   attendance:    { href: '/teacher/attendance',     label: '출결관리',     icon: 'ti-calendar-check' },
   changeLog:     { href: '/teacher/change-log',     label: '변경 기록',    icon: 'ti-history' },
   firstSet:      { href: '/teacher/learning-first-set', label: '첫 세트 확인', icon: 'ti-checkup-list' },
@@ -62,13 +70,14 @@ const ITEM = {
 function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
-    { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
+    { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
+      ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.schools] },
     { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {
-    groups.push({ title: '원장 전용', items: [ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
+    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
     groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords, ITEM.typeConcepts, ITEM.changeLog] })
   } else {
     // 강사도 학습기록 가져오기는 쓴다. 나머지 둘은 원장 전용 화면이라 넣지 않는다.
@@ -87,6 +96,10 @@ export function TeacherSidebar() {
   const [bulkEnabled, setBulkEnabled] = useState(false)
   // 접어 둔 묶음('가끔 쓰는 것')을 펼쳐 놓았는지. 그 안의 화면에 들어가 있으면 저절로 펼친다.
   const [openRare, setOpenRare] = useState(false)
+  // 강사가 올린 교재 삭제요청 건수(원장님만). 푸시를 못 받는 기기에서도 눈에 띄게 하려고 메뉴에 달아 둔다.
+  const [deleteRequests, setDeleteRequests] = useState(0)
+  // 선생님이 올린 시간표 변경요청 건수(원장님만) — 같은 이유로 메뉴에 달아 둔다.
+  const [schedRequests, setSchedRequests] = useState(0)
 
   useEffect(() => {
     async function fetchBulkSetting() {
@@ -95,6 +108,22 @@ export function TeacherSidebar() {
     }
     fetchBulkSetting()
   }, [])
+
+  useEffect(() => {
+    // 모드를 따른다 — 강사 모드로 보실 때는 강사 화면과 같아야 하고,
+    // 그때는 목록도 담당 학생것만 뜨기 때문에 숫자가 안 맞는다.
+    if (!isAdmin()) { setDeleteRequests(0); setSchedRequests(0); return }
+    let alive = true
+    apiFetch('/api/textbook-delete-request')
+      .then((r) => r.json())
+      .then((j) => { if (alive) setDeleteRequests(Number(j?.count ?? 0)) })
+      .catch(() => {})
+    apiFetch('/api/schedule-change-request')
+      .then((r) => r.json())
+      .then((j) => { if (alive) setSchedRequests(Number(j?.count ?? 0)) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [currentUser, adminMode, pathname])
 
   const showBulk = isAdmin() || bulkEnabled
   const navGroups = buildNavGroups(isAdmin(), showBulk)
@@ -175,6 +204,53 @@ export function TeacherSidebar() {
               <div className="space-y-0.5" style={shown ? undefined : { display: 'none' }}>
                 {group.items.map((item) => {
                   const isActive = isActiveHref(item.href)
+                  // ★ 삭제요청 뱃지는 **그 건들만 모아 보는 화면**으로 따로 간다.
+                  //   과정관리로만 보내면 전체 학생 목록이 떠서 36건을 또 찾아다녀야 한다(원장님 2026-10-27).
+                  //   <Link> 안에 <Link> 를 넣을 수 없어 줄을 감싸고 두 개를 나란히 둔다.
+                  if (item.href === ITEM.curriculum.href && deleteRequests > 0) {
+                    return (
+                      <div key={item.href} className="flex items-center gap-1 rounded-xl"
+                        style={isActive ? { background: '#9FE1CB', borderLeft: '3px solid #085041' }
+                                        : { borderLeft: '3px solid transparent' }}>
+                        <Link href={item.href}
+                          className="flex items-center gap-2.5 pl-3 py-2 text-sm font-medium flex-1 min-w-0"
+                          style={{ color: isActive ? '#085041' : '#4b5563', fontWeight: isActive ? 600 : 500 }}>
+                          <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
+                            color: isActive ? '#085041' : '#6b7280' }} />
+                          {item.label}
+                        </Link>
+                        {/* ★ <Link> 가 아니라 <a> 다. 이미 과정관리 화면에 있으면 <Link> 는 주소의 ?delete=1 만
+                            바꾸고 화면을 다시 그리지 않아서, 눌러도 전체 목록이 그대로 떠 있었다(원장님 2026-10-28).
+                            <a> 는 화면을 새로 열어 주므로 어디서 눌러도 같게 동작한다. */}
+                        <a href={`${item.href}?delete=1`} title="삭제요청만 모아 보기"
+                          className="text-[10px] font-bold px-1.5 py-0.5 mr-2 rounded-lg shrink-0"
+                          style={{ background: '#FEE2E2', color: '#991B1B' }}>
+                          삭제요청 {deleteRequests}
+                        </a>
+                      </div>
+                    )
+                  }
+                  // 시간표 변경요청도 교재 삭제요청과 같은 꼴로 보여 준다. 학생관리 화면
+                  // 맨 위에 요청 목록이 뜨므로 주소는 그대로 둔다.
+                  if (item.href === ITEM.students.href && schedRequests > 0) {
+                    return (
+                      <div key={item.href} className="flex items-center gap-1 rounded-xl"
+                        style={isActive ? { background: '#9FE1CB', borderLeft: '3px solid #085041' }
+                                        : { borderLeft: '3px solid transparent' }}>
+                        <Link href={item.href}
+                          className="flex items-center gap-2.5 pl-3 py-2 text-sm font-medium flex-1 min-w-0"
+                          style={{ color: isActive ? '#085041' : '#4b5563', fontWeight: isActive ? 600 : 500 }}>
+                          <i className={`ti ${item.icon}`} style={{ fontSize: 17, width: 18, textAlign: 'center',
+                            color: isActive ? '#085041' : '#6b7280' }} />
+                          {item.label}
+                        </Link>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 mr-2 rounded-lg shrink-0"
+                          style={{ background: '#D7F3E8', color: '#085041' }}>
+                          시간표요청 {schedRequests}
+                        </span>
+                      </div>
+                    )
+                  }
                   return (
                     <Link key={item.href} href={item.href}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all"

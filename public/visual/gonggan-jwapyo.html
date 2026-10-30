@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>좌표공간</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 점·두 점·구 고르기와 좌표 막대 / 오른쪽: 돌려 보는 좌표공간. 아래: 계산 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --shape: #f97316;
+  --axis: #e11d48;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible, canvas:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sliders { display: grid; gap: 6px; }
+.sl { display: grid; grid-template-columns: 3.6em minmax(0, 1fr) 2.2em; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.sl input { width: 100%; accent-color: var(--accent); }
+.sl output { font-family: var(--font-display); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.group { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.group > span { font-size: 13px; color: var(--muted); }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.symBtn { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.symBtn[aria-pressed="true"] { background: var(--shape); border-color: var(--shape); color: var(--surface); }
+.symBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dotP { color: var(--accent); } .dotQ { color: var(--ok); } .dotR { color: var(--shape); }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background-color: var(--surface); min-width: 0; }
+#canvasBox { height: 540px; }
+@media (max-width: 860px) { #canvasBox { height: 420px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.overlayTop { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+.hint { position: absolute; left: 12px; bottom: 8px; margin: 0; font-size: 12px; color: var(--muted); pointer-events: none; }
+
+.calc { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.calc .item { background: var(--bg); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; min-width: 0; }
+.calc .item span { font-size: 13px; color: var(--muted); }
+.calc .item b { font-family: var(--font-display); font-size: 19px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.calc .item.hl { background: var(--accent-soft); }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; margin-left: 4px; color: var(--surface); }
+.tag.no { background: var(--muted); } .tag.touch { background: var(--warn); } .tag.cross { background: var(--ok); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">기하 · 공간좌표와 구의 방정식</div>
+    <h1>좌표공간</h1>
+    <p>x축은 앞쪽(보는 사람 쪽), y축은 오른쪽, z축은 위쪽입니다. 막대로 좌표를 바꾸면서 정사영·대칭점·두 점 사이의 거리·내분점과 외분점, 구와 좌표평면이 만나는 모양을 돌려 가며 확인해 보세요.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="조절">
+      <div class="btns" role="group" aria-label="보기">
+        <button class="chip" data-mode="point" aria-pressed="true">점 하나</button>
+        <button class="chip" data-mode="two" aria-pressed="false">두 점</button>
+        <button class="chip" data-mode="sphere" aria-pressed="false">구</button>
+      </div>
+      <p class="sub" id="modeSub" style="margin:0"></p>
+      <div class="sliders" id="sliders"></div>
+
+      <div class="group" id="pointOpts">
+        <span>정사영 보기</span>
+        <div class="btns">
+          <label class="check"><input type="checkbox" id="projPlane" checked> 좌표평면 위로</label>
+          <label class="check"><input type="checkbox" id="projAxis" checked> 좌표축 위로</label>
+        </div>
+        <span>대칭점 (누르면 3D에 주황 점으로)</span>
+        <div class="btns" id="syms"></div>
+      </div>
+
+      <div class="group" id="twoOpts" hidden>
+        <div class="btns" role="group" aria-label="내분 외분">
+          <button class="chip" data-div="in" aria-pressed="true">내분점</button>
+          <button class="chip" data-div="out" aria-pressed="false">외분점</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <span>좌표평면 보이기</span>
+        <div class="btns">
+          <label class="check"><input type="checkbox" id="pl-xy" checked> xy평면</label>
+          <label class="check"><input type="checkbox" id="pl-yz"> yz평면</label>
+          <label class="check"><input type="checkbox" id="pl-zx"> zx평면</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="좌표공간 3D">
+      <div class="overlayTop" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso">비스듬히</button>
+        <button class="chip" data-view="front">x축 쪽에서</button>
+        <button class="chip" data-view="side">y축 쪽에서</button>
+        <button class="chip" data-view="top">z축 위에서</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox"><canvas id="c" tabindex="0" aria-label="좌표공간 3D. 끌거나 화살표 키로 돌릴 수 있습니다."></canvas></div>
+      <p class="hint">끌어서 돌려 보기 · 휠·두 손가락으로 확대 · 눈금 한 칸 = 1</p>
+    </section>
+  </div>
+
+  <section class="card" aria-label="계산">
+    <h2 id="calcTitle">계산</h2>
+    <div class="calc" id="calc"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = {
+    mode: 'point', P: [3, 4, 2], Q: [-2, 1, 4], m: 2, n: 1, div: 'in', C: [1, 2, 2], r: 3, sym: 'xy',
+  };
+
+  // ---------- 계산 ----------
+  const fmt = v => v < 0 ? '−' + (-v) : String(v);
+  const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a || 1; };
+  function frac(num, den) {
+    if (den < 0) { num = -num; den = -den; }
+    const g = gcd(num, den); num /= g; den /= g;
+    return den === 1 ? fmt(num) : `${num < 0 ? '−' : ''}${Math.abs(num)}/${den}`;
+  }
+  function rootForm(N) {
+    if (N === 0) return '0';
+    let k = 1, m = N;
+    for (let f = 2; f * f <= m; f++) while (m % (f * f) === 0) { m /= f * f; k *= f; }
+    return m === 1 ? String(k) : (k === 1 ? `√${m}` : `${k}√${m}`);
+  }
+  const sq = v => v < 0 ? `(${fmt(v)})²` : `${v}²`;
+  const pt = (p, name) => `${name ? name : ''}(${p.map(fmt).join(', ')})`;
+  const SYMS = {
+    origin: ['원점', ([a, b, c]) => [-a, -b, -c]],
+    x: ['x축', ([a, b, c]) => [a, -b, -c]],
+    y: ['y축', ([a, b, c]) => [-a, b, -c]],
+    z: ['z축', ([a, b, c]) => [-a, -b, c]],
+    xy: ['xy평면', ([a, b, c]) => [a, b, -c]],
+    yz: ['yz평면', ([a, b, c]) => [-a, b, c]],
+    zx: ['zx평면', ([a, b, c]) => [a, -b, c]],
+  };
+  const dist2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+  // 내분점·외분점 (m:n). 외분에서 m = n 이면 없다
+  function divide(P, Q, m, n, kind) {
+    const den = kind === 'in' ? m + n : m - n;
+    if (den === 0) return null;
+    return [0, 1, 2].map(i => ({ num: m * Q[i] + (kind === 'in' ? n : -n) * P[i], den }));
+  }
+  // 구와 좌표평면: d = 중심에서 평면까지 거리
+  function sphereCuts(C, r) {
+    return [['xy평면', 2, 'z = 0'], ['yz평면', 0, 'x = 0'], ['zx평면', 1, 'y = 0']].map(([name, i, eq]) => {
+      const d = Math.abs(C[i]), center = C.map((v, j) => j === i ? 0 : v), R2 = r * r - d * d;
+      return { name, eq, d, center, R2, kind: R2 < 0 ? 'no' : R2 === 0 ? 'touch' : 'cross' };
+    });
+  }
+
+  // ---------- 조절 막대 ----------
+  const SL = {
+    point: [['P', 0, 'a (x)'], ['P', 1, 'b (y)'], ['P', 2, 'c (z)']],
+    two: [['P', 0, 'P의 x'], ['P', 1, 'P의 y'], ['P', 2, 'P의 z'], ['Q', 0, 'Q의 x'], ['Q', 1, 'Q의 y'], ['Q', 2, 'Q의 z'], ['m', null, 'm'], ['n', null, 'n']],
+    sphere: [['C', 0, '중심 x'], ['C', 1, '중심 y'], ['C', 2, '중심 z'], ['r', null, '반지름']],
+  };
+  const SUB = {
+    point: '점 P(a, b, c)에서 각 좌표평면·좌표축에 내린 수선의 발과, 원점·축·평면에 대한 대칭점을 봅니다.',
+    two: '두 점 P, Q 사이의 거리와 선분 PQ를 m : n 으로 나누는 점을 봅니다.',
+    sphere: '중심과 반지름을 바꾸며 구가 각 좌표평면과 만나는 모양(만나지 않음·접함·원)을 봅니다.',
+  };
+  function drawSliders() {
+    const box = $('sliders'); box.innerHTML = '';
+    SL[S.mode].forEach(([key, i, label]) => {
+      const isNum = i === null, min = isNum ? 1 : -5, max = isNum ? (key === 'r' ? 6 : 5) : 5;
+      const val = isNum ? S[key] : S[key][i], id = `s-${key}${isNum ? '' : i}`;
+      const row = document.createElement('div'); row.className = 'sl';
+      row.innerHTML = `<label for="${id}">${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="1" value="${val}"><output for="${id}">${fmt(val)}</output>`;
+      const inp = row.querySelector('input'), out = row.querySelector('output');
+      inp.addEventListener('input', () => {
+        const v = Number(inp.value);
+        if (isNum) S[key] = v; else S[key][i] = v;
+        out.textContent = fmt(v); update();
+      });
+      box.appendChild(row);
+    });
+    $('modeSub').textContent = SUB[S.mode];
+    $('pointOpts').hidden = S.mode !== 'point';
+    $('twoOpts').hidden = S.mode !== 'two';
+  }
+  function drawSymButtons() {
+    $('syms').innerHTML = Object.entries(SYMS).map(([k, [name, f]]) =>
+      `<button class="symBtn" data-sym="${k}" aria-pressed="${k === S.sym}">${name} ${pt(f(S.P))}</button>`).join('');
+    $('syms').querySelectorAll('[data-sym]').forEach(b => b.addEventListener('click', () => { S.sym = S.sym === b.dataset.sym ? null : b.dataset.sym; update(); }));
+  }
+
+  // ---------- 3D ----------
+  const canvas = $('c'), box = $('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 500);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.66));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(6, 10, 8); scene.add(sun);
+  const fillL = new THREE.DirectionalLight(0xffffff, 0.25); fillL.position.set(-7, 3, -4); scene.add(fillL);
+  // 수학 좌표 (x, y, z) → three 좌표: x 는 보는 사람 쪽(+Z), y 는 오른쪽(+X), z 는 위(+Y)
+  const M = (x, y, z) => new THREE.Vector3(y, z, x);
+  const Mv = p => M(p[0], p[1], p[2]);
+  const EXT = 6;
+
+  function label(text, color, size) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+    const g = cv.getContext('2d');
+    g.font = '700 72px "Gowun Dodum", "Malgun Gothic", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 10; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.strokeText(text, 128, 64);
+    g.fillStyle = color; g.fillText(text, 128, 64);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(size * 2, size, 1); sp.renderOrder = 10; return sp;
+  }
+  const line = (pts, m) => new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m);
+  function dashed(p, q, color) {
+    const l = line([p, q], new THREE.LineDashedMaterial({ color, dashSize: 0.18, gapSize: 0.12 }));
+    l.computeLineDistances(); return l;
+  }
+  const dot = (p, color, r) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), new THREE.MeshLambertMaterial({ color })); s.position.copy(p); return s; };
+
+  // 축·눈금·평면 (고정)
+  const axisCol = 0x334155;
+  [[M(1, 0, 0), 'x'], [M(0, 1, 0), 'y'], [M(0, 0, 1), 'z']].forEach(([dir, name]) => {
+    scene.add(line([dir.clone().multiplyScalar(-EXT), dir.clone().multiplyScalar(EXT)], new THREE.LineBasicMaterial({ color: axisCol })));
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.4, 16), new THREE.MeshBasicMaterial({ color: axisCol }));
+    cone.position.copy(dir.clone().multiplyScalar(EXT + 0.2)); cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); scene.add(cone);
+    const lb = label(name, '#1d2b3a', 0.7); lb.position.copy(dir.clone().multiplyScalar(EXT + 0.8)); scene.add(lb);
+    for (let k = 1; k <= 5; k++) {
+      const t = label(String(k), '#7b8a9a', 0.42); t.position.copy(dir.clone().multiplyScalar(k)).add(new THREE.Vector3(0.18, -0.22, 0.18)); scene.add(t);
+    }
+  });
+  const oLb = label('O', '#1d2b3a', 0.55); oLb.position.set(-0.3, -0.3, -0.3); scene.add(oLb);
+  const planes = {};
+  [['xy', 0x2563eb, g => {}], ['yz', 0x16a34a, g => { g.rotation.x = Math.PI / 2; }], ['zx', 0xf97316, g => { g.rotation.z = Math.PI / 2; }]].forEach(([k, col, orient]) => {
+    const g = new THREE.Group();
+    const grid = new THREE.GridHelper(2 * EXT, 2 * EXT, col, col); grid.material.transparent = true; grid.material.opacity = 0.28; g.add(grid);
+    const fillM = new THREE.Mesh(new THREE.PlaneGeometry(2 * EXT, 2 * EXT), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
+    fillM.rotation.x = -Math.PI / 2; g.add(fillM);
+    orient(g); planes[k] = g; scene.add(g);
+  });
+  // GridHelper 는 three 의 y=0 평면(수학 xy평면)에 눕는다. yz평면은 three z=0, zx평면은 three x=0
+
+  let dyn = new THREE.Group(); scene.add(dyn);
+  const COL = { P: 0x2563eb, Q: 0x16a34a, R: 0xf97316, plane: 0x7c3aed, axis: 0x0ea5e9, sym: 0xf97316 };
+
+  function buildPoint(g) {
+    const [a, b, c] = S.P, P = Mv(S.P);
+    // 원점과 P 를 마주 보는 꼭짓점으로 하는 직육면체 (점선)
+    const xs = [0, a], ys = [0, b], zs = [0, c];
+    for (const y of ys) for (const z of zs) if (a) g.add(dashed(M(0, y, z), M(a, y, z), 0x94a3b8));
+    for (const x of xs) for (const z of zs) if (b) g.add(dashed(M(x, 0, z), M(x, b, z), 0x94a3b8));
+    for (const x of xs) for (const y of ys) if (c) g.add(dashed(M(x, y, 0), M(x, y, c), 0x94a3b8));
+    g.add(dot(P, COL.P, 0.17)); const lp = label(`P${pt(S.P)}`, '#2563eb', 0.5); lp.position.copy(P).add(new THREE.Vector3(0, 0.45, 0)); g.add(lp);
+    g.add(line([M(0, 0, 0), P], new THREE.LineBasicMaterial({ color: COL.P })));
+    if ($('projPlane').checked) [[a, b, 0], [0, b, c], [a, 0, c]].forEach(q => {
+      g.add(dot(Mv(q), COL.plane, 0.11)); const t = label(pt(q), '#7c3aed', 0.36); t.position.copy(Mv(q)).add(new THREE.Vector3(0, -0.32, 0)); g.add(t);
+    });
+    if ($('projAxis').checked) [[a, 0, 0], [0, b, 0], [0, 0, c]].forEach(q => {
+      g.add(dot(Mv(q), COL.axis, 0.09)); const t = label(pt(q), '#0284c7', 0.34); t.position.copy(Mv(q)).add(new THREE.Vector3(0, 0.3, 0)); g.add(t);
+    });
+    if (S.sym) {
+      const q = SYMS[S.sym][1](S.P), Q = Mv(q);
+      g.add(dot(Q, COL.sym, 0.15), dashed(P, Q, COL.sym));
+      const t = label(`P'${pt(q)}`, '#ea580c', 0.5); t.position.copy(Q).add(new THREE.Vector3(0, 0.45, 0)); g.add(t);
+    }
+  }
+
+  function buildTwo(g) {
+    const P = Mv(S.P), Q = Mv(S.Q), R = divide(S.P, S.Q, S.m, S.n, S.div);
+    g.add(dot(P, COL.P, 0.16), dot(Q, COL.Q, 0.16), line([P, Q], new THREE.LineBasicMaterial({ color: 0x334155 })));
+    const lp = label('P', '#2563eb', 0.6); lp.position.copy(P).add(new THREE.Vector3(0, 0.45, 0));
+    const lq = label('Q', '#16a34a', 0.6); lq.position.copy(Q).add(new THREE.Vector3(0, 0.45, 0)); g.add(lp, lq);
+    // 바닥(xy평면)까지 내린 수선으로 높이를 읽기 쉽게
+    [S.P, S.Q].forEach(p => { if (p[2]) g.add(dashed(Mv(p), M(p[0], p[1], 0), 0x94a3b8)); });
+    if (R) {
+      const rv = R.map(c => c.num / c.den), Rv = Mv(rv);
+      if (S.div === 'out') g.add(dashed(S.m > S.n ? Q : P, Rv, COL.R));
+      g.add(dot(Rv, COL.R, 0.14));
+      const lr = label(S.div === 'in' ? 'R (내분점)' : 'R (외분점)', '#ea580c', 0.5); lr.position.copy(Rv).add(new THREE.Vector3(0, -0.45, 0)); g.add(lr);
+    }
+  }
+
+  function buildSphere(g) {
+    const C = Mv(S.C), r = S.r;
+    const sp = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 32), new THREE.MeshLambertMaterial({ color: 0x7cc8ff, transparent: true, opacity: 0.32, depthWrite: false }));
+    sp.position.copy(C); g.add(sp);
+    const wire = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(r, 16, 10)), new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.25 }));
+    wire.position.copy(C); g.add(wire);
+    g.add(dot(C, COL.P, 0.13)); const lc = label(`중심${pt(S.C)}`, '#2563eb', 0.45); lc.position.copy(C).add(new THREE.Vector3(0, 0.4, 0)); g.add(lc);
+    const colors = { 'xy평면': 0x2563eb, 'yz평면': 0x16a34a, 'zx평면': 0xf97316 };
+    sphereCuts(S.C, r).forEach(cut => {
+      if (!$(`pl-${{ 'xy평면': 'xy', 'yz평면': 'yz', 'zx평면': 'zx' }[cut.name]}`).checked) return;
+      const cen = Mv(cut.center), col = colors[cut.name];
+      if (cut.kind === 'touch') g.add(dot(cen, col, 0.14));
+      if (cut.kind === 'cross') {
+        const rr = Math.sqrt(cut.R2);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.05, 10, 96), new THREE.MeshBasicMaterial({ color: col }));
+        ring.position.copy(cen);
+        // 토러스는 three 의 xy 면에 놓인다 → 각 좌표평면 방향으로 돌린다
+        if (cut.name === 'xy평면') ring.rotation.x = Math.PI / 2;      // three y=0 면
+        if (cut.name === 'zx평면') ring.rotation.y = Math.PI / 2;      // three x=0 면
+        g.add(ring, dot(cen, col, 0.09));
+      }
+    });
+  }
+
+  function build3D() {
+    dyn.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    scene.remove(dyn); dyn = new THREE.Group(); scene.add(dyn);
+    ({ point: buildPoint, two: buildTwo, sphere: buildSphere })[S.mode](dyn);
+    ['xy', 'yz', 'zx'].forEach(k => { planes[k].visible = $(`pl-${k}`).checked; });
+    draw();
+  }
+
+  // ---------- 계산 칸 ----------
+  function drawCalc() {
+    const items = [];
+    const it = (label, val, hl) => items.push(`<div class="item${hl ? ' hl' : ''}"><span>${label}</span><b>${val}</b></div>`);
+    if (S.mode === 'point') {
+      const [a, b, c] = S.P, N = a * a + b * b + c * c;
+      $('calcTitle').textContent = `점 P${pt(S.P)}`;
+      it('원점과의 거리 OP', `√(${sq(a)} + ${sq(b)} + ${sq(c)}) = ${N ? (rootForm(N).startsWith('√') ? rootForm(N) : `√${N} = ${rootForm(N)}`) : '0'}`, true);
+      it('xy평면 위로의 정사영 (z를 0으로)', pt([a, b, 0]));
+      it('yz평면 위로의 정사영 (x를 0으로)', pt([0, b, c]));
+      it('zx평면 위로의 정사영 (y를 0으로)', pt([a, 0, c]));
+      it('x축·y축·z축 위로의 정사영', `${pt([a, 0, 0])}, ${pt([0, b, 0])}, ${pt([0, 0, c])}`);
+      if (S.sym) it(`${SYMS[S.sym][0]}에 대한 대칭점`, `P'${pt(SYMS[S.sym][1](S.P))}`, true);
+      it('대칭점 규칙', '대칭 기준에 들어 있는 좌표는 그대로, 나머지는 부호를 바꿉니다. 원점 대칭은 셋 다 바꿉니다.');
+    } else if (S.mode === 'two') {
+      const N = dist2(S.P, S.Q), d = S.Q.map((v, i) => v - S.P[i]);
+      $('calcTitle').textContent = `P${pt(S.P)}, Q${pt(S.Q)}`;
+      it('두 점 사이의 거리 PQ', `√(${d.map(sq).join(' + ')}) = ${N ? (rootForm(N).startsWith('√') ? rootForm(N) : `√${N} = ${rootForm(N)}`) : '0'}`, true);
+      const R = divide(S.P, S.Q, S.m, S.n, S.div);
+      const kind = S.div === 'in' ? '내분' : '외분';
+      if (!R) it(`${S.m} : ${S.n} 로 ${kind}하는 점`, 'm = n 이면 외분점은 없습니다');
+      else {
+        it(`선분 PQ를 ${S.m} : ${S.n} 로 ${kind}하는 점 R`, `R(${R.map(c => frac(c.num, c.den)).join(', ')})`, true);
+        it('공식', S.div === 'in' ? `(${S.m}×Q + ${S.n}×P) ÷ (${S.m} + ${S.n}) — 좌표마다 계산` : `(${S.m}×Q − ${S.n}×P) ÷ (${S.m} − ${S.n}) — 좌표마다 계산`);
+        if (S.div === 'in' && S.m === S.n) it('참고', 'm = n 이면 내분점은 중점입니다');
+      }
+    } else {
+      const [a, b, c] = S.C, r = S.r;
+      const term = (v, name) => v === 0 ? `${name}²` : `(${name} ${v > 0 ? '−' : '+'} ${Math.abs(v)})²`;
+      $('calcTitle').textContent = `${term(a, 'x')} + ${term(b, 'y')} + ${term(c, 'z')} = ${r * r}`;
+      it('구의 방정식', `중심 ${pt(S.C)}, 반지름 ${r}`, true);
+      sphereCuts(S.C, r).forEach(cut => {
+        const tag = { no: '<span class="tag no">만나지 않음</span>', touch: '<span class="tag touch">접함</span>', cross: '<span class="tag cross">원에서 만남</span>' }[cut.kind];
+        const body = cut.kind === 'no' ? `중심까지 거리 ${cut.d} > 반지름 ${r}`
+          : cut.kind === 'touch' ? `중심까지 거리 ${cut.d} = 반지름 → 접점 ${pt(cut.center)}`
+          : `중심 ${pt(cut.center)}, 반지름 √(${r}² − ${cut.d}²) = ${rootForm(cut.R2)}`;
+        it(`${cut.name} (${cut.eq}) ${tag}`, body, cut.kind !== 'no');
+      });
+    }
+    $('calc').innerHTML = items.join('');
+  }
+
+  function update() { if (S.mode === 'point') drawSymButtons(); drawCalc(); build3D(); }
+
+  // ---------- 카메라 ----------
+  const target = new THREE.Vector3(0, 0.5, 0);
+  let theta = 0.75, phi = 1.12, zoom = 1;
+  const VIEWS = { iso: [0.75, 1.12], front: [0, Math.PI / 2], side: [Math.PI / 2, Math.PI / 2], top: [0, 0.0005] };
+  function frame() {
+    const w = box.clientWidth, h = box.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw();
+  }
+  function draw() {
+    const a = cam.aspect || 1, R = (a < 1 ? 24 / a * 0.8 : 24) / zoom, sp = Math.sin(phi);
+    cam.position.set(target.x + R * sp * Math.sin(theta), target.y + R * Math.cos(phi), target.z + R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target); renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let tween = null;
+  const viewChips = () => document.querySelectorAll('.chip[data-view]');
+  function goTo(name) {
+    const [t1, p1] = VIEWS[name];
+    viewChips().forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * e; phi = p0 + (p1 - p0) * e; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  viewChips().forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI - 0.05, p));
+  const setZoom = z => { zoom = Math.max(0.5, Math.min(3, z)); draw(); };
+  const pts = new Map(); let pinch = 0;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); if (pts.size === 2) pinch = pinchDist();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+  });
+  const endDrag = e => { pts.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener('keydown', e => {
+    const d = 0.12, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!m) return; e.preventDefault(); theta += m[0]; phi = clampPhi(phi + m[1]); draw();
+  });
+  $('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  $('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  // ---------- 고르기 ----------
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    S.mode = b.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    if (S.mode === 'sphere') ['xy', 'yz', 'zx'].forEach(k => { $(`pl-${k}`).checked = true; });
+    drawSliders(); update();
+  }));
+  document.querySelectorAll('[data-div]').forEach(b => b.addEventListener('click', () => {
+    S.div = b.dataset.div;
+    document.querySelectorAll('[data-div]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    update();
+  }));
+  ['projPlane', 'projAxis', 'pl-xy', 'pl-yz', 'pl-zx'].forEach(id => $(id).addEventListener('change', update));
+
+  drawSliders(); update(); goTo('iso'); frame();
+})();
+</script>
+</html>

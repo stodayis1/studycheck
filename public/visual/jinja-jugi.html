@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>진자 파동과 주기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 위: 위에서 내려다본 진자들(줄마다 진자 하나) / 아래: 고른 진자의 y = cos 그래프와 한 주기 / 오른쪽: 단추와 식 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --shape: #f97316;
+  --axis: #e11d48;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 18px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row .lbl { font-size: 13px; color: var(--muted); min-width: 6.5em; }
+.group { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.group h3 { margin: 0; font-family: var(--font-display); font-size: 15px; }
+canvas { width: 100%; display: block; }
+#pend { cursor: pointer; touch-action: manipulation; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.time { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+.time b { min-width: 6.5em; font-size: 18px; }
+.math { font-size: 14px; line-height: 1.85; }
+.math .eq { display: block; padding: 6px 10px; margin: 4px 0; background: var(--accent-soft); border-radius: 8px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.math .hl { color: var(--brand); font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">수학Ⅰ 삼각함수 · 주기</div>
+    <h1>진자 파동과 주기</h1>
+    <p>길이가 조금씩 다른 진자들을 한꺼번에 놓아요. 진자마다 주기가 달라서 뱀처럼 꿈틀거리다가 세 줄, 두 줄로 갈라지고, 정해진 시간이 지나면 모두 처음 자리로 돌아와요. 진자 하나를 누르면 아래에 그 진자의 그래프가 나와요.</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <section class="card" aria-label="위에서 내려다본 진자">
+        <canvas id="pend" role="img" aria-label="위에서 내려다본 진자들의 위치"></canvas>
+        <div class="time"><b id="tRead">t = 0초</b><input id="tRange" type="range" min="0" max="1000" value="0" aria-label="시각"></div>
+      </section>
+      <section class="card" aria-label="고른 진자의 그래프">
+        <h2 id="gTitle">고른 진자의 그래프</h2>
+        <p class="sub">가로는 시각 t, 세로는 진자가 가운데에서 벗어난 정도예요. 주황 구간이 한 주기, 세로선이 지금 시각이에요.</p>
+        <canvas id="graph" role="img" aria-label="고른 진자의 코사인 그래프"></canvas>
+      </section>
+    </div>
+
+    <aside class="card" aria-label="고르기와 식">
+      <div class="btns">
+        <button class="btn primary" id="btnPlay" type="button">멈춤</button>
+        <button class="btn" id="btnZero" type="button">처음으로</button>
+      </div>
+      <div class="group">
+        <h3>이 시각으로 가 보기</h3>
+        <div class="btns" id="jumps"></div>
+      </div>
+      <div class="group">
+        <div class="row"><span class="lbl">진자 수</span><span class="btns" id="nChips"></span></div>
+        <div class="row"><span class="lbl">가장 느린 진자가 흔들리는 횟수</span><span class="btns" id="kChips"></span></div>
+        <div class="row"><span class="lbl">모두 돌아오는 시간 T</span><span class="btns" id="TChips"></span></div>
+        <div class="row"><span class="lbl">빠르기</span><span class="btns" id="sChips"></span></div>
+      </div>
+      <div class="group math" id="math"></div>
+    </aside>
+  </div>
+</div>
+
+<script id="core">
+// 계산만 한다(화면 없음). i번째 진자(0부터)는 T초 동안 정확히 k+i 번 흔들린다.
+// 위치 x_i(t) = cos(2π(k+i)t/T), 주기 = T/(k+i). T 는 모든 주기의 정수배라서 t = T 에 모두 처음 자리로 온다.
+const CORE = (function () {
+  function pos(i, t, P) { return Math.cos(2 * Math.PI * (P.k + i) * t / P.T); }
+  function period(i, P) { return P.T / (P.k + i); }
+  // t 에서 진자들이 몇 줄(서로 다른 위치)로 모였는지. 같은 위치는 소수 셋째 자리까지 같으면 하나로 센다.
+  function lines(t, P) {
+    const seen = new Set();
+    for (let i = 0; i < P.n; i++) seen.add(Math.round(pos(i, t, P) * 1000));
+    return seen.size;
+  }
+  return { pos: pos, period: period, lines: lines };
+})();
+if (typeof module !== "undefined") module.exports = CORE;
+</script>
+
+<script>
+(function () {
+  const C = CORE;
+  const P = { n: 15, k: 20, T: 60 };
+  const st = { t: 0, playing: true, speed: 2, sel: 0 };
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { st.playing = false; st.t = P.T / 3; }
+  const FONT = '"Gowun Dodum","Malgun Gothic",sans-serif';
+  const num = (x) => { const v = Math.round(x * 100) / 100; return Number.isInteger(v) ? String(v) : v.toFixed(2); };
+  const hue = (i) => 215 - 190 * i / Math.max(1, P.n - 1);      // 파랑 → 주황
+
+  function chips(el, items, label, isOn, pick) {
+    el.innerHTML = '';
+    items.forEach(function (it) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = label(it);
+      b.setAttribute('aria-pressed', isOn(it) ? 'true' : 'false');
+      b.onclick = function () { pick(it); render(); };
+      el.appendChild(b);
+    });
+  }
+  const JUMPS = [['0', 0], ['T/4', 0.25], ['T/2', 0.5], ['T', 1]];
+  function render() {
+    chips(document.getElementById('nChips'), [10, 15, 20], String, (v) => v === P.n, (v) => { P.n = v; st.sel = Math.min(st.sel, v - 1); });
+    chips(document.getElementById('kChips'), [10, 15, 20], (v) => v + '번', (v) => v === P.k, (v) => { P.k = v; });
+    chips(document.getElementById('TChips'), [30, 60], (v) => v + '초', (v) => v === P.T, (v) => { P.T = v; st.t = Math.min(st.t, v); });
+    chips(document.getElementById('sChips'), [1, 2, 4], (v) => '×' + v, (v) => v === st.speed, (v) => { st.speed = v; });
+    const jb = document.getElementById('jumps'); jb.innerHTML = '';
+    JUMPS.forEach(function (j) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = 't = ' + j[0];
+      b.onclick = function () { st.t = P.T * j[1]; st.playing = false; syncPlay(); };
+      jb.appendChild(b);
+    });
+    const i = st.sel, kk = P.k + i;
+    document.getElementById('gTitle').textContent = (i + 1) + '번 진자의 그래프 (T초 동안 ' + kk + '번 흔들림)';
+    document.getElementById('math').innerHTML =
+      '<h3>식으로 보면</h3>' +
+      '<div>' + (i + 1) + '번 진자의 위치</div>' +
+      '<span class="eq">x = cos(2π × ' + kk + ' × t ÷ ' + P.T + ')</span>' +
+      '<div>주기는 2π 를 t 앞의 수로 나눈 값</div>' +
+      '<span class="eq">주기 = ' + P.T + ' ÷ ' + kk + ' = <span class="hl">' + num(P.T / kk) + '초</span></span>' +
+      '<div>진자들의 주기는 ' + P.T + '/' + P.k + ', ' + P.T + '/' + (P.k + 1) + ', ' + P.T + '/' + (P.k + 2) + ', … 초예요. ' +
+      P.T + '초는 어느 주기로 나누어도 자연수(흔들린 횟수)가 되니까 <span class="hl">t = ' + P.T + '초에 모두 처음 자리</span>로 와요.</div>' +
+      '<div>t = T/2 이면 흔들린 횟수가 짝수인 진자는 처음 쪽, 홀수인 진자는 반대쪽에 있어서 두 줄이 돼요. t = T/4 이면 흔들린 횟수를 4로 나눈 나머지에 따라 처음 쪽·가운데·반대쪽 세 줄이에요.</div>';
+    draw();
+  }
+
+  function setup(cv, ratio) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = cv.clientWidth, h = Math.round(w * ratio);
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.style.height = h + 'px'; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, w: w, h: h };
+  }
+  let rowGeom = null;
+  function drawPend() {
+    const cv = document.getElementById('pend');
+    const { ctx, w, h } = setup(cv, cv.clientWidth < 520 ? 0.9 : 0.5);
+    ctx.clearRect(0, 0, w, h);
+    const top = 16, bottom = h - 16, cx = w / 2, amp = w * 0.36;
+    const gap = (bottom - top) / P.n, rad = Math.max(5, Math.min(13, gap * 0.36));
+    rowGeom = { top: top, gap: gap };
+    ctx.strokeStyle = '#dceafa'; ctx.lineWidth = 1;
+    [-1, 0, 1].forEach((s) => { ctx.beginPath(); ctx.moveTo(cx + s * amp, top); ctx.lineTo(cx + s * amp, bottom); ctx.stroke(); });
+    const pts = [];
+    for (let i = 0; i < P.n; i++) {
+      const y = top + gap * (i + 0.5), x = cx + amp * C.pos(i, st.t, P);
+      pts.push([x, y]);
+      if (i === st.sel) { ctx.fillStyle = 'rgba(242,107,29,0.10)'; ctx.fillRect(8, y - gap / 2, w - 16, gap); }
+      ctx.strokeStyle = 'rgba(29,43,58,0.25)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(x, y); ctx.stroke();
+      ctx.fillStyle = '#1d2b3a'; ctx.beginPath(); ctx.arc(cx, y, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(37,99,235,0.35)'; ctx.lineWidth = 2; ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+    pts.forEach(function (p, i) {
+      ctx.fillStyle = 'hsl(' + hue(i) + ',85%,55%)';
+      ctx.beginPath(); ctx.arc(p[0], p[1], i === st.sel ? rad * 1.35 : rad, 0, Math.PI * 2); ctx.fill();
+      if (i === st.sel) { ctx.strokeStyle = '#1d2b3a'; ctx.lineWidth = 2; ctx.stroke(); }
+    });
+    ctx.font = '12px ' + FONT; ctx.fillStyle = '#5b6b7d'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('1번 (가장 느림)', 10, top + gap * 0.5);
+    ctx.fillText(P.n + '번 (가장 빠름)', 10, top + gap * (P.n - 0.5));
+  }
+  function drawGraph() {
+    const cv = document.getElementById('graph');
+    const { ctx, w, h } = setup(cv, cv.clientWidth < 520 ? 0.6 : 0.3);
+    ctx.clearRect(0, 0, w, h);
+    const left = 30, right = w - 10, mid = h / 2, A = h * 0.36;
+    const span = Math.min(P.T, Math.max(4 * C.period(st.sel, P), 8));   // 주기 몇 개가 보이게 앞부분을 넓혀 그린다
+    const t0 = Math.max(0, Math.min(st.t - span / 2, P.T - span));
+    const X = (t) => left + (t - t0) / span * (right - left);
+    ctx.strokeStyle = '#dceafa'; ctx.lineWidth = 1;
+    [-1, 0, 1].forEach((s) => { ctx.beginPath(); ctx.moveTo(left, mid - s * A); ctx.lineTo(right, mid - s * A); ctx.stroke(); });
+    ctx.font = '12px ' + FONT; ctx.fillStyle = '#5b6b7d'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('1', left - 6, mid - A); ctx.fillText('0', left - 6, mid); ctx.fillText('−1', left - 6, mid + A);
+    const per = C.period(st.sel, P);
+    const ps = Math.ceil(t0 / per) * per;
+    if (ps + per <= t0 + span) {
+      ctx.fillStyle = 'rgba(242,107,29,0.12)'; ctx.fillRect(X(ps), mid - A - 6, X(ps + per) - X(ps), 2 * A + 12);
+      ctx.fillStyle = '#c2410c'; ctx.textAlign = 'center';
+      ctx.fillText('한 주기 ' + num(per) + '초', (X(ps) + X(ps + per)) / 2, mid - A - 14 < 8 ? 8 : mid - A - 14);
+    }
+    ctx.strokeStyle = 'hsl(' + hue(st.sel) + ',85%,50%)'; ctx.lineWidth = 2.5; ctx.beginPath();
+    for (let px = 0; px <= right - left; px++) {
+      const t = t0 + px / (right - left) * span, y = mid - A * C.pos(st.sel, t, P);
+      px ? ctx.lineTo(left + px, y) : ctx.moveTo(left + px, y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = '#1d2b3a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(X(st.t), 4); ctx.lineTo(X(st.t), h - 4); ctx.stroke();
+    ctx.fillStyle = '#1d2b3a'; ctx.beginPath(); ctx.arc(X(st.t), mid - A * C.pos(st.sel, st.t, P), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5b6b7d'; ctx.textAlign = 'left'; ctx.fillText(num(t0) + '초', left, h - 8);
+    ctx.textAlign = 'right'; ctx.fillText(num(t0 + span) + '초', right, h - 8);
+  }
+  function draw() {
+    drawPend(); drawGraph();
+    const L = C.lines(st.t, P);
+    document.getElementById('tRead').textContent = 't = ' + num(st.t) + '초' + (L <= 4 ? ' · ' + L + '줄' : '');
+    document.getElementById('tRange').value = String(Math.round(st.t / P.T * 1000));
+  }
+
+  let last = null;
+  function tick(ts) {
+    const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+    if (st.playing) { st.t += dt * st.speed; if (st.t > P.T) st.t -= P.T; }
+    draw();
+    requestAnimationFrame(tick);
+  }
+  function syncPlay() { document.getElementById('btnPlay').textContent = st.playing ? '멈춤' : '움직이기'; }
+  document.getElementById('btnPlay').onclick = function () { st.playing = !st.playing; syncPlay(); };
+  document.getElementById('btnZero').onclick = function () { st.t = 0; };
+  document.getElementById('tRange').oninput = function (e) { st.t = e.target.value / 1000 * P.T; st.playing = false; syncPlay(); };
+  document.getElementById('pend').addEventListener('click', function (e) {
+    if (!rowGeom) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.floor((e.clientY - rect.top - rowGeom.top) / rowGeom.gap);
+    if (i >= 0 && i < P.n) { st.sel = i; render(); }
+  });
+  window.addEventListener('resize', draw);
+  render(); syncPlay();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

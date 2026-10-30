@@ -1,0 +1,79 @@
+{
+ "id": "증명_06",
+ "order": "12-증명1",
+ "title": "중심에서 같은 거리에 있는 두 현의 길이가 같은 이유",
+ "concept_no": 12,
+ "chapter": "원의 성질",
+ "sub_chapter": "원과 직선",
+ "book_page": 43,
+ "figure": {"image": "12/cut_01.png", "crop": [1010, 525, 1500, 742]},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "같은 거리면 같은 길이!",
+   "say": "자, 오늘은 현의 길이에 대한 성질을 증명해 볼게. // {강조 한 원에서 중심으로부터 같은 거리에 있는 두 현의 길이는 같다.} // 거꾸로 길이가 같은 두 현은 중심으로부터 같은 거리에 있다는 것도 / 같은 방법으로 보일 수 있어. // 앞에서 배운 현의 수직이등분 성질을 그대로 쓰니까 같이 써 보자.",
+   "write": [
+    {"cue": "중심으로부터 같은 거리에 있는 두 현의", "tex": "$\\overline{OM}=\\overline{ON}$ 이면 $\\overline{AB}=\\overline{CD}$", "color": "blue"},
+    {"cue": "거꾸로 길이가 같은 두 현은", "tex": "$\\overline{AB}=\\overline{CD}$ 이면 $\\overline{OM}=\\overline{ON}$", "color": "blue"}
+  ]
+  },
+  {
+   "pose": "D",
+   "bubble": "거리는 수선의 길이",
+   "say": "중심에서 현까지의 거리는 / 중심에서 현에 내린 수선의 길이죠? // 그래서 원 오의 중심에서 두 현 에이비, 씨디에 내린 수선의 발을 / 각각 엠, 엔이라고 하자. // 같은 거리에 있으니까 오엠과 오엔은 길이가 같아. // {강조 오른쪽 그림처럼 반지름 오에이와 오디를 그어 보자.}",
+   "write": [
+    {"cue": "수선의 발을", "tex": "$\\overline{OM}\\perp\\overline{AB},\\ \\ \\overline{ON}\\perp\\overline{CD}$"},
+    {"cue": "같은 거리에 있으니까", "tex": "$\\overline{OM}=\\overline{ON}$", "indent": 1},
+    {"cue": "반지름 오에이와 오디를", "tex": "반지름 $\\overline{OA},\\ \\overline{OD}$ 긋기", "color": "red", "indent": 1}
+  ]
+  },
+  {
+   "pose": "D",
+   "bubble": "RHS 합동",
+   "say": "이제 삼각형 오에이엠과 삼각형 오디엔을 비교할게. // 각 오엠에이와 각 오엔디는 둘 다 구십 도. / 오에이와 오디는 반지름이라 같고, / 오엠과 오엔은 처음부터 같다고 했죠. // {강조 빗변과 다른 한 변이 각각 같으니까 알에이치에스 합동이야.} // 그래서 대응변 에이엠과 디엔의 길이가 같아.",
+   "write": [
+    {"cue": "각 오엠에이와 각 오엔디는", "tex": "$\\angle OMA=\\angle OND=90^\\circ$", "indent": 1},
+    {"cue": "오에이와 오디는 반지름이라", "tex": "$\\overline{OA}=\\overline{OD}$ (반지름), $\\overline{OM}=\\overline{ON}$", "indent": 1},
+    {"cue": "빗변과 다른 한 변이 각각", "tex": "$\\triangle OAM\\equiv\\triangle ODN$ (RHS 합동)", "color": "red"},
+    {"cue": "대응변 에이엠과 디엔의", "tex": "$\\overline{AM}=\\overline{DN}$", "indent": 1}
+  ]
+  },
+  {
+   "pose": "B",
+   "bubble": "현은 반쪽의 두 배",
+   "say": "여기서 앞에서 배운 성질을 꺼낼게. // {강조 원의 중심에서 현에 내린 수선은 그 현을 이등분하죠.} // 그래서 현 에이비는 에이엠의 두 배, 현 씨디는 디엔의 두 배야. // 반쪽 길이가 같으니까 / {천천히 두 배 한 에이비와 씨디도 길이가 같은 거다.}",
+   "write": [
+    {"cue": "원의 중심에서 현에 내린 수선은", "tex": "수선은 현을 이등분!", "color": "red"},
+    {"cue": "현 에이비는 에이엠의 두 배", "tex": "$\\overline{AB}=2\\overline{AM},\\ \\ \\overline{CD}=2\\overline{DN}$", "indent": 1},
+    {"cue": "두 배 한 에이비와 씨디도", "tex": "$\\therefore\\ \\overline{AB}=\\overline{CD}$", "color": "blue", "box": true}
+  ]
+  },
+  {
+   "pose": "C",
+   "bubble": "거꾸로는?",
+   "say": "그럼 거꾸로, 두 현의 길이가 같으면 왜 거리가 같을까? // 에이비와 씨디가 같으면 / 그 절반인 에이엠과 디엔도 같아지죠. // 이번엔 삼각형 오에이엠과 오디엔에서 / 직각, 반지름인 빗변, 그리고 에이엠과 디엔이 같으니까 / {강조 역시 알에이치에스 합동이라서 오엠과 오엔이 같아.}",
+   "write": [
+    {"cue": "그 절반인 에이엠과 디엔도", "tex": "$\\overline{AB}=\\overline{CD}\\Rightarrow\\overline{AM}=\\overline{DN}$"},
+    {"cue": "역시 알에이치에스 합동이라서", "tex": "RHS 합동 $\\Rightarrow\\ \\overline{OM}=\\overline{ON}$", "color": "blue", "indent": 1}
+  ]
+  },
+  {
+   "pose": "A",
+   "bubble": "숫자로 확인해 보기",
+   "say": "숫자로 확인해 볼게. // 반지름이 오인 원에서 두 현 에이비와 씨디가 / 둘 다 중심으로부터 거리가 삼만큼 떨어져 있다고 하자. // 에이엠은 루트 오 제곱 빼기 삼 제곱이라서 사, 디엔도 똑같이 사. // {강조 그래서 두 현의 길이는 둘 다 팔로 같아.} // 거리만 알면 현의 길이가 정해지는 거지.",
+   "write": [
+    {"cue": "반지름이 오인 원에서", "tex": "예) 반지름 $5$, $\\overline{OM}=\\overline{ON}=3$"},
+    {"cue": "에이엠은 루트 오 제곱 빼기", "tex": "$\\overline{AM}=\\overline{DN}=\\sqrt{5^2-3^2}=4$", "indent": 1},
+    {"cue": "두 현의 길이는 둘 다 팔로", "tex": "$\\overline{AB}=\\overline{CD}=8$", "indent": 1}
+  ]
+  },
+  {
+   "pose": "E",
+   "bubble": "수선, 반지름, RHS",
+   "say": "정리할게. 현의 길이와 중심까지의 거리는 / {강조 수선을 내리고, 반지름을 긋고, 알에이치에스 합동으로 연결돼.} // 거리가 같으면 길이가 같고, 길이가 같으면 거리가 같은 거야. // 이제 영상 끄고 백지에 그림부터 그려서 혼자 증명해 봐. / 다 쓰면 사진 찍어서 올려 줘.",
+   "write": [
+    {"cue": "수선을 내리고, 반지름을 긋고", "tex": "수선 $\\rightarrow$ 반지름 $\\rightarrow$ RHS 합동 $\\rightarrow$ 두 배", "color": "red", "highlight": true}
+  ]
+  }
+ ]
+}
