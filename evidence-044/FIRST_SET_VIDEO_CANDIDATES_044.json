@@ -1,0 +1,321 @@
+{
+  "status": "metadata_based_candidate_shortlist_not_publication_approval",
+  "source_sha256": "7f1eb1c4cee45cd2d52691b7e8bfa105665222bce76c10a4a10e22e5878d56d4",
+  "max_first_set_videos": 3,
+  "first_set_types": [
+    "공수1-01-02",
+    "공수1-01-07"
+  ],
+  "primary_candidates": [
+    {
+      "target_type_code": "공수1-01-02",
+      "video_metadata": {
+        "id": "350b973a-46f6-4dee-981e-0143f8312423",
+        "book": "개념+유형 개념편 공통수학1",
+        "kind": "대표예제",
+        "grade": "공통수학1",
+        "title": "필수예제 02 다항식의 전개식에서 계수 구하기",
+        "chapter": "다항식",
+        "is_active": true,
+        "concept_no": 2,
+        "type_codes": [
+          "공수1-01-02"
+        ],
+        "order_label": "02-풀이01",
+        "scene_count": 5,
+        "sub_chapter": "다항식의 연산",
+        "scene_labels": [
+          {
+            "label": "필수예제 02번!",
+            "scene_ordinal": 1,
+            "label_truncated": false
+          },
+          {
+            "label": "다 전개하지 마!",
+            "scene_ordinal": 2,
+            "label_truncated": false
+          },
+          {
+            "label": "필요한 짝만 곱하기",
+            "scene_ordinal": 3,
+            "label_truncated": false
+          },
+          {
+            "label": "네제곱은 어떤 짝?",
+            "scene_ordinal": 4,
+            "label_truncated": false
+          },
+          {
+            "label": "부호까지 같이 곱하기",
+            "scene_ordinal": 5,
+            "label_truncated": false
+          }
+        ],
+        "scenes_shape": "array",
+        "duration_seconds": 86.296,
+        "has_video_source": true,
+        "scene_positions_truncated": false
+      },
+      "review": {
+        "content_suitability": null,
+        "answer_exposure": null,
+        "whole_delivery_safe": null,
+        "student_access": null,
+        "playback_verified": null,
+        "segment_seconds": null
+      }
+    },
+    {
+      "target_type_code": "공수1-01-07",
+      "video_metadata": {
+        "id": "8e59d4bc-1e4f-4e65-b056-40c948da4fd8",
+        "book": "개념+유형 개념편 공통수학1",
+        "kind": "개념",
+        "grade": "공통수학1",
+        "title": "곱셈 공식의 변형",
+        "chapter": "다항식",
+        "is_active": true,
+        "concept_no": 3,
+        "type_codes": [
+          "공수1-01-05",
+          "공수1-01-07",
+          "공수1-01-07",
+          "공수1-01-12"
+        ],
+        "order_label": "03",
+        "scene_count": 7,
+        "sub_chapter": "다항식의 연산",
+        "scene_labels": [
+          {
+            "label": "오늘 배울 개념",
+            "scene_ordinal": 1,
+            "label_truncated": false
+          },
+          {
+            "label": "개념 ① 곱셈 공식의 변형",
+            "scene_ordinal": 2,
+            "label_truncated": false
+          },
+          {
+            "label": "개념 ① 변형 ⑷ ⑸ · 참고",
+            "scene_ordinal": 3,
+            "label_truncated": false
+          },
+          {
+            "label": "개념 Plus ⑷ 유도 과정",
+            "scene_ordinal": 4,
+            "label_truncated": false
+          },
+          {
+            "label": "개념 Check",
+            "scene_ordinal": 5,
+            "label_truncated": false
+          },
+          {
+            "label": "개념 Check 정답",
+            "scene_ordinal": 6,
+            "label_truncated": false
+          },
+          {
+            "label": "이어서 풀 필수예제",
+            "scene_ordinal": 7,
+            "label_truncated": false
+          }
+        ],
+        "scenes_shape": "array",
+        "duration_seconds": 175.867,
+        "has_video_source": true,
+        "scene_positions_truncated": false
+      },
+      "review": {
+        "content_suitability": null,
+        "answer_exposure": null,
+        "whole_delivery_safe": null,
+        "student_access": null,
+        "playback_verified": null,
+        "segment_seconds": null
+      }
+    },
+    {
+      "target_type_code": "공수1-01-07",
+      "video_metadata": {
+        "id": "58671e09-3268-45b1-895a-34f3fca3eaaa",
+        "book": "개념+유형 개념편 공통수학1",
+        "kind": "증명",
+        "grade": "공통수학1",
+        "title": "곱셈 공식의 변형 (4) 유도",
+        "chapter": "다항식",
+        "is_active": true,
+        "concept_no": 3,
+        "type_codes": [
+          "공수1-01-05",
+          "공수1-01-07",
+          "공수1-01-07",
+          "공수1-01-12"
+        ],
+        "order_label": "03-증명1",
+        "scene_count": 7,
+        "sub_chapter": "다항식의 연산",
+        "scene_labels": [
+          {
+            "label": "변형 (4)를 직접 만들자!",
+            "scene_ordinal": 1,
+            "label_truncated": false
+          },
+          {
+            "label": "왜 2배를 할까?",
+            "scene_ordinal": 2,
+            "label_truncated": false
+          },
+          {
+            "label": "2배 하고 1/2 곱하기",
+            "scene_ordinal": 3,
+            "label_truncated": false
+          },
+          {
+            "label": "제곱을 하나씩 나눠 주자",
+            "scene_ordinal": 4,
+            "label_truncated": false
+          },
+          {
+            "label": "완전제곱식으로 묶기",
+            "scene_ordinal": 5,
+            "label_truncated": false
+          },
+          {
+            "label": "부호만 바꾸면?",
+            "scene_ordinal": 6,
+            "label_truncated": false
+          },
+          {
+            "label": "2배 → 나눠 쓰기 → 묶기",
+            "scene_ordinal": 7,
+            "label_truncated": false
+          }
+        ],
+        "scenes_shape": "array",
+        "duration_seconds": 137.425,
+        "has_video_source": true,
+        "scene_positions_truncated": false
+      },
+      "review": {
+        "content_suitability": null,
+        "answer_exposure": null,
+        "whole_delivery_safe": null,
+        "student_access": null,
+        "playback_verified": null,
+        "segment_seconds": null
+      }
+    }
+  ],
+  "replacement_candidate_for_slot3": {
+    "id": "e5b46da8-624e-47f0-9e9d-3cf8297a3cc1",
+    "book": "개념+유형 개념편 공통수학1",
+    "kind": "대표예제",
+    "grade": "공통수학1",
+    "title": "필수예제 07 곱셈 공식의 변형-문자가 3개인 경우 ⑵",
+    "chapter": "다항식",
+    "is_active": true,
+    "concept_no": 3,
+    "type_codes": [
+      "공수1-01-07"
+    ],
+    "order_label": "03-풀이03",
+    "scene_count": 7,
+    "sub_chapter": "다항식의 연산",
+    "scene_labels": [
+      {
+        "label": "필수예제 07번!",
+        "scene_ordinal": 1,
+        "label_truncated": false
+      },
+      {
+        "label": "차를 세 개 만들기",
+        "scene_ordinal": 2,
+        "label_truncated": false
+      },
+      {
+        "label": "차의 제곱으로 바꾸기",
+        "scene_ordinal": 3,
+        "label_truncated": false
+      },
+      {
+        "label": "값 넣어서 계산",
+        "scene_ordinal": 4,
+        "label_truncated": false
+      },
+      {
+        "label": "합에서 하나 빼기",
+        "scene_ordinal": 5,
+        "label_truncated": false
+      },
+      {
+        "label": "일차식 세 개의 곱",
+        "scene_ordinal": 6,
+        "label_truncated": false
+      },
+      {
+        "label": "abc 부호 조심",
+        "scene_ordinal": 7,
+        "label_truncated": false
+      }
+    ],
+    "scenes_shape": "array",
+    "duration_seconds": 105.039,
+    "has_video_source": true,
+    "scene_positions_truncated": false
+  },
+  "excluded_pending_youtube_identifier": {
+    "id": "2d8deba8-b3e9-4e05-95de-860511be4225",
+    "book": "개념+유형 개념편 공통수학1",
+    "kind": "대표예제",
+    "grade": "공통수학1",
+    "title": "필수예제 06 곱셈 공식의 변형-문자가 3개인 경우 ⑴",
+    "chapter": "다항식",
+    "is_active": true,
+    "concept_no": 3,
+    "type_codes": [
+      "공수1-01-07"
+    ],
+    "order_label": "03-풀이02",
+    "scene_count": 6,
+    "sub_chapter": "다항식의 연산",
+    "scene_labels": [
+      {
+        "label": "필수예제 06번!",
+        "scene_ordinal": 1,
+        "label_truncated": false
+      },
+      {
+        "label": "먼저 혼자 풀어 봐",
+        "scene_ordinal": 2,
+        "label_truncated": false
+      },
+      {
+        "label": "제곱의 합 공식",
+        "scene_ordinal": 3,
+        "label_truncated": false
+      },
+      {
+        "label": "3abc 공식!",
+        "scene_ordinal": 4,
+        "label_truncated": false
+      },
+      {
+        "label": "6을 그대로 넣기",
+        "scene_ordinal": 5,
+        "label_truncated": false
+      },
+      {
+        "label": "세 값만 알면 끝",
+        "scene_ordinal": 6,
+        "label_truncated": false
+      }
+    ],
+    "scenes_shape": "array",
+    "duration_seconds": 90.829,
+    "has_video_source": false,
+    "scene_positions_truncated": false
+  },
+  "live_access_authorized": false
+}

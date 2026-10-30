@@ -1,0 +1,47 @@
+[OK]   클러스터 시작 — psql (PostgreSQL) 17.6 · 127.0.0.1:63140 (외부 포트 없음)
+[OK]   045 설치가 통과한다
+[OK]   본 검증 51개 항목 통과 (A~H)
+[OK]   045 를 **다시 적용해도** 통과한다 (멱등)
+[OK]   요청 역할이 service_role 이면 호출자 검사 = true
+[OK]   요청 역할이 authenticated 이면 호출자 검사 = false
+[OK]   요청 역할이 anon 이면 호출자 검사 = false
+[OK]   요청 역할이 authenticated 면 **함수 안에서** 막힌다
+[OK]   세션1 이 applied 다
+[OK]   세션2 가 duplicate 다 (둘 다 반영되지 않는다)
+[OK]   받아들인 줄이 **정확히 하나**다
+[OK]   되돌리기 블록이 세 개다 (찾은 것 3개)
+[OK]   되돌리기 1단계(차단)가 통과한다
+[OK]   1단계는 **자료를 지우지 않는다** (13줄 그대로)
+[OK]   1단계 뒤에는 **아무도 저장하지 못한다**
+[OK]   045 를 다시 실행하면 1단계 차단이 풀린다
+[OK]   차단을 푼 뒤에는 다시 저장된다
+[OK]   2단계의 묶음 이름 한 줄을 pgtest-045 로 바꿨다 (문서가 말한 그 한 곳)
+[OK]   되돌리기 2단계(이 묶음 정리)가 통과한다
+[OK]   2단계는 **이 묶음만** 지운다 (다른 묶음은 남는다)
+       other-run:1
+[OK]   3단계는 **남은 기록이 있으면 멈춘다**
+[OK]   되돌리기 3단계(기능 철수)가 통과한다
+[OK]   3단계 뒤 표와 함수가 없다
+       none/none
+[OK]   3단계가 기존 표(students)를 건드리지 않았다
+       3
+[OK]   직접권한 있음: 설치 뒤 권한이 anon·authenticated 거부 / service_role 허용이다
+       anon=false,authenticated=false,service_role=true
+[OK]   직접권한 있음: anon 는 **권한에서** 막힌다 (호출자 검사와 별개로)
+       ERROR:  permission denied for function apply_learning_action
+[OK]   직접권한 있음: authenticated 는 **권한에서** 막힌다 (호출자 검사와 별개로)
+       ERROR:  permission denied for function apply_learning_action
+[OK]   직접권한 있음: 권한이 있어도 요청 역할이 anon 이면 **함수 안에서** 막힌다
+[OK]   직접권한 있음: service_role 은 저장할 수 있다
+[OK]   직접권한 없음: 설치 뒤 권한이 anon·authenticated 거부 / service_role 허용이다
+       anon=false,authenticated=false,service_role=true
+[OK]   직접권한 없음: anon 는 **권한에서** 막힌다 (호출자 검사와 별개로)
+       ERROR:  permission denied for function apply_learning_action
+[OK]   직접권한 없음: authenticated 는 **권한에서** 막힌다 (호출자 검사와 별개로)
+       ERROR:  permission denied for function apply_learning_action
+[OK]   직접권한 없음: 권한이 있어도 요청 역할이 anon 이면 **함수 안에서** 막힌다
+[OK]   직접권한 없음: service_role 은 저장할 수 있다
+
+엔진: psql (PostgreSQL) 17.6
+fixture: scripts/pg-learning-fixture.sql · 검증: scripts/pg-learning-verify.sql
+항목 34 · 통과 34 · 실패 0
