@@ -240,23 +240,22 @@ export default function LearningFirstSetPage() {
           {/* ① 원문 */}
           <section className="rounded-xl border bg-white p-4">
             <h2 className="mb-2 font-bold" style={{ color: NAVY }}>① 원문</h2>
-            <div className="space-y-2">
-              {problems.map((p) => (
-                <button key={p.problemId} onClick={() => { setProblemId(p.problemId); setConfirmIds([]) }}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
-                    problemId === p.problemId ? 'border-blue-400 bg-blue-50' : 'bg-gray-50'}`}>
-                  <div className="font-semibold">
-                    {p.typeCode} · {p.book ?? ''} {p.localNo ?? p.problemId}번
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {p.answerKind}
-                    {p.hasAnswerImage && ' · 해설 그림 있음(주소는 만들지 않음)'}
-                  </div>
-                </button>
-              ))}
-            </div>
+
+            {/*
+              고른 문항을 **목록보다 위에** 둔다. 전에는 목록 10개 아래에 있어서
+              무엇을 골랐는지 보려면 끝까지 내려가야 했다 — 원문·영상·확인문제를
+              「같이 본다」는 이 화면의 뜻이 반감된다 (원장님 2026-10-30).
+            */}
+            {problem === null && (
+              <p className="mb-2 rounded-lg border border-dashed bg-gray-50 p-3 text-xs text-gray-500">
+                아래에서 문항을 고르면 여기에 문제 그림과 정답이 보입니다.
+              </p>
+            )}
             {problem !== null && (
-              <div className="mt-3 rounded-lg border bg-gray-50 p-3">
+              <div className="mb-3 rounded-lg border-2 bg-gray-50 p-3" style={{ borderColor: NAVY }}>
+                <div className="mb-1 text-xs font-bold" style={{ color: NAVY }}>
+                  고른 원문 · {problem.typeCode} · {problem.book ?? ''} {problem.localNo ?? problem.problemId}번
+                </div>
                 {problem.stem !== '' && <p className="text-sm"><MathText text={problem.stem} /></p>}
                 {problem.imageUrl !== null && (
                   <img src={problem.imageUrl} alt={`문항 ${problem.problemId}`}
@@ -275,6 +274,23 @@ export default function LearningFirstSetPage() {
                 </p>
               </div>
             )}
+
+            {/* 목록은 접어 둔다 — 길어서 아래 칸을 밀어내지 않게 */}
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {problems.map((p) => (
+                <button key={p.problemId} onClick={() => { setProblemId(p.problemId); setConfirmIds([]) }}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                    problemId === p.problemId ? 'border-blue-400 bg-blue-50' : 'bg-gray-50'}`}>
+                  <div className="font-semibold">
+                    {p.typeCode} · {p.book ?? ''} {p.localNo ?? p.problemId}번
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {p.answerKind}
+                    {p.hasAnswerImage && ' · 해설 그림 있음(주소는 만들지 않음)'}
+                  </div>
+                </button>
+              ))}
+            </div>
           </section>
 
           {/* ② 영상 */}
