@@ -248,6 +248,28 @@ export function isDailyTest(row: { title?: string | null; kind?: string | null }
 }
 
 /**
+ * 교재연계로 낸 것인가 — 스터디체크에서는 **쌍둥이 학습지(twin)** 다.
+ *
+ * ★ 매쓰홀릭의 「교재 연계」(시중교재·교과서·매쓰홀릭 교재)는 카드 설명 그대로
+ *   **쌍둥이·유사 문제 출제**다. 그래서 레벨이 없고 쪽 범위로 낸다
+ *   (「[쎈] 중등 1-1 (2022개정) P.18 ~ P.80」).
+ *   원장님 2026-10-30 「[교재]는 쌍둥이 학습지로 들어가야돼」.
+ *   실제로 그 교재 과제가 스터디체크에 worksheet_type='twin' 으로 들어가 있었다.
+ */
+export function isTextbookLinked(row: { title?: string | null; kind?: string | null }): boolean {
+  const t = `${row.title ?? ''} ${row.kind ?? ''}`
+  return /교재/.test(t) || /\bP\.?\s*\d+\s*[~\-]/i.test(t)
+}
+
+/** 학습지관리에 넣을 때의 갈래. main(레벨학습지) · similar(오답유사) · twin(쌍둥이) */
+export function worksheetTypeOf(row: { title?: string | null; kind?: string | null }): 'main' | 'similar' | 'twin' {
+  const t = `${row.title ?? ''} ${row.kind ?? ''}`
+  if (/오답유사/.test(t)) return 'similar'
+  if (isTextbookLinked(row)) return 'twin'
+  return 'main'
+}
+
+/**
  * 이너프원으로 만든 것인가.
  *
  * ★ 이너프원은 **학습지가 아니라 내신대비교재**다 (원장님 2026-10-29
@@ -349,10 +371,9 @@ export function parseWorksheetTitle(title: string): TitleParts {
 export function needsLevel(row: { title?: string | null; kind?: string | null }): boolean {
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
   if (/주말복습|단원평가|진단평가|월간평가|주간평가/.test(t)) return false
-  // ★ 교재연계로 낸 것은 레벨 개념이 없다 — 교재와 쪽 범위로 낸다
-  //   (「[쎈] 중등 1-1 (2022개정) P.18 ~ P.80」). 새 제목 규칙에서는 머리표를 「[교재]」로 쓴다.
+  // ★ 교재연계(= 쌍둥이 학습지)는 레벨 개념이 없다 — 교재와 쪽 범위로 낸다.
   //   여기를 안 빼 두면 교재 과제가 통째로 「레벨이 없어요」로 막힌다 (2026-10-29 예행에서 걸렸다).
-  if (/교재/.test(t) || /\bP\.?\s*\d+\s*[~\-]/i.test(t)) return false
+  if (isTextbookLinked(row)) return false
   return /학습지|오답유사/.test(t)
 }
 
@@ -646,9 +667,13 @@ export function rankWorksheets(row: MatholicRow, list: WsCandidate[], unit?: Res
       }
     }
 
-    const wantsSimilar = /오답유사/.test(row.title) || row.kind === '오답유사'
-    if (wantsSimilar && ws.worksheet_type === 'similar') { points += 3; why.push('오답유사') }
-    if (wantsSimilar && ws.worksheet_type === 'main') points -= 2
+    // 갈래가 같으면 올리고, 다르면 내린다 (오답유사·쌍둥이·레벨학습지).
+    const want = worksheetTypeOf(row)
+    if (ws.worksheet_type === want) {
+      if (want !== 'main') { points += 3; why.push(want === 'similar' ? '오답유사' : '쌍둥이') }
+    } else if (want !== 'main' || ws.worksheet_type !== 'main') {
+      points -= 2
+    }
 
     // 아직 점수가 안 적힌 것이 먼저다 — 보통 그것을 채우러 온 것이다.
     if (ws.score == null) { points += 2; why.push('점수 비어 있음') }

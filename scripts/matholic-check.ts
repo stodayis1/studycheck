@@ -17,7 +17,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -314,6 +314,12 @@ T('교재연계로 낸 것은 레벨이 없어도 된다 (쪽 범위로 낸다)'
   !needsLevel({ title: '[쎈] 중등 1-1 (2022개정) P.18 ~ P.80[01-04]', kind: '학습지' })
   && !needsLevel({ title: '[교재] 중1-1 쎈 P.18~P.80', kind: '학습지' }))
 
+T('교재연계로 낸 것은 쌍둥이 학습지로 들어간다', () =>
+  worksheetTypeOf({ title: '[교재] 중1-1 쎈 P.18~P.80', kind: '학습지' }) === 'twin'
+  && worksheetTypeOf({ title: '[쎈] 중등 1-1 (2022개정) P.18 ~ P.80[01-04]', kind: '학습지' }) === 'twin'
+  && worksheetTypeOf({ title: '[오답유사] 중1-1 Ⅱ 문자와 식_Lv3.5', kind: '학습지' }) === 'similar'
+  && worksheetTypeOf({ title: '[학습지] 초6-2 1단원 분수의 나눗셈_Lv5', kind: '학습지' }) === 'main')
+
 T('학습지·오답유사는 레벨이 반드시 있어야 한다', () =>
   needsLevel({ title: '[학습지] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
   && needsLevel({ title: '[오답유사] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
@@ -519,6 +525,13 @@ T('새 제목 규칙 — 머리표가 오답유사면 오답유사 학습지에 
     WS({ id: 's', current_level: 4, unit: '1단원', unit_name: '분수의 나눗셈', worksheet_type: 'similar' }),
   ])
   return !isDailyTest(r.rows[0]) && ranked[0].ws.id === 's' && isClearWinner(ranked)
+})
+
+T('쌍둥이는 쌍둥이 학습지에 붙는다 (레벨학습지에 붙으면 안 된다)', () => {
+  const ranked = rankWorksheets(
+    { ...ROW({}), title: '[교재] 초6-2 쎈 P.18~P.40', level: null },
+    [WS({ id: 'main' }), WS({ id: 'twin', worksheet_type: 'twin' })])
+  return ranked[0].ws.id === 'twin'
 })
 
 T('오답유사는 오답유사 학습지에 붙는다', () => {

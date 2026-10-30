@@ -32,7 +32,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
-  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
+  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
@@ -291,7 +291,9 @@ export default function MatholicImportPage() {
             unit: u?.chapter ?? t.unit ?? p.row.course ?? '매쓰홀릭',
             unit_name: u?.subChapter ?? t.unitName ?? p.row.title,
             current_level: p.row.level,
-            worksheet_type: /오답유사/.test(p.row.title) || p.row.kind === '오답유사' ? 'similar' : 'main',
+            // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
+            // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
+            worksheet_type: worksheetTypeOf(p.row),
             status: 'scored', score: p.row.score,
             assigned_at: `${p.row.date}T12:00:00+09:00`,
             submitted_at: `${p.row.date}T12:00:00+09:00`,
