@@ -39,6 +39,7 @@ def clean(t):
     """제어 문자·좁은 빈칸 정리, 수식 글꼴의 \\·_ 는 ×·÷ (중2-1 「(단항식)\\(다항식)」)"""
     if not PANEL: return t
     t = re.sub(r'[\x00-\x1f\u200b-\u200d]', '', t).replace('\\', '×').replace('_', '÷')
+    t = t.replace('@', '²').replace('#', '³').replace('{', '(').replace('}', ')')   # 중3-1 「y=ax@」「{x-p}」
     return re.sub(r' +', ' ', re.sub(r'[\u2000-\u200a]', ' ', t)).strip()   # 얇은 빈칸(U+2005·2006)은 파일 이름·화면에서 □ 로 깨진다
 
 
@@ -58,7 +59,7 @@ def marks(p):
     out, last_ext = [], -99
     for m in ms:
         if PANEL and m['k'] == 'ext' and out and out[-1]['k'] == 'ex' and m['y'] - last_ext < 14:
-            out[-1]['title'] += ' ' + m['t']; last_ext = m['y']; continue    # 세 줄 넘는 제목(중2-1)
+            out[-1]['title'] = (out[-1].get('title', '') + ' ' + m['t']).strip(); last_ext = m['y']; continue    # 세 줄 넘는 제목(중2-1)
         if m['k'] == 'ext': last_ext = m['y']
         if m['k'] == 'head' and out and out[-1]['k'] == 'num' and m['y'] - out[-1]['y'] < 12 and 'title' not in out[-1]:
             out[-1]['title'] = m['t']; continue
@@ -113,6 +114,8 @@ def main():
     a = ap.parse_args()
     global PANEL; PANEL = a.panel
     doc = pymupdf.open(a.pdf)
+    # 「개념 확인」 머리가 글자로 있는 책(중3-1)은 바탕 사각형으로 개념 확인을 짐작하지 않는다 — 상자 밖 주의 줄을 개념 확인으로 잘못 잡았다
+    chk_text = any(l['font'].startswith('RixDefyKid') for p in doc for l in lines_of(p))
     subs = sub_chapters(a.grade, a.semester)
 
     # 1) 강의 단위로 묶기
@@ -131,7 +134,7 @@ def main():
             continue
         bottom = bottom_of(p)
         pan = panel_of(p)
-        if pan and not any(m['k'] == 'chk' for m in ms):
+        if pan and not chk_text and not any(m['k'] == 'chk' for m in ms):
             # 「개념 확인」 머리가 그림이라 글자로 안 잡힌다: 바탕 사각형 아래부터 필수 문제 전까지가 개념 확인
             first_ex = min([m['y'] for m in ms if m['k'] == 'ex' and m['y'] > pan.y1] + [bottom])
             # 오른쪽에만 붙은 「용어」 쪽지는 개념 확인이 아니다 → 왼쪽에서 시작하는 글이 있어야 (중2-1 p34)
