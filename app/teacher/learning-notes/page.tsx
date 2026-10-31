@@ -11,6 +11,7 @@ import { cx, fetchAllRows, formatDailyTestUnitLabel, formatWorksheetScope, textb
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
+import { unitParen, unitLabel, levelText } from '@/lib/worksheetTitle'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
@@ -3792,7 +3793,10 @@ ${e?.message ?? '연결 실패'}
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
                           style={{ background: '#639922', color: '#fdf8f0' }}>학습지</span>
                         <p className="text-xs flex-1" style={{ color: '#1f2937' }}>
-                          {recentWS.grade_level} · {recentWS.unit}{recentWS.unit_name ? ` (${recentWS.unit_name})` : ''} · {recentWS.current_level}레벨
+                          {recentWS.grade_level} · {unitParen(recentWS.unit, recentWS.unit_name)} · {levelText(recentWS.current_level)}레벨
+                          {/* ★ 점수까지 보여 준다 — 원장님 2026-10-31 「점수는 안보여」.
+                                 매쓰홀릭에서 점수가 들어와 있어도 이 칸이 레벨까지만 찍고 있었다. */}
+                          {recentWS.score != null && <> · <b style={{ color: '#27500A' }}>{recentWS.score}점</b></>}
                         </p>
                       </div>
                     )}
@@ -4253,8 +4257,8 @@ ${e?.message ?? '연결 실패'}
                         </p>
                         <div className="flex flex-wrap gap-1">
                           {todays.map((w) => {
-                            const 단원 = [w.unit, w.unit_name].filter(Boolean).join(' ')
-                            const 레벨 = w.current_level != null ? `Lv${w.current_level}` : ''
+                            const 단원 = unitLabel(w.unit, w.unit_name)
+                            const 레벨 = w.current_level != null ? `Lv${levelText(w.current_level)}` : ''
                             return (
                               <button key={w.id} type="button"
                                 onClick={() => { setNoteWorksheetUnit(단원); setNoteWorksheetLevel(레벨) }}
@@ -4809,7 +4813,7 @@ ${e?.message ?? '연결 실패'}
                               </span>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-semibold text-gray-800">
-                                  {ws.grade_level} · {ws.unit}{ws.unit_name ? ` (${ws.unit_name})` : ''} · {ws.current_level}레벨
+                                  {ws.grade_level} · {unitParen(ws.unit, ws.unit_name)} · {levelText(ws.current_level)}레벨
                                 </p>
                                 {ws.worksheet_type === 'similar' && (
                                   <span className="text-[10px] text-[#712B13] font-bold">오답유사</span>

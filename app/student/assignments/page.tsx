@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { unitParen, levelText } from '@/lib/worksheetTitle'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { loadHolidays, type Holiday } from '@/lib/holidays'
@@ -335,7 +336,7 @@ export default function StudentAssignmentsPage() {
                     style={{ background: '#f9fafb', border: '1px solid #f0f0f0' }}>
                     <span className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0" style={{ borderColor: '#F5C4B3' }} />
                     <span className="flex-1 text-sm font-semibold text-gray-700">
-                      학습지 · {ws.grade_level} {ws.unit}{ws.unit_name ? ` (${ws.unit_name})` : ''} · {ws.current_level}레벨
+                      학습지 · {ws.grade_level} {unitParen(ws.unit, ws.unit_name)} · {levelText(ws.current_level)}레벨
                     </span>
                     <span className="text-[10px] font-bold" style={{ color: '#993C1D' }}>
                       {savingItem === 'ws-' + ws.id ? '저장 중' : '제출 체크'}

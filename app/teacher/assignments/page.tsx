@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, formatConceptRangeLabel, fetchAllRows } from '@/lib/utils'
 import { splitTeachers } from '@/lib/teachers'
+import { unitNameBeside } from '@/lib/worksheetTitle'
 
 interface Student {
   id: string
@@ -174,7 +175,10 @@ function getUnitPass(rows: StudentWorksheet[]): { state: UnitPassState; last: St
   return { state: 'fail', last }
 }
 
-function formatUnit(gradeLevel: string, unit: string, unitName: string) {
+function formatUnit(gradeLevel: string, unit: string, unitNameRaw: string) {
+  // ★ 같은 말을 두 번 찍지 않는다 — 원장님 2026-10-31 「전범위 전범위 Lv4로 나온다」.
+  //   전범위·복합처럼 쪼갤 것이 없는 제목은 unit 과 unit_name 에 **같은 값**이 들어온다.
+  const unitName = unitNameBeside(unit, unitNameRaw)
   if (unitName) {
     const chapterNum = unit.match(/^[Ⅰ-Ⅸ\d]+/)?.[0] ?? unit.replace(/[^0-9Ⅰ-Ⅸ]/g, '') ?? ''
     const subNums = unitName.split(' + ').map((s) => {

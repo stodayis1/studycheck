@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { unitLabel } from '@/lib/worksheetTitle'
 import { apiFetch } from '@/lib/apiFetch'
 import { cx, fetchAllRows } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -616,7 +617,7 @@ export default function TeacherReportsPage() {
     const worksheetDetail = [...monthWS]
       .sort((a: any, b: any) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
       .map((w: any) => ({
-        unit: `${w.grade_level} ${w.unit}${w.unit_name ? ' ' + w.unit_name : ''}`.trim(),
+        unit: `${w.grade_level} ${unitLabel(w.unit, w.unit_name)}`.trim(),
         level: w.current_level,
         score: w.score,
         status: WS_STATUS_LABEL[w.status] ?? w.status,

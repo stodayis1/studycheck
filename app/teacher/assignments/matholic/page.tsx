@@ -28,6 +28,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/common/Header'
+import { unitNameBeside } from '@/lib/worksheetTitle'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
@@ -283,13 +284,19 @@ export default function MatholicImportPage() {
           // 개념 사전에서 찾아낸 단원이 있으면 **그 이름으로** 넣는다 — 그래야 레벨 현황판에서
           // 같은 단원끼리 모인다. 선생님이 소개념 이름으로 쓰셔도 대단원까지 함께 들어간다.
           const u = p.unit
+          // ★ 두 칸에 **같은 값**을 넣지 않는다 (원장님 2026-10-31 「전범위 전범위로 나온다」).
+          //   전범위·복합처럼 쪼갤 것이 없는 제목은 대단원·소단원이 같은 글자가 되고,
+          //   그러면 그 뒤로 모든 화면이 「전범위 전범위」로 찍는다. 읽는 쪽도 막아 두었지만
+          //   (lib/worksheetTitle.ts) 들어가는 쪽에서 막는 것이 먼저다.
+          const unitCell = u?.chapter ?? t.unit ?? p.row.course ?? '매쓰홀릭'
+          const unitNameCell = unitNameBeside(unitCell, u?.subChapter ?? t.unitName ?? p.row.title) || null
           const { error } = await supabase.from('student_worksheets').insert({
             student_id: p.studentId, subject: '수학',
             // 제목에 학년이 적혀 있으면 그걸 쓰고, 없으면 학생의 학년으로 메운다.
             grade_level: t.gradeLevel ?? gradeFromCourse(p.row.course)?.grade ?? who?.grade ?? null,
             semester: t.semester ?? gradeFromCourse(p.row.course)?.semester ?? null,
-            unit: u?.chapter ?? t.unit ?? p.row.course ?? '매쓰홀릭',
-            unit_name: u?.subChapter ?? t.unitName ?? p.row.title,
+            unit: unitCell,
+            unit_name: unitNameCell,
             current_level: p.row.level,
             // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
             // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).

@@ -99,6 +99,21 @@ const KINDS = ['학습지', '진단평가', '월간평가', '주간평가', '단
  *   데일리는 학습일지, 나머지는 학습지. 옛 제목도 그대로 읽히게 둔다(한꺼번에 안 바뀐다).
  */
 const TITLE_KIND = /^\[\s*([^\]]{1,12}?)\s*\]\s*/
+/**
+ * 머리표에 쓰시는 말이 갈린다 — 「평가」와 「테스트」를 섞어 쓰신다.
+ *
+ * ★ 원장님이 2026-10-30 에 실제로 쓰신 머리표는 「[주간테스트]」였다. KINDS 에는
+ *   「주간평가」만 있어서 **머리표를 못 알아보고 제목에 그대로 남았다.** 에러는 안 난다 —
+ *   그래서 아무도 모른다. 아는 말을 넓혀 둔다(제목 규칙은 선생님마다 조금씩 다르다).
+ */
+const KIND_ALIAS: Record<string, string> = {
+  '주간테스트': '주간평가',
+  '월간테스트': '월간평가',
+  '단원테스트': '단원평가',
+  '진단테스트': '진단평가',
+  '주말테스트': '주말복습',
+  '주말과제': '주말복습',
+}
 /** 「공통수학2 (2022 개정)」·「초등 6-2 (2022 개정)」 — 과정 칸은 개정 연도가 붙어 온다 */
 const COURSE_CELL = /\(\s*\d{4}\s*개정\s*\)/
 const NO_HISTORY = /해당 기간 학습 이력이 없습니다/
@@ -215,9 +230,11 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
     let title = rest.join(' ').replace(/\s+/g, ' ').trim()
     // 제목 맨 앞 「[데일리]」 같은 머리표는 종류로 쓰고 제목에서 덜어낸다.
     const th = TITLE_KIND.exec(title)
-    if (th && KINDS.some((k) => th[1].includes(k))) {
-      kind = KINDS.find((k) => th[1].includes(k)) ?? kind
-      title = title.slice(th[0].length).trim()
+    if (th) {
+      const inner = th[1].trim()
+      // 똑같이 적힌 별명을 먼저 보고, 없으면 아는 말이 들어 있는지 본다.
+      const k = KIND_ALIAS[inner] ?? KINDS.find((x) => inner.includes(x))
+      if (k) { kind = k; title = title.slice(th[0].length).trim() }
     }
     const lv = LEVEL.exec(title)
 
