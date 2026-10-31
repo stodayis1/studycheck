@@ -65,8 +65,14 @@ export async function GET(req: NextRequest) {
     const used = pickCodes(auto)
 
     /** 한 판을 보고, 등록된 본문·버튼이 코드와 같은지 알려 준다. */
-    const inspect = (code: string | undefined, ours: string, wantBtn: [string, string][]) => {
-      if (!code) return { 등록여부: '아직 Vercel 에 코드가 없습니다' }
+    const inspect = (code: string | undefined, ours: string, wantBtn: [string, string][], key?: string) => {
+      if (!code) {
+        // ★ 「코드가 없다」로만 적으면 **왜** 없는지를 모른다. 2026-10-31 에 그것 때문에
+        //   한참 헤맸다 — 환경변수에 없을 뿐 자동으로 찾아 쓰고 있었고, 그다음엔 버튼이
+        //   달라 안 쓰기로 한 것이었는데 화면은 똑같이 「코드가 없다」고만 했다.
+        const r = key ? auto.why?.[key] : null
+        return { 등록여부: r ? `안 씁니다 — ${r}` : '알리고에서 이 본문으로 등록된 템플릿을 못 찾았고, Vercel 환경변수에도 코드가 없습니다' }
+      }
       const t = list.find((x) => x.templtCode === code)
       if (!t) return { 등록여부: `알리고에서 ${code} 를 못 찾았습니다` }
       const registered = String(t.templtContent ?? '').replace(/\r\n/g, '\n')
@@ -140,12 +146,12 @@ export async function GET(req: NextRequest) {
       //   2026-10-31 에 ② 판이 「아직 Vercel 에 코드가 없습니다」로 떴는데, 정작 발송은
       //   알리고 목록에서 **자동으로 찾은** 코드로 나가고 있었다. 그 코드는 검사된 적이 없다.
       판: {
-        '① 예전 판 · 알림장 있는 날': inspect(used.v1 ?? tplCode, BRIEFING_TEMPLATE, BTN3),
-        '① 예전 판 · 알림장 없는 날': inspect(used.v1NoNote ?? undefined, BRIEFING_TEMPLATE_NONOTE, BTN2),
-        '② 과제 성취도 판 · 알림장 있는 날': inspect(used.v2 ?? undefined, BRIEFING_TEMPLATE_V2, BTN3),
-        '② 과제 성취도 판 · 알림장 없는 날': inspect(used.v2NoNote ?? undefined, BRIEFING_TEMPLATE_V2_NONOTE, BTN2),
-        '③ 데일리테스트 판 · 알림장 있는 날': inspect(used.v3 ?? undefined, BRIEFING_TEMPLATE_V3, BTN3),
-        '③ 데일리테스트 판 · 알림장 없는 날': inspect(used.v3NoNote ?? undefined, BRIEFING_TEMPLATE_V3_NONOTE, BTN2),
+        '① 예전 판 · 알림장 있는 날': inspect(used.v1 ?? tplCode, BRIEFING_TEMPLATE, BTN3, 'v1'),
+        '① 예전 판 · 알림장 없는 날': inspect(used.v1NoNote ?? undefined, BRIEFING_TEMPLATE_NONOTE, BTN2, 'v1NoNote'),
+        '② 과제 성취도 판 · 알림장 있는 날': inspect(used.v2 ?? undefined, BRIEFING_TEMPLATE_V2, BTN3, 'v2'),
+        '② 과제 성취도 판 · 알림장 없는 날': inspect(used.v2NoNote ?? undefined, BRIEFING_TEMPLATE_V2_NONOTE, BTN2, 'v2NoNote'),
+        '③ 데일리테스트 판 · 알림장 있는 날': inspect(used.v3 ?? undefined, BRIEFING_TEMPLATE_V3, BTN3, 'v3'),
+        '③ 데일리테스트 판 · 알림장 없는 날': inspect(used.v3NoNote ?? undefined, BRIEFING_TEMPLATE_V3_NONOTE, BTN2, 'v3NoNote'),
       },
       // 어디서 온 코드인지 — 「자동으로 찾음」인지 「Vercel 환경변수」인지
       코드출처: Object.fromEntries((['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote'] as const)

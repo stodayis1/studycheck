@@ -147,6 +147,7 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
         why[key] = `본문은 같은데 아직 승인 전이에요 (${same[0].inspStatus})`
         return null
       }
+      // 승인된 것이 없을 때 — 같은 본문이 몇 개나 있고 각각 어떤 상태인지 적어 둔다.
       const near = list.find((t) => loose(body(t)) === loose(ours))
       if (near) {
         why[key] = near.inspStatus === 'APR'
@@ -154,7 +155,7 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
           : `띄어쓰기만 다른 판이 있는데 아직 승인 전이에요 (${near.inspStatus})`
         return null
       }
-      why[key] = '알리고에 이 원문으로 등록된 템플릿이 없어요'
+      why[key] = `알리고에 이 원문으로 등록된 템플릿이 없어요 (등록된 템플릿 ${list.length}개 중)`
       return null
     }
 
