@@ -1,4 +1,5 @@
-﻿export function formatRelativeTime(isoString: string): string {
+﻿import { unitNameBeside } from './worksheetTitle'
+export function formatRelativeTime(isoString: string): string {
   const date = new Date(isoString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -151,6 +152,11 @@ export function formatWorksheetScope(
 ): string {
   const raw = (unitName ?? '').trim()
   if (!raw) return ''
+  // ★ 단원 칸과 **같은 말**이면 범위로 쓸 것이 없다 — 괄호에 같은 말을 또 넣으면
+  //   「* 레벨학습지 (5-2) 3단원 * (* 레벨학습지 (5-2) 3단원 *)」가 되고, 그 줄이
+  //   학부모 과제 칸으로 **그대로 나간다**(2026-10-30 에 13명이 그렇게 나갔다).
+  //   전범위·복합처럼 쪼갤 것이 없는 제목은 두 칸에 같은 값이 들어온다.
+  if (!unitNameBeside(unit, raw)) return ''
   // 대단원 이름이 여러 개 이어 붙은 경우(「Ⅰ 기본도형 + Ⅱ 평면도형」)도 각각 찾아 본다.
   const chapters = (unit ?? '').split('+').map((c) => c.trim()).filter(Boolean)
   const pool = concepts.filter((c) => chapters.some((ch) => ch === c.chapter))
