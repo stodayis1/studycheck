@@ -1868,6 +1868,11 @@ ${e?.message ?? '연결 실패'}
           const proof = urls.filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명').length
           return { total: urls.length, proof }
         })(),
+        // 그날 들어온 학습지 점수 — 발송 쪽과 같은 규칙(그날 제출 + 점수 있음)으로 고른다.
+        // 위의 초록 칩이 보여 주는 것과 **같은 줄들**이다.
+        worksheets: worksheets.filter((w) =>
+          w.student_id === noteStudent.id && w.score != null
+          && String(w.submitted_at ?? '').slice(0, 10) === day) as any,
         noNoteTemplate: !!briefMode?.noNoteTemplate,
         noNoteTemplateV3: !!briefMode?.noNoteTemplateV3,
         useV2: !!briefMode?.useV2,
@@ -4227,8 +4232,13 @@ ${e?.message ?? '연결 실패'}
                         · 선생님이 **이미 들어왔다는 것을 바로 알게** 하려는 것이다. 붙여넣기로 들어오면
                           학습지관리에는 쌓이는데 이 화면에서는 보이지 않아 한 번 더 찾아봐야 했다.
                         · 성취도는 **고쳐 주지 않는다.** 그건 선생님 판단값이다(5% 단위로 직접 고르신다).
-                          다만 「단원·레벨 넣기」를 누르면 아래 두 칸만 채워 준다 —
-                          그 두 칸은 학부모 브리핑에 그대로 나가는데 지금은 손으로 적고 계신다.
+                          다만 칩을 누르면 아래 단원·레벨 칸을 채워 준다. 그 두 칸은 주간 보고서와
+                          OPS 로도 가므로 여전히 쓸모가 있다.
+                        · ★ 점수 자체는 **칩을 안 눌러도** 브리핑에 나간다 (원장님 2026-10-30).
+                          브리핑은 student_worksheets 를 직접 읽는다 —
+                          「▶ 과제 성취도  70% · 학습지 전범위 Lv4 90점」.
+                          그래서 **알림장을 먼저 쓴 날에도** 점수가 묻히지 않는다. 2026-10-30 에
+                          매쓰홀릭 점수가 들어온 18명 중 6명이 알림장을 먼저 쓰셨고 칩을 볼 수 없었다.
                         · 읽기만 한다. 이 칩이 뭔가를 저장하는 일은 없다. */}
                   {(() => {
                     const day = noteDate || todayStr
@@ -4257,7 +4267,7 @@ ${e?.message ?? '연결 실패'}
                           })}
                         </div>
                         <p className="text-[10px] mt-1" style={{ color: '#639922' }}>
-                          칩을 누르면 아래 단원·레벨 칸에 넣어 드려요. 과제 성취도는 선생님이 직접 고르시는 값이라 그대로 둡니다.
+                          이 점수는 학부모 브리핑에 저절로 나가요. 과제 성취도는 선생님이 직접 고르시는 값이라 그대로 둡니다.
                         </p>
                       </div>
                     )

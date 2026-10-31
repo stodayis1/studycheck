@@ -32,8 +32,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
-  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS,
-  type NameRules, type SessionLite, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
+  parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
+  type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
 /**
@@ -57,6 +57,8 @@ interface Plan {
   sessionId: string | null
   /** 코어테스트일 때 회차 이름 (예비 1회 · 예비 2회 · 본고사) */
   coreRound: string | null
+  /** 개념 사전에서 찾아낸 단원. 못 찾았으면 null 이고, 그때는 제목 글자를 그대로 쓴다 */
+  unit: ResolvedUnit | null
   mode: Mode
   /** 왜 이렇게 골랐는지 — 화면에 그대로 보여 준다 */
   why: string
@@ -82,6 +84,11 @@ export default function MatholicImportPage() {
       const { data: setting } = await supabase.from('app_settings')
         .select('value').eq('key', 'matholic_name_rules').maybeSingle()
       const rules: NameRules = (setting?.value as any) ?? {}
+
+      // 개념 사전 — 선생님이 소개념·중단원·대단원 어느 이름으로 쓰셔도 여기서 찾아 올린다
+      // (원장님 2026-10-29 「그 제목을 쓰면 너가 알아서 매칭해서 붙여줘야지」).
+      const concepts = await fetchAllRows<ConceptRow>(() =>
+        supabase.from('concepts').select('grade, semester, chapter, sub_chapter, concept_name').order('id'))
 
       const res = parseMatholic(text)
       setParsed(res)
@@ -136,18 +143,18 @@ export default function MatholicImportPage() {
       setPlans(res.rows.map((row, i): Plan => {
         const students = found[i]
         if (isEnoughOne(row)) {
-          return { row, students: [], studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null,
+          return { row, students: [], studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null,
             mode: 'excluded', why: '이너프원은 내신대비교재라 학습지로 안 넣어요' }
         }
         if (students.length === 0) {
-          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
+          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, mode: 'skip',
             why: '스터디체크에 그 이름의 학생이 없어요 (또는 제 담당이 아니에요)' }
         }
         // 같은 이름이 여럿이면 설정에 적힌 규칙으로 한 명을 고른다.
         // 규칙에 없으면 아무도 안 고르고 사람에게 묻는다 — 반반 확률로 찍지 않는다.
         const picked = students.length === 1 ? students[0] : pickByRule(row.student, students, rules)
         if (!picked) {
-          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
+          return { row, students, studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, mode: 'skip',
             why: `같은 이름이 ${students.length}명이에요 — 누구인지 골라 주세요` }
         }
         const byRule = students.length > 1
@@ -163,10 +170,10 @@ export default function MatholicImportPage() {
         if (round) {
           const already = coreByKey.get(`${sid}|${row.date}|${round}`)
           if (already != null) {
-            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round,
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round, unit: null,
               mode: 'done', why: tag(`평가관리에 코어테스트 ${round} ${already}점이 이미 있어요`) }
           }
-          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round,
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round, unit: null,
             mode: 'core', why: tag(`평가관리 · 코어테스트 ${round} 로 넣습니다`) }
         }
 
@@ -175,41 +182,49 @@ export default function MatholicImportPage() {
           // (집에서 풀고 다음 수업에 가져오는 경우). 앞은 보지 않는다.
           const hit = pickSessionForDaily(row.date, sessionsOf.get(sid) ?? [])
           if (!hit) {
-            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, mode: 'skip',
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, mode: 'skip',
               why: tag(`${row.date} 뒤로 수업이 없어요 — 적을 데가 없어 넘어갑니다`) }
           }
           const { session: ses, gapDays } = hit
           const 어디 = gapDays === 0 ? '' : ` (${ses.session_date} 수업에 붙입니다 · ${gapDays}일 뒤)`
           if (ses.daily_test_score === row.score) {
-            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, mode: 'done',
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, unit: null, mode: 'done',
               why: tag(`학습일지에 이미 같은 점수가 있어요${어디}`) }
           }
-          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, mode: 'daily',
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, unit: null, mode: 'daily',
             why: tag((ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
               : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다`) + 어디) }
         }
 
+        // 제목에 적힌 단원 이름을 개념 사전에 대고 찾는다. 못 찾으면 null 이고,
+        // 그때는 예전처럼 글자만 보고 견준다.
+        const parts = parseWorksheetTitle(row.title)
+        // 학년은 ① 제목 ② 과정 칸 ③ 학생 순서로 본다. 선행하는 학생은 학생 학년과 과정이 다르다.
+        const course = gradeFromCourse(row.course)
+        const unit = resolveUnit(parts.unit ?? row.title,
+          parts.gradeLevel ?? course?.grade ?? picked.grade ?? null, concepts)
+
         const list = byStudent.get(sid) ?? []
         // 이미 넣은 것인가 — 같은 점수·같은 날짜면 다시 넣지 않는다
         const dup = list.find((w) => alreadyIn(row, w))
-        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, mode: 'done', why: tag('이미 들어가 있어요') }
+        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, unit, mode: 'done', why: tag('이미 들어가 있어요') }
 
         // ★ 학습지는 **레벨학습지**다 (원장님 2026-10-29 「반드시 레벨이 제목에 있어야」).
         //    레벨 없이 들어가면 레벨 현황판과 초등 70점 규칙이 조용히 멈춘다.
         //    ★ 이 확인은 **이미 들어갔는지 본 뒤**에 한다 — 예전에 넣어 둔 것까지
         //      「레벨이 없어요」로 막으면 멀쩡한 기록이 빨갛게 뜬다(2026-10-29 예행에서 걸렸다).
         if (needsLevel(row) && row.level == null) {
-          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null,
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null,
             mode: 'skip', why: tag('레벨이 없어요 — 매쓰홀릭 제목 끝에 _Lv3.5 처럼 붙여 주세요') }
         }
 
-        const ranked = rankWorksheets(row, list)
+        const ranked = rankWorksheets(row, list, unit)
         if (isClearWinner(ranked)) {
           return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
-            sessionId: null, coreRound: null, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
+            sessionId: null, coreRound: null, unit, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
         }
         return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-          coreRound: null, mode: 'new', why: tag(ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') }
+          coreRound: null, unit, mode: 'new', why: tag(ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') }
       }))
     } finally { setReading(false) }
   }
@@ -265,15 +280,20 @@ export default function MatholicImportPage() {
           // ★ 단원과 레벨을 **칸에 제대로** 넣는다. 제목을 통째로 unit_name 에 넣으면
           //   레벨 현황판(학년 × 단원 표)과 초등 70점 규칙이 조용히 멈춘다.
           const t = parseWorksheetTitle(p.row.title)
+          // 개념 사전에서 찾아낸 단원이 있으면 **그 이름으로** 넣는다 — 그래야 레벨 현황판에서
+          // 같은 단원끼리 모인다. 선생님이 소개념 이름으로 쓰셔도 대단원까지 함께 들어간다.
+          const u = p.unit
           const { error } = await supabase.from('student_worksheets').insert({
             student_id: p.studentId, subject: '수학',
             // 제목에 학년이 적혀 있으면 그걸 쓰고, 없으면 학생의 학년으로 메운다.
-            grade_level: t.gradeLevel ?? who?.grade ?? null,
-            semester: t.semester,
-            unit: t.unit ?? p.row.course ?? '매쓰홀릭',
-            unit_name: t.unitName ?? p.row.title,
+            grade_level: t.gradeLevel ?? gradeFromCourse(p.row.course)?.grade ?? who?.grade ?? null,
+            semester: t.semester ?? gradeFromCourse(p.row.course)?.semester ?? null,
+            unit: u?.chapter ?? t.unit ?? p.row.course ?? '매쓰홀릭',
+            unit_name: u?.subChapter ?? t.unitName ?? p.row.title,
             current_level: p.row.level,
-            worksheet_type: /오답유사/.test(p.row.title) || p.row.kind === '오답유사' ? 'similar' : 'main',
+            // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
+            // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
+            worksheet_type: worksheetTypeOf(p.row),
             status: 'scored', score: p.row.score,
             assigned_at: `${p.row.date}T12:00:00+09:00`,
             submitted_at: `${p.row.date}T12:00:00+09:00`,

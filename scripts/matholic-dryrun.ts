@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
-import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, pickByRule } from '../lib/matholic'
+import { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, pickByRule, parseWorksheetTitle, resolveUnit, gradeFromCourse } from '../lib/matholic'
 
 const env = Object.fromEntries(
   fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)
@@ -34,6 +34,8 @@ const all = students ?? []
 
 const { data: setting } = await db.from('app_settings').select('value').eq('key', 'matholic_name_rules').maybeSingle()
 const rules = (setting?.value as any) ?? {}
+
+const { data: concepts } = await db.from('concepts').select('grade, semester, chapter, sub_chapter, concept_name')
 
 const found = res.rows.map((r) => findStudents(r.student, all as any))
 const ids = [...new Set(found.flat().map((s: any) => s.id))]
@@ -90,18 +92,21 @@ res.rows.forEach((row, i) => {
     console.log(`${head} → ◆ 학습일지 데일리테스트${c.daily_test_score == null ? ' (비어 있음)' : ` (지금 ${c.daily_test_score}점 → 바꿈)`}`)
     return
   }
+  const parts = parseWorksheetTitle(row.title)
+  const unit = resolveUnit(parts.unit ?? row.title, parts.gradeLevel ?? gradeFromCourse(row.course)?.grade ?? picked.grade ?? null, (concepts ?? []) as any)
+  const 단원 = unit ? `  [사전: ${unit.level} → ${unit.chapter ?? ''} / ${unit.subChapter ?? ''}]` : '  [사전: 못 찾음]'
   const list = byStudent.get(sid) ?? []
   if (list.find((w) => alreadyIn(row, w as any))) { dup++; console.log(`${head} → ◦ 이미 들어가 있어요`); return }
   if (needsLevel(row) && row.level == null) {
     none++; console.log(`${head} → ✗ 레벨이 없어요 — 제목 끝에 _Lv3.5 처럼 붙여야 넣습니다`); return
   }
-  const ranked = rankWorksheets(row, list as any)
+  const ranked = rankWorksheets(row, list as any, unit)
   if (isClearWinner(ranked)) {
     fill++
-    console.log(`${head} → ✎ 점수 채우기: ${ranked[0].ws.unit_name} (${ranked[0].why.join(' · ')})`)
+    console.log(`${head} → ✎ 점수 채우기: ${ranked[0].ws.unit_name} (${ranked[0].why.join(' · ')})${단원}`)
   } else {
     neo++
-    console.log(`${head} → ＋ 새로 만들기 (붙일 학습지 ${list.length}건 중 맞는 것 없음)`)
+    console.log(`${head} → ＋ 새로 만들기${단원}`)
   }
 })
 
