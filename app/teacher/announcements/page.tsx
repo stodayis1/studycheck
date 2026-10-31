@@ -27,6 +27,23 @@ function fmtDate(iso: string) {
 
 export default function TeacherAnnouncementsPage() {
   const { currentUser, isAdmin, canManageAllStudents } = useAuth()
+  // ── 학부모 전체 문자 (원장 전용) ──────────────────────────────────────────
+  //   알림톡이 아니라 **문자**다. 알림톡은 승인된 템플릿과 글자 단위로 같아야 나가는데
+  //   공지는 그때그때 글이 다르다(원장님 2026-10-31). docs/카톡브리핑.md 참고.
+  const [smsOpen, setSmsOpen] = useState(false)
+  const [smsText, setSmsText] = useState('')
+  const [smsBusy, setSmsBusy] = useState(false)
+  const [smsInfo, setSmsInfo] = useState<any>(null)
+  const callSms = async (b: any) => {
+    setSmsBusy(true)
+    try {
+      const r = await apiFetch('/api/notice-sms', { method: 'POST', body: JSON.stringify({ text: smsText, ...b }) })
+      setSmsInfo(await r.json())
+    } catch (e: any) {
+      setSmsInfo({ error: e?.message ?? '연결하지 못했어요.' })
+    }
+    setSmsBusy(false)
+  }
   const [items, setItems] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -211,6 +228,62 @@ export default function TeacherAnnouncementsPage() {
       />
 
       <div className="px-4 py-4 space-y-3 md:px-6 max-w-2xl">
+        {/* ★ 학부모 전체 문자 — 한 번 나가면 못 되돌린다. 예행 → 나에게만 → 전체 순서로만 열린다. */}
+        {isAdmin() && (
+          <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1px solid #F5C4B3' }}>
+            <button onClick={() => setSmsOpen((v) => !v)} className="w-full flex items-center gap-2 text-left">
+              <i className="ti ti-message-2-share" style={{ fontSize: 16, color: '#712B13' }} />
+              <span className="text-sm font-bold flex-1" style={{ color: '#712B13' }}>학부모 전체 문자</span>
+              <i className={`ti ${smsOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 14, color: '#9ca3af' }} />
+            </button>
+            {smsOpen && (
+              <div className="space-y-2.5">
+                <p className="text-[11px] text-gray-500">
+                  재원생 학부모께 <b>문자</b>로 한 통 나갑니다. 퇴원생·휴원생은 빠집니다.
+                  카톡(알림톡)은 승인된 템플릿하고만 나가서, 그때그때 다른 공지는 문자로 보냅니다.
+                </p>
+                <textarea value={smsText} onChange={(e) => { setSmsText(e.target.value); setSmsInfo(null) }}
+                  rows={10} placeholder="보낼 글을 그대로 붙여넣어 주세요."
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#F5C4B3]" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] text-gray-400">{smsText.trim().length}자 · {smsText.trim().length > 90 ? 'LMS(장문)' : 'SMS(단문)'}</span>
+                  <div className="flex-1" />
+                  <button disabled={smsBusy || !smsText.trim()} onClick={() => callSms({ dryRun: true })}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white text-gray-700 disabled:opacity-40">
+                    ① 몇 명인지 보기
+                  </button>
+                  <button disabled={smsBusy || !smsText.trim()} onClick={() => callSms({ testOnly: true })}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg disabled:opacity-40"
+                    style={{ background: '#FFF5F2', color: '#712B13', border: '1px solid #F5C4B3' }}>
+                    ② 나에게만 한 통
+                  </button>
+                  <button
+                    disabled={smsBusy || !smsInfo?.보낼사람}
+                    onClick={() => {
+                      if (!confirm(`학부모 ${smsInfo.보낼사람}분께 문자가 나갑니다. 되돌릴 수 없어요. 보낼까요?`)) return
+                      callSms({ dryRun: false, confirmCount: smsInfo.보낼사람 })
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg text-white disabled:opacity-40"
+                    style={{ background: '#991b1b' }}>
+                    ③ 전체 발송
+                  </button>
+                </div>
+                {smsBusy && <p className="text-[11px] text-gray-400">보내는 중…</p>}
+                {smsInfo && (
+                  <div className="rounded-xl p-2.5 text-[11px] space-y-1" style={{ background: '#F9FAFB', border: '1px solid #e5e7eb' }}>
+                    {smsInfo.error && <p style={{ color: '#991b1b' }}>{smsInfo.error}</p>}
+                    {smsInfo.보낼사람 != null && <p className="text-gray-700">받는 분 <b>{smsInfo.보낼사람}</b>명 · {smsInfo.글자수}자 · {smsInfo.종류}</p>}
+                    {smsInfo.시험발송 && <p style={{ color: '#27500A' }}>{smsInfo.시험발송}</p>}
+                    {smsInfo.보냄 != null && <p style={{ color: '#27500A' }}>보냄 <b>{smsInfo.보냄}</b>건 · 실패 {smsInfo.실패}건</p>}
+                    {(smsInfo.실패목록 ?? []).map((t: string, i: number) => <p key={i} style={{ color: '#991b1b' }}>{t}</p>)}
+                    {smsInfo.예행 && (smsInfo.보기 ?? []).map((t: string, i: number) => <p key={i} className="text-gray-400">{t}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {showForm && (
           <div className="bg-white rounded-2xl border-2 border-green-200 p-4 space-y-3">
             <p className="text-sm font-bold text-gray-800">{editingId ? '공지 수정' : '새 공지 작성'}</p>

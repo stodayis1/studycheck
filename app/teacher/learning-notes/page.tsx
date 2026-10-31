@@ -575,6 +575,38 @@ export default function TeacherLearningNotesPage() {
   // ★ 수업일지 목록은 **시간표상 오늘 수업이 있는 학생**만 보여 준다. 그래서 보강·추가 수업으로
   //   그날 기록이 생긴 학생(예: 화·금 시간표인데 목요일에 수업한 윤수지)은 목록에 없고
   //   학생 줄의 「카톡 발송」 버튼도 없다. 그런 경우 여기서 골라 보낸다.
+  /**
+   * ★ 「알림장 없는 판」으로 나간 것만 골라 **다시** 보낸다 (원장님 2026-10-31).
+   *
+   * 왜 — 2026-10-30 에 그 판이 카카오에 거절당했다(버튼이 등록된 것과 달랐다).
+   *   우리 기록에는 「접수됨」으로 남아 실패를 가릴 수가 없다. 그래서 **본문으로** 가른다 —
+   *   「▶ 선생님 알림장」이 없는 글이 그 판이다. 받으신 분께 두 번 가지 않게 하려는 것이다.
+   *   ★ 버튼 고침이 **배포된 뒤에** 눌러야 한다. 안 그러면 같은 이유로 또 거절당한다.
+   */
+  async function sendNoNoteAgain() {
+    const 대상 = ((briefPreview?.previews ?? []) as any[])
+      .filter((p) => p.alreadySent && !String(p.body ?? '').includes('▶ 선생님 알림장'))
+    if (!대상.length) { alert('알림장 없는 판으로 나간 건이 없어요.'); return }
+    if (!confirm(
+      `${briefDate} 수업 브리핑을 ${대상.length}명께 **다시** 보냅니다.\n`
+      + '「알림장 없는 판」으로 나가 카카오가 거절했던 분들입니다.\n'
+      + '알림장이 있던 분(이미 받으신 분)은 빠집니다.\n\n'
+      + '★ 버튼 고침이 배포된 뒤에 눌러 주세요. 아니면 또 거절당합니다.\n\n보낼까요?')) return
+    setBriefBusy(true)
+    try {
+      const res = await apiFetch('/api/kakao-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: briefDate, dryRun: false, resend: true, studentIds: 대상.map((p) => p.studentId) }),
+      })
+      const d = await res.json()
+      if (!res.ok) { alert('발송 실패: ' + (d.error ?? '알 수 없는 오류')); return }
+      alert(`다시 보냈어요 — ${d.sent ?? 0}건${d.failed ? ` · 실패 ${d.failed}건` : ''}`)
+    } catch (e: any) {
+      alert('발송 실패: ' + (e?.message ?? '연결하지 못했어요'))
+    } finally { setBriefBusy(false) }
+  }
+
   async function sendOne(p: { studentId: string; name: string; phone: string; alreadySent?: boolean }) {
     // ★ 이미 나간 날도 **일부러** 다시 보낼 수 있다 (원장님 2026-10-27
     //   「못 받았다는 사람 다시 보내지」). 그래서 말투를 다르게 해 두 번 가는 것임을 분명히 한다.
@@ -2786,6 +2818,28 @@ ${e?.message ?? '연결 실패'}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 {briefBusy && !briefResult ? '확인 중...' : '미리보기'}
               </button>
+              {/* ★ 알림장 없는 판으로 나간 건만 다시 보내기 — 2026-10-30 에 그 판이 거절당했다. */}
+              {isAdmin() && (() => {
+                const 못받은 = ((briefPreview?.previews ?? []) as any[])
+                  .filter((p) => p.alreadySent && !String(p.body ?? '').includes('▶ 선생님 알림장'))
+                if (!못받은.length) return null
+                return (
+                  <div className="rounded-xl p-3 mb-2" style={{ background: '#FFF5F2', border: '1px solid #F5C4B3' }}>
+                    <p className="text-xs font-bold" style={{ color: '#712B13' }}>
+                      알림장 없는 판으로 나간 {못받은.length}명
+                    </p>
+                    <p className="text-[11px] text-gray-600 mt-1">
+                      그 판은 카카오가 거절해 <b>도착하지 않았을 수 있습니다</b>. 버튼 고침이 배포된 뒤에 눌러 주세요.
+                      알림장이 있던 분(이미 받으신 분)은 빠집니다.
+                    </p>
+                    <button disabled={briefBusy} onClick={sendNoNoteAgain}
+                      className="mt-2 px-3 py-1.5 text-xs font-bold rounded-lg text-white disabled:opacity-40"
+                      style={{ background: '#991b1b' }}>
+                      {못받은.length}명께 다시 보내기
+                    </button>
+                  </div>
+                )
+              })()}
               {briefPreview && (
                 <button onClick={confirmSendBriefing} disabled={briefBusy || (briefPreview.sent ?? 0) === 0}
                   className="px-3 py-1.5 text-xs font-bold rounded-lg text-[#3C1E1E] disabled:opacity-50"
