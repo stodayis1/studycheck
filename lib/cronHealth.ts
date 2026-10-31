@@ -38,7 +38,7 @@ const isSaturday = (date: string) => new Date(date + 'T00:00:00Z').getUTCDay() =
 
 /** 매일 돌아야 하는 것과 그 시각(한국). 감시 자신도 넣는다 — 감시가 죽으면 대시보드에 뜬다. */
 export const CRON_SLOTS: Slot[] = [
-  { phase: 'premorning', label: '미작성 알림(10:30)', due: () => '10:30' },
+  { phase: 'premorning', label: '미작성 알림(10:00)', due: () => '10:00' },
   { phase: 'morning', label: '오전 발송(11:00)', due: () => '11:00' },
   { phase: 'watch-noon', label: '점검(12:30)', due: () => '12:30', from: '2026-10-27' },
   { phase: 'evening', label: '저녁 발송', due: (d) => (isSaturday(d) ? '18:00' : '20:00') },

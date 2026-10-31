@@ -13,11 +13,12 @@
  *
  * 마지막 줄 「통과 N / 전체 N」, 종료코드 0 이 통과.
  */
+import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
-const { checkCronRuns } = await import(pathToFileURL(target).href)
+const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
 const plus = (iso: string, min: number) => new Date(Date.parse(iso) + min * 60_000).toISOString()
@@ -29,7 +30,7 @@ const okResult = () => ({
   sample: { sent: 1, picks: [{ ok: true }] },
 })
 const DUE: Record<string, (d: string) => string> = {
-  premorning: () => '10:30', morning: () => '11:00', 'watch-noon': () => '12:30',
+  premorning: () => '10:00', morning: () => '11:00', 'watch-noon': () => '12:30',
   evening: (d) => (new Date(d + 'T00:00:00Z').getUTCDay() === 6 ? '18:00' : '20:00'), 'watch-night': () => '21:30',
 }
 /** 그 날짜들의 다섯 가지가 전부 제시간에 돌고 1분 만에 끝난 기록. nowIso 뒤의 것은 안 만든다. */
@@ -176,6 +177,29 @@ T('같은 문제는 같은 key (문자 중복 방지용)', () => {
   const a = checkCronRuns(rows, Date.parse(NOW))[0]?.key
   const b = checkCronRuns(rows, Date.parse(at('2026-10-27', '23:00')))[0]?.key
   return !!a && a === b && a === 'evening|2026-10-27|안 돎'
+})
+
+// ── 알림 시각이 **두 곳**에 적혀 있다 ───────────────────────────────────────────
+//    보내는 쪽(lib/cronBriefing.ts 의 「아직 ~ 전이에요」 막는 시각)과
+//    점검 쪽(CRON_SLOTS.premorning.due), 그리고 이 시험의 기대값(DUE) 셋이 같아야 한다.
+//    ★ 한쪽만 고치면 **에러가 안 난다.** 점검이 엉뚱한 시각을 기다리게 되고, 그건
+//      「알림이 안 나갔다」를 못 잡는다는 뜻이다. 2026-10-31 에 10:30 → 10:00 으로
+//      당길 때 실제로 네 곳을 같이 고쳐야 했다.
+
+T('미작성 알림 — 보내는 시각과 점검 시각과 시험 기대값이 모두 같다', () => {
+  const src = fs.readFileSync('lib/cronBriefing.ts', 'utf8')
+  // runRemindCron 의 「!force && now < 'HH:MM'」
+  const 막는시각 = src.match(/now\s*<\s*'(\d\d:\d\d)'/)?.[1]
+  const 점검시각 = (CRON_SLOTS as any[]).find((x) => x.phase === 'premorning')?.due('2026-10-31')
+  const 시험기대 = DUE.premorning('2026-10-31')
+  if (!막는시각) return false
+  return 막는시각 === 점검시각 && 막는시각 === 시험기대
+})
+
+T('미작성 알림은 11시 발송보다 앞선다 (지나서 보내면 「이미 늦었습니다」가 된다)', () => {
+  const 알림 = DUE.premorning('2026-10-31')
+  const 발송 = DUE.morning('2026-10-31')
+  return 알림 < 발송
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
