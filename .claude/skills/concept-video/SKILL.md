@@ -75,7 +75,7 @@ node scripts/lesson-video/yt_update_concepts.mjs "<영상폴더>" --dry   # 먼�
 node scripts/lesson-video/yt_update_concepts.mjs "<영상폴더>"
 # 10. 앱 강의 목록에 연결 (lesson_videos upsert, 기준 grade+order_label)
 node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통수학1 --ids "<영상폴더>/_유튜브_주소.json" --dry
-node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통수학1 --ids "<영상폴더>/_유튜브_주소.json"
+node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통수학1 --ids "<영상폴더>/_유튜브_주소.json" --linked-only
 ```
 
 ## 대본 규칙
@@ -156,3 +156,6 @@ node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통
 - 2026-10-29 공유 작업 폴더가 다른 세션 브랜치면 그 안의 도구는 옛 사본일 수 있다(연결 도구가 공식 쓰기 두 쪽을 한 쪽으로 되돌림) → origin/main 으로 만든 worktree 의 도구로 돌린다(node_modules 는 junction, 키 파일은 하드 링크)
 - 2026-10-29 중학교 증명: 교재에 「증명」 표시가 없어 교과서에서 증명하는 개념만 골랐다(중2-2 15 · 중3-2 12 · 중1-2 8 · 중1-1 4). 그림은 그 개념의 토막에서 잘라 `figure` 로. 증명 그림은 이제 오른쪽 말풍선 아래에 늘 떠 있다(노트에 두면 줄이 밀려 올라가며 사라졌다). 머리의 과정 이름은 대본 폴더 `docs/대본/<과정>/` 에서 읽는다(예전엔 공통수학1·2만 알아서 중학교가 「공통수학2」로 찍혔다). 썸네일은 학년 개념색보다 한 단계 진하게(proof_m1·m2·m3)
 - 2026-10-29 손글씨 글꼴의 소문자 l 은 숫자 1 과 똑같다(부채꼴 l=2πr) → 수식 안 l 은 자동으로 필기체 ℓ(Segoe Script)로 그린다. \ell 은 손글씨 글꼴에서 다시 막대로 나와 안 된다
+- 2026-10-29 한 학년을 나눠 올리는 중이면 앱 연결은 `--linked-only` — 안 그러면 아직 안 올린 편이 youtube_id 빈 행으로 들어가고, 유형 개념 API(type-concepts)가 그 행까지 영상 목록에 싣는다. 제목 맞춤 확인은 `yt_crosscheck.mjs`(파일 이름 그대로 올라간 영상만 본다) 말고 이미 맞춘 제목까지 세어 「없는 번호」를 낸다 — 맞춘 영상이 「안 올라옴」으로 보여 헷갈렸다
+- 2026-10-29 다시 렌더해도 바이트가 그대로인 편은 `_옛판` 과 크기까지 같다(중1-2 01~11 중 8편, 해시도 같음) → `yt_crosscheck.mjs` 는 폴더 mp4 와 크기가 다를 때만 「★ _옛판」으로 본다. ★가 뜨면 두 파일 해시부터 비교
+- 2026-10-29 중학교 풀이영상은 필수예제가 아니라 쎈 B단계 대표유형 + C단계 전 문항(원장님)
