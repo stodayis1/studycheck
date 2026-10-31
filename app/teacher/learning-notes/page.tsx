@@ -2888,6 +2888,27 @@ ${e?.message ?? '연결 실패'}
                                v.본문일치 === false && `본문이 ${v.처음_다른_자리}번째 글자부터 다름`,
                                v.버튼일치 === false && `버튼이 다름(등록 ${v.버튼?.등록됨?.length ?? 0}개 / 기대 ${v.버튼?.기대?.length ?? 0}개)`,
                               ].filter(Boolean).join(' · ')}
+                        {/* ★ 개수가 같아도 안 맞을 수 있다 — 이름이나 링크가 다른 것이다.
+                               2026-10-31 에 「등록 3개 / 우리 3개」인데 안 맞아서 한참 찾았다. */}
+                        {v.버튼일치 === false && (
+                          <div className="mt-1 ml-3 space-y-0.5 font-mono text-[10px]" style={{ color: '#6b7280' }}>
+                            {(v.버튼?.등록됨 ?? []).map((b: any, i: number) => {
+                              const w = v.버튼?.기대?.[i]
+                              const 이름다름 = w && b?.[0] !== w?.[0]
+                              const 링크다름 = w && b?.[1] !== w?.[1]
+                              return (
+                                <div key={i}>
+                                  <div style={{ color: 이름다름 || 링크다름 ? '#991b1b' : '#27500A' }}>
+                                    알리고 · {b?.[0]} → {b?.[1]}
+                                  </div>
+                                  {(이름다름 || 링크다름) && (
+                                    <div style={{ color: '#1f2937' }}>우리 · {w?.[0]} → {w?.[1]}</div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div className="text-gray-500">
