@@ -17,6 +17,7 @@ import {
   BRIEFING_TEMPLATE_V3, BRIEFING_TEMPLATE_V3_NONOTE,
 } from '@/lib/briefing'
 import { aligoPost } from '@/lib/aligo'
+import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
 
 export const runtime = 'nodejs'
 
@@ -59,6 +60,9 @@ export async function GET(req: NextRequest) {
     }
 
     const list: any[] = json.list ?? []
+    // 실제로 보낼 때와 **같은 방법**으로 코드를 고른다 — 그래야 검사한 것이 보낼 것과 같다.
+    const auto = await resolveBriefingTemplateCodes()
+    const used = pickCodes(auto)
 
     /** 한 판을 보고, 등록된 본문·버튼이 코드와 같은지 알려 준다. */
     const inspect = (code: string | undefined, ours: string, wantBtn: [string, string][]) => {
@@ -132,14 +136,21 @@ export async function GET(req: NextRequest) {
       }),
       버튼: { 등록됨: gotButtons, 코드가_기대하는것: wantButtons },
       // 두 판을 나란히 — 알림장 있는 날 / 없는 날
+      // ★ **실제로 보낼 때 쓰는 코드**를 본다. 환경변수만 보면 사각지대가 생긴다 —
+      //   2026-10-31 에 ② 판이 「아직 Vercel 에 코드가 없습니다」로 떴는데, 정작 발송은
+      //   알리고 목록에서 **자동으로 찾은** 코드로 나가고 있었다. 그 코드는 검사된 적이 없다.
       판: {
-        '① 예전 판 · 알림장 있는 날': inspect(tplCode, BRIEFING_TEMPLATE, BTN3),
-        '① 예전 판 · 알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_NONOTE, BRIEFING_TEMPLATE_NONOTE, BTN2),
-        '② 과제 성취도 판 · 알림장 있는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V2, BRIEFING_TEMPLATE_V2, BTN3),
-        '② 과제 성취도 판 · 알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V2_NONOTE, BRIEFING_TEMPLATE_V2_NONOTE, BTN2),
-        '③ 데일리테스트 판 · 알림장 있는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V3, BRIEFING_TEMPLATE_V3, BTN3),
-        '③ 데일리테스트 판 · 알림장 없는 날': inspect(process.env.ALIGO_BRIEFING_TPL_CODE_V3_NONOTE, BRIEFING_TEMPLATE_V3_NONOTE, BTN2),
+        '① 예전 판 · 알림장 있는 날': inspect(used.v1 ?? tplCode, BRIEFING_TEMPLATE, BTN3),
+        '① 예전 판 · 알림장 없는 날': inspect(used.v1NoNote ?? undefined, BRIEFING_TEMPLATE_NONOTE, BTN2),
+        '② 과제 성취도 판 · 알림장 있는 날': inspect(used.v2 ?? undefined, BRIEFING_TEMPLATE_V2, BTN3),
+        '② 과제 성취도 판 · 알림장 없는 날': inspect(used.v2NoNote ?? undefined, BRIEFING_TEMPLATE_V2_NONOTE, BTN2),
+        '③ 데일리테스트 판 · 알림장 있는 날': inspect(used.v3 ?? undefined, BRIEFING_TEMPLATE_V3, BTN3),
+        '③ 데일리테스트 판 · 알림장 없는 날': inspect(used.v3NoNote ?? undefined, BRIEFING_TEMPLATE_V3_NONOTE, BTN2),
       },
+      // 어디서 온 코드인지 — 「자동으로 찾음」인지 「Vercel 환경변수」인지
+      코드출처: Object.fromEntries((['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote'] as const)
+        .map((k) => [k, used[k] ? (auto[k] ? `${used[k]} (알리고에서 자동으로 찾음)` : `${used[k]} (Vercel 환경변수)`) : '없음'])),
+      못찾은까닭: auto.why ?? null,
       // 본문에 쓰인 변수 이름이 우리와 같은지(치환이 안 되면 #{...} 가 그대로 나간다)
       변수: {
         등록된_본문의_변수: [...new Set(registered.match(/#\{[^}]+\}/g) ?? [])],

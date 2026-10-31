@@ -133,10 +133,13 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
         if (got.length && (got.length !== wantBtn.length
             || !wantBtn.every(([n, l], i) => got[i]?.[0] === n && got[i]?.[1] === l))) {
           // ★ 버튼이 다르면 카카오가 **거절**한다 — 「메시지가 템플릿과 일치하지않음」.
-          //   2026-10-30 에 그렇게 조용히 안 나갔다. 막지는 않지만(목록 API 가 버튼을
-          //   안 줄 수도 있다) 까닭은 분명히 적어 둔다.
-          why[key] = `버튼이 등록된 것과 달라요 (등록 ${got.length}개 / 우리 ${wantBtn.length}개)`
-            + ' — 이대로 보내면 카카오가 「템플릿과 일치하지않음」으로 거절할 수 있어요'
+          //   2026-10-30~31 에 그렇게 조용히 안 나갔다(건당 6.5P 가 그냥 나갔다).
+          //   예전에는 경고만 적고 그대로 썼는데, 그러면 **못 닿는 판으로 계속 보낸다.**
+          //   이제는 **안 쓴다** — 이 판을 버리면 버튼이 맞는 판으로 떨어지고, 그건 닿는다.
+          //   버튼을 못 받은 경우(got.length === 0)는 여기 안 들어온다. 그때는 예전처럼 쓴다.
+          why[key] = `버튼이 등록된 것과 달라 이 판을 쓰지 않습니다 (등록 ${got.length}개 / 우리 ${wantBtn.length}개)`
+            + ' — 그대로 보내면 카카오가 「템플릿과 일치하지않음」으로 거절합니다'
+          return null
         }
         return String(apr.templtCode)
       }
