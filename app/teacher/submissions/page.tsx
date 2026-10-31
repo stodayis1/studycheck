@@ -5,6 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
+import { unitParen } from '@/lib/worksheetTitle'
 
 interface Student {
   id: string
@@ -194,8 +195,7 @@ export default function TeacherSubmissionsPage() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {w.grade_level} · {w.unit}
-                        {w.unit_name ? ` (${w.unit_name})` : ''} ·{' '}
+                        {w.grade_level} · {unitParen(w.unit, w.unit_name)} ·{' '}
                         <span className={cx('font-bold', w.current_level >= 4 ? 'text-orange-500' : 'text-blue-600')}>
                           {w.current_level}레벨
                         </span>

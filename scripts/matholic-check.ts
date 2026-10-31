@@ -15,6 +15,7 @@
  */
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/worksheetTitle.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
 const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse } =
@@ -227,6 +228,25 @@ T('과정과 종류를 제목에서 덜어낸다', () => {
   const r = real.rows[0]
   return r.kind === '학습지' && r.course === '공통수학2 (2022 개정)'
     && r.title === '고1A Daily Test 0903 (lv2.5)'
+})
+
+// ★ 원장님이 2026-10-30 에 실제로 쓰신 머리표가 「[주간테스트]」였다. 아는 말이 아니어서
+//    머리표가 제목에 그대로 남았는데 **에러는 안 났다.** 그래서 여기서 잡는다.
+T('「평가」를 「테스트」로 쓰셔도 머리표로 알아본다', () => {
+  const r = parseMatholic('홍길동\n(1/1)\n10/30 20:00\n[주간테스트] 중1-1 전범위_Lv4\n28/30\n93점', TODAY)
+  const row = r.rows[0]
+  return row.kind === '주간평가' && row.title === '중1-1 전범위_Lv4' && row.level === 4 && row.score === 93
+})
+
+T('아는 머리표는 그대로 읽는다 ([주간평가]·[월간평가])', () => {
+  const a = parseMatholic('홍길동\n(1/1)\n10/30 20:00\n[주간평가] 중1-1 전범위_Lv4\n28/30\n93점', TODAY)
+  const b = parseMatholic('홍길동\n(1/1)\n10/30 20:00\n[월간평가] 중1-1 전범위_Lv4\n28/30\n93점', TODAY)
+  return a.rows[0].kind === '주간평가' && b.rows[0].kind === '월간평가'
+})
+
+T('모르는 머리표는 지어내지 않는다 — 제목에 그대로 남긴다', () => {
+  const r = parseMatholic('홍길동\n(1/1)\n10/30 20:00\n[가나다] 중1-1 전범위_Lv4\n28/30\n93점', TODAY)
+  return r.rows[0].kind === '' && r.rows[0].title === '[가나다] 중1-1 전범위_Lv4'
 })
 
 T('연도는 앞으로 가지 않게 메운다 (10월에 본 12월은 작년)', () => {
@@ -547,6 +567,33 @@ T('같은 걸 또 붙여넣어도 두 번 안 들어간다', () => {
   const other = WS({ id: 'w', score: 93, submitted_at: '2026-09-11T05:00:00Z' })
   return alreadyIn(row, same) === true && alreadyIn(row, other) === false
 })
+
+// ── 화면에 찍는 단원 글자 (원장님 2026-10-31 「전범위 전범위 Lv4로 나온다」) ─────────
+//    student_worksheets 는 단원을 두 칸으로 들고 있다. 쪼갤 것이 없는 제목은 두 칸이
+//    같은 값이 되고, 그걸 이어 붙이면 같은 말이 두 번 나간다.
+
+T('전범위처럼 두 칸이 같으면 한 번만 찍는다', () =>
+  unitLabel('전범위', '전범위') === '전범위'
+  && unitParen('전범위', '전범위') === '전범위'
+  && unitNameBeside('전범위', '전범위') === '')
+
+T('두 칸이 다르면 둘 다 살린다', () =>
+  unitLabel('2단원', '소수의 나눗셈') === '2단원 소수의 나눗셈'
+  && unitParen('2단원', '소수의 나눗셈') === '2단원 (소수의 나눗셈)')
+
+T('소단원이 대단원을 품고 있으면 긴 쪽만 찍는다', () =>
+  unitLabel('2단원', '2단원 소수의 나눗셈') === '2단원 소수의 나눗셈'
+  && unitParen('2단원', '2단원 소수의 나눗셈') === '2단원 소수의 나눗셈')
+
+T('빈칸·공백 차이는 같은 말로 본다', () =>
+  unitLabel('전범위', ' 전 범 위 ') === '전범위'
+  && unitLabel('', '복합') === '복합'
+  && unitLabel('복합', null) === '복합'
+  && unitLabel(null, null) === '')
+
+T('레벨 4.0 은 4 로, 3.5 는 3.5 로 찍는다', () =>
+  levelText('4.0') === '4' && levelText(4) === '4' && levelText('3.5') === '3.5'
+  && levelText(null) === '')
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)

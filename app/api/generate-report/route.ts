@@ -6,6 +6,7 @@ import { randomBytes } from 'crypto'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 import { fetchAllRows } from '@/lib/utils'
 import { isExamAbsence } from '@/lib/attendance'
+import { unitLabel } from '@/lib/worksheetTitle'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -135,7 +136,7 @@ export async function POST(req: NextRequest) {
     const worksheetDetail = [...periodWS]
       .sort((a: any, b: any) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime())
       .map((w: any) => ({
-        unit: `${w.grade_level} ${w.unit}${w.unit_name ? ' ' + w.unit_name : ''}`.trim(),
+        unit: `${w.grade_level} ${unitLabel(w.unit, w.unit_name)}`.trim(),
         level: w.current_level,
         score: w.score,
         status: WS_STATUS_LABEL[w.status] ?? w.status,
