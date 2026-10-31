@@ -326,21 +326,38 @@ async function run(opts: {
         : brief.template === 'nonote'
           ? (tpl.v2 ? (tpl.v2NoNote || tpl.v2) : (tpl.v1NoNote || cfg!.tplCode))
           : (tpl.v2 || cfg!.tplCode)
+      // ★ 버튼은 **승인된 템플릿에 등록된 것과 개수·이름·링크가 같아야** 한다.
+      //   하나라도 다르면 카카오가 「메시지가 템플릿과 일치하지않음」으로 **거절**하고,
+      //   우리 기록에는 「접수됨」으로 남아 아무도 모른다 — 2026-10-30 에 알림장 없는 판이
+      //   그렇게 조용히 안 나갔다(학부모님이 「올 때가 있고 안 올 때가 있다」).
+      //
+      //   그래서 **우리가 들고 있는 버튼을 고집하지 않는다.** 알리고에 등록된 버튼을
+      //   그대로 쓰고, 링크의 #{…토큰} 자리만 이 학생 것으로 바꾼다. 그러면 어긋날 수가 없다.
+      //   목록 API 가 버튼을 안 주면(그럴 수 있다) 예전처럼 우리 것으로 보낸다.
+      const tplKey = (['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote'] as const)
+        .find((k) => tpl[k] && tpl[k] === tplForThis)
+      const 토큰: Record<string, string> = { 점수토큰: tScore, 출결토큰: tAtt, 알림장토큰: tNotice }
+      const 등록버튼 = tplKey ? tpl.buttons?.[tplKey] : undefined
+      const 우리버튼 = [
+        { name: '레벨학습지 점수 현황', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tScore}`, linkPc: `${APP_URL}/report/${tScore}` },
+        { name: '출결·과제달성률 현황', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tAtt}`, linkPc: `${APP_URL}/report/${tAtt}` },
+        ...(brief.template === 'nonote' ? [] : [
+          { name: '알림장·사진 보기', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tNotice}`, linkPc: `${APP_URL}/report/${tNotice}` },
+        ]),
+      ]
+      const buttons = 등록버튼?.length
+        ? 등록버튼.map(([name, link]) => {
+            const url = String(link).replace(/#\{([^}]+)\}/g, (_m, k) => 토큰[k] ?? '')
+            return { name, linkType: 'WL' as const, linkMo: url, linkPc: url }
+          })
+        : 우리버튼
+
       const r = await sendAlimtalk({ ...cfg!, tplCode: tplForThis }, {
         to,
         name: student.name,
         subject: `${student.name} 학생 수업 브리핑`,
         message: brief.body,
-        // ★ 버튼은 **승인된 템플릿에 등록된 것과 개수·이름·링크가 같아야** 한다.
-        //   알림장이 없는 날은 「알림장·사진 보기」를 눌러도 빈 화면이라 그 판에는 버튼을 안 둔다
-        //   (그 판 템플릿도 버튼 2개로 등록해야 한다 — docs/카톡브리핑.md).
-        buttons: [
-          { name: '레벨학습지 점수 현황', linkType: 'WL', linkMo: `${APP_URL}/report/${tScore}`, linkPc: `${APP_URL}/report/${tScore}` },
-          { name: '출결·과제달성률 현황', linkType: 'WL', linkMo: `${APP_URL}/report/${tAtt}`, linkPc: `${APP_URL}/report/${tAtt}` },
-          ...(brief.template === 'nonote' ? [] : [
-            { name: '알림장·사진 보기', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tNotice}`, linkPc: `${APP_URL}/report/${tNotice}` },
-          ]),
-        ],
+        buttons,
         failoverMessage: brief.body,
       })
       if (r.point != null) out.pointLeft = r.point

@@ -30,7 +30,9 @@ import { aligoPost } from './aligo'
 const LIST_PATH = '/akv10/template/list/'
 
 /**
- * ★ 「알림장 없는 판」을 쓸지 — 기본은 **안 쓴다** (원장님 2026-10-31).
+ * ★ 「알림장 없는 판」을 쓸지 — 기본은 **쓴다**.
+ *   원장님 2026-10-31 「알림장이 없을 때는 알림장이 없는 판으로 나가는게 맞아」.
+ *   잠깐 껐다가 되돌렸다. 끄는 것은 급할 때의 비상구다 (`ALIGO_BRIEFING_NONOTE=off`).
  *
  * 왜 껐나
  *   2026-10-30 발송에서 알리고가 「메시지가 템플릿과 일치하지않음」으로 **거절**했다.
@@ -46,11 +48,12 @@ const LIST_PATH = '/akv10/template/list/'
  *   그 판은 잘 나가고 있다(2026-10-30 에 97건). 알림장이 없는 날은
  *   「오늘은 따로 남긴 말씀이 없어요.」 한 줄이 들어갈 뿐이다.
  *
- * 다시 켜려면 — 등록된 템플릿의 버튼을 우리가 보내는 것과 맞춘 뒤
- *   Vercel 환경변수 `ALIGO_BRIEFING_NONOTE` 를 `on` 으로 두고 재배포한다.
+ * 진짜 고침 — 우리가 들고 있는 버튼을 고집하지 않고 **등록된 버튼을 그대로 보낸다**
+ *   (아래 find() 가 돌려주는 buttons). 그러면 어긋날 수가 없다. 목록 API 가 버튼을
+ *   안 주면 예전처럼 우리 것을 쓴다.
  */
 const useNoNoteTemplates = () =>
-  (process.env.ALIGO_BRIEFING_NONOTE ?? '').trim().toLowerCase() === 'on'
+  (process.env.ALIGO_BRIEFING_NONOTE ?? 'on').trim().toLowerCase() !== 'off'
 const APP_URL = 'https://studycheck-five.vercel.app'
 
 /** 알림장 있는 판의 버튼 3개 — 템플릿에 등록된 그대로. */
@@ -70,6 +73,13 @@ export interface BriefingTemplateCodes {
   note?: string
   /** 판마다 **왜 못 골랐는지** — 「안 바뀌네?」를 화면에서 바로 알 수 있게. */
   why?: Record<string, string>
+  /**
+   * 판마다 알리고에 **등록된 버튼** [이름, 링크]. 보낼 때 이걸 그대로 쓴다 —
+   * 우리 것과 하나라도 다르면 카카오가 「메시지가 템플릿과 일치하지않음」으로 거절한다
+   * (2026-10-30 에 알림장 없는 판이 그렇게 조용히 안 나갔다).
+   * 목록 API 가 버튼을 안 주면 그 판은 여기 없고, 부르는 쪽이 예전처럼 우리 것을 쓴다.
+   */
+  buttons?: Record<string, [string, string][]>
 }
 
 const EMPTY: BriefingTemplateCodes = {
@@ -105,15 +115,21 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
     }
     const list: any[] = json.list ?? []
     const why: Record<string, string> = {}
+    /** 알리고에 **등록된** 버튼 (이름, 링크). 보낼 때 이걸 그대로 쓴다. */
+    const regBtn: Record<string, [string, string][]> = {}
     // 알리고는 줄바꿈을 \r\n 으로 돌려준다. 우리 상수는 \n 이라 맞춰 놓고 본다.
     const body = (t: any) => String(t.templtContent ?? '').replace(/\r\n/g, '\n')
 
-    /** 이 본문으로 **보내면 통과하는** 템플릿 코드. 없으면 null 이고 까닭을 why 에 남긴다. */
+    /**
+     * 이 본문으로 **보내면 통과하는** 템플릿 코드. 없으면 null 이고 까닭을 why 에 남긴다.
+     * 등록된 버튼도 같이 돌려준다 — 보낼 때 **그걸 그대로** 쓰면 어긋날 수가 없다.
+     */
     const find = (key: string, ours: string, wantBtn: [string, string][]) => {
       const same = list.filter((t) => body(t) === ours)
       const apr = same.find((t) => t.inspStatus === 'APR')
       if (apr) {
         const got = (apr.buttons ?? []).map((b: any) => [b.name, b.linkMo] as [string, string])
+        if (got.length) regBtn[key] = got
         if (got.length && (got.length !== wantBtn.length
             || !wantBtn.every(([n, l], i) => got[i]?.[0] === n && got[i]?.[1] === l))) {
           // ★ 버튼이 다르면 카카오가 **거절**한다 — 「메시지가 템플릿과 일치하지않음」.
@@ -152,6 +168,7 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
       v3: find('v3', BRIEFING_TEMPLATE_V3, BTN3),
       v3NoNote: noNote ? find('v3NoNote', BRIEFING_TEMPLATE_V3_NONOTE, BTN2) : null,
       why,
+      buttons: regBtn,
     }
     cache = { at: Date.now(), codes }
     return codes
@@ -179,5 +196,6 @@ export function pickCodes(auto: BriefingTemplateCodes) {
     v2NoNote: noNote ? (auto.v2NoNote ?? env('ALIGO_BRIEFING_TPL_CODE_V2_NONOTE')) : null,
     v3: auto.v3 ?? env('ALIGO_BRIEFING_TPL_CODE_V3'),
     v3NoNote: noNote ? (auto.v3NoNote ?? env('ALIGO_BRIEFING_TPL_CODE_V3_NONOTE')) : null,
+    buttons: auto.buttons ?? {},
   }
 }
