@@ -107,6 +107,21 @@ T('사람이 없는 머리줄은 들고 다니지 않는다 (붙여넣다 끊긴
   return x.blocks.length === 0 && x.skipped.some((s: any) => s.why.includes('적힌 사람이 없어요'))
 })
 
+// ★ 2026-10-31 자는 대괄호가 없었다 — 「중3 지축중학교 기출유사 총 23문항」.
+//   괄호로 가르면 그 날치를 통째로 못 읽는다. 괄호가 있든 없든 같게 읽어야 한다.
+T('머리줄에 대괄호가 없어도 읽는다', () => {
+  const x = parsePastExamSimilar('중3 지축중학교 기출유사 총 23문항\n\n가나 나다 -0\n다라 -7')
+  return x.blocks.length === 1 && x.blocks[0].title === '중3 지축중 기출유사'
+    && x.blocks[0].total === 23 && x.blocks[0].rows.length === 3
+    && x.skipped.length === 0
+})
+
+T('괄호가 있든 없든 같은 제목이 된다', () => {
+  const a = parsePastExamSimilar('[2024 가람중학교 기출유사 총 20문항]\n가나 -1').blocks[0]
+  const b = parsePastExamSimilar('2024 가람중학교 기출유사 총 20문항\n가나 -1').blocks[0]
+  return a.title === b.title && a.total === b.total
+})
+
 T('동명이인 꼬리가 붙은 이름을 그대로 들고 간다', () => {
   const x = parsePastExamSimilar('[2024 가람중 기출유사 총 20문항]\n가나다j 가나다2 -1')
   return x.blocks[0].rows.map((p: any) => p.name).join(',') === '가나다j,가나다2'

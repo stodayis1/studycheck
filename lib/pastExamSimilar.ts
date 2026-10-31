@@ -19,7 +19,14 @@
  * ★ 순수 함수다(DB·시계를 안 만진다). 시험은 scripts/past-exam-check.ts 에 있다.
  */
 
-/** 머리줄 「[2024 백마중학교 기출유사 총 24문항]」 */
+/**
+ * 머리줄 「[2024 백마중학교 기출유사 총 24문항]」.
+ *
+ * ★ 대괄호는 **있을 수도 없을 수도 있다.** 2026-10-24 자는 대괄호가 있었고
+ *   2026-10-31 자는 「중3 지축중학교 기출유사 총 23문항」처럼 없었다. 선생님마다·날마다
+ *   다르므로 **괄호로 가르지 않는다** — 「총 N문항」이 적혀 있고 줄 끝에 「-개수」가 없으면
+ *   머리줄이다(사람 줄은 반드시 「-개수」로 끝난다).
+ */
 const HEAD = /^\[\s*(.+?)\s*\]$/
 /** 「총 24문항」 — 머리줄에서 문항 수를 떼어낸다. 「총24문항」·「24문항」도 받는다. */
 const TOTAL = /\s*총?\s*(\d{1,3})\s*문항\s*/
@@ -72,12 +79,14 @@ export function parsePastExamSimilar(text: string): ParsePastExamResult {
     const t = lines[i].trim()
     if (!t) continue
 
-    const head = HEAD.exec(t)
-    if (head) {
-      const inside = head[1]
+    const bracket = HEAD.exec(t)
+    // 괄호가 없어도 「총 N문항」이 있고 사람 줄이 아니면 머리줄로 본다.
+    const looksHead = !!bracket || (TOTAL.test(t) && !ROW.test(t))
+    if (looksHead) {
+      const inside = bracket ? bracket[1] : t
       const m = TOTAL.exec(inside)
       if (!m) {
-        skipped.push({ line, text: t, why: '총 몇 문항인지 안 적혀 있어요 (예: [2024 ○○중 기출유사 총 24문항])' })
+        skipped.push({ line, text: t, why: '총 몇 문항인지 안 적혀 있어요 (예: 2024 ○○중 기출유사 총 24문항)' })
         cur = null
         continue
       }
