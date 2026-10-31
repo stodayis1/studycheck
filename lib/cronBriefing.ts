@@ -186,7 +186,7 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   //   보내던 때는 김은수 선생님이 매일 15~20건짜리 문자를 받으셔서, 정작 진짜로
   //   빠진 한 건(10/21 장서윤)이 그 속에 묻혔다.
   if (phase === 2) {
-    out.remind = { 건너뜀: '발송 30분 전(오전 10:30)에 따로 보냅니다' }
+    out.remind = { 건너뜀: '발송 1시간 전(오전 10:00)에 따로 보냅니다' }
   } else {
     try {
       const { items, noTeacher } = await buildTeacherReminders(db, date, { when: 'evening' })
@@ -230,19 +230,23 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
 }
 
 /**
- * 오전 10시 30분 — **발송 직전** 미작성 알림만 보낸다. 학부모에게는 아무것도 안 간다.
+ * 오전 10시 — **발송 전** 미작성 알림만 보낸다. 학부모에게는 아무것도 안 간다.
  *
  * 원장님 2026-10-22
  *   「오후 8시에 초등학생 학습브리핑이 나갈때 굳이 중고등 강사에게는 학습일지 미작성
  *     안내를 안내보내도 될 거 같아. 어차피 대부분 다음날 오전 11시에 학습브리핑이 나가니까.
  *     차라리 오전 11시 전 한 10시 30분경에 학습일지 미작성 상태인 알림을 주면
+ *   ★ 2026-10-31 에 **오전 10시**로 당겼다 — 원장님 「문자는 오전 10시에 보내자」.
+ *     10시 30분은 발송까지 30분밖에 안 남아, 받고 나서 채울 시간이 모자랐다.
  *     학습브리핑 발송 직전에 혹시 놓친 학습일지가 있더라도 얼렁 작성할 수 있잖아.」
  *
  * 그래서 알림은 두 번으로 나뉜다.
  *   · 저녁 8시 — 그날 브리핑이 나가는 **초등만**
- *   · 오전 10시 30분 — 전날 것 중 아직 빈 것 **전부** (11시 발송 30분 전)
+ *   · 오전 10시 — 전날 것 중 아직 빈 것 **전부** (11시 발송 1시간 전)
  *
- * ★ 예약은 늦게 깨울 수 있으므로 10분마다 깨우고 여기서 10:30 전과 「오늘 이미 돎」을 막는다.
+ * ★ 예약은 늦게 깨울 수 있으므로 10분마다 깨우고 여기서 10:00 전과 「오늘 이미 돎」을 막는다.
+ *   pg_cron 은 01:00~01:50 UTC(한국 10:00~10:50)에 10분마다 깨운다 — 시각을 당기는 데
+ *   예약은 안 건드렸다. 첫 깨움이 이미 한국 10:00 이다.
  *   11시 발송보다 **늦게** 돌면 아무 쓸모가 없으니 10:55 를 넘으면 그냥 건너뛴다.
  */
 export async function runRemindCron(req: NextRequest) {
@@ -260,8 +264,8 @@ export async function runRemindCron(req: NextRequest) {
   const now = kstHhmm()
   const out: any = { phase: 'premorning', date, startedAt: new Date().toISOString() }
 
-  if (!force && now < '10:30') {
-    return NextResponse.json({ ...out, skipped: `아직 10:30 전이에요 (지금 ${now})` })
+  if (!force && now < '10:00') {
+    return NextResponse.json({ ...out, skipped: `아직 10:00 전이에요 (지금 ${now})` })
   }
   // 11시 발송을 지나서 보내면 「고치세요」가 아니라 「이미 늦었습니다」가 된다 — 차라리 안 보낸다.
   if (!force && now > '10:55') {
