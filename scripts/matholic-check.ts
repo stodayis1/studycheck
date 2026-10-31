@@ -16,6 +16,7 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/worksheetTitle.ts'
+import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
 const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse } =
@@ -590,6 +591,20 @@ T('빈칸·공백 차이는 같은 말로 본다', () =>
   && unitLabel('', '복합') === '복합'
   && unitLabel('복합', null) === '복합'
   && unitLabel(null, null) === '')
+
+// ★ 일곱째 자리 — 학부모 **과제 칸**. 여기가 가장 아팠다.
+//   과제 배부 글(class_sessions.hw_worksheet_range)은 formatWorksheetScope 가 만든다.
+//   개념 사전에 안 걸리면 단원 이름을 그대로 돌려주는데, 단원 칸과 같은 말이면
+//   「3단원 (3단원)」이 되고 그 줄이 **학부모께 그대로 나간다** — 2026-10-30 에 13명.
+T('과제 칸 — 범위가 단원과 같은 말이면 괄호를 안 만든다', () =>
+  formatWorksheetScope([], '* 레벨학습지 (5-2) 3단원 *', '* 레벨학습지 (5-2) 3단원 *') === ''
+  && formatWorksheetScope([], '전범위', '전범위') === '')
+
+T('과제 칸 — 범위가 다르면 그대로 쓴다', () =>
+  formatWorksheetScope([], '2단원', '소수의 나눗셈') === '소수의 나눗셈')
+
+T('과제 칸 — 단원 이름이 없으면 빈 글자', () =>
+  formatWorksheetScope([], '3단원', null) === '' && formatWorksheetScope([], '3단원', '') === '')
 
 T('레벨 4.0 은 4 로, 3.5 는 3.5 로 찍는다', () =>
   levelText('4.0') === '4' && levelText(4) === '4' && levelText('3.5') === '3.5'
