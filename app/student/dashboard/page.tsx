@@ -134,7 +134,8 @@ export default function StudentDashboardPage() {
   }>>({})
   const [ssenbProblemMap, setSsenbProblemMap] = useState<SsenbProblem[]>([])
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  // ★ toISOString() 은 **UTC** 다. 한국 새벽 0~9시에는 어제 날짜가 나온다. 9시간 더해서 본다.
+  const todayStr = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
 
   useEffect(() => {
     async function init() {
@@ -169,11 +170,16 @@ export default function StudentDashboardPage() {
     // 최근 14일치 날짜 범위
     const fourteenDaysAgo = new Date()
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
-    const fromStr = fourteenDaysAgo.toISOString().split('T')[0]
+    const fromStr = new Date(fourteenDaysAgo.getTime() + 9 * 3600_000).toISOString().slice(0, 10)
 
     const [{ data: ssData }, { data: wsData }, { data: tbData }, { data: cData }, { data: pcData }, { data: fbData }, { data: apmData }, { data: ssenbData }] = await Promise.all([
+      // ★ **아직 오지 않은 날은 안 가져온다.** 여행 같은 결석을 미리 등록해 두면
+      //   그 날짜에도 수업 줄이 생기는데(OPS 결석 연동), 그대로 두면 학생 화면에
+      //   11/25·11/27 처럼 **미래 날짜가 맨 앞에** 뜨고 그게 기본으로 골라진다
+      //   (원장님 2026-11-02 「오늘인데 날짜가 왜 저렇게 떠있는거지?」).
       supabase.from('class_sessions').select('*').eq('student_id', sid)
-        .gte('session_date', fromStr).order('session_date', { ascending: false }),
+        .gte('session_date', fromStr).lte('session_date', todayStr)
+        .order('session_date', { ascending: false }),
       supabase.from('student_worksheets').select('*').eq('student_id', sid).order('assigned_at', { ascending: false }),
       supabase.from('student_textbooks').select('*').eq('student_id', sid).not('status', 'in', '("checked")').order('assigned_at', { ascending: false }),
       supabase.from('concepts').select('*').order('concept_order'),

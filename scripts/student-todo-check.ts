@@ -82,6 +82,28 @@ function todo(sid: string, day: string, mode: 'old' | 'new') {
   return ws.length > 0 || 교재 || 연산
 }
 
+// ── 미래 수업 — 학생·학부모 화면에 뜨면 안 된다 ────────────────────────────
+//    여행 같은 결석을 미리 등록하면 **그 날짜에도 수업 줄이 생긴다**(OPS 결석 연동).
+//    거르지 않으면 학생 화면 날짜 띠에 11/25 같은 **미래 날짜가 맨 앞에** 뜨고
+//    그게 기본으로 골라진다 (원장님 2026-11-02 「오늘인데 날짜가 왜 저렇게 떠있는거지?」).
+const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+const future = sessions.filter((c: any) => c.session_date > today)
+const futureWho = [...new Set(future.map((c: any) => c.student_id))]
+console.log(`\n앞으로 잡혀 있는 수업 줄: ${future.length}건 · 학생 ${futureWho.length}명`
+  + (future.length ? ` (${[...new Set(future.map((c: any) => c.session_date))].sort().join(', ')})` : ''))
+
+// ★ 거르는 일은 화면 코드가 한다. 그 줄이 사라지면 조용히 되살아나므로 글자로 지킨다.
+const guards: [string, string][] = [
+  ['app/student/dashboard/page.tsx', "lte('session_date', todayStr)"],
+  ['app/student/assignments/page.tsx', 's.session_date <= todayStr'],
+]
+let guardFail = 0
+for (const [f, needle] of guards) {
+  const ok = fs.readFileSync(f, 'utf8').includes(needle)
+  console.log(`  ${ok ? '✓' : '✗'} ${f} 가 미래 수업을 거른다`)
+  if (!ok) guardFail++
+}
+
 console.log(`\n재원생 ${live.length}명 — 날마다 「할 일」이 뜨는 학생 수\n`)
 console.log('  날짜          고치기 전   고친 뒤')
 let badDays = 0
@@ -97,4 +119,4 @@ for (const day of DAYS) {
 const 전원빈날 = DAYS.filter((d) => live.filter((s: any) => todo(s.id, d, 'new')).length === 0)
 console.log(`\n고친 뒤에도 전원이 빈 화면인 날: ${전원빈날.length}일${전원빈날.length ? ` (${전원빈날.join(', ')})` : '  ✓'}`)
 if (badDays) console.log(`고치기 전에 전원이 빈 화면이던 날: ${badDays}일`)
-process.exitCode = 전원빈날.length ? 1 : 0
+process.exitCode = (전원빈날.length || guardFail) ? 1 : 0
