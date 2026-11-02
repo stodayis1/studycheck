@@ -25,6 +25,7 @@ import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/a
 import { randomBytes } from 'crypto'
 import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
+import { attachPastExamMemos } from '@/lib/pastExamMemo'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
@@ -79,6 +80,8 @@ export interface BriefingSummary {
   skippedThin: { name: string }[]
   /** 어느 판으로 나가는지 — 「예전 판」이면 새 템플릿이 아직 안 잡힌 것이다 */
   template?: string
+  /** 보내기 직전에 메모에 붙인 기출유사 결과 */
+  pastExam?: { 붙임: number; 보기: string[] }
   errors: { name: string; error: string }[]
   previews?: {
     studentId: string; name: string; phone: string; bodyLen: number; body: string
@@ -145,6 +148,20 @@ async function run(opts: {
 
   const studentIds = [...new Set(sessions.map((s: any) => s.student_id))]
   const sessionIds = sessions.map((s: any) => s.id)
+
+  // ★ 기출유사 결과를 **읽기 전에** 메모에 붙인다 (원장님 2026-11-02
+  //   「학습일지 나가기 전에 붙이면 됨」). 따로 돌리면 시각을 맞춰야 하고 그 사이에
+  //   선생님이 일지를 채우면 놓친다. 여기서 붙이면 **그 브리핑에 그대로 실린다.**
+  //   예행(dryRun)에서는 쓰지 않는다 — 미리보기가 DB 를 바꾸면 안 된다.
+  if (!dryRun) {
+    try {
+      const r = await attachPastExamMemos(db, date, studentIds)
+      if (r.attached) out.pastExam = { 붙임: r.attached, 보기: r.lines.slice(0, 5) }
+    } catch (e: any) {
+      out.errors.push({ name: '기출유사 메모', error: e?.message ?? '붙이지 못했어요' })
+    }
+  }
+
   const [{ data: students }, { data: notes }, { data: fbs }, { data: already }] = await Promise.all([
     db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id, teacher_name').in('id', studentIds),
     db.from('learning_notes').select('*').in('session_id', sessionIds),

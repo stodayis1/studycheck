@@ -102,8 +102,8 @@ const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
  *   진단평가는 **0건**이었다 — 쓰지도 않는 말로 규칙을 만들고 있었다.
  *
  * ── 담기는 칸 (분류) ────────────────────────────────────────────────────────
- *   TOMA · 코어테스트                         → 평가관리 (회차: 예비 1회·예비 2회·본고사)
- *   진단평가 · 월간평가 · 주간평가 · 단원평가   → 평가 (단원평가는 **진단평가**로)
+ *   TOMA · 코어테스트 · **월간평가**            → 평가관리 (회차: 예비 1회·예비 2회·본고사·월간평가)
+ *   진단평가 · 주간평가 · 단원평가              → 평가 (단원평가는 **진단평가**로)
  *   교재 · 교과서 · **교재 이름 자체**          → 쌍둥이 학습지
  *   데일리 · Daily Test                       → 학습일지의 데일리테스트 칸 (학습지가 아니다)
  *   **그 밖에 전부**                          → **레벨학습지**
@@ -147,6 +147,24 @@ const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
  *   같이 센다**(그 전까지는 worksheet_type='similar' 로 갈라 두었다). 그 부작용을 원장님께
  *   알려 드렸고, 그렇게 하기로 정하셨다. 현황판에서 이상한 것이 보이면 이 결정을 먼저
  *   떠올릴 것.
+ *
+ * ── 2026-11-02 에 바뀐 것 (원장님) ────────────────────────────────────────────
+ *   ① **월간평가는 코어테스트로 올린다** 「월간평가는 코어테스트로 올리면됨」.
+ *      회차 이름은 「월간평가」 그대로 둔다 — 예비 1회·예비 2회·본고사와 섞이면
+ *      어느 시험 점수인지 평가관리에서 다시 알 수 없다.
+ *      ★ TOMA 를 **먼저** 본다. 매쓰홀릭은 TOMA 건에도 종류를 「월간평가」로 붙여 주므로,
+ *        월간평가를 먼저 보면 TOMA 본고사가 「월간평가」로 밀린다(검사가 잡았다).
+ *   ② **레벨이 없고 「N회차」면 이너프원** 「학습지 이름에 레벨이 없고 00회차 이렇게
+ *      쓰여 잇는건 이너프원이야 안넣어도됨」. 레벨이 있으면 레벨학습지다 —
+ *      **레벨이 없는 것**이 열쇠다.
+ *   ③ **오답유사·오답문제는 오답학습지** 「기존 규칙대로 제목에 오답학습지라고 넣어주고
+ *      이전 레벨 학습지의 레벨과 동일하게 해줘」.
+ *      · 제목(unit_name)에 「오답학습지」를 넣는다 — 이미 있으면 겹쳐 쓰지 않는다.
+ *      · 레벨은 **그 학생의 직전 레벨학습지와 같게** 한다(`prevLevelOf`). 오답은 그
+ *        레벨에서 틀린 것을 다시 푸는 것이라 자기 레벨이 없다.
+ *      · 그래서 오답은 레벨이 없어도 **「레벨이 없어요」로 막지 않는다**(needsLevel).
+ *      · 「오답유사」만 보던 것을 「오답」으로 넓혔다 — 선생님마다 「오답문제」·「오답 모음」
+ *        으로도 적으시고, 그러면 조용히 레벨학습지로 들어갔다.
  *
  * ★ 선생님께 **새로 가르칠 말은 없다.** 고쳐야 할 것은 표기뿐이다 — 별표로 감싸기
  *   (`* 레벨학습지 (3-2) 3단원 *`), 꺾쇠(`< 중 ( 1-1 ) 1단원 >`), 들쭉날쭉한 띄어쓰기
@@ -342,9 +360,18 @@ export function isTextbookLinked(row: { title?: string | null; kind?: string | n
 }
 
 /** 학습지관리에 넣을 때의 갈래. main(레벨학습지) · similar(오답유사) · twin(쌍둥이) */
+/**
+ * 오답 학습지인가 — 「오답유사」·「오답문제」·「오답 모음」 다 같다.
+ * 원장님 2026-11-02 「오답유사 또는 오답문제는 오답학습지거든」.
+ * ★ 예전에는 「오답유사」가 붙어 있을 때만 걸렸다. 선생님마다 쓰는 말이 달라서
+ *   「오답문제」로 적은 것은 레벨학습지로 들어갔다.
+ */
+export function isWrongNote(row: { title?: string | null; kind?: string | null }): boolean {
+  return /오답/.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+}
+
 export function worksheetTypeOf(row: { title?: string | null; kind?: string | null }): 'main' | 'similar' | 'twin' {
-  const t = `${row.title ?? ''} ${row.kind ?? ''}`
-  if (/오답유사/.test(t)) return 'similar'
+  if (isWrongNote(row)) return 'similar'
   if (isTextbookLinked(row)) return 'twin'
   return 'main'
 }
@@ -361,8 +388,18 @@ export function worksheetTypeOf(row: { title?: string | null; kind?: string | nu
  * 빠진 것인지 일부러 뺀 것인지 사람이 알아야 한다.
  * 새 제목 규칙에서는 머리표를 「[이너프원]」으로 적는다.
  */
-export function isEnoughOne(row: { title?: string | null; kind?: string | null }): boolean {
-  return /이너프\s*원|이너프\s*1|enough\s*one/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+export function isEnoughOne(row: { title?: string | null; kind?: string | null; level?: number | null }): boolean {
+  const t = `${row.title ?? ''} ${row.kind ?? ''}`
+  if (/이너프\s*원|이너프\s*1|enough\s*one/i.test(t)) return true
+  // ★ 이름을 안 붙이고 「3회차」처럼만 적힌 것도 이너프원이다 —
+  //   원장님 2026-11-02 「학습지 이름에 레벨이 없고 00회차 이렇게 쓰여 잇는건
+  //   이너프원이야 안넣어도됨」. **레벨이 없는 것**이 열쇠다. 레벨학습지는 레벨이 있다.
+  //   ★ 다른 칸으로 갈 줄은 가로채지 않는다 — 오답(레벨을 물려받는다) · 데일리테스트
+  //     (학습일지로 간다) · 코어테스트(평가관리로 간다)는 레벨이 없어도 이너프원이 아니다.
+  //     이 판정이 화면에서 **맨 먼저** 돌기 때문에, 여기서 걸리면 그 줄은 통째로 사라진다.
+  if (row.level == null && /\d+\s*회차/.test(t)
+    && !isWrongNote(row) && !isDailyTest(row) && !coreTestRound(row)) return true
+  return false
 }
 
 /**
@@ -381,7 +418,14 @@ export function isEnoughOne(row: { title?: string | null; kind?: string | null }
  */
 export function coreTestRound(row: { title?: string | null; kind?: string | null }): string | null {
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
-  if (!/TOMA|코어\s*테스트/i.test(t)) return null
+  // ★ TOMA·코어테스트를 **먼저** 본다. 매쓰홀릭은 TOMA 건에도 종류를 「월간평가」로
+  //   붙여 준다 — 월간평가를 먼저 보면 TOMA 본고사가 「월간평가」로 밀린다(검사가 잡았다).
+  if (!/TOMA|코어\s*테스트/i.test(t)) {
+    // 월간평가도 코어테스트로 올린다 (원장님 2026-11-02 「월간평가는 코어테스트로
+    // 올리면됨」). 회차 이름은 「월간평가」 그대로 — 예비·본고사와 섞이지 않게.
+    if (/월간\s*평가|월간\s*테스트/.test(t)) return '월간평가'
+    return null
+  }
   if (/예비\s*2/.test(t)) return '예비 2회'
   if (/예비\s*1/.test(t)) return '예비 1회'
   return '본고사'
@@ -454,7 +498,39 @@ export function needsLevel(row: { title?: string | null; kind?: string | null })
   // ★ 교재연계(= 쌍둥이 학습지)는 레벨 개념이 없다 — 교재와 쪽 범위로 낸다.
   //   여기를 안 빼 두면 교재 과제가 통째로 「레벨이 없어요」로 막힌다 (2026-10-29 예행에서 걸렸다).
   if (isTextbookLinked(row)) return false
+  // ★ 오답 학습지도 레벨을 **적어 오지 않는다** — 직전 레벨학습지의 레벨을 물려받기
+  //   때문이다 (원장님 2026-11-02 「이전 레벨 학습지의 레벨과 동일하게 해줘」).
+  //   여기를 안 빼 두면 오답 줄이 통째로 「레벨이 없어요」로 막힌다.
+  if (isWrongNote(row)) return false
   return /학습지|오답유사/.test(t)
+}
+
+/**
+ * 그 학생의 **직전 레벨학습지 레벨.** 오답 학습지가 물려받을 값이다.
+ * 그 날짜까지 받은 레벨학습지(main) 중 가장 나중 것을 본다 — 오답은 그 뒤에 나오므로
+ * 날짜를 안 자르면 나중에 올라간 레벨을 거꾸로 물려받는다.
+ */
+export function prevLevelOf(list: WsCandidate[], onDate: string): number | null {
+  const got = list.filter((w) => w.worksheet_type === 'main' && w.current_level != null
+    && String(w.assigned_at ?? '').slice(0, 10) <= onDate)
+  if (!got.length) return null
+  got.sort((a, b) => String(a.assigned_at ?? '').localeCompare(String(b.assigned_at ?? '')))
+  return got[got.length - 1].current_level
+}
+
+/**
+ * 오답 학습지의 제목과 레벨.
+ *   · 제목에는 **「오답학습지」**가 들어가야 한다 (원장님 2026-11-02 「기존 규칙대로
+ *     제목에 오답학습지라고 넣어주고」). 이미 들어 있으면 그대로 둔다.
+ *   · 레벨은 **그 학생의 직전 레벨학습지와 같게** 한다. 오답은 그 레벨에서 틀린 것을
+ *     다시 푸는 것이라 레벨이 따로 있을 수 없다. 직전 레벨학습지가 없으면 적힌 대로 둔다.
+ */
+export function wrongNoteFix(
+  unitName: string, level: number | null, prevMainLevel: number | null,
+): { unitName: string; level: number | null } {
+  const t = String(unitName ?? '').trim()
+  const named = /오답\s*학습지/.test(t) ? t : (t ? `오답학습지 ${t}` : '오답학습지')
+  return { unitName: named.replace(/\s+/g, ' ').trim(), level: prevMainLevel ?? level }
 }
 
 export interface SessionLite { id: string; student_id: string; session_date: string; daily_test_score: number | null }

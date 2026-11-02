@@ -34,6 +34,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
   parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
+  isWrongNote, wrongNoteFix, prevLevelOf,
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
@@ -60,6 +61,12 @@ interface Plan {
   coreRound: string | null
   /** 개념 사전에서 찾아낸 단원. 못 찾았으면 null 이고, 그때는 제목 글자를 그대로 쓴다 */
   unit: ResolvedUnit | null
+  /**
+   * 그 학생의 직전 레벨학습지 레벨. **오답 학습지일 때만** 쓴다 —
+   * 오답은 자기 레벨이 없고 틀린 그 레벨을 다시 푸는 것이라 레벨을 물려받는다
+   * (원장님 2026-11-02 「이전 레벨 학습지의 레벨과 동일하게 해줘」).
+   */
+  prevLevel?: number | null
   mode: Mode
   /** 왜 이렇게 골랐는지 — 화면에 그대로 보여 준다 */
   why: string
@@ -206,9 +213,11 @@ export default function MatholicImportPage() {
           parts.gradeLevel ?? course?.grade ?? picked.grade ?? null, concepts)
 
         const list = byStudent.get(sid) ?? []
+        // ★ 오답 학습지는 레벨을 물려받는다 — 그 날짜까지의 마지막 레벨학습지를 찾아 둔다.
+        const prevLevel = isWrongNote(row) ? prevLevelOf(list, row.date) : null
         // 이미 넣은 것인가 — 같은 점수·같은 날짜면 다시 넣지 않는다
         const dup = list.find((w) => alreadyIn(row, w))
-        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, unit, mode: 'done', why: tag('이미 들어가 있어요') }
+        if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, unit, prevLevel, mode: 'done', why: tag('이미 들어가 있어요') }
 
         // ★ 학습지는 **레벨학습지**다 (원장님 2026-10-29 「반드시 레벨이 제목에 있어야」).
         //    레벨 없이 들어가면 레벨 현황판과 초등 70점 규칙이 조용히 멈춘다.
@@ -222,10 +231,14 @@ export default function MatholicImportPage() {
         const ranked = rankWorksheets(row, list, unit)
         if (isClearWinner(ranked)) {
           return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
-            sessionId: null, coreRound: null, unit, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
+            sessionId: null, coreRound: null, unit, prevLevel, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
         }
+        // 오답은 제목에 「오답학습지」가 들어가고 레벨을 물려받는다 — 화면에 그대로 적어 보여 준다.
+        const 오답말 = isWrongNote(row)
+          ? ` · 오답학습지로 넣습니다 (레벨 ${prevLevel ?? row.level ?? '없음'}${prevLevel != null ? ' 물려받음' : ''})`
+          : ''
         return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-          coreRound: null, unit, mode: 'new', why: tag(ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') }
+          coreRound: null, unit, prevLevel, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 오답말) }
       }))
     } finally { setReading(false) }
   }
@@ -289,7 +302,15 @@ export default function MatholicImportPage() {
           //   그러면 그 뒤로 모든 화면이 「전범위 전범위」로 찍는다. 읽는 쪽도 막아 두었지만
           //   (lib/worksheetTitle.ts) 들어가는 쪽에서 막는 것이 먼저다.
           const unitCell = u?.chapter ?? t.unit ?? p.row.course ?? '매쓰홀릭'
-          const unitNameCell = unitNameBeside(unitCell, u?.subChapter ?? t.unitName ?? p.row.title) || null
+          let unitNameCell = unitNameBeside(unitCell, u?.subChapter ?? t.unitName ?? p.row.title) || null
+          let levelCell = p.row.level
+          // ★ 오답 학습지 — 제목에 「오답학습지」를 넣고 레벨은 직전 레벨학습지와 같게
+          //   (원장님 2026-11-02). 학부모 브리핑과 레벨 현황판이 이 두 칸만 읽는다.
+          if (isWrongNote(p.row)) {
+            const fixed = wrongNoteFix(unitNameCell ?? unitCell, p.row.level, p.prevLevel ?? null)
+            unitNameCell = fixed.unitName
+            levelCell = fixed.level
+          }
           const { error } = await supabase.from('student_worksheets').insert({
             student_id: p.studentId, subject: '수학',
             // 제목에 학년이 적혀 있으면 그걸 쓰고, 없으면 학생의 학년으로 메운다.
@@ -297,7 +318,7 @@ export default function MatholicImportPage() {
             semester: t.semester ?? gradeFromCourse(p.row.course)?.semester ?? null,
             unit: unitCell,
             unit_name: unitNameCell,
-            current_level: p.row.level,
+            current_level: levelCell,
             // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
             // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
             worksheet_type: worksheetTypeOf(p.row),
