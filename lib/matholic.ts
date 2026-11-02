@@ -804,10 +804,40 @@ export function findStudents(name: string, all: StudentLite[]): StudentLite[] {
   // 꼬리를 뗀 이름으로도 찾는다. 숫자뿐 아니라 영문 꼬리(「…h」)도 쓰인다.
   const bare = raw.replace(/[0-9A-Za-z]+$/, '').trim()
   const loose = bare && bare !== raw ? all.filter((s) => s.name === bare) : []
+  // ★ 그래도 못 찾으면 **이름의 일부**로 찾는다 (원장님 2026-11-02 「스터디체크에는
+  //   스미스마이클로 등록은 되어 있는데 매쓰홀릭에는 마이클로 등록해놨거든」).
+  //   성을 빼고 부르는 외국 이름, 스터디체크에만 꼬리가 붙은 이름(「…j」)이 여기 걸린다.
+  //
+  //   ★ **앞의 둘이 아무도 못 찾았을 때만** 본다 — 평범한 세 글자 이름의 동작은 그대로다.
+  //   ★ 여럿 걸리면 고르지 않는다. 「서연」처럼 짧은 이름은 여러 명에 들어가므로 후보를
+  //     전부 돌려주고 **사람이 고른다**(화면이 그렇게 돼 있다).
+  //   ★ 두 글자보다 짧으면 보지 않는다 — 한 글자는 아무 이름에나 들어간다.
+  const part: StudentLite[] = []
+  if (!exact.length && !loose.length) {
+    const k = (bare || raw).replace(/\s+/g, '')
+    if (k.length >= 2) {
+      for (const st of all) {
+        const n = String(st.name ?? '').replace(/\s+/g, '')
+        if (!n) continue
+        const 길이맞나 = Math.min(n.length, k.length) >= 2
+        if (길이맞나 && (n === k || n.includes(k) || k.includes(n))) part.push(st)
+      }
+    }
+  }
+
   // 이름이 똑같이 적힌 학생이 있어도, 꼬리를 뗀 이름의 학생이 따로 더 있으면 **둘 다** 후보다.
   // (스터디체크에 꼬리 붙은 이름이 **따로 저장돼 있는** 학생들이 있다 — 어느 쪽인지 사람이 봐야 한다.)
   const seen = new Set<string>()
-  return [...exact, ...loose].filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)))
+  return [...exact, ...loose, ...part].filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)))
+}
+
+/**
+ * 매쓰홀릭 이름과 스터디체크 이름이 **다른가.** 다르면 화면에 그대로 적어 보여 준다 —
+ * 조용히 바꿔 치면 엉뚱한 학생에게 점수가 들어가도 아무도 모른다.
+ */
+export function nameDiffers(matholicName: string, student: StudentLite | null | undefined): boolean {
+  if (!student) return false
+  return String(matholicName ?? '').trim().replace(/\s+/g, '') !== String(student.name ?? '').trim().replace(/\s+/g, '')
 }
 
 /**

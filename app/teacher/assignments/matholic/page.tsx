@@ -34,7 +34,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
   parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
-  isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook,
+  isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, nameDiffers, isTextbookLinked,
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
@@ -184,7 +184,12 @@ export default function MatholicImportPage() {
 
         // ★ 데일리테스트는 학습지로 넣지 않는다 (원장님 2026-10-29 「학습일지에 따로 있잖아」).
         //    학습지로도 넣으면 같은 점수가 두 군데 생겨 성취도·브리핑이 이중으로 센다.
-        const tag = (why: string) => (byRule ? `${picked.grade} ${picked.teacher_name}T — 규칙으로 골랐어요 · ${why}` : why)
+        // ★ 매쓰홀릭 이름과 스터디체크 이름이 다르면(「마이클」 → 「스미스마이클」) 그 말을
+        //   **반드시** 적는다. 조용히 바꿔 치면 엉뚱한 학생에게 들어가도 아무도 모른다.
+        const 이름말 = nameDiffers(row.student, picked)
+          ? `이름이 달라요 — 매쓰홀릭 「${row.student}」 → 스터디체크 「${picked.name}」 · `
+          : ''
+        const tag = (why: string) => 이름말 + (byRule ? `${picked.grade} ${picked.teacher_name}T — 규칙으로 골랐어요 · ${why}` : why)
 
         // ★ 코어테스트(TOMA 수학경시대회 포함)는 학습지가 아니라 **평가관리**로 간다
         //    (원장님 2026-10-29 「TOMA는 코어테스트 평가로 들어가야돼」).
@@ -250,7 +255,13 @@ export default function MatholicImportPage() {
         // 교재 이름으로 걸린 것은 **어느 교재인지** 적어 준다 — 레벨이 없어도 들어가므로
         // 「왜 레벨 없이 들어갔지」를 사람이 바로 알 수 있어야 한다.
         const 교재 = isWrongNote(row) ? null : matchTextbook(`${row.title ?? ''} ${row.kind ?? ''}`, bookNames)
-        const 교재말 = 교재 ? ` · 「${교재}」 교재라 쌍둥이 학습지로 넣습니다` : ''
+        // ★ 교재 **목록에 없는** 것도 까닭을 적는다 — 「비상교과서」처럼 출판사가 붙은
+        //   교과서는 목록(textbook_catalog)에 없어서 교재 이름으로는 안 걸리고
+        //   「교과서」라는 글자로 걸린다. 그때 화면이 아무 말도 안 하면 **안 걸린 줄 안다**
+        //   (원장님 2026-11-02 「교과서가 들어갔는데도 쌍둥이로 안걸리는것도 문제야」 —
+        //    판정은 맞게 되고 있었고, 화면이 그 말을 안 하고 있었다).
+        const 교재말 = 교재 ? ` · 「${교재}」 교재라 쌍둥이 학습지로 넣습니다`
+          : (!isWrongNote(row) && isTextbookLinked(row, bookNames) ? ' · 교재·교과서라 쌍둥이 학습지로 넣습니다' : '')
         // 오답은 제목에 「오답학습지」가 들어가고 레벨을 물려받는다 — 화면에 그대로 적어 보여 준다.
         const 오답말 = isWrongNote(row)
           ? ` · 오답학습지로 넣습니다 (레벨 ${prevLevel ?? row.level ?? '없음'}${prevLevel != null ? ' 물려받음' : ''})`
@@ -453,6 +464,15 @@ export default function MatholicImportPage() {
                     {p.mode === 'excluded' && (
                       <span className={cx(칩, 'bg-gray-200 text-gray-700')}>이너프원 · 넣지 않음</span>
                     )}
+                    {/* ★ 어느 갈래로 들어가는지 — 레벨학습지·오답학습지·쌍둥이.
+                        이게 없으면 「비상교과서」가 쌍둥이로 걸렸는지 **화면만 보고는 알 수 없다.** */}
+                    {p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'excluded' && p.studentId && (() => {
+                      const 갈래 = worksheetTypeOf(p.row, books)
+                      const [말, 색] = 갈래 === 'twin' ? ['쌍둥이 학습지', 'bg-indigo-100 text-indigo-800']
+                        : 갈래 === 'similar' ? ['오답학습지', 'bg-rose-100 text-rose-800']
+                        : ['레벨학습지', 'bg-emerald-100 text-emerald-800']
+                      return <span className={cx(칩, 색)}>{말}</span>
+                    })()}
                     {p.mode !== 'done' && p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'excluded' && p.studentId && (
                       <>
                         <select value={p.wsId ?? ''} onChange={(e) => {
