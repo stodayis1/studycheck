@@ -194,7 +194,8 @@ export default function ParentAssignmentsPage() {
 
             const d = new Date(session.session_date)
             const dateLabel = `${d.getMonth() + 1}/${d.getDate()} (${DAYS[d.getDay()]})`
-            const isToday = session.session_date === new Date().toISOString().split('T')[0]
+            // ★ UTC 가 아니라 한국 날짜로 본다 (새벽 0~9시에 하루 어긋난다).
+            const isToday = session.session_date === new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
 
             return (
               <div key={session.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

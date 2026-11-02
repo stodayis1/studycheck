@@ -219,7 +219,8 @@ export default function ParentDashboardPage() {
   if (!student) return null
 
   const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]
+  // ★ toISOString() 은 UTC 다 — 한국 새벽 0~9시에 하루 어긋난다.
+  const todayStr = new Date(today.getTime() + 9 * 3600_000).toISOString().slice(0, 10)
   const todayDay = DAYS[today.getDay()]
 
   // 기간 설정
