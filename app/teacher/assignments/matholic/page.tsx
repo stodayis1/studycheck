@@ -34,7 +34,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
   parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
-  isWrongNote, wrongNoteFix, prevLevelOf,
+  isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook,
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
@@ -81,6 +81,13 @@ export default function MatholicImportPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [reading, setReading] = useState(false)
   const [saving, setSaving] = useState(false)
+  /**
+   * 시중교재·교과서 이름 목록. 제목에 이 이름이 있으면 **쌍둥이 학습지**다
+   * (원장님 2026-11-02 「레벨이 없어도 시중교재나 교과서가 붙어있으면 쌍둥이 학습지로」).
+   * ★ 코드에 박지 않고 `textbook_catalog` 를 읽는다 — 선생님이 교재를 새로 등록하면
+   *   그 이름도 저절로 걸려야 한다.
+   */
+  const [books, setBooks] = useState<string[]>([])
   const [done, setDone] = useState<{ daily: number; core: number; filled: number; created: number; skipped: number; failed: string[] } | null>(null)
 
   /** 붙여넣은 글자를 읽고, 학생과 학습지를 찾아 둔다. 저장은 하지 않는다. */
@@ -107,6 +114,13 @@ export default function MatholicImportPage() {
         supabase.from('students').select('id, name, grade, teacher_name, is_active, on_leave')
           .or('is_active.eq.true,on_leave.eq.true').order('id'))
       const mine = all.filter((s) => canViewStudent(s))
+
+      // 교재 이름 목록. 안 쓰는 교재(is_active=false)도 읽는다 — 옛 제목에 적힌 이름도
+      // 쌍둥이로 알아봐야 한다. 이름만 읽으므로 가볍다(2026-11-02 기준 98건).
+      const catalog = await fetchAllRows<{ textbook_name: string | null }>(() =>
+        supabase.from('textbook_catalog').select('textbook_name').order('textbook_name'))
+      const bookNames = [...new Set(catalog.map((b) => String(b.textbook_name ?? '').trim()).filter(Boolean))]
+      setBooks(bookNames)
 
       // ② 후보 학생을 먼저 정하고, 그 학생들 학습지만 읽는다 (전체를 끌어오지 않는다)
       const found = res.rows.map((r) => findStudents(r.student, mine))
@@ -150,7 +164,7 @@ export default function MatholicImportPage() {
 
       setPlans(res.rows.map((row, i): Plan => {
         const students = found[i]
-        if (isEnoughOne(row)) {
+        if (isEnoughOne(row, bookNames)) {
           return { row, students: [], studentId: null, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null,
             mode: 'excluded', why: '이너프원은 내신대비교재라 학습지로 안 넣어요' }
         }
@@ -223,22 +237,26 @@ export default function MatholicImportPage() {
         //    레벨 없이 들어가면 레벨 현황판과 초등 70점 규칙이 조용히 멈춘다.
         //    ★ 이 확인은 **이미 들어갔는지 본 뒤**에 한다 — 예전에 넣어 둔 것까지
         //      「레벨이 없어요」로 막으면 멀쩡한 기록이 빨갛게 뜬다(2026-10-29 예행에서 걸렸다).
-        if (needsLevel(row) && row.level == null) {
+        if (needsLevel(row, bookNames) && row.level == null) {
           return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null,
             mode: 'skip', why: tag('레벨이 없어요 — 매쓰홀릭 제목 끝에 _Lv3.5 처럼 붙여 주세요') }
         }
 
-        const ranked = rankWorksheets(row, list, unit)
+        const ranked = rankWorksheets(row, list, unit, bookNames)
         if (isClearWinner(ranked)) {
           return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
             sessionId: null, coreRound: null, unit, prevLevel, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
         }
+        // 교재 이름으로 걸린 것은 **어느 교재인지** 적어 준다 — 레벨이 없어도 들어가므로
+        // 「왜 레벨 없이 들어갔지」를 사람이 바로 알 수 있어야 한다.
+        const 교재 = isWrongNote(row) ? null : matchTextbook(`${row.title ?? ''} ${row.kind ?? ''}`, bookNames)
+        const 교재말 = 교재 ? ` · 「${교재}」 교재라 쌍둥이 학습지로 넣습니다` : ''
         // 오답은 제목에 「오답학습지」가 들어가고 레벨을 물려받는다 — 화면에 그대로 적어 보여 준다.
         const 오답말 = isWrongNote(row)
           ? ` · 오답학습지로 넣습니다 (레벨 ${prevLevel ?? row.level ?? '없음'}${prevLevel != null ? ' 물려받음' : ''})`
           : ''
         return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-          coreRound: null, unit, prevLevel, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 오답말) }
+          coreRound: null, unit, prevLevel, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 교재말 + 오답말) }
       }))
     } finally { setReading(false) }
   }
@@ -321,7 +339,7 @@ export default function MatholicImportPage() {
             current_level: levelCell,
             // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
             // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
-            worksheet_type: worksheetTypeOf(p.row),
+            worksheet_type: worksheetTypeOf(p.row, books),
             status: 'scored', score: p.row.score,
             assigned_at: `${p.row.date}T12:00:00+09:00`,
             submitted_at: `${p.row.date}T12:00:00+09:00`,
