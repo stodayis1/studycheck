@@ -826,6 +826,17 @@ export default function TeacherExamsPage() {
               // 입학테스트: 이미 있는 학생은 표시 다르게
               const hasEntry = tab === '입학테스트' && sExams.length > 0
 
+              // ★ 코어테스트는 「예비 1회 · 예비 2회 · 본고사」가 한 줄에 섞여 보인다.
+              //   점수만 보여 주면 **그게 언제 것인지 알 수 없어** 등록이 됐는지 안 됐는지
+              //   모른다(원장님 2026-11-02 「언제꺼인지 점수에 표기가 안되니까 등록이
+              //   된건지 안된건지 모르겠네」). 그래서 회차·날짜를 점수 밑에 적고,
+              //   이번 회차 **본고사**가 비어 있으면 눈에 띄게 알린다.
+              const 최근45일 = new Date(Date.now() + 9 * 3600_000 - 45 * 86400_000).toISOString().slice(0, 10)
+              const 이번회차 = sExams.filter((e: any) => e.exam_date >= 최근45일)
+              const 본고사없음 = tab === '코어테스트'
+                && 이번회차.length > 0
+                && !이번회차.some((e: any) => e.title === '본고사' && e.score != null)
+
               return (
                 <div key={student.id} className="rounded-2xl overflow-hidden"
                   style={{ background: 'white', border: isExpanded ? `2px solid ${cfg.badge}` : '1px solid #e5e7eb' }}>
@@ -849,6 +860,12 @@ export default function TeacherExamsPage() {
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
                             style={{ background: '#f3f4f6', color: '#9ca3af' }}>미등록</span>
                         )}
+                        {본고사없음 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                            style={{ background: '#FFF5F2', color: '#991b1b', border: '1px solid #F5C4B3' }}>
+                            본고사 미등록
+                          </span>
+                        )}
                       </div>
                       <p className="text-[10px] text-gray-400 mt-0.5">{student.teacher_name}</p>
                     </div>
@@ -857,6 +874,12 @@ export default function TeacherExamsPage() {
                         <div className="text-right">
                           <div className="text-sm font-bold" style={{ color: scoreColor(lastExam.score, lastExam.total_score) }}>
                             {pct(lastExam.score, lastExam.total_score)}점
+                          </div>
+                          {/* ★ 어느 회차·언제 것인지 — 이것이 없으면 등록 여부를 알 수 없다 */}
+                          <div className="text-[10px] text-gray-400 whitespace-nowrap">
+                            {[lastExam.title, lastExam.exam_date
+                              ? `${Number(lastExam.exam_date.slice(5, 7))}/${Number(lastExam.exam_date.slice(8, 10))}`
+                              : null].filter(Boolean).join(' · ')}
                           </div>
                           {trend !== null && (
                             <div className="text-[10px] font-semibold" style={{ color: trend > 0 ? '#27500A' : trend < 0 ? '#991b1b' : '#6b7280' }}>
