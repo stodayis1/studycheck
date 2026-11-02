@@ -13,6 +13,7 @@ const STAGES: Stage[] = [
     units: [
       { unit: '4-1 평면도형의 이동', what: '밀기·뒤집기·돌리기, 목표 모양 맞히기', href: '/visual/idong.html' },
       { unit: '5-2 직육면체', what: '정육면체 전개도 11가지 접기, 마주 보는 면 맞히기', href: '/visual/jeongyukmyeonche.html' },
+      { unit: '5-2 직육면체 · 전개도', what: '전개도를 천천히 접으며 겹치는 점 찾기 — 직육면체와 정다면체 다섯 가지', href: '/visual/jeopgi.html' },
       { unit: '6-1 각기둥과 각뿔', what: '밑면과 옆면, 전개도, 면·모서리·꼭짓점 수', href: '/visual/dagakhyeong.html' },
       { unit: '6-2 공간과 입체 · 쌓기나무', what: '위·앞·옆에서 본 모양, 층별 모양, 최소·최대 개수', href: '/visual/ssakgi.html' },
       { unit: '6-2 원기둥, 원뿔, 구', what: '원기둥·원뿔 전개도 펴기, 겉넓이와 부피', href: '/visual/geotneolbi.html' },
@@ -23,6 +24,7 @@ const STAGES: Stage[] = [
     units: [
       { unit: '기본 도형 · 위치 관계', what: '꼬인 위치, 직선과 평면·평면과 평면의 위치 관계', href: '/visual/wichi.html' },
       { unit: '입체도형의 성질 · 다면체와 정다면체', what: '정다면체가 다섯 가지뿐인 이유, 전개도 접기, 면·모서리·꼭짓점 세기', href: '/visual/dagakhyeong.html' },
+      { unit: '다면체 · 전개도', what: '접었을 때 겹치는 점·붙는 변 찾기 (정사면체~정이십면체)', href: '/visual/jeopgi.html' },
       { unit: '입체도형의 성질 · 회전체', what: '평면도형을 회전축 둘레로 돌려 회전체 만들기, 회전축을 품은 단면·수직인 단면', href: '/visual/hoijeon.html' },
       { unit: '입체도형의 겉넓이와 부피', what: '기둥·뿔·뿔대·구, 원뿔 전개도의 부채꼴', href: '/visual/geotneolbi.html' },
     ],

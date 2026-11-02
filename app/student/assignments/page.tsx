@@ -65,7 +65,9 @@ export default function StudentAssignmentsPage() {
   const baseDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1)
   const year = baseDate.getFullYear()
   const month = baseDate.getMonth()
-  const todayStr = today.toISOString().split('T')[0]
+  // ★ toISOString() 은 **UTC** 다. 한국 새벽 0~9시에는 어제 날짜가 나온다 —
+  //   그 시간대에 학생이 들어오면 「오늘」이 하루 어긋난다. 9시간 더해서 본다.
+  const todayStr = new Date(today.getTime() + 9 * 3600_000).toISOString().slice(0, 10)
 
   useEffect(() => {
     async function init() {
@@ -138,10 +140,17 @@ export default function StudentAssignmentsPage() {
   const hasWorkbook = textbooks.some(t => t.textbook_type === '연산서')
 
   // 오늘 할 일: 학생이 직접 체크할 수 있는 항목들 (자기주도학습 체크리스트)
-  const todaySession = sessions.find(s => s.session_date === todayStr) ?? null
+  // ★ 과제는 「다음 시간까지」 하는 것이다 — **오늘 수업이 있는 날만** 보여 주면
+  //   수업 없는 날은 화면이 통째로 빈다. 2026-10-31(토)에 수업이 있는 학생은 0명이었고,
+  //   전날 과제를 받은 학생 102명이 아무것도 못 봤다 (원장님 「학생용으로 로그인하면
+  //   과제가 안떠」). 그래서 **오늘을 포함한 가장 최근 수업**의 과제를 보여 준다.
+  //   다음 수업이 생기면 그 수업 것으로 저절로 바뀐다.
+  const todaySession = [...sessions].reverse().find(s => s.session_date <= todayStr) ?? null
   const todayNote = todaySession ? (notes.find(n => n.session_id === todaySession.id) ?? null) : null
   const todayAchievement = todayNote?.textbook_achievement ?? (todayNote?.workbook_done ? 100 : null)
-  const todayWorksheets = worksheets.filter(w => w.assigned_at?.startsWith(todayStr) && w.status === 'assigned')
+  // 학습지도 같다 — 오늘 배정된 것만 보면 어제 받은 숙제가 사라진다. 아직 안 낸 것을 보여 준다.
+  const todayWorksheets = worksheets.filter(w =>
+    w.status === 'assigned' && (w.assigned_at ?? '').slice(0, 10) <= todayStr)
   const showTextbookTodo = !!(todaySession?.hw_textbook_name && (todayAchievement === null || todayAchievement < 100))
   const showWorkbookTodo = hasWorkbook && !!todaySession && !(todayNote?.workbook_done)
   const hasTodoItems = todayWorksheets.length > 0 || showTextbookTodo || showWorkbookTodo
@@ -268,7 +277,7 @@ export default function StudentAssignmentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="할일목록" subtitle="오늘 할 일을 직접 체크해요" />
+      <Header title="할일목록" subtitle="다음 수업까지 할 일을 직접 체크해요" />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 
@@ -319,15 +328,20 @@ export default function StudentAssignmentsPage() {
           </div>
         )}
 
-        {/* 오늘 할 일 체크리스트 */}
+        {/* 다음 수업까지 할 일 — 가장 최근 수업에서 받은 과제다(「오늘 수업」이 아니다) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#FFF5F2', borderBottom: '1px solid #f0f0f0' }}>
             <i className="ti ti-checklist" style={{ fontSize: 16, color: '#993C1D' }} />
-            <h3 className="text-sm font-bold" style={{ color: '#712B13' }}>오늘 할 일</h3>
+            <h3 className="text-sm font-bold" style={{ color: '#712B13' }}>다음 수업까지 할 일</h3>
+            {todaySession && todaySession.session_date !== todayStr && (
+              <span className="text-[10px] text-gray-400">
+                {Number(todaySession.session_date.slice(5, 7))}/{Number(todaySession.session_date.slice(8, 10))} 수업에서 받은 과제
+              </span>
+            )}
           </div>
           <div className="px-4 py-3">
             {!hasTodoItems ? (
-              <p className="text-xs text-gray-400 py-2 text-center">오늘 체크할 할 일이 없어요</p>
+              <p className="text-xs text-gray-400 py-2 text-center">받은 과제가 없어요</p>
             ) : (
               <div className="space-y-2">
                 {todayWorksheets.map(ws => (
