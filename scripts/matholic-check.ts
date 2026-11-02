@@ -13,13 +13,14 @@
  *
  * 마지막 줄 「통과 N / 전체 N」, 종료코드 0 이 통과.
  */
+import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/worksheetTitle.ts'
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers, levelForInsert, DEFAULT_LEVEL } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -793,6 +794,21 @@ T('교재 줄에 회차가 적혀 있어도 이너프원으로 보내지 않는�
 T('오답이 교재보다 먼저다 — 「쎈 오답문제」는 오답 학습지다', () =>
   worksheetTypeOf({ title: '중1-1 쎈 오답문제', kind: '학습지' }, BOOKS) === 'similar'
   && isTextbookLinked({ title: '중1-1 쎈 오답문제', kind: '학습지' }, BOOKS) === true)
+
+// ── 레벨 칸은 비울 수 없다 (2026-11-02) ─────────────────────────────────────
+//   student_worksheets.current_level 은 NOT NULL 이다. 레벨 없이 들어가게 막이를 푼 날
+//   19건이 「violates not-null constraint」로 통째로 실패했다 — 에러는 저장 뒤에야 보인다.
+T('레벨이 없으면 Lv1 로 넣는다 (비워 보내면 DB 가 거절한다)', () =>
+  levelForInsert(null) === DEFAULT_LEVEL && levelForInsert(undefined) === DEFAULT_LEVEL
+  && levelForInsert(3.5) === 3.5 && levelForInsert(0) === 0 && DEFAULT_LEVEL === 1)
+
+// ★ 화면이 그 함수를 **실제로 쓰는지**까지 본다 — 함수만 고치고 넣는 자리를 안 고치면
+//   그 줄만 조용히 안 들어간다(그게 이번에 일어난 일이다).
+T('매쓰홀릭 화면이 레벨 칸을 비우지 않고 넣는다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  const 넣는줄 = src.match(/current_level:[^,\n]+/g) ?? []
+  return 넣는줄.length > 0 && 넣는줄.every((l) => /levelForInsert|레벨/.test(l)) && src.includes('levelForInsert(')
+})
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
