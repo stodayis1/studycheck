@@ -832,7 +832,11 @@ export default function TeacherExamsPage() {
               //   된건지 안된건지 모르겠네」). 그래서 회차·날짜를 점수 밑에 적고,
               //   이번 회차 **본고사**가 비어 있으면 눈에 띄게 알린다.
               const 최근45일 = new Date(Date.now() + 9 * 3600_000 - 45 * 86400_000).toISOString().slice(0, 10)
-              const 이번회차 = sExams.filter((e: any) => e.exam_date >= 최근45일)
+              //   ★ 월간평가도 코어테스트로 들어온다(2026-11-02). 그건 회차 시험이 아니라
+              //     달마다 보는 것이라, 이 판정에서는 **빼야** 한다 — 안 빼면 월간평가만 본
+              //     학생이 전부 「본고사 미등록」으로 빨갛게 뜬다.
+              const 이번회차 = sExams.filter((e: any) => e.exam_date >= 최근45일
+                && (e.title === '본고사' || String(e.title ?? '').startsWith('예비')))
               const 본고사없음 = tab === '코어테스트'
                 && 이번회차.length > 0
                 && !이번회차.some((e: any) => e.title === '본고사' && e.score != null)

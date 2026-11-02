@@ -19,7 +19,7 @@ import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/workshee
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -341,9 +341,11 @@ T('교재연계로 낸 것은 쌍둥이 학습지로 들어간다', () =>
   && worksheetTypeOf({ title: '[오답유사] 중1-1 Ⅱ 문자와 식_Lv3.5', kind: '학습지' }) === 'similar'
   && worksheetTypeOf({ title: '[학습지] 초6-2 1단원 분수의 나눗셈_Lv5', kind: '학습지' }) === 'main')
 
-T('학습지·오답유사는 레벨이 반드시 있어야 한다', () =>
+// ★ 2026-11-02 에 **바뀌었다**: 오답은 레벨을 적어 오지 않고 직전 레벨학습지에서
+//   물려받는다. 그래서 오답유사는 더 이상 「레벨이 있어야 한다」가 아니다.
+T('레벨학습지는 레벨이 반드시 있어야 한다 (오답은 물려받으므로 뺀다)', () =>
   needsLevel({ title: '[학습지] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
-  && needsLevel({ title: '[오답유사] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
+  && !needsLevel({ title: '[오답유사] 중1-1 Ⅱ 문자와 식', kind: '학습지' })
   && !needsLevel({ title: '[주말복습] 고1 공통수학2 도형의 방정식', kind: '학습지' })
   && !needsLevel({ title: '[단원평가] 초6-2 1단원', kind: '단원평가' }))
 
@@ -609,6 +611,71 @@ T('과제 칸 — 단원 이름이 없으면 빈 글자', () =>
 T('레벨 4.0 은 4 로, 3.5 는 3.5 로 찍는다', () =>
   levelText('4.0') === '4' && levelText(4) === '4' && levelText('3.5') === '3.5'
   && levelText(null) === '')
+
+// ── 원장님 2026-11-02 매쓰홀릭 규칙 셋 ──────────────────────────────────────
+
+T('월간평가는 코어테스트로 올린다', () =>
+  coreTestRound({ title: '초6 월간평가 3회', kind: '월간평가' }) === '월간평가')
+
+// ★ 매쓰홀릭은 TOMA 건에도 종류를 「월간평가」로 붙인다. 월간평가를 먼저 보면
+//   TOMA 본고사가 「월간평가」로 밀린다 — 실제로 이 검사가 그 실수를 잡았다.
+T('TOMA 가 월간평가보다 먼저다 (매쓰홀릭이 TOMA 에도 월간평가를 붙인다)', () =>
+  coreTestRound({ title: '제6회 TOMA 수학경시대회 - 초6', kind: '월간평가' }) === '본고사'
+  && coreTestRound({ title: 'TOMA 예비 2회', kind: '월간평가' }) === '예비 2회')
+
+T('월간평가도 TOMA 도 아니면 코어테스트가 아니다', () =>
+  coreTestRound({ title: '초6-2 3단원 소수의 나눗셈', kind: '학습지' }) === null)
+
+// ★ 레벨이 없고 「N회차」면 이너프원 — 안 넣는다.
+T('레벨 없이 「3회차」면 이너프원이다 (안 넣는다)', () =>
+  isEnoughOne({ title: '중3 3회차', kind: '', level: null }) === true)
+
+T('레벨이 있으면 회차가 적혀 있어도 이너프원이 아니다', () =>
+  isEnoughOne({ title: '중3 3회차', kind: '', level: 3 }) === false)
+
+T('이름이 적힌 이너프원은 레벨이 있어도 이너프원이다', () =>
+  isEnoughOne({ title: '이너프원 삼각비 (2)', kind: '', level: 3 }) === true)
+
+// ★ 이 판정이 화면에서 맨 먼저 돈다 — 여기서 걸리면 그 줄은 통째로 사라진다.
+//   다른 칸으로 갈 줄(오답·데일리·코어테스트)을 가로채면 안 된다.
+T('오답·데일리·코어테스트는 회차가 적혀 있어도 이너프원으로 보내지 않는다', () =>
+  isEnoughOne({ title: '오답문제 2회차', kind: '', level: null }) === false
+  && isEnoughOne({ title: 'Daily Test 3회차', kind: '데일리', level: null }) === false
+  && isEnoughOne({ title: '[코어테스트] 예비 1회 2회차', kind: '학습지', level: null }) === false)
+
+// ★ 오답 — 「오답유사」만 보던 것을 「오답」으로 넓혔다.
+T('오답유사·오답문제·오답모음이 모두 오답 학습지다', () =>
+  isWrongNote({ title: '오답유사 3단원' }) && isWrongNote({ title: '오답문제 2회차' })
+  && isWrongNote({ title: '기본도형 오답 모음' }) && !isWrongNote({ title: '3단원 소수의 나눗셈' }))
+
+T('오답은 similar 로 들어간다', () =>
+  worksheetTypeOf({ title: '오답문제 2회차', kind: '학습지' }) === 'similar')
+
+T('오답은 레벨이 없어도 막지 않는다 (물려받으니까)', () =>
+  needsLevel({ title: '오답문제 2회차', kind: '학습지' }) === false
+  && needsLevel({ title: '초6-2 3단원 소수의 나눗셈', kind: '학습지' }) === true)
+
+T('오답 제목에 「오답학습지」를 넣고, 레벨은 직전 레벨학습지와 같게', () => {
+  const a = wrongNoteFix('3단원 소수의 나눗셈', null, 3.5)
+  const b = wrongNoteFix('오답학습지 3단원', 2, 4)
+  const c = wrongNoteFix('3단원', 2.5, null)
+  return a.unitName === '오답학습지 3단원 소수의 나눗셈' && a.level === 3.5
+    && b.unitName === '오답학습지 3단원' && b.level === 4          // 이미 있으면 안 겹쳐 쓴다
+    && c.unitName === '오답학습지 3단원' && c.level === 2.5        // 직전이 없으면 적힌 대로
+})
+
+T('직전 레벨은 그 날짜까지의 마지막 레벨학습지에서 가져온다', () => {
+  const ws = (assigned: string, type: string, level: number | null) =>
+    ({ id: assigned + type, student_id: 'S', grade_level: null, unit: null, unit_name: null,
+      current_level: level, worksheet_type: type, status: 'scored', score: 80,
+      assigned_at: assigned + 'T12:00:00+09:00', submitted_at: null })
+  const list = [ws('2026-10-01', 'main', 3), ws('2026-10-20', 'main', 3.5),
+    ws('2026-10-25', 'similar', 9), ws('2026-11-05', 'main', 4)]
+  return prevLevelOf(list, '2026-10-30') === 3.5      // 11/05 것을 거꾸로 물려받지 않는다
+    && prevLevelOf(list, '2026-10-10') === 3
+    && prevLevelOf(list, '2026-09-01') === null
+    && prevLevelOf([], '2026-10-30') === null
+})
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
