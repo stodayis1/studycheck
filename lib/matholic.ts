@@ -605,6 +605,23 @@ export function prevLevelOf(list: WsCandidate[], onDate: string): number | null 
 }
 
 /**
+ * 레벨 칸에 넣을 값. **비워 둘 수 없다.**
+ *
+ * ★ `student_worksheets.current_level` 은 NOT NULL 이다 (DB 기본값 2.5).
+ *   레벨이 없어도 들어가게 막이를 푸는 것만으로는 모자라다 — 그대로 비워 보내면
+ *   DB 가 거절하고 그 줄은 통째로 안 들어간다 (2026-11-02 에 19건이 이렇게 실패했다.
+ *   「null value in column "current_level" … violates not-null constraint」).
+ *
+ * 못 찾으면 **Lv1** 로 넣는다. 교재연계 출제 화면이 쌍둥이 학습지를 만들 때 쓰는 값과
+ * 같게 맞춘 것이다(`app/teacher/assignments/page.tsx`). 화면에는 「레벨이 없어 Lv1 로
+ * 넣습니다」라고 **적어 보여 준다** — 조용히 1을 넣으면 레벨 현황판이 틀어져도 모른다.
+ */
+export const DEFAULT_LEVEL = 1
+export function levelForInsert(level: number | null | undefined): number {
+  return level == null || Number.isNaN(Number(level)) ? DEFAULT_LEVEL : Number(level)
+}
+
+/**
  * 오답 학습지의 제목과 레벨.
  *   · 제목에는 **「오답학습지」**가 들어가야 한다 (원장님 2026-11-02 「기존 규칙대로
  *     제목에 오답학습지라고 넣어주고」). 이미 들어 있으면 그대로 둔다.

@@ -92,7 +92,17 @@ node --import ./scripts/ts-resolve.mjs scripts/matholic-check.ts <틀린사본.t
    조용히 바꿔 치면 엉뚱한 학생에게 점수가 들어가도 아무도 모른다.
    · 2026-11-02 기준 재원생 194명 중 서로 품는 이름은 한 쌍뿐이라(꼬리 숫자) 위험이 낮다.
      새로 손대기 전에 `position(a.name in b.name) > 0` 로 **다시 세어 본다.**
-11. **목록을 넘기는 자리를 빼먹으면 조용히 옛 동작으로 돈다.** `books` 가 선택 인자라
+11. **막이를 풀면 DB 가 대신 막는다.** 레벨 없이 들어가게 `needsLevel` 을 푼 날,
+   `student_worksheets.current_level` 이 NOT NULL 이라 19건이 통째로 실패했다
+   (「violates not-null constraint」 — 저장 단추를 누른 **뒤에야** 보인다).
+   → 「없어도 되게」 바꿀 때는 **그 칸이 DB 에서 NOT NULL 인지 먼저 본다.**
+   ```sql
+   select column_name, is_nullable, column_default from information_schema.columns
+   where table_name = 'student_worksheets' and is_nullable = 'NO';
+   ```
+   지금 NOT NULL 인 칸: subject · grade_level(기본값 없음) · unit · current_level(2.5) · status.
+   레벨은 못 찾으면 **Lv1**(`levelForInsert`) 로 넣고 화면에 그렇게 적는다.
+12. **목록을 넘기는 자리를 빼먹으면 조용히 옛 동작으로 돈다.** `books` 가 선택 인자라
    타입 에러도 안 난다. 함수에 인자를 더하면 `grep` 으로 **모든 부르는 자리**를 센다
    (`rankWorksheets` 안에서도 `worksheetTypeOf` 를 부른다 — 거기도 넘겨야 한다).
 
@@ -127,5 +137,6 @@ group by 1 order by 2 desc;
 - 2026-11-02 오답유사·오답문제 → 오답학습지. 제목에 「오답학습지」, 레벨은 직전 레벨학습지와 같게
 - 2026-11-02 검사는 `npx tsx` 가 아니라 `node --import ./scripts/ts-resolve.mjs` 로 돌린다
 - 2026-11-02 매쓰홀릭·스터디체크 이름이 다르면 **이름의 일부**로 찾는다. 여럿이면 사람이 고르고, 고른 뒤에도 이름이 다르면 화면에 적는다 (`findStudents` 3단계 · `nameDiffers`)
+- 2026-11-02 레벨 칸은 비울 수 없다(NOT NULL) — 못 찾으면 Lv1 로 넣고 화면에 적는다. 「없어도 되게」 풀기 전에 DB 의 NOT NULL 을 먼저 볼 것
 - 2026-11-02 줄마다 **갈래 칩**(레벨학습지·오답학습지·쌍둥이)을 보여 준다 — 판정만 고치고 화면을 안 고치면 「안 걸린다」는 말을 듣는다
 - 2026-11-02 레벨이 없어도 **시중교재·교과서 이름**이 제목에 있으면 쌍둥이. 목록은 `textbook_catalog` 를 읽어 넘긴다 (`matchTextbook`) — 한 글자·전각·괄호 함정은 위 8번

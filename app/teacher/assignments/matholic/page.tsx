@@ -34,7 +34,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import {
   parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
-  isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, nameDiffers, isTextbookLinked,
+  isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, nameDiffers, isTextbookLinked, levelForInsert, DEFAULT_LEVEL,
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
 } from '@/lib/matholic'
 
@@ -262,12 +262,15 @@ export default function MatholicImportPage() {
         //    판정은 맞게 되고 있었고, 화면이 그 말을 안 하고 있었다).
         const 교재말 = 교재 ? ` · 「${교재}」 교재라 쌍둥이 학습지로 넣습니다`
           : (!isWrongNote(row) && isTextbookLinked(row, bookNames) ? ' · 교재·교과서라 쌍둥이 학습지로 넣습니다' : '')
+        // ★ 레벨 칸은 비울 수 없다(NOT NULL). 못 찾아 Lv1 로 넣는 줄은 **그렇게 적는다.**
+        const 쓸레벨 = isWrongNote(row) ? (prevLevel ?? row.level) : row.level
+        const 레벨말 = 쓸레벨 == null ? ` · 레벨이 없어 Lv${DEFAULT_LEVEL} 로 넣습니다` : ''
         // 오답은 제목에 「오답학습지」가 들어가고 레벨을 물려받는다 — 화면에 그대로 적어 보여 준다.
         const 오답말 = isWrongNote(row)
           ? ` · 오답학습지로 넣습니다 (레벨 ${prevLevel ?? row.level ?? '없음'}${prevLevel != null ? ' 물려받음' : ''})`
           : ''
         return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-          coreRound: null, unit, prevLevel, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 교재말 + 오답말) }
+          coreRound: null, unit, prevLevel, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 교재말 + 오답말 + 레벨말) }
       }))
     } finally { setReading(false) }
   }
@@ -340,14 +343,19 @@ export default function MatholicImportPage() {
             unitNameCell = fixed.unitName
             levelCell = fixed.level
           }
+          // ★ 레벨 칸은 비울 수 없다 (NOT NULL). 못 찾으면 Lv1 — 읽어 보기 화면에도
+          //   그렇게 적어 두었다. 비워 보내면 그 줄이 통째로 안 들어간다.
+          const 레벨 = levelForInsert(levelCell)
           const { error } = await supabase.from('student_worksheets').insert({
             student_id: p.studentId, subject: '수학',
             // 제목에 학년이 적혀 있으면 그걸 쓰고, 없으면 학생의 학년으로 메운다.
-            grade_level: t.gradeLevel ?? gradeFromCourse(p.row.course)?.grade ?? who?.grade ?? null,
+            // ★ 학년 칸도 **비울 수 없다**(NOT NULL, 기본값 없음). 재원생 194명 모두
+            //   학년이 있어 지금은 빌 일이 없지만, 비면 그 줄이 통째로 안 들어간다.
+            grade_level: t.gradeLevel ?? gradeFromCourse(p.row.course)?.grade ?? who?.grade ?? '미정',
             semester: t.semester ?? gradeFromCourse(p.row.course)?.semester ?? null,
             unit: unitCell,
             unit_name: unitNameCell,
-            current_level: levelCell,
+            current_level: 레벨,
             // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
             // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
             worksheet_type: worksheetTypeOf(p.row, books),
