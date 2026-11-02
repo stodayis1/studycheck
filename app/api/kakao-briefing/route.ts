@@ -26,6 +26,7 @@ import { randomBytes } from 'crypto'
 import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
 import { attachPastExamMemos } from '@/lib/pastExamMemo'
+import { RESEND_KEY, pickResend, dropDate } from '@/lib/briefingResend'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
@@ -82,6 +83,8 @@ export interface BriefingSummary {
   template?: string
   /** 보내기 직전에 메모에 붙인 기출유사 결과 */
   pastExam?: { 붙임: number; 보기: string[] }
+  /** 예약해 둔 「다시 보내기」를 오전 발송이 같이 보낸 결과 */
+  resent?: { 예약: number; 보냄: number; 실패: number; 오류: { name: string; error: string }[] }
   errors: { name: string; error: string }[]
   previews?: {
     studentId: string; name: string; phone: string; bodyLen: number; body: string
@@ -461,6 +464,29 @@ export async function GET(req: NextRequest) {
     //   못 끝낸 것은 다음 날 오전 11시에 나간다. 중복은 briefing_sends 가 막는다.
     const summary = await run({ date, dryRun: false, eveningRun: phase === 1 })
     summary.phase = phase
+
+    // ★ 다시 보내기 예약 — 오전 발송에서만 본다 (원장님 2026-11-02 「이미 나간 3명
+    //   기출유사 점수 추가해서 내일 오전 11시에 다시 보내줘」).
+    //   한 번 나간 학생은 기록이 남아 자동 발송에서 빠지므로, 고쳐서 다시 보내려면
+    //   사람이 그 시각에 화면 앞에 있어야 했다. 적어 두면 여기서 같이 보낸다.
+    //   ★ 보낸 뒤 그 날짜 예약을 지운다 — 안 지우면 다음 날에도 또 나간다.
+    if (phase === 2) {
+      try {
+        const db = admin()
+        const { data: row } = await db.from('app_settings').select('value').eq('key', RESEND_KEY).maybeSingle()
+        const ids = pickResend((row as any)?.value, date)
+        if (ids.length) {
+          const r = await run({ date, dryRun: false, studentIds: ids, resend: true })
+          summary.resent = { 예약: ids.length, 보냄: r.sent, 실패: r.failed, 오류: r.errors }
+          await db.from('app_settings').upsert({
+            key: RESEND_KEY, value: dropDate((row as any)?.value, date), updated_at: new Date().toISOString(),
+          })
+        }
+      } catch (e: any) {
+        // 다시 보내기가 실패해도 **그날 자동 발송은 끝난 뒤**다 — 여기서 멈추지 않는다.
+        summary.errors.push({ name: '다시 보내기 예약', error: e?.message ?? '알 수 없는 오류' })
+      }
+    }
     // 만료된 링크를 치운다 — 쌓이면 표가 무거워지고, 만료된 링크를 남길 이유도 없다.
     const { count } = await admin().from('report_links').delete({ count: 'exact' })
       .lt('expires_at', new Date().toISOString())

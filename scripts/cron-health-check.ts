@@ -19,6 +19,7 @@ import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
+const { RESEND_KEY, pickResend, dropDate, addResend } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
 const plus = (iso: string, min: number) => new Date(Date.parse(iso) + min * 60_000).toISOString()
@@ -200,6 +201,45 @@ T('미작성 알림은 11시 발송보다 앞선다 (지나서 보내면 「이�
   const 알림 = DUE.premorning('2026-10-31')
   const 발송 = DUE.morning('2026-10-31')
   return 알림 < 발송
+})
+
+// ── 브리핑 다시 보내기 예약 (2026-11-02) ───────────────────────────────────
+//   한 번 나간 학생은 자동 발송에서 빠진다. 고쳐서 다시 보내려면 그 시각에 사람이
+//   화면 앞에 있어야 했다 — 적어 두면 다음 오전 발송이 같이 보낸다.
+T('예약한 날짜의 사람만 꺼낸다', () => {
+  const v = { '2026-11-02': ['a', 'b'], '2026-11-01': ['c'] }
+  const got = pickResend(v, '2026-11-02')
+  return got.length === 2 && got.includes('a') && got.includes('b')
+    && pickResend(v, '2026-11-03').length === 0
+})
+
+T('값이 이상해도 자동 발송을 멈추지 않는다 (빈 목록)', () =>
+  pickResend(null, '2026-11-02').length === 0
+  && pickResend({ '2026-11-02': '학생' }, '2026-11-02').length === 0
+  && pickResend({}, '2026-11-02').length === 0)
+
+T('같은 사람을 두 번 적어도 한 번만 보낸다', () =>
+  pickResend({ '2026-11-02': ['a', 'a', ' a ', ''] }, '2026-11-02').length === 1)
+
+// ★ 보낸 뒤 지우지 않으면 **다음 날에도 또 나간다.**
+T('보낸 날짜만 지우고 다른 날짜 예약은 남긴다', () => {
+  const v = { '2026-11-02': ['a'], '2026-11-01': ['c'] }
+  const got = dropDate(v, '2026-11-02')
+  return !('2026-11-02' in got) && got['2026-11-01']?.[0] === 'c'
+})
+
+T('사람을 더해도 이미 있는 사람은 겹치지 않는다', () => {
+  const got = addResend({ '2026-11-02': ['a'] }, '2026-11-02', ['a', 'b'])
+  return got['2026-11-02'].length === 2
+})
+
+// ★ 함수만 있고 **자동 발송이 그걸 안 읽으면** 아무 일도 안 일어난다.
+//   2026-11-02 에 「판정은 맞는데 화면이 안 쓴다」로 한 번 당했다 — 부르는 자리까지 본다.
+T('오전 자동 발송이 예약을 실제로 읽고, 보낸 뒤 지운다', () => {
+  const src = fs.readFileSync(path.resolve('app/api/kakao-briefing/route.ts'), 'utf8')
+  return src.includes('pickResend(') && src.includes('dropDate(')
+    && src.includes('RESEND_KEY') && /phase === 2/.test(src)
+    && /resend: true/.test(src)
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
