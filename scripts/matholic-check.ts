@@ -19,7 +19,7 @@ import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/workshee
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -467,6 +467,49 @@ T('꼬리 붙은 이름이 스터디체크에 따로 저장돼 있으면 둘 다
   return findStudents('한지후2', two as any).length === 2
 })
 
+// ★ 매쓰홀릭과 스터디체크에 **다른 이름**으로 등록된 학생 (원장님 2026-11-02
+//   「스터디체크에는 스미스마이클로 등록은 되어 있는데 매쓰홀릭에는 마이클로」).
+//   실명은 쓰지 않는다 — 꼴만 같은 가짜 이름으로 시험한다.
+const 다른이름 = [
+  { id: 'n1', name: '스미스마이클', grade: '중2', teacher_name: '김은수' },  // 성 + 이름 붙여 등록
+  { id: 'n2', name: '홍길동j', grade: '중2', teacher_name: '김은수' },        // 스터디체크에만 꼬리
+  { id: 'n3', name: '김서연', grade: '중1', teacher_name: '박경미' },
+  { id: 'n4', name: '최서연', grade: '중1', teacher_name: '박경미' },
+]
+
+T('성을 빼고 부르는 이름도 찾는다 (마이클 → 스미스마이클)', () => {
+  const got = findStudents('마이클', 다른이름 as any)
+  return got.length === 1 && got[0].id === 'n1'
+})
+
+T('스터디체크에만 꼬리가 붙어 있어도 찾는다 (홍길동 → 홍길동j)', () => {
+  const got = findStudents('홍길동', 다른이름 as any)
+  return got.length === 1 && got[0].id === 'n2'
+})
+
+T('이름 일부가 여럿에 걸리면 고르지 않고 사람에게 묻는다', () =>
+  findStudents('서연', 다른이름 as any).length === 2)
+
+T('한 글자로는 찾지 않는다 — 아무 이름에나 들어간다', () =>
+  findStudents('연', 다른이름 as any).length === 0
+  // 거꾸로도 마찬가지 — 스터디체크 이름이 한 글자면 긴 이름 속에 그냥 들어간다
+  && findStudents('홍길동동', [{ id: 'y1', name: '홍' }] as any).length === 0)
+
+T('딱 맞는 이름이 있으면 일부로는 더 찾지 않는다', () => {
+  const two = [
+    { id: 'x1', name: '홍길동', grade: '중2', teacher_name: '김은수' },
+    { id: 'x2', name: '홍길동이', grade: '중3', teacher_name: '박경미' },
+  ]
+  const got = findStudents('홍길동', two as any)
+  return got.length === 1 && got[0].id === 'x1'
+})
+
+T('이름이 다르면 화면에 적을 수 있게 알려 준다', () =>
+  nameDiffers('마이클', 다른이름[0] as any) === true
+  && nameDiffers('홍길동', { id: 'z', name: '홍길동' } as any) === false
+  && nameDiffers('홍 길동', { id: 'z', name: '홍길동' } as any) === false
+  && nameDiffers('마이클', null) === false)
+
 // 규칙은 설정(app_settings)에서 오므로 시험에서는 그냥 넘겨준다 — 실명을 쓸 일이 없다.
 const RULE_CASE = [
   { id: 'hi', name: '정우찬', grade: '고1', teacher_name: '주한' },
@@ -694,6 +737,16 @@ T('교재 이름이 적혀 있으면 쌍둥이다 (레벨이 없어도)', () =>
 T('교과서가 붙어 있으면 쌍둥이다', () =>
   worksheetTypeOf({ title: '초6-2 교과서 2단원', kind: '학습지' }, BOOKS) === 'twin'
   && worksheetTypeOf({ title: '고1 마플교과서 도형의 방정식', kind: '학습지' }, BOOKS) === 'twin')
+
+// ★ 출판사 이름이 앞에 붙어도 「교과서」만 들어 있으면 걸려야 한다
+//   (원장님 2026-11-02 「비상교과서 이렇게 교과서가 들어갔는데도 쌍둥이로 안걸리는것도 문제야」).
+//   목록(textbook_catalog)에 없는 출판사라도 「교과서」 글자로 걸린다 — 목록을 안 넘겨도 된다.
+T('「비상교과서」처럼 출판사가 붙어도 쌍둥이다', () =>
+  worksheetTypeOf({ title: '중1-1 비상교과서 3단원', kind: '학습지' }, BOOKS) === 'twin'
+  && worksheetTypeOf({ title: '중1-1 비상교과서 3단원', kind: '학습지' }) === 'twin'
+  && worksheetTypeOf({ title: '중2-2 천재교과서 피타고라스', kind: '학습지' }) === 'twin'
+  && needsLevel({ title: '중1-1 비상교과서 3단원', kind: '학습지' }) === false
+  && isEnoughOne({ title: '중1-1 비상교과서 3회차', kind: '학습지', level: null }) === false)
 
 T('교재 이름이 없으면 레벨학습지 그대로다', () =>
   worksheetTypeOf({ title: '초6-2 2단원 분수의 나눗셈_Lv5', kind: '학습지' }, BOOKS) === 'main'
