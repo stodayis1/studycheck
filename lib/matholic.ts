@@ -165,6 +165,22 @@ const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
  *      · 그래서 오답은 레벨이 없어도 **「레벨이 없어요」로 막지 않는다**(needsLevel).
  *      · 「오답유사」만 보던 것을 「오답」으로 넓혔다 — 선생님마다 「오답문제」·「오답 모음」
  *        으로도 적으시고, 그러면 조용히 레벨학습지로 들어갔다.
+ *   ④ **레벨이 없어도 시중교재·교과서 이름이 붙어 있으면 쌍둥이 학습지** 「레벨이 없어도
+ *      시중교재나 교과서가 붙어있으면 쌍둥이 학습지로 넣어달라고 했는데 그건 반영이
+ *      안되어 있어」.
+ *      ★ 위 「교재 이름이 적혀 있으면 쌍둥이」는 2026-10-31 에 **적어만 두고 코드가
+ *        없었다.** 「교재」라는 낱말과 쪽 범위(P.18~P.80)만 보고 있었고, 「중1-1 개념원리
+ *        3단원」처럼 이름만 적힌 줄은 레벨학습지로 들어가거나 「레벨이 없어요」로 막혔다.
+ *        2026-11-02 에 `matchTextbook` 으로 실제로 대조하게 했다.
+ *      · `isTextbookLinked(row, books)` — **목록을 안 넘기면 이름으로는 안 걸린다.**
+ *        부르는 쪽에서 `textbook_catalog` 를 읽어 넘겨야 한다(화면이 그렇게 한다).
+ *      · 「교과서」라는 낱말도 쌍둥이로 본다.
+ *      · 넘어온 교재 이름은 화면의 「왜 이렇게 골랐는지」에 「‘개념원리’ 교재라 쌍둥이
+ *        학습지로 넣습니다」로 적어 보여 준다 — 레벨 없이 들어가는 이유가 보여야 한다.
+ *      · 들어간 뒤 레벨 칸은 비어 있다(쌍둥이는 레벨 개념이 없다).
+ *
+ *   ★ 2026-11-02 확인: 지금 들어 있는 학습지 4,754건 중 단원 칸에 교재 이름이 적힌 것은
+ *     **0건**이다. 지난 기록을 고칠 일은 없고, 이제부터 들어오는 것만 달라진다.
  *
  * ★ 선생님께 **새로 가르칠 말은 없다.** 고쳐야 할 것은 표기뿐이다 — 별표로 감싸기
  *   (`* 레벨학습지 (3-2) 3단원 *`), 꺾쇠(`< 중 ( 1-1 ) 1단원 >`), 들쭉날쭉한 띄어쓰기
@@ -354,9 +370,76 @@ export function isDailyTest(row: { title?: string | null; kind?: string | null }
  *   원장님 2026-10-30 「[교재]는 쌍둥이 학습지로 들어가야돼」.
  *   실제로 그 교재 과제가 스터디체크에 worksheet_type='twin' 으로 들어가 있었다.
  */
-export function isTextbookLinked(row: { title?: string | null; kind?: string | null }): boolean {
+/**
+ * 교재 이름을 견줄 수 있게 꼴을 맞춘다.
+ *   · 전각 → 반각 — 교재 목록에 「개념＋유형(유형편)」과 「개념+유형」이 섞여 있다.
+ *   · 대소문자 — 「RPM」·「rpm」.
+ * 띄어쓰기는 **지우지 않는다** — 「쎈」 한 글자를 낱말로 가려내는 데 띄어쓰기가 필요하다.
+ */
+export function normBook(s: string): string {
+  return String(s ?? '')
+    .replace(/[\uFF01-\uFF5E]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+/** 한 글자 이름은 **낱말로 떨어져 있을 때만** 본다 (아래 설명) */
+function 이름이있나(띈것: string, 붙인것: string, 이름: string): boolean {
+  const n = 이름.replace(/\s+/g, '')
+  if (!n) return false
+  if (n.length >= 2) return 붙인것.includes(n)
+  // ★ 「쎈」은 **한 글자**다. 그냥 찾으면 「분수의 나눗셈」의 「수」처럼 단원 이름 속
+  //   한 글자에 걸린다. 그래서 앞뒤가 한글이 아닐 때만 — 「쎈 중등 1-1」·「쎈3-2」는
+  //   걸리고 「분수의」는 안 걸린다. 「베이직쎈」은 그 이름이 목록에 따로 있어 길게 걸린다.
+  for (let i = 띈것.indexOf(n); i >= 0; i = 띈것.indexOf(n, i + 1)) {
+    const 앞 = i > 0 ? 띈것[i - 1] : ''
+    const 뒤 = i + n.length < 띈것.length ? 띈것[i + n.length] : ''
+    if (!/[가-힣]/.test(앞) && !/[가-힣]/.test(뒤)) return true
+  }
+  return false
+}
+
+/**
+ * 제목에 **시중교재·교과서 이름**이 들어 있나. 있으면 그 교재 이름을 돌려준다.
+ *
+ * ★ 원장님 2026-10-31 「교재명이 학습지 이름에 쓰여있는 경우도 있어 이건 쌍둥이 학습지야」,
+ *   2026-11-02 「레벨이 없어도 시중교재나 교과서가 붙어있으면 쌍둥이 학습지로」.
+ *   이름 목록을 **코드에 박지 않는다** — `textbook_catalog` 를 읽는다. 선생님이 교재를
+ *   새로 등록하면 그 이름도 저절로 걸려야 한다.
+ *
+ * ★ **긴 이름부터** 맞춘다 — 「쎈」이 「쎈B」·「베이직쎈」·「라이트쎈」·「쎈연산」 안에 들어 있다.
+ *   다 쌍둥이라 결과는 같지만, 어느 교재인지 적을 때는 긴 쪽이 맞다.
+ * ★ 괄호 안은 이름으로 쓰지 않는다 — 목록에 교재명 뒤 괄호로 **학생 이름**이 붙은 것이
+ *   넷 있다. 괄호를 떼면 교재명만 남고(「쎈」·「베이직쎈」·「개념유형 라이트」), 그 이름은
+ *   목록에 이미 따로 있다. 그래서 학생 이름은 대조에 **들어가지 않는다.**
+ */
+export function matchTextbook(title: string, books: string[] | null | undefined): string | null {
+  const 띈것 = normBook(title)
+  if (!띈것) return null
+  const 붙인것 = 띈것.replace(/\s+/g, '')
+  let best: string | null = null
+  for (const raw of books ?? []) {
+    const 적힌이름 = String(raw ?? '').trim()
+    if (!적힌이름) continue
+    // 괄호를 뗀 꼴도 같이 본다 — 「쎈3-2 (박유준)」 → 「쎈3-2」
+    for (const cand of [적힌이름, 적힌이름.replace(/\s*[(（][^)）]*[)）]\s*$/, '').trim()]) {
+      if (!cand) continue
+      if (!이름이있나(띈것, 붙인것, normBook(cand))) continue
+      if (!best || cand.replace(/\s+/g, '').length > best.replace(/\s+/g, '').length) best = cand
+    }
+  }
+  return best
+}
+
+export function isTextbookLinked(row: { title?: string | null; kind?: string | null }, books?: string[] | null): boolean {
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
-  return /교재/.test(t) || /\bP\.?\s*\d+\s*[~\-]/i.test(t)
+  // ★ 「교과서」도 쌍둥이다 (원장님 2026-11-02 「시중교재나 교과서가 붙어있으면」).
+  if (/교재|교과서/.test(t)) return true
+  if (/\bP\.?\s*\d+\s*[~\-]/i.test(t)) return true
+  // ★ 교재 **이름**이 적혀 있어도 쌍둥이다. 목록을 안 넘겨 주면 이 줄은 돌지 않는다 —
+  //   부르는 쪽에서 `textbook_catalog` 를 읽어 넘겨야 한다.
+  return matchTextbook(t, books) != null
 }
 
 /** 학습지관리에 넣을 때의 갈래. main(레벨학습지) · similar(오답유사) · twin(쌍둥이) */
@@ -370,9 +453,11 @@ export function isWrongNote(row: { title?: string | null; kind?: string | null }
   return /오답/.test(`${row.title ?? ''} ${row.kind ?? ''}`)
 }
 
-export function worksheetTypeOf(row: { title?: string | null; kind?: string | null }): 'main' | 'similar' | 'twin' {
+export function worksheetTypeOf(row: { title?: string | null; kind?: string | null }, books?: string[] | null): 'main' | 'similar' | 'twin' {
+  // ★ 오답이 교재보다 먼저다 — 「쎈 오답문제」는 오답 학습지다
+  //   (원장님 2026-10-31 「오답인데도 레벨이 있어도 오답이 이겨」).
   if (isWrongNote(row)) return 'similar'
-  if (isTextbookLinked(row)) return 'twin'
+  if (isTextbookLinked(row, books)) return 'twin'
   return 'main'
 }
 
@@ -388,7 +473,7 @@ export function worksheetTypeOf(row: { title?: string | null; kind?: string | nu
  * 빠진 것인지 일부러 뺀 것인지 사람이 알아야 한다.
  * 새 제목 규칙에서는 머리표를 「[이너프원]」으로 적는다.
  */
-export function isEnoughOne(row: { title?: string | null; kind?: string | null; level?: number | null }): boolean {
+export function isEnoughOne(row: { title?: string | null; kind?: string | null; level?: number | null }, books?: string[] | null): boolean {
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
   if (/이너프\s*원|이너프\s*1|enough\s*one/i.test(t)) return true
   // ★ 이름을 안 붙이고 「3회차」처럼만 적힌 것도 이너프원이다 —
@@ -398,7 +483,8 @@ export function isEnoughOne(row: { title?: string | null; kind?: string | null; 
   //     (학습일지로 간다) · 코어테스트(평가관리로 간다)는 레벨이 없어도 이너프원이 아니다.
   //     이 판정이 화면에서 **맨 먼저** 돌기 때문에, 여기서 걸리면 그 줄은 통째로 사라진다.
   if (row.level == null && /\d+\s*회차/.test(t)
-    && !isWrongNote(row) && !isDailyTest(row) && !coreTestRound(row)) return true
+    && !isWrongNote(row) && !isDailyTest(row) && !coreTestRound(row)
+    && !isTextbookLinked(row, books)) return true
   return false
 }
 
@@ -492,12 +578,12 @@ export function parseWorksheetTitle(title: string): TitleParts {
  * 학습지와 오답유사는 레벨학습지라 레벨 없이 넣으면 레벨 현황판이 틀어진다.
  * 주말복습·단원평가 같은 것은 레벨이 있으면 쓰고 없어도 괜찮다.
  */
-export function needsLevel(row: { title?: string | null; kind?: string | null }): boolean {
+export function needsLevel(row: { title?: string | null; kind?: string | null }, books?: string[] | null): boolean {
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
   if (/주말복습|단원평가|진단평가|월간평가|주간평가/.test(t)) return false
   // ★ 교재연계(= 쌍둥이 학습지)는 레벨 개념이 없다 — 교재와 쪽 범위로 낸다.
   //   여기를 안 빼 두면 교재 과제가 통째로 「레벨이 없어요」로 막힌다 (2026-10-29 예행에서 걸렸다).
-  if (isTextbookLinked(row)) return false
+  if (isTextbookLinked(row, books)) return false
   // ★ 오답 학습지도 레벨을 **적어 오지 않는다** — 직전 레벨학습지의 레벨을 물려받기
   //   때문이다 (원장님 2026-11-02 「이전 레벨 학습지의 레벨과 동일하게 해줘」).
   //   여기를 안 빼 두면 오답 줄이 통째로 「레벨이 없어요」로 막힌다.
@@ -792,7 +878,7 @@ function titleWords(title: string): string[] {
  * 화면이 물어본다. 아무것도 안 나오면 새로 만든다(주한 선생님 고1처럼 스터디체크에
  * 배정이 아예 없는 반이 있다).
  */
-export function rankWorksheets(row: MatholicRow, list: WsCandidate[], unit?: ResolvedUnit | null): Scored[] {
+export function rankWorksheets(row: MatholicRow, list: WsCandidate[], unit?: ResolvedUnit | null, books?: string[] | null): Scored[] {
   const words = titleWords(row.title)
   const out: Scored[] = []
   for (const ws of list) {
@@ -824,7 +910,7 @@ export function rankWorksheets(row: MatholicRow, list: WsCandidate[], unit?: Res
     }
 
     // 갈래가 같으면 올리고, 다르면 내린다 (오답유사·쌍둥이·레벨학습지).
-    const want = worksheetTypeOf(row)
+    const want = worksheetTypeOf(row, books)
     if (ws.worksheet_type === want) {
       if (want !== 'main') { points += 3; why.push(want === 'similar' ? '오답유사' : '쌍둥이') }
     } else if (want !== 'main' || ws.worksheet_type !== 'main') {

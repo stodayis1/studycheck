@@ -19,7 +19,7 @@ import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/workshee
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -676,6 +676,70 @@ T('직전 레벨은 그 날짜까지의 마지막 레벨학습지에서 가져�
     && prevLevelOf(list, '2026-09-01') === null
     && prevLevelOf([], '2026-10-30') === null
 })
+
+// ── 교재 이름이 적혀 있으면 쌍둥이 (원장님 2026-11-02) ──────────────────────
+//   「레벨이 없어도 시중교재나 교과서가 붙어있으면 쌍둥이 학습지로 넣어달라」.
+//   교재 이름은 코드에 박지 않고 textbook_catalog 를 읽는다 — 아래는 실제 목록에서
+//   **까다로운 것만** 골라 온 것이다(한 글자 · 전각 · 괄호 · 긴 이름이 짧은 이름을 품는 것).
+//   ★ 괄호 안 학생 이름은 여기 적지 않는다 — 가짜 이름(홍길동)으로 시험한다.
+const BOOKS = ['쎈', '쎈B', '베이직쎈', '라이트쎈', '쎈연산', '개념원리', '일품', '최상위',
+  '개념+유형', '개념＋유형(유형편)', '블랙라벨', '마플교과서', '교과서 개념잡기',
+  '모의고사 1부', '디딤돌 연산', 'RPM', '쎈 (홍길동)']
+
+T('교재 이름이 적혀 있으면 쌍둥이다 (레벨이 없어도)', () =>
+  worksheetTypeOf({ title: '중1-1 개념원리 3단원', kind: '학습지' }, BOOKS) === 'twin'
+  && worksheetTypeOf({ title: '[쎈] 중등 1-1 (2022개정) P.18 ~ P.80', kind: '학습지' }, BOOKS) === 'twin'
+  && worksheetTypeOf({ title: '중3 블랙라벨 이차함수', kind: '학습지' }, BOOKS) === 'twin')
+
+T('교과서가 붙어 있으면 쌍둥이다', () =>
+  worksheetTypeOf({ title: '초6-2 교과서 2단원', kind: '학습지' }, BOOKS) === 'twin'
+  && worksheetTypeOf({ title: '고1 마플교과서 도형의 방정식', kind: '학습지' }, BOOKS) === 'twin')
+
+T('교재 이름이 없으면 레벨학습지 그대로다', () =>
+  worksheetTypeOf({ title: '초6-2 2단원 분수의 나눗셈_Lv5', kind: '학습지' }, BOOKS) === 'main'
+  && worksheetTypeOf({ title: '중3-2 이차함수_Lv3', kind: '학습지' }, BOOKS) === 'main')
+
+T('목록을 안 넘기면 교재 이름으로는 안 걸린다 (옛 동작 그대로)', () =>
+  worksheetTypeOf({ title: '중1-1 개념원리 3단원', kind: '학습지' }) === 'main'
+  && worksheetTypeOf({ title: '[교재] 중1-1 P.18~P.80', kind: '학습지' }) === 'twin')
+
+// ★ 「쎈」은 한 글자다. 그냥 찾으면 단원 이름 속 한 글자에 걸린다.
+T('한 글자 교재 이름은 낱말로 떨어져 있을 때만 걸린다', () =>
+  matchTextbook('쎈3-2 1단원', ['쎈']) === '쎈'
+  && matchTextbook('중1-1 쎈 P.18~P.80', ['쎈']) === '쎈'
+  && matchTextbook('초6-2 분수의 나눗셈', ['수']) === null      // 「분수의」의 「수」에 안 걸린다
+  && matchTextbook('초6-2 분수의 나눗셈', ['쎈']) === null)
+
+T('긴 이름부터 맞춘다 — 쎈이 베이직쎈·쎈B 안에 들어 있다', () =>
+  matchTextbook('중1-1 베이직쎈 P.10~P.30', BOOKS) === '베이직쎈'
+  && matchTextbook('중1-1 쎈B 3단원', BOOKS) === '쎈B'
+  && matchTextbook('중1-1 라이트쎈 3단원', BOOKS) === '라이트쎈')
+
+T('전각·띄어쓰기 차이를 같은 교재로 본다', () =>
+  matchTextbook('중2 개념＋유형(유형편) p.12~p.40', BOOKS) === '개념＋유형(유형편)'
+  && matchTextbook('중2 개념+유형 3단원', BOOKS) === '개념+유형'
+  && matchTextbook('초5 디딤돌연산 2단원', BOOKS) === '디딤돌 연산'
+  && matchTextbook('중3 rpm 유형편', BOOKS) === 'RPM'
+  && normBook(' 개념＋유형  ') === '개념+유형')
+
+// ★ 교재 목록에 교재명 뒤 괄호로 **학생 이름**이 붙은 것이 넷 있다(2026-10-31 확인).
+//   괄호를 떼면 교재명만 남으므로 학생 이름은 대조에 들어가지 않는다.
+T('교재 목록의 괄호 안 이름은 교재명으로 세지 않는다', () =>
+  matchTextbook('중1-1 쎈 P.18~P.80', ['쎈 (홍길동)']) === '쎈'
+  && matchTextbook('홍길동 숙제 3단원', ['쎈 (홍길동)']) === null)
+
+T('교재 이름만 적힌 줄은 레벨이 없어도 막지 않는다', () =>
+  needsLevel({ title: '중1-1 개념원리 3단원', kind: '학습지' }, BOOKS) === false
+  && needsLevel({ title: '초6-2 교과서 2단원', kind: '학습지' }, BOOKS) === false
+  && needsLevel({ title: '초6-2 2단원 분수의 나눗셈', kind: '학습지' }, BOOKS) === true)
+
+T('교재 줄에 회차가 적혀 있어도 이너프원으로 보내지 않는다', () =>
+  isEnoughOne({ title: '중1-1 개념원리 3회차', kind: '학습지', level: null }, BOOKS) === false
+  && isEnoughOne({ title: '중1-1 3회차', kind: '학습지', level: null }, BOOKS) === true)
+
+T('오답이 교재보다 먼저다 — 「쎈 오답문제」는 오답 학습지다', () =>
+  worksheetTypeOf({ title: '중1-1 쎈 오답문제', kind: '학습지' }, BOOKS) === 'similar'
+  && isTextbookLinked({ title: '중1-1 쎈 오답문제', kind: '학습지' }, BOOKS) === true)
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
