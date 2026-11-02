@@ -510,11 +510,21 @@ export function buildBriefing(args: {
   // 알림장 — 없으면 머리글만 덩그러니 남지 않게 한 줄을 채운다(심사에도 골격이 또렷한 편이 낫다).
   const photos = feedbacks.flatMap((f) => fbImages(f.ai_message))
   const noticeParts: string[] = []
+  // ★ **줄 단위로** 거른다 (2026-11-02).
+  //   예전에는 알림장 글을 통째로 진도와 견줬다. 앞 30자만 겹쳐도 같은 글로 보기 때문에,
+  //   「진도와 같은 줄 + 그 뒤에 덧붙인 줄」인 알림장이 **통째로** 사라졌다.
+  //   그날 기출유사 결과를 메모 끝에 붙여 보냈는데, 진도를 그대로 적어 두신 학생들은
+  //   알림장 칸이 비어 「알림장 없는 판」으로 나갔다 — 점수 줄이 통째로 날아갔다.
+  //   이제 진도와 겹치는 **그 줄만** 빼고 나머지는 남긴다.
+  const 진도줄 = 진도.split(/\r?\n|\s\/\s/).map((x) => x.trim()).filter(Boolean)
+  const 진도와같나 = (l: string) => sameText(l, 진도) || 진도줄.some((x) => sameText(l, x))
   for (const raw of [...feedbacks.map((f) => f.content), note?.memo]) {
-    const t = (raw ?? '').trim()
-    // 진도 칸과 같은 글이거나 이미 넣은 것과 같은 글이면 건너뛴다.
-    if (!t || sameText(t, 진도) || noticeParts.some((p) => sameText(p, t))) continue
-    noticeParts.push(t)
+    for (const line of (raw ?? '').split(/\r?\n/)) {
+      const t = line.trim()
+      // 진도 칸과 같은 줄이거나 이미 넣은 줄과 같으면 건너뛴다.
+      if (!t || 진도와같나(t) || noticeParts.some((p) => sameText(p, t))) continue
+      noticeParts.push(t)
+    }
   }
   // 보강은 OPS 기록을 먼저 쓰고, 없으면 예전 글로 보조한다.
   const mkLine = makeupLine(args.makeup, note?.makeup_note)
