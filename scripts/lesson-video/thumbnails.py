@@ -34,6 +34,13 @@ THEME = {
     # 공통수학1 증명: 하늘색(개념)보다 한 단계 진한 파랑 — 공통수학2 의 연두 → 초록과 같은 짜임
     'proof_cm1': dict(bg=(160, 196, 238), grid=(144, 182, 228), badge=(18, 42, 86), pill=(205, 224, 248),
                     label=(16, 34, 68), title=(12, 26, 50)),
+    # 중학교 증명: 학년 개념색보다 한 단계 진하게 (중1 노랑 → 진한 노랑 · 중2 분홍 → 진한 분홍 · 중3 보라 → 진한 보라)
+    'proof_m1': dict(bg=(246, 214, 120), grid=(236, 200, 100), badge=(96, 60, 4), pill=(252, 236, 186),
+                     label=(80, 50, 6), title=(46, 30, 4)),
+    'proof_m2': dict(bg=(240, 168, 186), grid=(230, 152, 172), badge=(110, 18, 48), pill=(250, 214, 224),
+                     label=(92, 16, 40), title=(56, 10, 24)),
+    'proof_m3': dict(bg=(186, 172, 236), grid=(172, 158, 226), badge=(46, 28, 104), pill=(222, 214, 248),
+                     label=(40, 24, 86), title=(24, 14, 54)),
     'proof':   dict(bg=(156, 214, 172), grid=(140, 200, 157), badge=(16, 58, 32), pill=(200, 236, 210),
                     label=(16, 44, 28), title=(12, 28, 44)),
     # 공통수학1 풀이: 증명(진한 파랑)보다 한 단계 더 진한 파랑
@@ -200,7 +207,7 @@ def main():
             G = json.load(open(g, encoding='utf-8'))
             if only and G['order'] not in only: continue
             if os.path.exists(base + '.jpg') and not force: continue
-            kind = 'proof' if grade == '공통수학2' else 'proof_cm1'
+            kind = {'공통수학2': 'proof', '공통수학1': 'proof_cm1'}.get(grade) or 'proof_m' + grade[1]   # 중2-2 → proof_m2
             tag = ' 공식 쓰기' if G.get('label') == '공식 쓰기' else ' 증명'
             make(kind, G['order'], G['chapter'] + tag, G['title'], G['steps'][0]['bubble'], 'D', grade=grade).save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))

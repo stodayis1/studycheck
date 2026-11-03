@@ -7,7 +7,7 @@
 import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, isSsenC, needsPhoto, type LessonVideo } from '@/lib/lessonVideos'
 import { SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, LEC_LINES, lecLineUrl, lecCallText, type LecCallKey, planLectureCalls, CALL_REPLIES, type CallResponse, buildQuiz, type QuizChoice, QUIZ_RATE, CIRCLED } from '@/lib/nameCalls'
 import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
@@ -129,6 +129,14 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
           onStateChange: (e: any) => {
             if (e.data !== 1) { lastT.current = null; saveRef.current() }
             pausedSince.current = e.data === 2 ? Date.now() : null
+            // 대답 버튼을 안 누르고 유튜브 화면을 눌러 그냥 틀면 말풍선·버튼이 영상 위에 계속 남았다 (원장님 2026-11-03)
+            // → 다시 재생되면 무응답으로 적고 걷는다. 객관식 보기만은 남긴다
+            if (e.data === 1 && askRef.current && !askRef.current.quiz) {
+              const a = askRef.current
+              pushResp({ key: a.tag, at: a.at, answer: null, noanswer: true, ts: new Date().toISOString() })
+              askRef.current = null; setAsk(null); setNudge(false)
+            }
+            if (e.data === 1 && !askRef.current) { voice.current?.pause(); setBubble(null) }
             if (e.data === 0) { if (lessonRef.current?.kind === '대표예제') callSol('end'); else callLec('end') }
           },
         },
@@ -205,6 +213,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   function callLec(key: LecCallKey, opt: CallOpt = {}) { callLine('lec', key, opt) }
   function callLine(table: 'sol' | 'lec', key: string, opt: CallOpt) {
     if (!studentId || !studentName) { opt.after?.(); return }
+    // 컨씨영상은 강사가 직접 찍은 풀이라 AI 가 말을 걸지 않는다 (원장님 2026-11-03)
+    if (isSsenC(lessonRef.current)) { opt.after?.(); return }
     const tag = table + ':' + key
     const once = opt.tag ?? tag
     if (!opt.again && fired.current.has(once)) { opt.after?.(); return }
@@ -417,9 +427,10 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
         <p className="text-[11px] text-gray-400">건너뛴 부분은 시청 시간에 안 들어가요. 영상 속 문제는 멈추고 연습장에 풀어 보세요.</p>
       </div>
 
-      {/* 증명 영상: 다 본 뒤 백지에 써서 사진 제출 (채점 없음) */}
-      {lesson?.kind === '증명' && studentId && url && (
-        <ProofSubmitBox studentId={studentId} sessionId={sessionId} videoUrl={url} watched={!!log?.completed_at} formula={/공식.*써 보기/.test(lesson.title)} />
+      {/* 증명 영상: 다 본 뒤 백지에 써서 사진 제출 · 컨씨영상: 직접 푼 풀이 사진 제출 (채점 없음) */}
+      {needsPhoto(lesson) && studentId && url && (
+        <ProofSubmitBox studentId={studentId} sessionId={sessionId} videoUrl={url} watched={!!log?.completed_at}
+          formula={/공식.*써 보기/.test(lesson.title)} solve={isSsenC(lesson)} />
       )}
 
       {/* 장면 목차 */}

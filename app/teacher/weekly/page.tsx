@@ -57,7 +57,7 @@ function tone(kind: Badge['kind'], v: number | null) {
 }
 const KIND_LABEL: Record<Badge['kind'], string> = {
   book: '과제 달성', sheet: '과제 성취', test: '테스트', exam: '시험지', attend: '출결',
-  video: '영상 과제', proof: '증명 제출',
+  video: '영상 과제', proof: '증명·풀이 제출',
 }
 
 export default function WeeklyPage() {
@@ -369,6 +369,7 @@ export default function WeeklyPage() {
                     <div className="mt-2.5">
                       <ProofSubmissionChip
                         proofUrls={b.proofUrls}
+                        label={`${b.label.split(' ')[0]} 제출`}
                         subs={b.proofSubs ?? []}
                         labelOf={(u) => b.proofLabels?.[u] ?? u} />
                     </div>

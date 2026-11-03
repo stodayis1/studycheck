@@ -21,7 +21,7 @@ import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { canAssignVideos } from '@/lib/videoAssign'
-import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, lessonLabel, needsPhoto, photoLabel, type LessonVideo } from '@/lib/lessonVideos'
 import { summarizeResponses } from '@/lib/nameCalls'
 import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
@@ -2033,8 +2033,10 @@ ${e?.message ?? '연결 실패'}
                   )
                 })()}
                 {session.video_url && (() => {
-                  const proofUrls = session.video_url.split('\n').filter(Boolean).filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명')
+                  // 증명 백지 + 컨씨영상 풀이 사진 (원장님 2026-11-03)
+                  const proofUrls = session.video_url.split('\n').filter(Boolean).filter((u) => needsPhoto(lessonByYt[youtubeId(u) || '']))
                   return <ProofSubmissionChip proofUrls={proofUrls} subs={proofSubs.filter((p) => p.session_id === session.id)}
+                    label={photoLabel(proofUrls.map((u) => lessonByYt[youtubeId(u) || '']))}
                     labelOf={(u) => lessonLabel(lessonByYt[youtubeId(u) || ''])} />
                 })()}
               {(session.progress_content || session.today_textbook_name) && (

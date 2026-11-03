@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "created": "2026-09-27",
+  "source": "GPT-EXEC-014 D-111",
+  "decision": "D-111",
+  "scope_note": "1차 파일럿은 공통수학1 전용이다 (D-110). 이 목록을 중학교·다른 고등 과정의 준비 완료 근거로 확대 해석하지 않는다.",
+  "origin_note": "수치는 PREFLIGHT_COUNTS_TO_RUN_012.sql 을 원장님이 1회 실행한 결과를 GPT Work 가 검수해 고른 것이다. Claude Code 는 운영 DB 를 조회하지 않았으므로 이 수치를 직접 확인하지 못했다.",
+  "pilot_plan": {
+    "types": 10,
+    "sources_per_type": 5,
+    "candidates_per_source": 2,
+    "total_candidates": 100,
+    "note": "D-073. 최초 유료 호출은 1유형 x 원문 1개 x 후보 2개 스모크만 먼저 한다."
+  },
+  "types": [
+    {
+      "type_code": "공수1-01-07",
+      "grade": "공통수학1",
+      "chapter_title": "다항식",
+      "type_title": "곱셈 공식의 변형: a²+b²+c², a³+b³+c³",
+      "usable_source_count": 41,
+      "usable_number_count": 15,
+      "usable_choice_count": 26,
+      "selection_reason": "다항식 단원 2개 중 하나. 곱셈 공식 변형은 계수·수치 변형으로 쌍둥이를 만들기 쉬워 파일럿 초기 검증에 적합하다. 원문 41개로 여유가 있다."
+    },
+    {
+      "type_code": "공수1-01-02",
+      "grade": "공통수학1",
+      "chapter_title": "다항식",
+      "type_title": "다항식 전개식에서 계수 구하기",
+      "usable_source_count": 36,
+      "usable_number_count": 14,
+      "usable_choice_count": 22,
+      "selection_reason": "다항식 단원 2개 중 하나. 위 유형과 주제가 겹치지 않도록 '전개식 계수'를 골랐다. 단답 14 · 선택 22 로 두 답안 종류가 모두 확보된다."
+    },
+    {
+      "type_code": "공수1-05-07",
+      "grade": "공통수학1",
+      "chapter_title": "방정식",
+      "type_title": "제한된 범위에서 이차함수 최대·최소",
+      "usable_source_count": 50,
+      "usable_number_count": 28,
+      "usable_choice_count": 22,
+      "selection_reason": "방정식 단원 2개 중 하나. 원문 50개로 이번 10개 중 두 번째로 많고, 단답 28 · 선택 22 로 균형이 가장 좋다."
+    },
+    {
+      "type_code": "공수1-06-07",
+      "grade": "공통수학1",
+      "chapter_title": "방정식",
+      "type_title": "삼차방정식 근과 계수 관계",
+      "usable_source_count": 40,
+      "usable_number_count": 13,
+      "usable_choice_count": 27,
+      "selection_reason": "방정식 단원 2개 중 하나. 이차함수 최대·최소와 풀이 구조가 달라 주제 다양성을 넓힌다."
+    },
+    {
+      "type_code": "공수1-07-06",
+      "grade": "공통수학1",
+      "chapter_title": "부등식",
+      "type_title": "해가 주어진 연립일차부등식",
+      "usable_source_count": 32,
+      "usable_number_count": 12,
+      "usable_choice_count": 20,
+      "selection_reason": "부등식 단원 2개 중 하나. 역방향(해 → 조건) 문제라 역산 위험 검사가 실제로 작동하는지 볼 수 있다."
+    },
+    {
+      "type_code": "공수1-08-15",
+      "grade": "공통수학1",
+      "chapter_title": "부등식",
+      "type_title": "연립이차부등식 풀이",
+      "usable_source_count": 32,
+      "usable_number_count": 12,
+      "usable_choice_count": 20,
+      "selection_reason": "부등식 단원 2개 중 하나. 일차와 이차를 나눠 담아 난이도 폭을 넓혔다."
+    },
+    {
+      "type_code": "공수1-09-16",
+      "grade": "공통수학1",
+      "chapter_title": "순열과 조합",
+      "type_title": "nPr와 nCr 계산",
+      "usable_source_count": 52,
+      "usable_number_count": 29,
+      "usable_choice_count": 23,
+      "selection_reason": "순열과 조합 단원 2개 중 하나. 원문 52개로 이번 10개 중 가장 많고, 계산형이라 결정론적 검산을 붙이기 가장 쉽다."
+    },
+    {
+      "type_code": "공수1-09-19",
+      "grade": "공통수학1",
+      "chapter_title": "순열과 조합",
+      "type_title": "특정한 것을 포함/제외하는 조합 수",
+      "usable_source_count": 35,
+      "usable_number_count": 17,
+      "usable_choice_count": 18,
+      "selection_reason": "순열과 조합 단원 2개 중 하나. 조건이 문장으로 붙는 유형이라 '문장 맥락' 변형이 잘 되는지 확인할 수 있다. 단답 17 · 선택 18 로 거의 반반이다."
+    },
+    {
+      "type_code": "공수1-10-05",
+      "grade": "공통수학1",
+      "chapter_title": "행렬",
+      "type_title": "행렬의 곱셈",
+      "usable_source_count": 38,
+      "usable_number_count": 17,
+      "usable_choice_count": 21,
+      "selection_reason": "행렬 단원 2개 중 하나. 표 형태 지문이 많아 이미지 입력이 제대로 전달되는지 보기 좋다 (D-088)."
+    },
+    {
+      "type_code": "공수1-10-08",
+      "grade": "공통수학1",
+      "chapter_title": "행렬",
+      "type_title": "행렬의 거듭제곱 A^n=E 이용",
+      "usable_source_count": 26,
+      "usable_number_count": 13,
+      "usable_choice_count": 13,
+      "selection_reason": "행렬 단원 2개 중 하나. 원문 26개로 이번 10개 중 가장 적어 하한 쪽 여유를 확인하는 역할도 한다. 단답 13 · 선택 13 으로 정확히 반반이다."
+    }
+  ]
+}

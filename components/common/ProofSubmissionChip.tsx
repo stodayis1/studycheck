@@ -1,6 +1,7 @@
 'use client'
 
 // 증명 백지 제출 — 선생님·학부모 화면에 붙는 「증명 제출 1/2」 표시. 누르면 낸 사진을 보여 준다.
+// 컨씨영상의 「직접 푼 풀이」 사진도 같은 칸으로 낸다 → 이름은 photoLabel(lib/lessonVideos.ts)로 「풀이 제출」·「사진 제출」
 // 사진은 비공개 보관함(proof-photos)이라 잠깐 열리는 주소(10분)로만 연다 — 보관함 정책이 선생님과 그 학생 학부모만 허락한다.
 // 학생 화면에는 쓰지 않는다 (학생은 시청 화면의 ProofSubmitBox 에서 「냈다」만 본다).
 
@@ -9,8 +10,9 @@ import { supabase } from '@/lib/supabase'
 
 export type ProofSubmission = { session_id: string; video_url: string; photo_paths: string[]; submitted_at: string }
 
-export function ProofSubmissionChip({ proofUrls, subs, labelOf }: {
-  proofUrls: string[]                 // 이 수업 영상 과제 중 증명 강의 링크
+export function ProofSubmissionChip({ proofUrls, subs, labelOf, label = '증명 제출' }: {
+  proofUrls: string[]                 // 이 수업 영상 과제 중 사진을 내는 링크 (증명·컨씨)
+  label?: string                      // 「증명 제출」「풀이 제출」「사진 제출」
   subs: ProofSubmission[]             // 이 수업에 낸 것
   labelOf?: (url: string) => string   // 강의 이름 (없으면 순서 번호)
 }) {
@@ -36,13 +38,13 @@ export function ProofSubmissionChip({ proofUrls, subs, labelOf }: {
         className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
         style={all ? { background: '#EAF3DE', color: '#27500A' } : done ? { background: '#FAEEDA', color: '#633806' } : { background: '#fee2e2', color: '#991b1b' }}
         title={done ? '눌러서 사진 보기' : '아직 안 냈어요'}>
-        <i className="ti ti-writing align-[-0.125em]" /> 증명 제출 {done}/{proofUrls.length}{done ? ' · 사진 보기' : ''}
+        <i className="ti ti-writing align-[-0.125em]" /> {label} {done}/{proofUrls.length}{done ? ' · 사진 보기' : ''}
       </button>
       {open && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-gray-900">백지 증명 제출</p>
+              <p className="text-sm font-bold text-gray-900">{label === '증명 제출' ? '백지 증명 제출' : label}</p>
               <button onClick={() => setOpen(false)} className="text-gray-400"><i className="ti ti-x" /></button>
             </div>
             {proofUrls.map((u, i) => {

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:twin": "node scripts/run-twin-tests.cjs",
+    "test:twin:files": "lib/twin/twin.test.ts lib/twin/repo.test.ts lib/twin/exec006.test.ts lib/twin/exec007.test.ts lib/twin/exec008.test.ts lib/twin/exec009.test.ts lib/twin/exec010.test.ts lib/twin/exec012.test.ts lib/twin/exec014.test.ts lib/twin/exec016.test.ts lib/twin/exec017.test.ts lib/twin/exec018.test.ts lib/twin/exec019.test.ts lib/twin/exec021.test.ts lib/twin/exec025.test.ts lib/twin/exec028.test.ts lib/twin/exec029.test.ts lib/twin/exec030.test.ts lib/twin/exec032.test.ts lib/twin/exec033.test.ts lib/twin/exec034.test.ts lib/twin/exec036.test.ts lib/twin/exec037.test.ts lib/twin/exec038.test.ts lib/twin/exec040.test.ts lib/twin/exec041.test.ts lib/twin/exec042.test.ts lib/twin/exec043.test.ts lib/twin/exec044.test.ts lib/twin/exec045.test.ts",
+    "dev:learning-demo": "node scripts/dev-learning-demo.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
@@ -16,13 +19,16 @@
     "jsqr": "^1.4.0",
     "mathlive": "^0.110.0",
     "next": "16.2.6",
+    "openai": "^7.22.0",
     "pdfjs-dist": "^6.2.108",
     "postcss": "^8.5.14",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "solapi": "^6.0.1",
     "web-push": "^3.6.7",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
@@ -33,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

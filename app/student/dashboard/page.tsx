@@ -10,7 +10,7 @@ import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { getSsenbSubChapterForConceptOrder, type SsenbProblem } from '@/lib/ssenbSteps'
-import { youtubeId, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, needsPhoto, isSsenC, type LessonVideo } from '@/lib/lessonVideos'
 
 interface StudentInfo {
   id: string
@@ -693,9 +693,9 @@ export default function StudentDashboardPage() {
                               <p className="text-[10px] text-gray-400">
                                 {wl?.completed_at ? <span className="text-green-600 font-bold">시청 완료 ✓</span>
                                   : wl ? `${Math.round(Number(wl.coverage_pct))}% 봄` : '아직 안 봄'}
-                                {lesson?.kind === '증명' && (proofDone.has(`${selectedSession.id}|${url}`)
-                                  ? <span className="ml-1.5 text-green-600 font-bold">· 백지 증명 냄 ✓</span>
-                                  : <span className="ml-1.5 text-[#993C1D] font-bold">· 백지 증명 내야 해요</span>)}
+                                {needsPhoto(lesson) && (proofDone.has(`${selectedSession.id}|${url}`)
+                                  ? <span className="ml-1.5 text-green-600 font-bold">· {isSsenC(lesson) ? '풀이 사진' : '백지 증명'} 냄 ✓</span>
+                                  : <span className="ml-1.5 text-[#993C1D] font-bold">· {isSsenC(lesson) ? '풀이 사진' : '백지 증명'} 내야 해요</span>)}
                               </p>
                             )}
                           </div>

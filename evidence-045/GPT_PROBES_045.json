@@ -1,0 +1,379 @@
+{
+  "scope": "Unmodified submitted TS via transpile-only loader; SDK/NextResponse/apiAuth are explicit doubles; no PostgreSQL engine or browser",
+  "cases": [
+    {
+      "name": "P01_operational_action_route",
+      "actual": {
+        "status": 403,
+        "response": {
+          "ok": false,
+          "verdict": "rejected",
+          "mode": "operational",
+          "error": "시험(demo) 모드가 꺼져 있습니다",
+          "how": "npm run dev:learning-demo",
+          "why": "시험 입장 코드·시험 강사 쿠키·파일 저장소는 로컬 시험 전용입니다. 운영 인증(student_login · denyIfNotStaff)은 아직 연결되지 않았습니다."
+        },
+        "sdkClients": 0
+      },
+      "note": "Actual submitted POST returns before operational providers."
+    },
+    {
+      "name": "P02_staff_allowed_double_route",
+      "actual": {
+        "status": 501,
+        "response": {
+          "ok": false,
+          "mode": "operational",
+          "error": "시험(demo) 모드가 꺼져 있습니다",
+          "how": "npm run dev:learning-demo",
+          "why": "시험 입장 코드·시험 강사 쿠키·파일 저장소는 로컬 시험 전용입니다. 운영 인증(student_login · denyIfNotStaff)은 아직 연결되지 않았습니다."
+        }
+      },
+      "note": "Staff authorization is a permitted stub, not an auth proof; route still returns 501."
+    },
+    {
+      "name": "P03_student_projection",
+      "actual": {
+        "answerFieldPresent": false,
+        "answerImagePath": "private/answers/synthetic.png"
+      },
+      "note": "Only text answer stripped; solution image path remains. No real data exposed."
+    },
+    {
+      "name": "P04_auth_lookup_error_fallback",
+      "actual": {
+        "resolved": {
+          "student": {
+            "studentId": "student-A",
+            "loginCode": "",
+            "displayName": "synthetic",
+            "provenance": "operational"
+          },
+          "deny": null,
+          "source": "supabase"
+        },
+        "queries": [
+          {
+            "table": "students",
+            "steps": [
+              [
+                "select",
+                "id, name, session_uid, user_id"
+              ],
+              [
+                "eq",
+                "session_uid",
+                "auth-A"
+              ]
+            ]
+          },
+          {
+            "table": "students",
+            "steps": [
+              [
+                "select",
+                "id, name, session_uid, user_id"
+              ],
+              [
+                "eq",
+                "user_id",
+                "auth-A"
+              ]
+            ]
+          }
+        ]
+      },
+      "note": "Session query error is ignored; a successful user_id fallback is accepted. Inactive row filtering is also absent."
+    },
+    {
+      "name": "P05_store_readback_context",
+      "actual": {
+        "taskId": "101",
+        "problemId": "101",
+        "help": [
+          {
+            "actionId": "action-help",
+            "occurredAt": "2026-10-29T00:00:30Z",
+            "relationId": "rel-X",
+            "contentRefId": "",
+            "segmentKey": "full",
+            "observation": {
+              "method": "player_coverage",
+              "watchedRanges": [
+                [
+                  20,
+                  30
+                ]
+              ]
+            }
+          }
+        ],
+        "queries": [
+          {
+            "table": "learning_attempts",
+            "steps": [
+              [
+                "select",
+                "id, student_id, problem_id, started_at, updated_at"
+              ],
+              [
+                "eq",
+                "student_id",
+                "student-A"
+              ],
+              [
+                "eq",
+                "problem_id",
+                101
+              ],
+              [
+                "eq",
+                "run_id",
+                "review045"
+              ]
+            ]
+          },
+          {
+            "table": "learning_actions",
+            "steps": [
+              [
+                "select",
+                "action_id, kind, occurred_at, payload, graded"
+              ],
+              [
+                "eq",
+                "attempt_id",
+                "attempt-A"
+              ],
+              [
+                "eq",
+                "is_canonical",
+                true
+              ],
+              [
+                "order",
+                "occurred_at",
+                {
+                  "ascending": true
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      "note": "Using actual engine payload shape, task becomes problem ID and content/segment context is absent."
+    },
+    {
+      "name": "P06_bigint_rounding",
+      "actual": {
+        "rpc": "apply_learning_action",
+        "args": {
+          "p_student_id": "student-A",
+          "p_problem_id": 9007199254740992,
+          "p_source_kind": "standalone",
+          "p_source_ref": "task-X",
+          "p_run_id": "review045",
+          "p_action_id": "action-test",
+          "p_producer": "server-test",
+          "p_kind": "answer",
+          "p_occurred_at": "2026-10-29T00:00:00Z",
+          "p_payload": {
+            "answer": "synthetic"
+          },
+          "p_graded": "correct",
+          "p_watch_log_id": null
+        }
+      },
+      "note": "Supplied string exceeds safe JS integer; original adapter rounds it before RPC. Not a claim current IDs are this large."
+    },
+    {
+      "name": "P07_fixed_selection_and_scene_null",
+      "actual": {
+        "ids": [
+          "350b973a-46f6-4dee-981e-0143f8312423",
+          "8e59d4bc-1e4f-4e65-b056-40c948da4fd8",
+          "58671e09-3268-45b1-895a-34f3fca3eaaa"
+        ],
+        "queries": [
+          {
+            "table": "problems",
+            "steps": [
+              [
+                "select",
+                "id, type_code, grade, book, local_no, page_no, difficulty, is_essay, answer_kind, answer_text, image_path, answer_image_path"
+              ],
+              [
+                "eq",
+                "type_code",
+                "공수1-01-02"
+              ],
+              [
+                "eq",
+                "is_essay",
+                false
+              ],
+              [
+                "not",
+                "image_path",
+                "is",
+                null
+              ],
+              [
+                "not",
+                "answer_text",
+                "is",
+                null
+              ],
+              [
+                "order",
+                "id",
+                {
+                  "ascending": true
+                }
+              ],
+              [
+                "limit",
+                5
+              ]
+            ]
+          },
+          {
+            "table": "problems",
+            "steps": [
+              [
+                "select",
+                "id, type_code, grade, book, local_no, page_no, difficulty, is_essay, answer_kind, answer_text, image_path, answer_image_path"
+              ],
+              [
+                "eq",
+                "type_code",
+                "공수1-01-07"
+              ],
+              [
+                "eq",
+                "is_essay",
+                false
+              ],
+              [
+                "not",
+                "image_path",
+                "is",
+                null
+              ],
+              [
+                "not",
+                "answer_text",
+                "is",
+                null
+              ],
+              [
+                "order",
+                "id",
+                {
+                  "ascending": true
+                }
+              ],
+              [
+                "limit",
+                5
+              ]
+            ]
+          },
+          {
+            "table": "lesson_videos",
+            "steps": [
+              [
+                "select",
+                "id, grade, kind, order_label, title, chapter, sub_chapter, book, youtube_id, duration_seconds, scenes, type_codes, is_active"
+              ],
+              [
+                "in",
+                "id",
+                [
+                  "350b973a-46f6-4dee-981e-0143f8312423",
+                  "8e59d4bc-1e4f-4e65-b056-40c948da4fd8",
+                  "58671e09-3268-45b1-895a-34f3fca3eaaa"
+                ]
+              ],
+              [
+                "eq",
+                "is_active",
+                true
+              ]
+            ]
+          }
+        ],
+        "segments": [
+          {
+            "id": "ops-8e59d4bc-1e4f-4e65-b056-40c948da4fd8-101",
+            "segment": {
+              "startSeconds": 0,
+              "endSeconds": 0,
+              "sceneNo": 1
+            }
+          },
+          {
+            "id": "ops-58671e09-3268-45b1-895a-34f3fca3eaaa-101",
+            "segment": {
+              "startSeconds": 0,
+              "endSeconds": 0,
+              "sceneNo": 1
+            }
+          }
+        ],
+        "readiness": [
+          {
+            "videoId": "350b973a-46f6-4dee-981e-0143f8312423",
+            "title": "필수예제 02 다항식의 전개식에서 계수 구하기",
+            "targetTypeCode": "공수1-01-02",
+            "priority": 1,
+            "fetched": true,
+            "assetExists": "yes",
+            "playbackVerified": "unknown",
+            "studentAccess": "unknown",
+            "exposureReviewed": "unknown",
+            "confirmItemsReady": "no",
+            "assetExistsDisagrees": false
+          },
+          {
+            "videoId": "8e59d4bc-1e4f-4e65-b056-40c948da4fd8",
+            "title": "곱셈 공식의 변형",
+            "targetTypeCode": "공수1-01-07",
+            "priority": 2,
+            "fetched": true,
+            "assetExists": "yes",
+            "playbackVerified": "unknown",
+            "studentAccess": "unknown",
+            "exposureReviewed": "unknown",
+            "confirmItemsReady": "no",
+            "assetExistsDisagrees": false
+          },
+          {
+            "videoId": "58671e09-3268-45b1-895a-34f3fca3eaaa",
+            "title": "곱셈 공식의 변형 (4) 유도",
+            "targetTypeCode": "공수1-01-07",
+            "priority": 3,
+            "fetched": true,
+            "assetExists": "yes",
+            "playbackVerified": "unknown",
+            "studentAccess": "unknown",
+            "exposureReviewed": "unknown",
+            "confirmItemsReady": "no",
+            "assetExistsDisagrees": false
+          }
+        ]
+      },
+      "note": "Fixed IDs preserved. Null scene times are converted to 0, not left unknown; unreviewed relations remain blocked."
+    },
+    {
+      "name": "P08_choice_text_projection",
+      "actual": {
+        "answer": "30",
+        "key": "③",
+        "graded": "correct"
+      },
+      "note": "Free-text input filters characters to 1..5 rather than validating the submitted choice. First-pilot validation needed."
+    }
+  ],
+  "blockedNetworkAttempts": 0
+}

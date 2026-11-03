@@ -50,3 +50,9 @@ upload_stage/
 # 쌍둥이 생성 — 받은 그림·구운 그림·미리보기 (저장소에 넣지 않는다)
 scripts/twin-gen/work/
 scripts/twin-gen/out/
+
+# OpenAI 전용 설정파일 — 묶음·git 에 들어가면 안 된다 (GPT-EXEC-035 §108)
+.env.openai.local
+
+# 시험 학습 저장소 — 운영 자료가 아니지만 git 에 들어가지 않는다 (EXEC-041)
+.learning-test-store/

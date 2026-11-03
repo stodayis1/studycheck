@@ -1,0 +1,157 @@
+{
+ "id": "증명_04",
+ "order": "04-증명1",
+ "title": "각의 이등분선 위의 점에서 두 변까지의 거리가 같은 이유",
+ "concept_no": 4,
+ "chapter": "삼각형의 성질",
+ "sub_chapter": "삼각형의 성질 (1)",
+ "book_page": 15,
+ "figure": {
+  "image": "04/cut_02.png",
+  "crop": [
+   570,
+   300,
+   785,
+   465
+  ]
+ },
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "각의 이등분선의 성질",
+   "say": "자, 오늘은 각의 이등분선의 성질을 증명할게. // 각 에이오비의 이등분선 위의 한 점 피에서 / 두 변 오에이, 오비에 수선을 내리고 / 그 발을 각각 큐, 알이라고 하자. // {강조 첫째, 각의 이등분선 위의 점에서 두 변까지의 거리는 같다.} // 둘째, 그 반대도 성립한다는 걸 보일 거야.",
+   "write": [
+    {
+     "cue": "두 변 오에이, 오비에 수선을",
+     "tex": "점 $P$ 에서 $\\overline{OA},\\ \\overline{OB}$ 에 내린 수선의 발 $Q,\\ R$",
+     "color": "blue"
+    },
+    {
+     "cue": "두 변까지의 거리는 같다",
+     "tex": "(1) $\\angle AOP=\\angle BOP\\ \\Rightarrow\\ \\overline{PQ}=\\overline{PR}$",
+     "color": "blue"
+    }
+   ]
+  },
+  {
+   "pose": "wonder",
+   "bubble": "거리는 수선의 길이",
+   "say": "먼저 점과 직선 사이의 거리는 / {강조 그 점에서 직선에 내린 수선의 길이야.} // 그래서 두 변까지의 거리가 같다는 건 / 피큐와 피알의 길이가 같다는 뜻이죠. // 이걸 보이려고 삼각형 피오큐와 삼각형 피오알을 비교해 볼게.",
+   "write": [
+    {
+     "cue": "피큐와 피알의 길이가 같다는",
+     "tex": "거리 $=$ 수선의 길이 $\\rightarrow$ $\\overline{PQ}=\\overline{PR}$ 을 보이자",
+     "color": "red"
+    },
+    {
+     "cue": "삼각형 피오큐와 삼각형 피오알을",
+     "tex": "$\\triangle POQ$ 와 $\\triangle POR$ 에서"
+    }
+   ]
+  },
+  {
+   "pose": "pointer",
+   "bubble": "RHA 합동",
+   "say": "두 삼각형 모두 수선을 내려서 만들었으니까 / 각 피큐오와 각 피알오는 구십 도, 직각삼각형이야. // 빗변 오피는 공통이고 / 피가 이등분선 위에 있으니까 / 각 피오큐는 각 피오알과 같아. // 빗변의 길이와 한 예각의 크기가 같으니까 / {강조 두 삼각형은 알에이치에이 합동이다.}",
+   "write": [
+    {
+     "cue": "각 피큐오와 각 피알오는 구십 도",
+     "tex": "$\\angle PQO=\\angle PRO=90^\\circ$",
+     "indent": 1
+    },
+    {
+     "cue": "빗변 오피는 공통이고",
+     "tex": "$\\overline{OP}$ 는 공통, $\\angle POQ=\\angle POR$",
+     "indent": 1
+    },
+    {
+     "cue": "두 삼각형은 알에이치에이 합동",
+     "tex": "$\\therefore\\ \\triangle POQ\\equiv\\triangle POR$ (RHA 합동)",
+     "color": "red"
+    }
+   ]
+  },
+  {
+   "pose": "point",
+   "bubble": "대응변은 같다",
+   "say": "합동인 두 삼각형에서 대응변의 길이는 같으니까 / {강조 피큐는 피알과 같다.} // 이등분선 위의 어느 점을 잡아도 똑같이 되니까 / 각의 이등분선 위의 점은 두 변에서 같은 거리에 있는 거야.",
+   "write": [
+    {
+     "cue": "피큐는 피알과 같다",
+     "tex": "$\\therefore\\ \\overline{PQ}=\\overline{PR}$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "거꾸로도 될까?",
+   "say": "이번엔 거꾸로 가 볼게. // 각 에이오비의 두 변에서 같은 거리에 있는 점을 피라고 하자. / 즉 피큐와 피알의 길이가 같아. // {강조 이 점이 각의 이등분선 위에 있다}, 즉 각 피오큐와 각 피오알이 같다는 걸 보일 거야. // 이번에도 같은 두 직각삼각형을 비교해.",
+   "write": [
+    {
+     "cue": "즉 피큐와 피알의 길이가 같아",
+     "tex": "(2) $\\overline{PQ}=\\overline{PR}\\ \\Rightarrow\\ \\angle POQ=\\angle POR$",
+     "color": "blue"
+    },
+    {
+     "cue": "같은 두 직각삼각형을 비교해",
+     "tex": "$\\triangle POQ$ 와 $\\triangle POR$ 에서"
+    }
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "이번엔 RHS 합동",
+   "say": "각 피큐오와 각 피알오는 구십 도, / 빗변 오피는 공통이고 / 다른 한 변 피큐와 피알의 길이가 같죠. // 빗변과 다른 한 변의 길이가 같으니까 / {강조 이번엔 알에이치에스 합동이야.} // 대응각의 크기는 같으니까 / 각 피오큐는 각 피오알과 같다. // 즉 점 피는 각 에이오비의 이등분선 위에 있는 거다.",
+   "write": [
+    {
+     "cue": "빗변 오피는 공통이고",
+     "tex": "$\\angle PQO=\\angle PRO=90^\\circ$, $\\overline{OP}$ 는 공통",
+     "indent": 1
+    },
+    {
+     "cue": "다른 한 변 피큐와 피알의",
+     "tex": "$\\overline{PQ}=\\overline{PR}$",
+     "indent": 1
+    },
+    {
+     "cue": "이번엔 알에이치에스 합동",
+     "tex": "$\\therefore\\ \\triangle POQ\\equiv\\triangle POR$ (RHS 합동)",
+     "color": "red"
+    },
+    {
+     "cue": "각 피오큐는 각 피오알과 같다",
+     "tex": "$\\therefore\\ \\angle POQ=\\angle POR$",
+     "color": "blue",
+     "box": true
+    }
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "왜 꼭 수선일까?",
+   "say": "여기서 하나 짚고 갈게. // 만약 수선이 아니라 아무 방향으로나 선을 그으면 / 길이가 제각각이라 거리라고 할 수 없죠. // {강조 거리를 말할 때는 꼭 수선을 내려야 해.} // 그래서 직각이 생기고 / 직각삼각형의 합동 조건을 쓸 수 있었던 거야.",
+   "write": [
+    {
+     "cue": "거리를 말할 때는 꼭 수선을",
+     "tex": "거리 $\\rightarrow$ 수선 $\\rightarrow$ 직각 $\\rightarrow$ RHA, RHS",
+     "color": "red"
+    }
+   ]
+  },
+  {
+   "pose": "cheer",
+   "bubble": "각은 RHA, 거리는 RHS",
+   "say": "자, 정리할게. 두 성질 모두 수선을 내려서 직각삼각형 두 개를 만들고 / 빗변 오피를 공통으로 썼어. // {강조 각이 같으면 알에이치에이, 거리가 같으면 알에이치에스.} // 이 성질이 다음에 배울 내심의 바탕이 되니까 꼭 기억해. // 자, 영상 끄고 두 증명을 백지에 혼자 써 봐. 수고했어!",
+   "write": [
+    {
+     "cue": "각이 같으면 알에이치에이",
+     "tex": "각이 같다 $\\rightarrow$ RHA, 거리가 같다 $\\rightarrow$ RHS",
+     "color": "red",
+     "highlight": true
+    }
+   ]
+  }
+ ]
+}

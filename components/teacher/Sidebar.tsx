@@ -58,6 +58,7 @@ const ITEM = {
   myClassMap:    { href: '/teacher/class-map',      label: '내 시간표',     icon: 'ti-calendar-time' },
   attendance:    { href: '/teacher/attendance',     label: '출결관리',     icon: 'ti-calendar-check' },
   changeLog:     { href: '/teacher/change-log',     label: '변경 기록',    icon: 'ti-history' },
+  firstSet:      { href: '/teacher/learning-first-set', label: '첫 세트 확인', icon: 'ti-checkup-list' },
   settings:      { href: '/teacher/settings',       label: '설정',         icon: 'ti-settings' },
 } satisfies Record<string, NavItem>
 
@@ -80,7 +81,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {
-    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.workStatus, ITEM.settings] })
+    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
     groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords, ITEM.typeConcepts, ITEM.changeLog] })
   } else {
     // 강사도 학습기록 가져오기는 쓴다. 나머지 둘은 원장 전용 화면이라 넣지 않는다.
