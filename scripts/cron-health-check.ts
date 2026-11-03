@@ -19,6 +19,7 @@ import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
+const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
 const { RESEND_KEY, pickResend, dropDate, addResend } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
@@ -241,6 +242,15 @@ T('오전 자동 발송이 예약을 실제로 읽고, 보낸 뒤 지운다', ()
     && src.includes('RESEND_KEY') && /phase === 2/.test(src)
     && /resend: true/.test(src)
 })
+
+// ── 알림톡이 거절되면 문자로 대신 (원장님 2026-11-03 「켜줘」) ──────────────
+//   그 전까지는 꺼져 있어서, 카카오가 거절한 건은 아무 데도 안 가고 조용히 사라졌다.
+//   우리 기록에는 「나감」으로 남아 몇 주 동안 아무도 몰랐다.
+T('따로 끄지 않으면 문자 대신 보내기가 켜져 있다', () =>
+  failoverOn(undefined) === true && failoverOn('') === true && failoverOn('Y') === true)
+
+T('일부러 N 으로 두면 꺼진다', () =>
+  failoverOn('N') === false && failoverOn(' n ') === false)
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
