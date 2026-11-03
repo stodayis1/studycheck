@@ -99,6 +99,16 @@ T('배부 화면이 이 규칙들을 실제로 쓴다', () => {
     && src.includes('class_sessions')
 })
 
+// ★ 강사는 본인 담당만, 중등주임은 중등 전체 — 그 판단은 canViewStudent 한 곳에만 있다.
+//   여기서 따로 만들면 두 곳이 어긋난다. 그리고 **모드를 바꾸면 다시 읽어야** 한다.
+T('배부 화면도 보이는 학생 범위를 그대로 따른다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/videos/page.tsx'), 'utf8')
+  const 다시읽나 = /\}, \[쓸수있나, adminMode, supervisorMode\]\)/.test(src)
+  return src.includes('canViewStudent(') && 다시읽나
+    // 범위를 여기서 새로 만들지 않는다 — teacher_name 을 직접 견주면 안 된다
+    && !/teacher_name\s*===/.test(src)
+})
+
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
 process.exit(pass === total ? 0 : 1)

@@ -45,7 +45,12 @@ const MAX_BACK_DAYS = 21
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
 
 export default function VideoAssignPage() {
-  const { currentUser, canViewStudent } = useAuth()
+  // ★ 보이는 학생 범위는 **다른 화면과 똑같다** (원장님 2026-11-03 「강사들에게는 본인
+  //   학생만 … 중등주임은 중등전체, 다른 강사들은 본인학생만」).
+  //   그 판단은 canViewStudent 한 곳에만 있다 — 여기서 따로 만들지 않는다.
+  //   adminMode·supervisorMode 를 같이 본다: 모드를 바꾸면 **명단을 다시 읽어야** 한다.
+  //   안 그러면 강사모드로 바꿔도 아까 읽어 둔 전체 명단이 그대로 남는다.
+  const { currentUser, canViewStudent, adminMode, supervisorMode, supervisorLabel } = useAuth()
   const 쓸수있나 = canAssignVideos(currentUser)
 
   const [students, setStudents] = useState<StudentLite[]>([])
@@ -66,7 +71,7 @@ export default function VideoAssignPage() {
     if (!쓸수있나) { setLoading(false); return }
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [쓸수있나])
+  }, [쓸수있나, adminMode, supervisorMode])
 
   async function load() {
     setLoading(true)
@@ -227,6 +232,11 @@ export default function VideoAssignPage() {
           </div>
           <p className="text-[11px] text-gray-400 mb-2">
             기준 날짜까지의 <b>가장 최근 수업</b>에 붙습니다. 학습일지에서 하나씩 넣는 것과 같은 자리예요.
+          </p>
+          {/* ★ 어떤 범위가 보이는지 적어 둔다 — 「왜 그 학생이 없지」를 묻지 않아도 되게. */}
+          <p className="text-[11px] mb-2" style={{ color: '#3B6D11' }}>
+            <i className="ti ti-users align-[-0.125em]" />{' '}
+            {supervisorLabel() ? `${supervisorLabel()} 범위` : '내 담당 학생'} {students.length}명이 보여요
           </p>
 
           <div className="flex flex-wrap gap-1.5 mb-2">
