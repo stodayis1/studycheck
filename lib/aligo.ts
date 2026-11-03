@@ -43,9 +43,13 @@ export interface AligoConfig {
 }
 
 export class AligoError extends Error {
-  constructor(message: string, readonly code?: number) {
+  // ★ 생성자 인자에 readonly 를 붙이지 않는다 — 검사 스크립트가 쓰는 타입 벗기기
+  //   로더(scripts/ts-resolve.mjs)가 그 문법을 못 읽어서 이 파일을 통째로 못 불러온다.
+  readonly code?: number
+  constructor(message: string, code?: number) {
     super(message)
     this.name = 'AligoError'
+    this.code = code
   }
 }
 
@@ -72,8 +76,23 @@ export function aligoConfig(): AligoConfig {
     // ★ 기본이 테스트 모드다. 환경변수를 일부러 N 으로 두기 전까지는 요금도 안 나가고
     //   학부모에게도 안 간다. "설정을 안 했는데 실수로 185명에게 나갔다" 를 막는다.
     testMode: (process.env.ALIGO_TEST_MODE ?? 'Y').toUpperCase() !== 'N',
-    failover: (process.env.ALIGO_FAILOVER ?? 'N').toUpperCase() === 'Y',
+    failover: failoverOn(process.env.ALIGO_FAILOVER),
   }
+}
+
+/**
+ * 알림톡이 거절됐을 때 **문자로 대신 보낼까.**
+ *
+ * ★ 2026-11-03 부터 **켠 것이 기본**이다 (원장님 「켜줘」).
+ *   그 전까지는 꺼져 있었고, 카카오가 거절한 건은 **아무 데도 안 가고 조용히 사라졌다** —
+ *   우리 기록에는 「나감」으로 남아서 몇 주 동안 아무도 몰랐다
+ *   (알리고 실패 사유: 「메시지가 템플릿과 일치하지않음」).
+ *
+ * 문자는 알림톡보다 비싸다(본문이 길어 장문으로 나간다). 그래도 **학부모님이 아무것도
+ * 못 받는 것보다 낫다**는 판단이다. 끄려면 환경변수를 N 으로 둔다.
+ */
+export function failoverOn(v?: string | null): boolean {
+  return String(v ?? 'Y').trim().toUpperCase() !== 'N'
 }
 
 const digits = (s: string) => String(s ?? '').replace(/[^0-9]/g, '')
