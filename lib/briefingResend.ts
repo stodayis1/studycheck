@@ -30,6 +30,28 @@ export function dropDate(value: any, date: string): Record<string, string[]> {
   return out
 }
 
+/**
+ * 예약된 **모든 날짜.** 오래된 것부터.
+ *
+ * ★ 오전 발송은 「어제」만 보낸다. 그런데 다시 보낼 것은 **더 옛날 수업**일 수 있다
+ *   (원장님 2026-11-03 「지호는 29일꺼 보내고」 — 닷새 전 수업이다).
+ *   그래서 예약은 날짜를 가리지 않고 **적힌 날짜를 전부** 처리한다.
+ * ★ 한 번에 너무 많이 돌지 않게 열 날짜까지만 본다. 남은 것은 다음 날 나간다.
+ */
+export function allDates(value: any, max = 10): string[] {
+  return Object.keys((value ?? {}) as Record<string, any>)
+    .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && pickResend(value, k).length > 0)
+    .sort()
+    .slice(0, max)
+}
+
+/** 보낸 날짜들을 뺀 값. */
+export function dropDates(value: any, dates: string[]): Record<string, string[]> {
+  let out = (value ?? {}) as Record<string, string[]>
+  for (const d of dates) out = dropDate(out, d)
+  return out
+}
+
 /** 그 날짜에 사람을 더한 값. 이미 있으면 겹쳐 넣지 않는다. */
 export function addResend(value: any, date: string, ids: string[]): Record<string, string[]> {
   const out = { ...(dropDate(value, date)) }

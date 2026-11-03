@@ -26,7 +26,7 @@ import { randomBytes } from 'crypto'
 import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
 import { attachPastExamMemos } from '@/lib/pastExamMemo'
-import { RESEND_KEY, pickResend, dropDate } from '@/lib/briefingResend'
+import { RESEND_KEY, pickResend, allDates, dropDates } from '@/lib/briefingResend'
 import { buildBriefing } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
@@ -474,12 +474,22 @@ export async function GET(req: NextRequest) {
       try {
         const db = admin()
         const { data: row } = await db.from('app_settings').select('value').eq('key', RESEND_KEY).maybeSingle()
-        const ids = pickResend((row as any)?.value, date)
-        if (ids.length) {
-          const r = await run({ date, dryRun: false, studentIds: ids, resend: true })
-          summary.resent = { 예약: ids.length, 보냄: r.sent, 실패: r.failed, 오류: r.errors }
+        // ★ **적힌 날짜를 전부** 돈다. 오전 발송은 「어제」만 보내지만, 다시 보낼 것은
+        //   더 옛날 수업일 수 있다(원장님 2026-11-03 「지호는 29일꺼 보내고」).
+        const 날짜들 = allDates((row as any)?.value)
+        if (날짜들.length) {
+          const 몫 = { 예약: 0, 보냄: 0, 실패: 0, 오류: [] as { name: string; error: string }[] }
+          const 끝낸날짜: string[] = []
+          for (const d of 날짜들) {
+            const ids = pickResend((row as any)?.value, d)
+            if (!ids.length) continue
+            const r = await run({ date: d, dryRun: false, studentIds: ids, resend: true })
+            몫.예약 += ids.length; 몫.보냄 += r.sent; 몫.실패 += r.failed; 몫.오류.push(...r.errors)
+            끝낸날짜.push(d)
+          }
+          summary.resent = 몫
           await db.from('app_settings').upsert({
-            key: RESEND_KEY, value: dropDate((row as any)?.value, date), updated_at: new Date().toISOString(),
+            key: RESEND_KEY, value: dropDates((row as any)?.value, 끝낸날짜), updated_at: new Date().toISOString(),
           })
         }
       } catch (e: any) {

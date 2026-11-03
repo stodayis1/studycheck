@@ -20,7 +20,7 @@ import { pathToFileURL } from 'node:url'
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
 const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
-const { RESEND_KEY, pickResend, dropDate, addResend } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
+const { RESEND_KEY, pickResend, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
 const plus = (iso: string, min: number) => new Date(Date.parse(iso) + min * 60_000).toISOString()
@@ -229,6 +229,24 @@ T('보낸 날짜만 지우고 다른 날짜 예약은 남긴다', () => {
   return !('2026-11-02' in got) && got['2026-11-01']?.[0] === 'c'
 })
 
+// ★ 오전 발송은 「어제」만 보낸다. 다시 보낼 것은 더 옛날 수업일 수 있다.
+T('예약된 날짜를 전부 돈다 (옛날 수업도)', () => {
+  const v = { '2026-10-29': ['a'], '2026-11-02': ['b'], '엉뚱한키': ['c'], '2026-10-30': [] }
+  const got = allDates(v)
+  return got.length === 2 && got[0] === '2026-10-29' && got[1] === '2026-11-02'
+})
+
+T('한 번에 열 날짜까지만 (나머지는 다음 날)', () => {
+  const v: any = {}
+  for (let d = 1; d <= 15; d++) v[`2026-10-${String(d).padStart(2, '0')}`] = ['a']
+  return allDates(v).length === 10 && allDates(v, 3).length === 3
+})
+
+T('보낸 날짜들만 지운다', () => {
+  const got = dropDates({ '2026-10-29': ['a'], '2026-11-02': ['b'] }, ['2026-10-29'])
+  return !('2026-10-29' in got) && got['2026-11-02']?.[0] === 'b'
+})
+
 T('사람을 더해도 이미 있는 사람은 겹치지 않는다', () => {
   const got = addResend({ '2026-11-02': ['a'] }, '2026-11-02', ['a', 'b'])
   return got['2026-11-02'].length === 2
@@ -238,7 +256,7 @@ T('사람을 더해도 이미 있는 사람은 겹치지 않는다', () => {
 //   2026-11-02 에 「판정은 맞는데 화면이 안 쓴다」로 한 번 당했다 — 부르는 자리까지 본다.
 T('오전 자동 발송이 예약을 실제로 읽고, 보낸 뒤 지운다', () => {
   const src = fs.readFileSync(path.resolve('app/api/kakao-briefing/route.ts'), 'utf8')
-  return src.includes('pickResend(') && src.includes('dropDate(')
+  return src.includes('pickResend(') && src.includes('dropDates(') && src.includes('allDates(')
     && src.includes('RESEND_KEY') && /phase === 2/.test(src)
     && /resend: true/.test(src)
 })

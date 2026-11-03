@@ -78,12 +78,25 @@ const 못받음 = [...실패.keys()].filter((k) => !성공.has(k))
 console.log(`보낸 묶음 ${mids.length}건 · 성공한 짝 ${성공.size} · 실패한 짝 ${실패.size}`)
 console.log(`→ **한 번도 안 닿은 브리핑 ${못받음.length}건**\n`)
 
+// 한 학생만 보고 싶을 때: --이름 홍길동
+const 찾는이름 = (() => { const i = process.argv.indexOf('--이름'); return i > 0 ? process.argv[i + 1] : null })()
+if (찾는이름) {
+  const 그학생 = 못받음.filter((k) => k.split('|')[0] === 찾는이름).map((k) => k.split('|')[1]).sort()
+  const 받은것 = [...성공].filter((k) => k.split('|')[0] === 찾는이름).map((k) => k.split('|')[1]).sort()
+  console.log(`「${찾는이름}」 학생`)
+  console.log(`  닿은 수업 날짜 : ${받은것.join(', ') || '(없음)'}`)
+  console.log(`  못 닿은 날짜   : ${그학생.join(', ') || '(없음)'}`)
+}
+
 const 날짜별 = new Map<string, string[]>()
 for (const k of 못받음) {
   const [이름, 날짜] = k.split('|')
   날짜별.set(날짜, [...(날짜별.get(날짜) ?? []), 이름])
 }
+// 하루치 명단을 보고 싶을 때: --날짜 10-30
+const 찾는날짜 = (() => { const i = process.argv.indexOf('--날짜'); return i > 0 ? process.argv[i + 1] : null })()
 for (const [날짜, 이름들] of [...날짜별.entries()].sort()) {
   console.log(`  ${날짜} — ${이름들.length}명`)
+  if (찾는날짜 && 날짜 === 찾는날짜) console.log(`      ${[...이름들].sort().join(' · ')}`)
 }
 console.log('\n※ 이름은 알리고 본문에서 읽은 것이다. 같은 이름이 둘이면 한 줄로 묶인다.')
