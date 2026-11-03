@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/videoAssign.ts')
-const { canAssignVideos, mergeVideoUrls, pickSessionFor, VIDEO_HW_TEACHERS } = await import(pathToFileURL(target).href)
+const { canAssignVideos, mergeVideoUrls, pickSessionFor } = await import(pathToFileURL(target).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -31,15 +31,19 @@ const B = 'https://youtu.be/bbbbbbbbbbb'
 const A_꼬리 = 'https://youtu.be/aaaaaaaaaaa?si=xyz123'
 
 // ── 누가 쓸 수 있나 ─────────────────────────────────────────────────────────
+// ★ 2026-11-03 부터 **선생님이면 모두** 쓸 수 있다 (원장님 「보게 해달라니까?」).
+//   그 전에는 원장님과 주한 선생님만이었다.
 T('원장님은 모드와 상관없이 쓸 수 있다', () =>
   canAssignVideos({ role: 'admin', name: '아무개' }) === true)
 
-T('명단에 적힌 선생님도 쓸 수 있다', () =>
-  canAssignVideos({ role: 'teacher', name: VIDEO_HW_TEACHERS[0] }) === true)
+T('강사·직원 누구나 쓸 수 있다 (메뉴가 보여야 한다)', () =>
+  canAssignVideos({ role: 'teacher', name: '홍길동' }) === true
+  && canAssignVideos({ role: 'teacher', name: null }) === true
+  && canAssignVideos({ role: 'staff', name: '아무개' }) === true)
 
-T('그 밖의 선생님은 못 쓴다 (아직 시험 중인 기능이다)', () =>
-  canAssignVideos({ role: 'teacher', name: '홍길동' }) === false
-  && canAssignVideos(null) === false && canAssignVideos({}) === false)
+T('로그인 안 했거나 역할이 없으면 못 쓴다', () =>
+  canAssignVideos(null) === false && canAssignVideos({}) === false
+  && canAssignVideos({ role: 'student' }) === false)
 
 // ── 이어 붙이기 ─────────────────────────────────────────────────────────────
 // ★ 선생님이 넣어 둔 영상이 날아가면 안 된다.
@@ -97,6 +101,16 @@ T('배부 화면이 이 규칙들을 실제로 쓴다', () => {
   const src = fs.readFileSync(p, 'utf8')
   return src.includes('mergeVideoUrls(') && src.includes('pickSessionFor(') && src.includes('canAssignVideos(')
     && src.includes('class_sessions')
+})
+
+// ★ 강사는 본인 담당만, 중등주임은 중등 전체 — 그 판단은 canViewStudent 한 곳에만 있다.
+//   여기서 따로 만들면 두 곳이 어긋난다. 그리고 **모드를 바꾸면 다시 읽어야** 한다.
+T('배부 화면도 보이는 학생 범위를 그대로 따른다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/videos/page.tsx'), 'utf8')
+  const 다시읽나 = /\}, \[쓸수있나, adminMode, supervisorMode\]\)/.test(src)
+  return src.includes('canViewStudent(') && 다시읽나
+    // 범위를 여기서 새로 만들지 않는다 — teacher_name 을 직접 견주면 안 된다
+    && !/teacher_name\s*===/.test(src)
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
