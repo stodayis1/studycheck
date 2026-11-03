@@ -25,6 +25,8 @@ import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherRemind
 import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
 import { checkCronRuns, loadRecentCronRuns, type CronProblem } from '@/lib/cronHealth'
+import { fetchAligoRows, summarize, aligoProblems } from '@/lib/aligoResults'
+import { aligoPost } from '@/lib/aligo'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 import { sendSmsViaOps } from '@/lib/opsSms'
 
@@ -353,6 +355,20 @@ export async function runWatchCron(req: NextRequest) {
   try {
     const rows = await loadRecentCronRuns(db)
     const problems = checkCronRuns(rows, Date.now())
+
+    // ★ 알리고에 **실제 전송 결과**를 물어본다 (2026-11-03).
+    //   우리 기록은 「접수됨」까지만 안다. 카카오가 거절해도 「나감」으로 남아서,
+    //   10-20 ~ 10-31 에 1,074건이 거절된 것을 열하루 동안 아무도 몰랐다.
+    //   ★ 못 물어봐도 점검을 멈추지 않는다 — 나머지 점검은 그대로 돌아야 한다.
+    try {
+      const 어제 = kstDate(-1)
+      const 오늘 = kstDate(0)
+      const 결과 = summarize(await fetchAligoRows(aligoCall, 어제, 오늘))
+      out.aligo = { 본것: 결과.전체, 성공: 결과.성공, 실패: 결과.실패, 사유: 결과.사유별 }
+      problems.push(...aligoProblems(결과, 오늘))
+    } catch (e: any) {
+      out.aligo = { error: e?.message ?? '알리고에 물어보지 못했어요' }
+    }
     const already = new Set<string>(rows.flatMap((r) => (r.phase.startsWith('watch') ? r.result?.alerted ?? [] : [])))
     const fresh = problems.filter((p) => !already.has(p.key))
     out.problems = problems.map((p) => `${p.label} · ${p.kind} · ${p.detail}`)
@@ -381,6 +397,14 @@ export async function runWatchCron(req: NextRequest) {
     } catch { /* 기록이 안 남으면 다음 감시가 같은 문제를 한 번 더 알린다 — 그쪽이 낫다 */ }
   }
   return NextResponse.json(out)
+}
+
+/** 알리고에 물어볼 때 쓰는 부르개. 열쇠는 환경변수에서만 읽고 어디에도 찍지 않는다. */
+async function aligoCall(path: string, params: Record<string, string>) {
+  const apikey = process.env.ALIGO_API_KEY
+  const userid = process.env.ALIGO_USER_ID
+  if (!apikey || !userid) throw new Error('알리고 설정값이 없어요')
+  return aligoPost(path, new URLSearchParams({ apikey, userid, ...params }).toString())
 }
 
 /** 원장(users.role=admin) 이름으로 수학OPS 번호를 찾는다. 선생님 번호는 쓰지 않는다. */

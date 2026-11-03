@@ -20,6 +20,7 @@ import { pathToFileURL } from 'node:url'
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
 const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
+const { fetchAligoRows, summarize, aligoProblems } = await import(pathToFileURL(path.resolve('lib/aligoResults.ts')).href)
 const { RESEND_KEY, pickResend, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
@@ -264,11 +265,69 @@ T('오전 자동 발송이 예약을 실제로 읽고, 보낸 뒤 지운다', ()
 // ── 알림톡이 거절되면 문자로 대신 (원장님 2026-11-03 「켜줘」) ──────────────
 //   그 전까지는 꺼져 있어서, 카카오가 거절한 건은 아무 데도 안 가고 조용히 사라졌다.
 //   우리 기록에는 「나감」으로 남아 몇 주 동안 아무도 몰랐다.
-T('따로 끄지 않으면 문자 대신 보내기가 켜져 있다', () =>
-  failoverOn(undefined) === true && failoverOn('') === true && failoverOn('Y') === true)
+// ★ 원장님 2026-11-03 「문자대체하면 안될거 같아」 — 기본은 **꺼짐**이다.
+//   그래서 거절을 빨리 아는 것이 유일한 방어다(아래 알리고 점검).
+T('문자 대신 보내기는 따로 켜지 않으면 꺼져 있다', () =>
+  failoverOn(undefined) === false && failoverOn('') === false && failoverOn('N') === false)
 
-T('일부러 N 으로 두면 꺼진다', () =>
-  failoverOn('N') === false && failoverOn(' n ') === false)
+T('일부러 Y 로 두면 켜진다', () =>
+  failoverOn('Y') === true && failoverOn(' y ') === true)
+
+// ── 알리고 실제 결과 점검 (2026-11-03) ─────────────────────────────────────
+//   우리 기록은 「접수됨」까지만 안다. 카카오가 거절해도 「나감」으로 남아서,
+//   10-20 ~ 10-31 에 1,074건이 거절된 것을 열하루 동안 아무도 몰랐다.
+const 줄 = (rslt: string, msg: string, when = '2026-11-03 11:01:00') =>
+  ({ phone: '01000000000', rslt, msg, tpl: 'UM_0000', when })
+
+T('성공만 있으면 아무 말도 안 한다', () => {
+  const s = summarize([줄('0', '성공'), 줄('0', '성공')])
+  return s.성공 === 2 && s.실패 === 0 && aligoProblems(s, '2026-11-03').length === 0
+})
+
+// ★ 한 건이 보통 전조다 — 2026-10-20 에도 처음엔 몇 건이었다.
+T('거절이 한 건이라도 있으면 알린다', () => {
+  const s = summarize([줄('0', '성공'), 줄('U', '메시지가 템플릿과 일치하지않음')])
+  const p = aligoProblems(s, '2026-11-03')
+  return s.실패 === 1 && p.length === 1 && p[0].kind === '오류'
+    && p[0].detail.includes('메시지가 템플릿과 일치하지않음') && p[0].detail.includes('1건')
+})
+
+T('사유가 여럿이면 많은 것부터, 사유마다 따로 알린다', () => {
+  const s = summarize([줄('U', '템플릿 불일치'), 줄('U', '템플릿 불일치'), 줄('M', '템플릿 없음')])
+  const p = aligoProblems(s, '2026-11-03')
+  return p.length === 2 && p[0].detail.startsWith('2건') && p[1].detail.startsWith('1건')
+})
+
+// 같은 사유를 날마다 한 번만 알린다 (문자가 쏟아지지 않게)
+T('같은 날 같은 사유는 열쇠가 같다', () => {
+  const a = aligoProblems(summarize([줄('U', '템플릿 불일치')]), '2026-11-03')[0]
+  const b = aligoProblems(summarize([줄('U', '템플릿 불일치'), 줄('U', '템플릿 불일치')]), '2026-11-03')[0]
+  const c = aligoProblems(summarize([줄('U', '템플릿 불일치')]), '2026-11-04')[0]
+  return a.key === b.key && a.key !== c.key
+})
+
+T('실패한 날짜도 센다', () => {
+  const s = summarize([줄('U', 'x', '2026-11-02 20:00:00'), 줄('U', 'x', '2026-11-03 11:00:00')])
+  return s.실패날짜별['2026-11-02'] === 1 && s.실패날짜별['2026-11-03'] === 1
+})
+
+// ★ 그물에 안 걸리고 시험한다 — 알리고 대신 **가짜 부르개**를 넣는다.
+let 목록부름 = 0, 상세부름 = 0
+const 가짜알리고 = async (path: string, params: Record<string, string>) => {
+  if (path.includes('list')) {
+    목록부름++
+    return { list: 목록부름 === 1 ? [{ mid: '1' }, { mid: '2' }] : [] }
+  }
+  상세부름++
+  return { list: [{ phone: '01011112222', rslt: params.mid === '1' ? '0' : 'U',
+    rslt_message: params.mid === '1' ? '성공' : '거절', tpl_code: 'UM_1', sentdate: '2026-11-03 11:00:00' }] }
+}
+const 가짜줄들 = await fetchAligoRows(가짜알리고 as any, '2026-11-02', '2026-11-03')
+
+T('묶음 목록을 받아 묶음마다 수신자별 결과를 모은다', () =>
+  가짜줄들.length === 2 && 상세부름 === 2
+  && 가짜줄들.filter((r: any) => r.rslt === '0').length === 1
+  && summarize(가짜줄들).실패 === 1)
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
