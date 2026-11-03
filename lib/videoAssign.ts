@@ -10,20 +10,24 @@
 
 import { youtubeId } from './lessonVideos'
 
-/** 영상 과제 칸을 쓸 수 있는 선생님 (원장님은 늘 쓸 수 있다). 학습일지 쪽과 같은 명단이다. */
-export const VIDEO_HW_TEACHERS = ['주한']
-
 /**
- * 이 사람이 영상 과제를 배부할 수 있나.
+ * 영상 과제를 쓸 수 있는 사람 — **선생님이면 모두.**
+ *
+ * ★ 2026-11-03 부터 전원에게 열렸다 (원장님 「강사들은 안보인다는데? 영상과제 메뉴가
+ *   안보이면 안돼지. 보게 해달라니까?」).
+ *   그 전에는 시험 중이라 원장님과 주한 선생님께만 보였다(2026-10-20 ~ 11-03).
  *
  * ★ `isAdmin()` 이 아니라 **역할**로 본다. isAdmin() 은 「관리자모드」 토글까지 보기 때문에,
  *   원장님이 강사모드로 보시는 동안 원장님께도 메뉴가 사라진다
  *   (학습일지에서 2026-10-21 에 똑같이 당했다).
+ *
+ * ★ **누가 쓰느냐**와 **누가 보이느냐**는 다른 일이다. 이걸 열어도 배부 화면에 뜨는
+ *   학생은 `canViewStudent` 가 정한다 — 강사는 본인 담당만, 중등주임은 중등 전체.
  */
+const STAFF_ROLES = ['admin', 'teacher', 'staff']
+
 export function canAssignVideos(user?: { role?: string | null; name?: string | null } | null): boolean {
-  if (!user) return false
-  if (user.role === 'admin') return true
-  return !!user.name && VIDEO_HW_TEACHERS.includes(user.name)
+  return !!user && STAFF_ROLES.includes(String(user.role ?? ''))
 }
 
 /**
