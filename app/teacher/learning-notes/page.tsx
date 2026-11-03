@@ -20,6 +20,7 @@ import { splitTeachers } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
+import { canAssignVideos } from '@/lib/videoAssign'
 import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
 import { summarizeResponses } from '@/lib/nameCalls'
 import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
@@ -55,7 +56,7 @@ const TEACHER_CAMPUS: Record<string, '코어관' | '프라임관'> = {
  * (원장님 2026-10-20 「다른 강사들한테는 안보이게」 → 2026-10-29 「주한강사에게 열어줘」).
  * 다 되면 이 목록과 아래 `canVideoHw` 조건을 지우면 모두에게 열린다.
  */
-const VIDEO_HW_TEACHERS = ['주한']
+// ★ 명단은 lib/videoAssign.ts 한 곳에만 둔다 — 메뉴·배부 화면·이 칸이 같이 움직여야 한다.
 
 // 오토스텝 파일럿 2단계: 소단원(=concepts의 chapter+sub_chapter) 안의 모든 개념을 다 체크하면
 // 그 소단원에 해당하는 유형편 숙제를 자동으로 과제 화면에 알림으로 띄운다. 지금은 윤수지 학생 한 명 +
@@ -4914,8 +4915,7 @@ ${e?.message ?? '연결 실패'}
                         상관없이 보이는 것이 맞다 — 숨기려던 대상은 다른 강사들이다.
                       ★ 2026-10-29 부터 VIDEO_HW_TEACHERS 에 적힌 선생님께도 열린다(주한 선생님).
                       테스트가 끝나면 이 한 줄만 지우면 모두에게 열린다. */}
-                {(currentUser?.role === 'admin'
-                  || (!!currentUser?.name && VIDEO_HW_TEACHERS.includes(currentUser.name))) && (
+                {canAssignVideos(currentUser) && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-gray-700">영상 과제 링크</label>

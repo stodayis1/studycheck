@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { canAssignVideos } from '@/lib/videoAssign'
 import { apiFetch } from '@/lib/apiFetch'
 
 function cx(...classes: (string|boolean|undefined|null)[]) {
@@ -33,6 +34,7 @@ const ITEM = {
   //   2026-10-26 에 「학습지 배부」로 갈랐다가, 배부만 하는 곳이 아니라 배정·점수·다음 단계까지
   //   하는 곳이라 2026-10-29 에 화면 제목과 같은 「학습지관리」로 되돌렸다 (원장님 지시).
   assignments:   { href: '/teacher/assignments',    label: '학습지관리',   icon: 'ti-file-text' },
+  videoAssign:   { href: '/teacher/assignments/videos', label: '영상과제 배부', icon: 'ti-device-tv' },
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
   // 화면 제목이 「시험대비 관리」인데 메뉴만 「시험배정」이라 서로 달랐다. 화면 쪽에 맞췄다.
   examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },
@@ -66,13 +68,15 @@ const ITEM = {
 //   · 출결관리는 '보고'가 아니라 '학생' 쪽으로 (학생을 보다가 바로 넘어간다)
 //   · 내 기록은 '수업'이 아니라 '보고' 쪽으로 (남이 아니라 내 것을 돌아보는 화면)
 //   · 학습기록 가져오기·대표개념 연결·변경 기록은 가끔 쓰므로 접어 둔다
-function buildNavGroups(admin: boolean, showBulk: boolean): NavGroup[] {
+function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
       ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.schools] },
-    { title: '과제 · 평가', items: [ITEM.assignments, ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
+    // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
+    // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
+    { title: '과제 · 평가', items: [ITEM.assignments, ...(영상과제 ? [ITEM.videoAssign] : []), ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {
@@ -125,7 +129,7 @@ export function TeacherSidebar() {
   }, [currentUser, adminMode, pathname])
 
   const showBulk = isAdmin() || bulkEnabled
-  const navGroups = buildNavGroups(isAdmin(), showBulk)
+  const navGroups = buildNavGroups(isAdmin(), showBulk, canAssignVideos(currentUser))
   const mobileMainHrefs = new Set(MOBILE_MAIN.map((i) => i.href))
   const mobileMoreGroups = navGroups
     .map((g) => ({ ...g, items: g.items.filter((i) => !mobileMainHrefs.has(i.href)) }))
