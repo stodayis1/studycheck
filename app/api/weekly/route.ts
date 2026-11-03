@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { staffOrDeny } from '@/lib/apiAuth'
 import { staffCanSeeStudent } from '@/lib/teachers'
 import { fetchAll } from '@/lib/fetchAll'
+import { needsPhoto, photoLabel } from '@/lib/lessonVideos'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -92,7 +93,7 @@ export async function GET(req: Request) {
     Promise.all(vChunks.map((c) =>
       supabase.from('proof_submissions').select('session_id, video_url, submitted_at, photo_paths').in('session_id', c))),
     vIds.length
-      ? supabase.from('lesson_videos').select('youtube_id, kind, title, order_label')
+      ? supabase.from('lesson_videos').select('youtube_id, grade, kind, title, order_label')
       : Promise.resolve({ data: [] as any[], error: null }),
   ])
   const watchRows: any[] = []
@@ -200,12 +201,13 @@ export async function GET(req: Request) {
     })
 
     // 증명 영상이 섞인 날만 — 증명을 안 내준 날에 「증명 0/0」이 뜨면 잔소리가 된다
-    const proofUrls = urls.filter((u) => lv.get(ytId(u) ?? '')?.kind === '증명')
+    // 컨씨영상(직접 푼 풀이 사진)도 같은 배지 — 이름만 「풀이」「사진」 (photoLabel)
+    const proofUrls = urls.filter((u) => needsPhoto(lv.get(ytId(u) ?? '')))
     if (proofUrls.length) {
       const got = proofUrls.filter((u) => subs.some((p) => p.video_url === u)).length
       push(x.student_id, x.session_date, {
         kind: 'proof',
-        label: `증명 ${got}/${proofUrls.length}`,
+        label: `${photoLabel(proofUrls.map((u) => lv.get(ytId(u) ?? ''))).replace(' 제출', '')} ${got}/${proofUrls.length}`,
         value: Math.round((got / proofUrls.length) * 100),
         unit: '%',
         title: proofUrls.map((u, i) =>

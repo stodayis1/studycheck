@@ -1,10 +1,12 @@
 // 증명 백지 제출 — 학생이 증명 영상을 다 본 뒤, 백지에 직접 쓴 증명 사진(최대 3장)을 낸다. 채점 없음.
+// 컨씨영상(쎈 C단계 풀이, grade 「쎈C …」)도 같은 길로 「직접 푼 풀이」 사진을 낸다 (원장님 2026-11-03).
 // 학생은 이 API 로만 낸다(표·보관함에 직접 못 씀). 여기서 「내 과제인지 · 영상을 다 봤는지」를 확인한다.
 //   POST multipart: sessionId, videoUrl, photos(1~3, jpeg/png/webp, 각 5MB 이하)
 // 사진: proof-photos/<student_id>/<session_id>/<n>.jpg (비공개 — 선생님·그 학생 학부모만 열림)
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { needsPhoto } from '@/lib/lessonVideos'
 
 const MAX = 3
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -32,14 +34,14 @@ export async function POST(req: Request) {
     if (p.size > 5 * 1024 * 1024) return NextResponse.json({ error: '사진 한 장이 너무 커요(5MB까지).' }, { status: 400 })
   }
 
-  // 내 과제가 맞나 — 그 수업의 영상 과제에 이 링크가 있어야 하고, 증명 강의여야 한다
+  // 내 과제가 맞나 — 그 수업의 영상 과제에 이 링크가 있어야 하고, 증명 강의나 컨씨영상이어야 한다
   const { data: session } = await db.from('class_sessions').select('id, student_id, video_url').eq('id', sessionId).maybeSingle()
   if (!session || session.student_id !== student.id) return NextResponse.json({ error: '내 과제가 아니에요.' }, { status: 403 })
   const urls = String(session.video_url ?? '').split('\n').map((u) => u.trim())
   if (!urls.includes(videoUrl)) return NextResponse.json({ error: '과제에 없는 영상이에요.' }, { status: 400 })
   const yt = videoUrl.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1]
-  const { data: lesson } = await db.from('lesson_videos').select('id, kind').eq('youtube_id', yt ?? '').maybeSingle()
-  if (!lesson || lesson.kind !== '증명') return NextResponse.json({ error: '증명 영상 과제만 사진을 내요.' }, { status: 400 })
+  const { data: lesson } = await db.from('lesson_videos').select('id, grade, kind').eq('youtube_id', yt ?? '').maybeSingle()
+  if (!needsPhoto(lesson)) return NextResponse.json({ error: '증명·컨씨 영상 과제만 사진을 내요.' }, { status: 400 })
 
   // 영상을 다 봤나 — 시청 기록의 완료(90% 이상)
   const { data: log } = await db.from('video_watch_logs').select('completed_at')

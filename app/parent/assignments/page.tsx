@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
-import { youtubeId, lessonLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, lessonLabel, needsPhoto, photoLabel, type LessonVideo } from '@/lib/lessonVideos'
 import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
 interface ClassSession {
@@ -330,7 +330,8 @@ export default function ParentAssignmentsPage() {
                         <span className="text-[10px] text-gray-400">{videoUrls.length}개</span>
                         <span className="ml-auto">
                           <ProofSubmissionChip
-                            proofUrls={videoUrls.filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명')}
+                            proofUrls={videoUrls.filter((u) => needsPhoto(lessonByYt[youtubeId(u) || '']))}
+                            label={photoLabel(videoUrls.map((u) => lessonByYt[youtubeId(u) || '']))}
                             subs={proofSubs.filter((p) => p.session_id === session.id)}
                             labelOf={(u) => lessonLabel(lessonByYt[youtubeId(u) || ''])} />
                         </span>
