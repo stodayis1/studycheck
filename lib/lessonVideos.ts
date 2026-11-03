@@ -36,6 +36,20 @@ export function fmtDuration(sec: number | null | undefined): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+/** 컨씨영상 = 쎈 C단계 선별 문항을 강사가 직접 풀어 찍은 영상 (grade 「쎈C 중3-2」). AI 이름 부르기를 하지 않는다 (원장님 2026-11-03) */
+export const isSsenC = (v: Pick<LessonVideo, 'grade'> | null | undefined) => !!v?.grade?.startsWith('쎈C')
+
+/** 다 본 뒤 사진을 내는 영상 — 증명(백지 증명)과 컨씨영상(직접 푼 풀이) */
+export const needsPhoto = (v: Pick<LessonVideo, 'grade' | 'kind'> | null | undefined) => v?.kind === '증명' || isSsenC(v)
+
+/** 제출 칩·배지 이름: 증명만이면 「증명 제출」, 컨씨만이면 「풀이 제출」, 섞이면 「사진 제출」 */
+export function photoLabel(lessons: (Pick<LessonVideo, 'grade' | 'kind'> | null | undefined)[]): string {
+  const ls = lessons.filter(needsPhoto)
+  if (ls.length && ls.every(isSsenC)) return '풀이 제출'
+  if (ls.some(isSsenC)) return '사진 제출'
+  return '증명 제출'
+}
+
 /** 「03-증명2 · 세 변을 …」처럼 목록에 쓰는 이름 */
 export const lessonLabel = (v: Pick<LessonVideo, 'order_label' | 'title'>) => `${v.order_label} · ${v.title}`
 
