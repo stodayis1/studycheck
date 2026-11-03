@@ -130,43 +130,53 @@ for pi in range(doc.page_count):
                         clip=pymupdf.Rect(x0, y0, x1, y1)).save(os.path.join(out, f'{no}.png'))
         made[no] = dict(page=pi + 1, h=round(y1 - y0, 1), w=round(x1 - x0, 1))
 
-# 2차 — 단(칸)을 못 맞춘 쪽은 **지면에 적힌 차례 그대로** 번호표 → 바로 다음 「답」 으로 짝짓는다.
-# 풀이 지면은 번호와 답 사이에 풀이 여러 줄이 끼어, 단으로 가르는 1차 규칙이 잘 막힌다.
+# 2차 — 1차로 못 뜬 것. 풀이가 길면 **답이 다음 단·다음 쪽으로 넘어간다.**
+# 그래서 문서 전체를 한 줄로 이어 놓고 번호표 → 바로 다음 「답」 으로 짝짓는다.
+seq = []                                   # (쪽, 줄) — 쪽 차례 · 쪽 안에서는 글자 뽑힌 차례
+pages = {}
 for pi in range(doc.page_count):
     page = doc[pi]
     L = [l for l in lines_of(page) if l['x0'] < page.rect.x1 - 32]
-    seq = [l for l in L if NO.match(l['t']) or l['t'].startswith('답')]
-    for k, l in enumerate(seq):
-        m = NO.match(l['t'])
-        if not m:
-            continue
-        no = m.group(1)
-        if no not in want or no in made:
-            continue
-        nxt = seq[k + 1] if k + 1 < len(seq) else None
-        if nxt is None or NO.match(nxt['t']):      # 다음이 또 번호표면 이 번호의 답은 이 쪽에 없다
-            continue
-        ans = nxt
-        after = [x for x in seq if x['y0'] > ans['y0'] + 2 and x['x0'] > ans['x0'] - 40]
-        stop = min([x['y0'] for x in after], default=page.rect.y1) - 2
-        near = sorted([x for x in L if ans['x0'] - 2 <= x['x0'] <= ans['x0'] + 40
-                       and ans['y0'] - 3 <= x['y0'] < stop], key=lambda z: z['y0'])
-        band = []
-        for x in near:
-            if band and x['y0'] - band[-1]['y1'] > 8:
-                break
-            band.append(x)
-        if not band:
-            continue
-        x0 = max(ans['x0'] - 3, 0)
-        x1 = min(max(cut_at_gap(x) for x in band) + 3, page.rect.x1 - 6)
-        y0 = ans['y0'] - 4
-        y1 = min(stop, max(x['y1'] for x in band) + 3)
-        if y1 - y0 < 6 or x1 - x0 < 10:
-            continue
-        page.get_pixmap(matrix=pymupdf.Matrix(ZOOM, ZOOM),
-                        clip=pymupdf.Rect(x0, y0, x1, y1)).save(os.path.join(out, f'{no}.png'))
-        made[no] = dict(page=pi + 1, h=round(y1 - y0, 1), w=round(x1 - x0, 1), way='차례')
+    pages[pi] = L
+    for l in L:
+        if NO.match(l['t']) or l['t'].startswith('답'):
+            seq.append((pi, l))
+
+for k, (pi, l) in enumerate(seq):
+    m = NO.match(l['t'])
+    if not m:
+        continue
+    no = m.group(1)
+    if no not in want or no in made:
+        continue
+    if k + 1 >= len(seq):
+        continue
+    pj, ans = seq[k + 1]
+    if NO.match(ans['t']):                 # 다음이 또 번호표 → 이 번호의 답을 못 찾았다
+        continue
+    page = doc[pj]
+    L = pages[pj]
+    after = [x for x in L if x['y0'] > ans['y0'] + 2 and x['x0'] > ans['x0'] - 40
+             and (NO.match(x['t']) or x['t'].startswith('답'))]
+    stop = min([x['y0'] for x in after], default=page.rect.y1) - 2
+    near = sorted([x for x in L if ans['x0'] - 2 <= x['x0'] <= ans['x0'] + 40
+                   and ans['y0'] - 3 <= x['y0'] < stop], key=lambda z: z['y0'])
+    band = []
+    for x in near:
+        if band and x['y0'] - band[-1]['y1'] > 8:
+            break
+        band.append(x)
+    if not band:
+        continue
+    x0 = max(ans['x0'] - 3, 0)
+    x1 = min(max(cut_at_gap(x) for x in band) + 3, page.rect.x1 - 6)
+    y0 = ans['y0'] - 4
+    y1 = min(stop, max(x['y1'] for x in band) + 3)
+    if y1 - y0 < 6 or x1 - x0 < 10:
+        continue
+    page.get_pixmap(matrix=pymupdf.Matrix(ZOOM, ZOOM),
+                    clip=pymupdf.Rect(x0, y0, x1, y1)).save(os.path.join(out, f'{no}.png'))
+    made[no] = dict(page=pj + 1, h=round(y1 - y0, 1), w=round(x1 - x0, 1), way='차례')
 
 miss = sorted(want - set(made))
 json.dump(made, io.open(os.path.join(out, '_뜬것.json'), 'w', encoding='utf8'), ensure_ascii=False, indent=1)
