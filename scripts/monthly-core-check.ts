@@ -154,11 +154,39 @@ T('옛 리포트 스냅샷을 만나도 깨지지 않게 걸러 둔다', () => {
 })
 
 // ★ 폰(375px)에서 16회가 되면 칸이 17px 이 되어 날짜·점수가 잘렸다(실측 2026-11-04).
-T('칸이 26px 보다 좁아지지 않게 바닥을 둔다 (좁으면 옆으로 민다)', () => {
+T('칸이 30px 보다 좁아지지 않게 바닥을 둔다 (좁으면 옆으로 민다)', () => {
   const src = fs.readFileSync(path.resolve('components/report/MonthlyReport.tsx'), 'utf8')
-  return /const CGMIN = core\.length \* 26 \+ Math\.max\(0, core\.length - 1\) \* 4/.test(src)
+  return /const CGMIN = core\.length \* 30\b/.test(src)
     && (src.match(/style=\{\{ minWidth: CGMIN \}\}/g) ?? []).length === 2   // 그래프와 날짜 줄이 같이 밀려야 한다
-    && /\.mr \.cgscroll\{overflow-x:auto/.test(src)
+    && /\.mr \.cgscroll\{[^}]*overflow-x:auto/.test(src)
+})
+
+// ★ 추이 선은 **칸 가운데**를 이어야 한다. 칸 사이에 틈(gap)이 있으면 가운데가 (i+0.5)/n 이 아니어서
+//   선이 막대와 어긋난다 — 그래서 틈을 칸 안쪽으로 넣고 gap 을 0 으로 둔다.
+T('추이 선이 칸 가운데를 잇는다 (칸 사이 틈이 0이라야 맞다)', () => {
+  const src = fs.readFileSync(path.resolve('components/report/MonthlyReport.tsx'), 'utf8')
+  const plot = /\.mr \.cgplot\{([^}]*)\}/.exec(src)?.[1] ?? ''
+  const xrow = /\.mr \.cgx\{([^}]*)\}/.exec(src)?.[1] ?? ''
+  return /\$\{i \+ 0\.5\},\$\{100 - 높이\(c\.pct\)\}/.test(src)
+    && /gap:\s*0(;|$)/.test(plot) && /gap:\s*0(;|$)/.test(xrow)
+    && src.includes('preserveAspectRatio="none"')          // 가로로 늘어나 칸과 같이 움직인다
+    && src.includes('vectorEffect="non-scaling-stroke"')   // 늘려도 선 굵기는 그대로
+})
+
+// ★ 두 번째 그림(원장님 2026-11-04)대로 — 점·추이 선·평균 선·본고사 테두리.
+T('점·평균 선·본고사 테두리가 있다 (상자 셋도, 맨 막대도 아니다)', () => {
+  const src = fs.readFileSync(path.resolve('components/report/MonthlyReport.tsx'), 'utf8')
+  const cmain = /\.mr \.cmain\{([^}]*)\}/.exec(src)?.[1] ?? ''
+  return src.includes('className="cgdot"')      // 막대 끝 점
+    && src.includes('className="cgavg"')        // 평균 가로선
+    && src.includes('<polyline')                // 점을 잇는 추이 선
+    && /border:[^;]*#712B13/.test(cmain)        // 본고사는 테두리로 갈린다
+})
+
+// ★ 점수 글자가 점 **위로** 올라가야 점을 가리지 않는다(점 지름 5px).
+T('점수 글자를 점 위로 올린다', () => {
+  const src = fs.readFileSync(path.resolve('components/report/MonthlyReport.tsx'), 'utf8')
+  return /bottom: `calc\(\$\{높이\(c\.pct\)\}% \+ 6px\)`/.test(src)
 })
 
 T('막대 굵기를 고정하지 않는다 (회가 쌓이면 저절로 얇아져야 한다)', () => {

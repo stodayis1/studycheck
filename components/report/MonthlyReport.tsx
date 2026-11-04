@@ -62,17 +62,26 @@ const CSS = `
 .mr .cglg span{display:inline-flex;align-items:center;gap:4px}
 .mr .cglg i{width:9px;height:9px;border-radius:2px;display:inline-block}
 .mr .cglg em{font-style:normal;margin-left:auto;font-size:9.5px;color:#8C7B72}
-.mr .cpre{background:#9FE1CB}
-.mr .cmain{background:#712B13}
-.mr .cetc{background:#CDBFB5}
-.mr .cgscroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:2px}
-.mr .cgplot{position:relative;display:flex;align-items:stretch;gap:4px;height:146px;padding-top:15px;box-sizing:border-box;border-bottom:1px solid #D9C9BD}
-.mr .cggrid{position:absolute;left:0;right:0;top:15px;bottom:0;background:repeating-linear-gradient(to top,#EFE4DC 0,#EFE4DC 1px,transparent 1px,transparent 25%)}
+.mr .cpre{background:#BCE7D7;border:1px solid #86CFB6}
+.mr .cmain{background:#F6E2CD;border:2px solid #712B13}
+.mr .cetc{background:#E8E0D9;border:1px solid #D2C5BB}
+.mr .cgwrap{display:flex;align-items:flex-start;gap:4px}
+.mr .cgax{position:relative;flex:0 0 auto;width:21px;height:152px;padding-top:20px;box-sizing:border-box}
+.mr .cgax div{position:relative;height:100%}
+.mr .cgax i{position:absolute;right:0;font-style:normal;font-size:8.5px;color:#B3A49B;line-height:1;transform:translateY(50%)}
+.mr .cgscroll{flex:1 1 0;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.mr .cgplot{position:relative;display:flex;align-items:stretch;gap:0;height:152px;padding-top:20px;box-sizing:border-box;border-bottom:1px solid #D9C9BD}
+.mr .cggrid{position:absolute;left:0;right:0;top:20px;bottom:0;background:repeating-linear-gradient(to top,#EFE4DC 0,#EFE4DC 1px,transparent 1px,transparent 50%)}
+.mr .cgover{position:absolute;left:0;right:0;top:20px;bottom:0}
+.mr .cgavg{position:absolute;left:0;right:0;border-top:1px dashed #C9B6A8}
+.mr .cgavg b{position:absolute;right:0;bottom:2px;font-size:8.5px;font-weight:700;color:#9C8A7F;background:#FFFBF7;padding:0 3px;white-space:nowrap}
+.mr .cgline{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
 .mr .cgcol{position:relative;flex:1 1 0;min-width:0}
-.mr .cgbar{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:40px;min-height:2px;border-radius:3px 3px 0 0}
+.mr .cgbar{position:absolute;left:3px;right:3px;bottom:0;margin:0 auto;max-width:40px;min-height:2px;border-radius:5px 5px 2px 2px;box-sizing:border-box}
+.mr .cgdot{position:absolute;left:0;right:0;margin:0 auto;width:5px;height:5px;border-radius:50%;background:#A9512C;transform:translateY(50%)}
 .mr .cgv{position:absolute;left:0;right:0;text-align:center;font-size:9.5px;font-weight:800;color:#712B13;line-height:13px}
-.mr .cgx{display:flex;gap:4px;margin-top:5px}
-.mr .cgx>div{flex:1 1 0;min-width:0;text-align:center;overflow:hidden}
+.mr .cgx{display:flex;gap:0;margin-top:5px}
+.mr .cgx>div{flex:1 1 0;min-width:0;text-align:center;overflow:hidden;padding:0 1px;box-sizing:border-box}
 .mr .cgx b{display:block;font-size:9px;font-weight:700;color:#5B4639;white-space:nowrap}
 .mr .cgx span{display:block;font-size:8.5px;color:#9C8A7F;white-space:nowrap;margin-top:1px}
 .mr .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:11px}
@@ -100,8 +109,11 @@ const CSS = `
   .mr .lvrow{flex-wrap:wrap;gap:4px 8px}
   .mr .lvname{width:calc(100% - 80px)}
   .mr .bt{order:3;flex-basis:100%}
-  .mr .cgplot{height:124px;gap:3px}
-  .mr .cgx{gap:3px}
+  .mr .cgax{height:130px;padding-top:18px}
+  .mr .cgplot{height:130px;padding-top:18px}
+  .mr .cggrid{top:18px}
+  .mr .cgover{top:18px}
+  .mr .cgv{font-size:9px;line-height:12px}
   .mr .cgx b{font-size:8px}
   .mr .cgx span{font-size:7.5px}
   .mr .ft{padding:12px 16px}
@@ -158,10 +170,15 @@ export function MonthlyReportView({ d }: { d: Data }) {
   //   그래서 새 모양인 것만 골라 쓰고, 아니면 칸을 띄우지 않는다.
   const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
   const CS = d.coreSummary
-  // ★ 막대 굵기는 flex 가 알아서 나눠 가지되, **칸이 26px 보다 좁아지지는 않게** 한다.
+  // ★ 막대 굵기는 flex 가 알아서 나눠 가지되, **칸이 30px 보다 좁아지지는 않게** 한다.
   //   폰(375px)에서 16회가 되면 칸이 17px 이 되어 「예비1」·「5/11」·「100」이 잘렸다(실측 2026-11-04).
   //   좁으면 옆으로 밀어서 본다 — 눈금선과 밑줄까지 같이 밀려야 해서 폭을 숫자로 준다.
-  const CGMIN = core.length * 26 + Math.max(0, core.length - 1) * 4
+  //   칸 사이 틈은 칸 **안쪽**에 있다(gap:0) — 그래야 칸 가운데가 정확히 (i+0.5)/n 이 되고,
+  //   추이 선을 서버에서 그 자리에 그려 둘 수 있다.
+  const CGMIN = core.length * 30
+  const 높이 = (pct: number) => Math.min(100, Math.max(0, pct))
+  // 점을 잇는 추이 선 — SVG 는 글자가 아니라 선이라 가로로 늘려도 괜찮다(JS 없이 그려진다).
+  const CGLINE = core.map((c: any, i: number) => `${i + 0.5},${100 - 높이(c.pct)}`).join(' ')
   let no = 1
   const nx = () => String(no++).padStart(2, '0')
 
@@ -274,16 +291,50 @@ export function MonthlyReportView({ d }: { d: Data }) {
                   {core.some((c) => c.kind === '기타') && <span><i className="cetc" />회차 미기재</span>}
                   <em>100점 만점</em>
                 </div>
+                <div className="cgwrap">
+                <div className="cgax" aria-hidden="true">
+                  <div>
+                    <i style={{ bottom: '100%' }}>100</i>
+                    <i style={{ bottom: '50%' }}>50</i>
+                    <i style={{ bottom: '0%' }}>0</i>
+                  </div>
+                </div>
                 <div className="cgscroll">
                 <div className="cgplot" style={{ minWidth: CGMIN }}>
                   <div className="cggrid" />
+                  <div className="cgover">
+                    {CS.avg != null && (
+                      <div className="cgavg" style={{ bottom: `${높이(CS.avg)}%` }}>
+                        <b>평균 {CS.avg}점</b>
+                      </div>
+                    )}
+                    {core.length > 1 && (
+                      <svg
+                        className="cgline"
+                        viewBox={`0 0 ${core.length} 100`}
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <polyline
+                          points={CGLINE}
+                          fill="none"
+                          stroke="#C08A6E"
+                          strokeWidth="1.4"
+                          strokeDasharray="3 3"
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </svg>
+                    )}
+                  </div>
                   {core.map((c, i) => (
                     <div className="cgcol" key={`${c.date}-${c.round}-${i}`}>
-                      <span className="cgv" style={{ bottom: `calc(${c.pct}% + 1px)` }}>{c.pct}</span>
+                      <span className="cgv" style={{ bottom: `calc(${높이(c.pct)}% + 6px)` }}>{c.pct}</span>
                       <div
                         className={`cgbar ${c.kind === '본고사' ? 'cmain' : c.kind === '예비' ? 'cpre' : 'cetc'}`}
-                        style={{ height: `${Math.min(100, Math.max(0, c.pct))}%` }}
+                        style={{ height: `${높이(c.pct)}%` }}
                       />
+                      <i className="cgdot" style={{ bottom: `${높이(c.pct)}%` }} />
                     </div>
                   ))}
                 </div>
@@ -294,6 +345,7 @@ export function MonthlyReportView({ d }: { d: Data }) {
                       <span>{c.dateLabel}</span>
                     </div>
                   ))}
+                </div>
                 </div>
                 </div>
                 <p className="note">
