@@ -24,6 +24,7 @@ import { collectPolishTargets, proposePolish, applyPolish, logPolish } from '@/l
 import { buildTeacherReminders, sendTeacherReminders } from '@/lib/teacherReminder'
 import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
+import { syncLeaveFromOps } from '@/lib/opsLeave'
 import { checkCronRuns, loadRecentCronRuns, type CronProblem } from '@/lib/cronHealth'
 import { fetchAligoRows, summarize, aligoProblems } from '@/lib/aligoResults'
 import { aligoPost } from '@/lib/aligo'
@@ -153,6 +154,16 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
     out.firstClass = await syncFirstClassFromOps(db)
   } catch (e: any) {
     out.firstClass = { error: e?.message ?? '첫 수업일 동기화 실패' }
+  }
+
+  // ── ①-1-2 휴원 여부도 수학OPS 에서 가져온다 (원장님 2026-11-04) ─────────
+  // 휴원·복귀는 OPS 에서 처리하시는데 이쪽으로 넘어오는 길이 없었다. 중3 학생 한 명이
+  // 두 달 동안 스터디체크에서는 재원으로 보였다. 하루 한 번 맞춘다.
+  // ★ 사람을 지우거나 퇴원시키지 않는다 — 바꾸는 것은 휴원 칸 넷뿐이다.
+  try {
+    out.leave = await syncLeaveFromOps(db)
+  } catch (e: any) {
+    out.leave = { error: e?.message ?? '휴원 동기화 실패' }
   }
 
   // ── ①-2 본수업에 이어서 한 추가수업을 수학OPS 에 옮겨 적는다 ─────────────

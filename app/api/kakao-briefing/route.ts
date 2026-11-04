@@ -77,6 +77,8 @@ export interface BriefingSummary {
   skippedNoRecord: { name: string }[]
   /** 시험기간 결석이라 일부러 안 보낸 학생 */
   skippedExam: { name: string }[]
+  /** 연습용(가짜) 학생이라 일부러 안 보낸 학생 */
+  skippedTest?: { name: string }[]
   /** 저녁 8시에 「출결만 찍혀 있어」 다음 날 오전 11시로 미룬 학생 */
   skippedThin: { name: string }[]
   /** 어느 판으로 나가는지 — 「예전 판」이면 새 템플릿이 아직 안 잡힌 것이다 */
@@ -140,7 +142,7 @@ async function run(opts: {
   const { date, dryRun } = opts
   const out: BriefingSummary = {
     date, dryRun, sent: 0, failed: 0, skippedAlreadySent: 0,
-    skippedNoPhone: [], skippedNoRecord: [], skippedExam: [], skippedThin: [], errors: [], previews: [],
+    skippedNoPhone: [], skippedNoRecord: [], skippedExam: [], skippedThin: [], skippedTest: [], errors: [], previews: [],
   }
 
   let q = db.from('class_sessions').select('*').eq('session_date', date)
@@ -166,7 +168,7 @@ async function run(opts: {
   }
 
   const [{ data: students }, { data: notes }, { data: fbs }, { data: already }] = await Promise.all([
-    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id, teacher_name').in('id', studentIds),
+    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id, teacher_name, is_test').in('id', studentIds),
     db.from('learning_notes').select('*').in('session_id', sessionIds),
     // 알림장은 session_id 가 없어 작성 시각으로 묶는다. 한국 날짜 하루치를 UTC 범위로 받는다.
     db.from('feedbacks').select('*').in('student_id', studentIds)
@@ -250,6 +252,11 @@ async function run(opts: {
       if (opts.only === 'elementary' && !초등) continue
       if (opts.only === 'secondary' && 초등) continue
     }
+    // ★ 연습용(가짜) 학생에게는 **절대 안 보낸다** (원장님 2026-11-04 「연습용 학생때문에
+    //   브리핑·문자 나가면 안돼지」). 학부모 번호 칸에는 그때그때 연습하시는 강사 번호가
+    //   적혀 있다 — 그대로 두면 선생님 휴대폰으로 학부모 브리핑이 간다.
+    //   조용히 거르지 않고 **「연습용」으로 세어 보여 준다** — 빠진 것과 구분돼야 한다.
+    if (student.is_test) { out.skippedTest!.push({ name: student.name }); continue }
     if (!note || !note.attendance) { out.skippedNoRecord.push({ name: student.name }); continue }
     // ★ 시험기간은 **아예 보내지 않는다**(원장님 결정 2026-10-08).
     //   중·고등은 시험기간에 학원을 안 나와도 봐주시는데, 그걸 「결석」으로 통보하면

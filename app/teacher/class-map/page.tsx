@@ -152,7 +152,7 @@ export default function ClassMapPage() {
     setLoading(true)
     // 학생을 먼저 받는다. 조회 정책이 이미 **내 범위**로 걸러 준다(원장·행정은 전체).
     const { data: sData } = await supabase
-      .from('students').select('id, name, grade, school, teacher_name, on_leave')
+      .from('students').select('id, name, grade, school, teacher_name, on_leave, is_test')
       .eq('is_active', true).order('name')
     const list = (sData ?? []) as Student[]
     setStudents(list)

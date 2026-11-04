@@ -20,6 +20,8 @@ import { pathToFileURL } from 'node:url'
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
 const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
+const { leaveDiff, leaveLine } = await import(pathToFileURL(path.resolve('lib/opsLeave.ts')).href)
+const { chooseApproved, buttonsMatch } = await import(pathToFileURL(path.resolve('lib/briefingTemplate.ts')).href)
 const { fetchAligoRows, summarize, aligoProblems } = await import(pathToFileURL(path.resolve('lib/aligoResults.ts')).href)
 const { RESEND_KEY, pickResend, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 
@@ -328,6 +330,96 @@ T('묶음 목록을 받아 묶음마다 수신자별 결과를 모은다', () =>
   가짜줄들.length === 2 && 상세부름 === 2
   && 가짜줄들.filter((r: any) => r.rslt === '0').length === 1
   && summarize(가짜줄들).실패 === 1)
+
+// ── 휴원 여부를 수학OPS 에서 가져오기 (2026-11-04) ─────────────────────────
+//   휴원·복귀는 OPS 에서 하시는데 이쪽으로 넘어오는 길이 없었다. 중3 학생 한 명이
+//   두 달 동안 스터디체크에서는 재원으로 보였다.
+const 재원 = { on_leave: false, leave_start_date: null, leave_end_date: null, leave_reason: null }
+
+T('같으면 아무것도 안 바꾼다', () =>
+  leaveDiff(재원, 재원) === null
+  && leaveDiff({ ...재원, on_leave: null }, 재원) === null)   // null 과 false 는 같은 뜻이다
+
+T('OPS 가 휴원이면 휴원으로 바꾼다 (날짜·사유까지)', () => {
+  const got = leaveDiff(재원, { on_leave: true, leave_start_date: '2026-10-01', leave_end_date: null, leave_reason: '유학' })
+  return !!got && got.on_leave === true && got.leave_start_date === '2026-10-01' && got.leave_reason === '유학'
+})
+
+T('OPS 가 재원이면 되돌린다 (휴원 종료)', () => {
+  const 휴원중 = { on_leave: true, leave_start_date: '2026-09-08', leave_end_date: null, leave_reason: null }
+  const got = leaveDiff(휴원중, 재원)
+  return !!got && got.on_leave === false && got.leave_start_date === null
+})
+
+// ★ 휴원 여부는 같은데 날짜만 바뀐 경우도 맞춰야 한다 — 안 그러면 기록이 어긋난 채 남는다.
+T('휴원은 그대로인데 날짜만 달라도 맞춘다', () => {
+  const got = leaveDiff(
+    { on_leave: true, leave_start_date: '2026-10-01', leave_end_date: null, leave_reason: null },
+    { on_leave: true, leave_start_date: '2026-10-01', leave_end_date: '2026-11-03', leave_reason: null })
+  return !!got && got.leave_end_date === '2026-11-03'
+})
+
+T('무엇이 바뀌었는지 한 줄로 적는다', () =>
+  leaveLine('홍길동', 재원, { on_leave: true, leave_start_date: '2026-10-01', leave_end_date: null, leave_reason: null })
+    === '홍길동 재원 → 휴원 2026-10-01~')
+
+// ★ 사람을 지우거나 퇴원시키면 안 된다 — 바꾸는 칸이 넷인지 코드로 본다.
+T('휴원 칸 넷 말고는 건드리지 않는다', () => {
+  const src = fs.readFileSync(path.resolve('lib/opsLeave.ts'), 'utf8')
+  const 바꾸는것 = src.match(/\.update\(([^)]*)\)/g) ?? []
+  // 바꾸는 자리는 한 곳뿐이고, 넣는 값은 leaveDiff 가 만든 next 다.
+  if (바꾸는것.length !== 1 || !바꾸는것[0].includes('next')) return false
+  // ★ 넣는 값은 **leaveDiff 가 만든 것**이어야 하고, 바뀐 게 없으면 건너뛰어야 한다.
+  //   (이 두 줄이 없으면 아무 값이나 덮어쓸 수 있다 — 일부러 그렇게 고친 사본으로 확인했다.)
+  if (!/const next = leaveDiff\(/.test(src) || !/if \(!next\) continue/.test(src)) return false
+  // OPS 에 없는 사람은 손대지 않는다
+  if (!/if \(!o\) continue/.test(src)) return false
+  // 지우지 않는다. is_active 는 **읽을 때 거르는 조건**으로만 쓰인다(고쳐 쓰지 않는다).
+  if (/\.delete\(/.test(src)) return false
+  if (src.split('is_active').length - 1 !== 1 || !src.includes(".eq('is_active', true)")) return false
+  // next 에 담기는 칸이 정말 휴원 넷인지 — 값으로 확인한다.
+  const got = leaveDiff(재원, { on_leave: true, leave_start_date: '2026-10-01', leave_end_date: null, leave_reason: 'x' })
+  return Object.keys(got).sort().join(',') === 'leave_end_date,leave_reason,leave_start_date,on_leave'
+})
+
+T('하루 한 번 도는 자리에서 실제로 부른다', () => {
+  const src = fs.readFileSync(path.resolve('lib/cronBriefing.ts'), 'utf8')
+  return src.includes('syncLeaveFromOps(db)')
+})
+
+// ── 같은 본문으로 승인된 템플릿이 여럿일 때 (2026-11-04) ──────────────────
+//   승인된 템플릿은 **고칠 수가 없다**(알리고). 버튼 이름 오타를 고치려면 새것을 등록해야
+//   하고, 그러면 옛것과 새것이 같이 승인 상태로 남는다. 아무거나 고르면 오타가 있는
+//   옛 판을 계속 쓴다.
+const 바른버튼: [string, string][] = [['레벨학습지 점수 현황', 'u1'], ['출결·과제달성률 현황', 'u2']]
+const 템플릿 = (code: string, 상태: string, 이름들: string[]) =>
+  ({ templtCode: code, inspStatus: 상태, buttons: 이름들.map((n, i) => ({ name: n, linkMo: `u${i + 1}` })) })
+
+T('버튼 이름이 맞는 승인본을 먼저 고른다 (오타 난 옛 판을 안 쓴다)', () => {
+  const 옛것 = 템플릿('UM_OLD', 'APR', ['레벨학습지 점수 현황t', '출결·과제달성률 현황'])
+  const 새것 = 템플릿('UM_NEW', 'APR', ['레벨학습지 점수 현황', '출결·과제달성률 현황'])
+  return chooseApproved([옛것, 새것], 바른버튼)?.templtCode === 'UM_NEW'
+    && chooseApproved([새것, 옛것], 바른버튼)?.templtCode === 'UM_NEW'   // 순서와 상관없이
+})
+
+// ★ 맞는 것이 없어도 **발송은 계속돼야 한다** — 버튼은 등록된 것을 그대로 보내므로 나간다.
+T('맞는 것이 없으면 첫 승인본을 그대로 쓴다', () =>
+  chooseApproved([템플릿('UM_OLD', 'APR', ['레벨학습지 점수 현황t', '출결·과제달성률 현황'])], 바른버튼)
+    ?.templtCode === 'UM_OLD')
+
+T('승인 안 된 것은 고르지 않는다', () =>
+  chooseApproved([템플릿('UM_A', 'REQ', ['레벨학습지 점수 현황', '출결·과제달성률 현황'])], 바른버튼) === undefined
+  && chooseApproved([], 바른버튼) === undefined)
+
+T('승인 전인 새 판이 있어도 지금 승인된 판으로 보낸다', () => {
+  const 옛것 = 템플릿('UM_OLD', 'APR', ['레벨학습지 점수 현황t', '출결·과제달성률 현황'])
+  const 심사중 = 템플릿('UM_NEW', 'REQ', ['레벨학습지 점수 현황', '출결·과제달성률 현황'])
+  return chooseApproved([옛것, 심사중], 바른버튼)?.templtCode === 'UM_OLD'
+})
+
+T('버튼 개수가 다르거나 없으면 맞다고 하지 않는다', () =>
+  buttonsMatch(템플릿('x', 'APR', ['레벨학습지 점수 현황']), 바른버튼) === false
+  && buttonsMatch({ inspStatus: 'APR' }, 바른버튼) === false)
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)

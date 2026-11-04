@@ -111,7 +111,7 @@ export default function MatholicImportPage() {
 
       // ① 내가 볼 수 있는 학생만 — 서버 정책과 같은 기준(hooks/useAuth.canViewStudent)
       const all = await fetchAllRows<StudentLite & { is_active: boolean; on_leave: boolean }>(() =>
-        supabase.from('students').select('id, name, grade, teacher_name, is_active, on_leave')
+        supabase.from('students').select('id, name, grade, teacher_name, is_active, on_leave, is_test')
           .or('is_active.eq.true,on_leave.eq.true').order('id'))
       const mine = all.filter((s) => canViewStudent(s))
 

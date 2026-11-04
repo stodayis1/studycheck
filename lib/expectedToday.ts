@@ -51,7 +51,7 @@ export async function expectedStudentsOn(
 
   const [{ data: sch }, { data: students }] = await Promise.all([
     db.from('schedules').select('student_id, is_active').eq('day_of_week', dow),
-    db.from('students').select('id, first_class_date, skip_lesson_note').eq('is_active', true),
+    db.from('students').select('id, first_class_date, skip_lesson_note, is_test').eq('is_active', true),
   ])
   // ★ 첫 수업 전인 학생은 뺀다. 첫 수업일이 비어 있으면 **빼지 않는다** —
   //   값이 없다고 수업을 안 한다고 볼 수는 없으니 안전한 쪽(다 센다)으로 기운다.
@@ -59,7 +59,9 @@ export async function expectedStudentsOn(
     .filter((s: any) => s.first_class_date && s.first_class_date > date)
     .map((s: any) => s.id))
   // ★ 학습일지를 안 쓰는 학생 — 시간표에는 두고, 「써야 하는 사람」에서만 뺀다.
-  const skipNote = (students ?? []).filter((s: any) => s.skip_lesson_note).map((s: any) => s.id)
+  //   연습용(가짜) 학생도 여기서 뺀다 — 선생님께 「일지 안 썼어요」 문자가 가면 안 된다
+  //   (원장님 2026-11-04 「연습용 학생때문에 브리핑·문자 나가면 안돼지」).
+  const skipNote = (students ?? []).filter((s: any) => s.skip_lesson_note || s.is_test).map((s: any) => s.id)
   const skipSet = new Set(skipNote)
   const live = new Set((students ?? []).map((s: any) => s.id))
   let ids = [...new Set((sch ?? [])

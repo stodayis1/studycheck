@@ -29,6 +29,28 @@ import { aligoPost } from './aligo'
 
 const LIST_PATH = '/akv10/template/list/'
 
+/** 그 템플릿의 버튼 이름이 우리가 바라는 것과 **글자까지** 같나 */
+export function buttonsMatch(t: any, wantBtn: [string, string][]): boolean {
+  const got = ((t?.buttons ?? []) as any[]).map((b) => String(b?.name ?? ''))
+  if (!got.length) return false
+  return got.length === wantBtn.length && wantBtn.every(([n], i) => got[i] === n)
+}
+
+/**
+ * 같은 본문으로 등록된 것들 중 **쓸 템플릿** 하나.
+ *
+ * ★ 같은 본문으로 승인된 템플릿이 **여럿일 수 있다.** 승인된 템플릿은 **고칠 수가 없어서**
+ *   (알리고 확인 2026-11-04), 버튼 이름에 오타가 있으면 새것을 등록하는 수밖에 없다.
+ *   그러면 옛것과 새것이 같이 승인 상태로 남는다. 아무거나 고르면 **오타가 있는 옛 판을
+ *   계속 쓴다.** 그래서 **버튼 이름이 우리 것과 맞는 판을 먼저** 고른다.
+ *   맞는 것이 없으면 예전처럼 첫 번째 승인본 — 발송은 계속돼야 한다
+ *   (버튼은 보낼 때 등록된 것을 그대로 쓰므로 어느 쪽을 골라도 나가긴 한다).
+ */
+export function chooseApproved(same: any[], wantBtn: [string, string][]): any | undefined {
+  const apr = (same ?? []).filter((t) => t?.inspStatus === 'APR')
+  return apr.find((t) => buttonsMatch(t, wantBtn)) ?? apr[0]
+}
+
 /**
  * ★ 「알림장 없는 판」을 쓸지 — 기본은 **쓴다**.
  *   원장님 2026-10-31 「알림장이 없을 때는 알림장이 없는 판으로 나가는게 맞아」.
@@ -126,7 +148,7 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
      */
     const find = (key: string, ours: string, wantBtn: [string, string][]) => {
       const same = list.filter((t) => body(t) === ours)
-      const apr = same.find((t) => t.inspStatus === 'APR')
+      const apr = chooseApproved(same, wantBtn)
       if (apr) {
         const got = (apr.buttons ?? []).map((b: any) => [b.name, b.linkMo] as [string, string])
         if (got.length) regBtn[key] = got

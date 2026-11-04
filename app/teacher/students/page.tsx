@@ -757,7 +757,15 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                     <tbody>
                       {importedStudents.slice(0, 10).map((s, i) => (
                         <tr key={i} className="border-b border-gray-50">
-                          <td className="px-3 py-2 font-semibold text-gray-800">{s.name}</td>
+                          <td className="px-3 py-2 font-semibold text-gray-800">
+                            {s.name}
+                            {/* ★ 연습용(가짜) 학생 — 실제 학생과 헷갈리면 안 된다.
+                                발송에서는 빠지고, 담당이 없어도 모두에게 보인다. */}
+                            {(s as any).is_test && (
+                              <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                style={{ background: '#FEF3C7', color: '#92400E' }}>연습용</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-gray-600">{s.school}</td>
                           <td className="px-3 py-2 text-gray-600">{s.grade}</td>
                           <td className="px-3 py-2 text-gray-600">{s.class_time}</td>
