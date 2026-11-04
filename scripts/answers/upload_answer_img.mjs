@@ -3,6 +3,9 @@
 // 그림 파일 이름은 교재 번호다 (0860.png).
 //
 // 창고에 이미 그 파일이 있으면 **건너뛴다** — 멀쩡한 그림을 덮어쓰지 않으려고.
+// `--덮어쓰기` 를 주면 있는 것도 바꾼다. **다시 자른 그림을 올릴 때만** 쓴다
+// (라이트쎈 중2-1, 2026-11-04). 옛 그림은 돌아오지 않으니 **먼저 받아 두고** 쓸 것 —
+//   node scripts/answers/fetch_by_id.mjs "<교재>/<과정>/<학기>" <백업폴더> --all
 // 올린 뒤 다시 받아 **바이트 수를 맞대** 확인한다.
 import fs from 'fs'
 import path from 'path'
@@ -15,6 +18,7 @@ const [spec, DIR] = process.argv.slice(2)
 const [book, grade, sem] = spec.split('/')
 const xi = process.argv.indexOf('--빼기')
 const SKIP = new Set(xi>0 ? process.argv[xi+1].split(',') : [])
+const OVER = process.argv.includes('--덮어쓰기')
 
 const nos = fs.readdirSync(DIR).filter(f=>/^\d{4}\.png$/.test(f)).map(f=>f.slice(0,4)).filter(n=>!SKIP.has(n))
 const rows=[]
@@ -33,10 +37,12 @@ for(const r of rows){
   const file=path.join(DIR, `${r.local_no}.png`)
   const buf=fs.readFileSync(file)
   // 이미 있으면 덮어쓰지 않는다
-  const {data:sign}=await db.storage.from('problem-images').createSignedUrl(r.answer_image_path, 60)
-  if(sign?.signedUrl){ skip++; continue }
+  if(!OVER){
+    const {data:sign}=await db.storage.from('problem-images').createSignedUrl(r.answer_image_path, 60)
+    if(sign?.signedUrl){ skip++; continue }
+  }
   const {error}=await db.storage.from('problem-images')
-    .upload(r.answer_image_path, buf, {contentType:'image/png', upsert:false})
+    .upload(r.answer_image_path, buf, {contentType:'image/png', upsert:OVER})
   if(error){ bad.push(`${r.local_no} ${error.message}`); continue }
   // 되받아 바이트 수 확인
   const {data:s2}=await db.storage.from('problem-images').createSignedUrl(r.answer_image_path, 60)

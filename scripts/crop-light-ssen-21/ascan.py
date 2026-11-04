@@ -24,7 +24,9 @@ def groups(m):
             if cur: res.append(cur)
             cur=[b]
     if cur: res.append(cur)
-    return [g for g in res if 34<=g[-1][1]-g[0][0]<=85 and 16<=max(b[3] for b in g)-min(b[2] for b in g)<=32 and len(g)>=2]
+    # ★ len(g)>=2 로 거르면 **네 글자가 한 덩어리로 붙은 번호**가 통째로 빠진다
+    #   (0434·0448 이 그랬다 — 그 자리가 비면 자리 순서가 어긋나 뒤가 다 밀린다)
+    return [g for g in res if 34<=g[-1][1]-g[0][0]<=85 and 16<=max(b[3] for b in g)-min(b[2] for b in g)<=32]
 if __name__=='__main__':
     rows=[]; gl=[]
     import sys

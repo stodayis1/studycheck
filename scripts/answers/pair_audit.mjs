@@ -6,6 +6,8 @@
 // 글자 정답이 이미 들어 있는 교재는 **전부 이 검사를 한 번씩** 거쳐야 한다.
 //
 // 글자 정답이 있는 문항 중에서 고른다 — 그것이 지금 자동 채점에 쓰이는 값이기 때문이다.
+// `--글자없어도` 를 주면 글자 정답이 없는 문항도 고른다. 다시 자른 정답 그림이
+// 제 문항에 붙었는지 볼 때 쓴다(라이트쎈 중2-1, 2026-11-04).
 import fs from 'fs'
 import path from 'path'
 import { createClient } from '@supabase/supabase-js'
@@ -15,6 +17,7 @@ const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE
 
 const [spec, OUT] = process.argv.slice(2)
 const N = Number(process.argv[4] || 6)
+const ANY = process.argv.includes('--글자없어도')
 const [book, grade, sem] = spec.split('/')
 fs.mkdirSync(OUT,{recursive:true})
 
@@ -23,12 +26,15 @@ for(let from=0;;from+=1000){        // ★ order 없이 range 로 넘기면 행�
   const {data,error}=await db.from('problems')
     .select('id,local_no,answer_kind,answer_text,answer_unit,image_path,answer_image_path')
     .eq('book',book).eq('grade',grade).eq('semester',Number(sem))
-    .not('answer_text','is',null).not('image_path','is',null)
+    .not('image_path','is',null)
     .order('local_no').range(from,from+999)
   if(error){console.error(error.message);process.exit(1)}
   if(!data||!data.length)break; all.push(...data); if(data.length<1000)break
 }
-if(!all.length){ console.error(`${spec} — 글자 정답이 있는 문항이 없다`); process.exit(1) }
+// ★ ANY 면 picked 와 all 이 **같은 배열**이다 — all 을 비우면 picked 도 빈다. 사본을 뜬다.
+const picked = ANY ? all.slice() : all.filter(r=>r.answer_text!=null)
+if(!picked.length){ console.error(`${spec} — 고를 문항이 없다`); process.exit(1) }
+all.length=0; all.push(...picked)
 const step=Math.max(1, Math.floor(all.length/N))
 const pick=[]
 for(let i=0;i<N && i*step<all.length;i++) pick.push(all[i*step])
