@@ -223,9 +223,30 @@ export function MonthlyReportView({ d }: { d: Data }) {
             </Sec>
           )}
 
-          <Sec no={nx()} title="영역별 성취도" note="담당 선생님 기록 · 100점 기준">
-            {d.areas.map((a) => <Bar key={a.label} label={a.label} value={a.value} />)}
-          </Sec>
+          {/* 학원 코어테스트 — 예전에 있던 성취도 막대 칸을 대신한다 (원장님 2026-11-04
+              「영역별 성취도는 굳이 필요없으니 그자리에 대체할께」).
+              그 달 것만이 아니라 **그 달까지의 가장 최근 회차**를 보여 주고, 언제 본 것인지 적는다.
+              셋 다 기록이 없으면 칸 자체를 띄우지 않는다. */}
+          {d.coreTests?.some((c) => c.score != null) && (
+            <Sec no={nx()} title="학원 코어테스트" note="예비 1회 · 예비 2회 · 본고사">
+              <div className="cols">
+                {d.coreTests.map((c) => (
+                  <div className="box" key={c.round}>
+                    <div className="t">
+                      {c.round}
+                      <span>{c.date ? `${Number(c.date.slice(5, 7))}월 ${Number(c.date.slice(8, 10))}일` : '아직'}</span>
+                    </div>
+                    <p style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 0' }}>
+                      {c.score != null ? `${c.score}점` : '—'}
+                      {c.score != null && c.total != null && c.total !== 100 && (
+                        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.6 }}> / {c.total}</span>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Sec>
+          )}
 
           <Sec no={nx()} title="담당 선생님 코멘트">
             <div className="cols">
