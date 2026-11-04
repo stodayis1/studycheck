@@ -152,16 +152,38 @@ await T('SQL 이 직원 전용 정책을 is_staff() 로 쓴다 (authenticated �
 // ★ 켜 놓고 브리핑에 안 적으면 **학부모님은 사진을 내야 하는 줄 모르신다.**
 await T('브리핑이 「풀이 사진 올리기」까지 적는다', () => {
   const 줄 = hwLines({} as any, { total: 3, proof: 0, photo: 2, photoWord: '풀이 사진' })
-  return 줄.includes('· 영상과제 3개 시청 후 풀이 사진 올리기')
+  return 줄.includes('· 영상과제 3개 시청 후 풀이 사진 2개 올리기')
 })
 
-await T('증명이면 지금까지대로 「증명 올리기」', () =>
-  hwLines({} as any, { total: 2, proof: 1, photo: 1, photoWord: '증명' })
-    .includes('· 영상과제 2개 시청 후 증명 올리기'))
+await T('증명만이면 지금까지대로 「증명 올리기」', () =>
+  hwLines({} as any, { total: 1, proof: 1, photo: 1, photoWord: '증명' })
+    .includes('· 영상과제 1개 시청 후 증명 올리기'))
 
-await T('섞이면 「사진 올리기」', () =>
-  hwLines({} as any, { total: 2, proof: 1, photo: 2, photoWord: '사진' })
-    .includes('· 영상과제 2개 시청 후 사진 올리기'))
+await T('영상 전부를 내는 날은 편수를 안 적는다 (군더더기)', () =>
+  hwLines({} as any, { total: 3, proof: 0, photo: 3, photoWord: '풀이 사진' })
+    .includes('· 영상과제 3개 시청 후 풀이 사진 올리기'))
+
+await T('섞이면 무엇을 내는지 둘 다 적는다', () =>
+  hwLines({} as any, { total: 3, proof: 1, photo: 2, photoWord: '증명·풀이 사진' })
+    .includes('· 영상과제 3개 시청 후 증명·풀이 사진 2개 올리기'))
+
+// ★ 원장님이 2026-11-04 에 잡으신 것 — 체크를 하나 켜면 바뀌는데 그다음부터는 글이 똑같았다.
+//   편수를 안 적어서, 여덟 개 중 한 개를 내나 일곱 개를 내나 「사진 올리기」로 같았다.
+await T('체크를 켤 때마다 브리핑 글이 달라진다 (8개 중 1개가 증명)', () => {
+  const ids = ['ka4K6Tg23_4', '3aW5nyScffU', 'F_m2dnwMQVE', 'Zpz7fIx8JJY',
+               'wgeI_P6XQfU', 'HFjzG04EKkU', 'FJzR9gtQDsI', 'BajGM9XS3go']
+  const urls = ids.map((i) => `https://youtu.be/${i}`)
+  const lessonOf = (u: string) => (u === urls[1] ? 증명 : 개념)
+  const 켤수있는것 = urls.filter((u) => u !== urls[1])
+  const 글 = []
+  for (let n = 0; n <= 7; n++) {
+    const asked = new Set(켤수있는것.slice(0, n).map((u) => u.split('/').pop()!))
+    const b = photoBrief(urls, lessonOf as any, asked)
+    글.push(hwLines({} as any, { total: urls.length, proof: 1, photo: b.photo, photoWord: b.photoWord })
+      .find((l: string) => l.startsWith('· 영상과제')))
+  }
+  return new Set(글).size === 8 && 글[0]!.includes('증명 1개') && 글[7]!.includes('증명·풀이 사진 올리기')
+})
 
 await T('낼 것이 없으면 「시청」만 (잔소리가 되면 안 된다)', () =>
   hwLines({} as any, { total: 2, proof: 0, photo: 0, photoWord: '증명' })
@@ -172,10 +194,10 @@ await T('옛 호출(photo 없음)은 증명 편수로 센다', () =>
   hwLines({} as any, { total: 1, proof: 1 }).includes('· 영상과제 1개 시청 후 증명 올리기')
   && hwLines({} as any, { total: 1, proof: 0 }).includes('· 영상과제 1개 시청'))
 
-await T('브리핑에 쓸 말 — 증명 / 풀이 사진 / 사진', () =>
+await T('브리핑에 쓸 말 — 증명 / 풀이 사진 / 증명·풀이 사진', () =>
   photoBrief([A], () => 증명, []).photoWord === '증명'
   && photoBrief([A], () => 개념, [{ video_url: A }]).photoWord === '풀이 사진'
-  && photoBrief([A, B], (u: string) => (u === A ? 증명 : 개념), [{ video_url: B }]).photoWord === '사진'
+  && photoBrief([A, B], (u: string) => (u === A ? 증명 : 개념), [{ video_url: B }]).photoWord === '증명·풀이 사진'
   && photoBrief([A], () => 개념, []).photo === 0)
 
 // ★ 세는 곳이 셋이다 — 카톡 발송 · 알림장 화면 · 학습일지 미리보기. 하나라도 빠지면 글이 달라진다.
