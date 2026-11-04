@@ -15,6 +15,11 @@
  *   ③ **바로 저장하지 않는다.** 누구의 어느 수업에 붙는지 표로 먼저 보여 주고, 확인한 뒤에 넣는다.
  *   ④ **앞으로의 수업에는 안 붙인다.** 아직 하지 않은 수업에 과제가 달리면 학생 화면에
  *      미래 날짜가 뜬다(2026-11-02 에 그걸로 한 번 고쳤다).
+ *
+ * 2026-11-04 더해진 것 — 배부하면서 **「직접 푼 풀이도 찍어 내라」**를 켤 수 있다
+ *   (원장님 「영상과제를 배부하면서 증명이 아니라 직접 풀이한것도 찍어 올리라고 할거거든」).
+ *   켜면 학생 시청 화면에 지금 증명이 쓰던 그 제출 칸이 열린다 — 새 길이 아니다.
+ *   증명·컨씨영상은 **원래부터** 사진을 내므로 켜고 끌 것이 없다.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -23,7 +28,7 @@ import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
-import { lessonLabel, youtubeId, type LessonVideo } from '@/lib/lessonVideos'
+import { lessonLabel, youtubeId, needsPhoto, type LessonVideo } from '@/lib/lessonVideos'
 import { canAssignVideos, mergeVideoUrls, pickSessionFor, type SessionLite } from '@/lib/videoAssign'
 
 interface StudentLite {
@@ -56,6 +61,9 @@ export default function VideoAssignPage() {
   const [students, setStudents] = useState<StudentLite[]>([])
   const [sessionsOf, setSessionsOf] = useState<Map<string, (SessionLite & { video_url: string | null })[]>>(new Map())
   const [videos, setVideos] = useState<LessonVideo[]>([])
+  /** 「직접 푼 풀이도 사진으로 받기」를 켠 영상 (유튜브 id 또는 링크 글자) */
+  const [askPhoto, setAskPhoto] = useState<Set<string>>(new Set())
+  const 영상열쇠 = (u: string) => youtubeId(u) || String(u ?? '').trim()
   const [loading, setLoading] = useState(true)
 
   const [picked, setPicked] = useState<string[]>([])
@@ -65,7 +73,7 @@ export default function VideoAssignPage() {
   const [grade, setGrade] = useState('')
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
-  const [done, setDone] = useState<{ 넣음: number; 건너뜀: number; 실패: string[] } | null>(null)
+  const [done, setDone] = useState<{ 넣음: number; 건너뜀: number; 실패: string[]; 사진켬?: number } | null>(null)
 
   useEffect(() => {
     if (!쓸수있나) { setLoading(false); return }
@@ -125,6 +133,9 @@ export default function VideoAssignPage() {
     }), [보이는학생, chosen, baseDate, sessionsOf, picked])
 
   const 넣을것 = plans.filter((p) => p.session && p.added.length)
+  const 붙일수있는사람 = plans.filter((p) => p.session)
+  /** 고른 영상 중 「직접 푼 풀이 사진」을 켠 것 (증명·컨씨는 원래 내므로 뺀다) */
+  const 켠영상 = picked.filter((u) => !needsPhoto(videoByYt[youtubeId(u) ?? '']) && askPhoto.has(영상열쇠(u)))
   const 수업없음 = plans.filter((p) => !p.session)
   const 이미있음 = plans.filter((p) => p.session && !p.added.length)
 
@@ -144,22 +155,40 @@ export default function VideoAssignPage() {
 
   /** 고른 대로 넣는다. 한 명이 실패해도 나머지는 계속 간다. */
   async function handleSave() {
-    if (!넣을것.length) return
-    if (!confirm(`${넣을것.length}명의 학습일지 과제에 영상 ${picked.length}개를 넣습니다. 계속할까요?`)) return
+    if (!넣을것.length && !(켠영상.length && 붙일수있는사람.length)) return
+    if (!confirm(
+      `${넣을것.length}명의 학습일지 과제에 영상 ${picked.length}개를 넣습니다.`
+      + (켠영상.length ? `\n그중 ${켠영상.length}개는 「직접 푼 풀이 사진」도 받습니다.` : '')
+      + '\n계속할까요?')) return
     setSaving(true)
     let 넣음 = 0
+    let 사진켬 = 0
     const 실패: string[] = []
-    for (const p of 넣을것) {
+    // ★ 영상이 **이미 들어 있는** 학생에게도 「풀이 사진 받기」는 켠다 — 그게 선생님 뜻이다.
+    //   (영상은 안 넣고 지나가므로 「넣음」 수에는 안 들어간다.)
+    for (const p of 붙일수있는사람) {
       try {
         const r = mergeVideoUrls(p.session!.video_url, picked)
-        const { error } = await supabase.from('class_sessions')
-          .update({ video_url: r.urls.join('\n') }).eq('id', p.session!.id)
-        if (error) throw new Error(error.message)
-        넣음++
-      } catch (e: any) { 실패.push(`${p.student.name} — ${e?.message ?? '실패'}`) }
+        if (r.added.length) {
+          const { error } = await supabase.from('class_sessions')
+            .update({ video_url: r.urls.join('\n') }).eq('id', p.session!.id)
+          if (error) throw new Error(error.message)
+          넣음++
+        }
+      } catch (e: any) { 실패.push(`${p.student.name} — ${e?.message ?? '실패'}`); continue }
+      // 사진 받기는 **따로** 센다 — 여기서 막혀도 영상 배부는 이미 끝났다.
+      // (표가 아직 없을 수 있다: docs/sql/영상과제_풀이사진_요청.sql)
+      if (켠영상.length) {
+        const { error } = await supabase.from('video_photo_requests').upsert(켠영상.map((u) => ({
+          student_id: p.student.id, session_id: p.session!.id, video_url: u,
+          youtube_id: youtubeId(u), requested_by: currentUser?.name ?? null,
+        })), { onConflict: 'session_id,video_url' })
+        if (error) 실패.push(`${p.student.name} — 풀이 사진 받기를 켜지 못했어요 (${error.message})`)
+        else 사진켬++
+      }
     }
     setSaving(false)
-    setDone({ 넣음, 건너뜀: 이미있음.length, 실패 })
+    setDone({ 넣음, 건너뜀: 이미있음.length, 실패, 사진켬 })
     setChosen(new Set())
     await load()
   }
@@ -216,6 +245,44 @@ export default function VideoAssignPage() {
                   </span>
                 )
               })}
+            </div>
+          )}
+
+          {/* 직접 푼 풀이 사진 받기 (원장님 2026-11-04)
+              ★ 증명·컨씨영상은 **원래부터** 사진을 내므로 켜고 끌 것이 없다 — 그렇게 적어 둔다. */}
+          {picked.length > 0 && (
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid #f3f4f6' }}>
+              <p className="text-xs font-bold text-gray-700 mb-1.5">
+                <i className="ti ti-camera align-[-0.125em]" /> 직접 푼 풀이도 사진으로 받기
+              </p>
+              <div className="space-y-1">
+                {picked.map((u) => {
+                  const v = videoByYt[youtubeId(u) ?? '']
+                  const 저절로 = needsPhoto(v)
+                  const 이름 = v ? `${v.grade} ${lessonLabel(v)}` : u
+                  return 저절로 ? (
+                    <p key={u} className="text-[11px]" style={{ color: '#3B6D11' }}>
+                      <i className="ti ti-writing align-[-0.125em]" /> {이름} — 원래 사진을 내는 영상이에요
+                    </p>
+                  ) : (
+                    <label key={u} className="flex items-start gap-1.5 cursor-pointer select-none">
+                      <input type="checkbox" className="mt-0.5" checked={askPhoto.has(영상열쇠(u))}
+                        onChange={(e) => setAskPhoto((prev) => {
+                          const next = new Set(prev)
+                          if (e.target.checked) next.add(영상열쇠(u)); else next.delete(영상열쇠(u))
+                          return next
+                        })} />
+                      <span className="text-[11px]" style={{ color: askPhoto.has(영상열쇠(u)) ? '#993C1D' : '#6b7280' }}>
+                        {이름}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                켜면 학생이 <b>영상을 끝까지 본 뒤</b> 연습장에 직접 푼 풀이를 찍어 올려요 (최대 3장, 채점 없음).
+                이미 그 영상이 들어 있는 학생에게도 켜집니다.
+              </p>
             </div>
           )}
         </div>
@@ -305,6 +372,7 @@ export default function VideoAssignPage() {
           <div className="rounded-2xl p-4" style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC' }}>
             <p className="text-xs font-bold" style={{ color: '#166534' }}>
               끝났어요 — {done.넣음}명에게 넣었어요 {done.건너뜀 > 0 && `· 이미 있어 건너뛴 ${done.건너뜀}명`}
+              {!!done.사진켬 && ` · 풀이 사진 받기 ${done.사진켬}명`}
             </p>
             {done.실패.length > 0 && (
               <div className="mt-2 text-[11px] text-red-600">

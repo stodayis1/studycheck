@@ -21,7 +21,8 @@ import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { canAssignVideos } from '@/lib/videoAssign'
-import { youtubeId, lessonLabel, needsPhoto, photoLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, lessonLabel, needsPhoto, photoUrlsOf, photoLabelOf, photoBrief, type LessonVideo } from '@/lib/lessonVideos'
+import { safeAsks, asksOf, type PhotoAskRow } from '@/lib/photoAsk'
 import { summarizeResponses } from '@/lib/nameCalls'
 import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
@@ -294,6 +295,15 @@ export default function TeacherLearningNotesPage() {
     fetchAllRows(() => supabase.from('proof_submissions').select('session_id, video_url, photo_paths, submitted_at'))
       .then((rows) => setProofSubs((rows || []) as ProofSubmission[]))
   }, [])
+  // 선생님이 「이 영상은 직접 푼 풀이도 찍어 내라」고 켜 둔 것 (원장님 2026-11-04)
+  // ★ 표가 아직 없어도(SQL 실행 전) 화면이 멈추면 안 된다 — 못 읽으면 「켠 것이 없다」로 본다.
+  const [photoAsks, setPhotoAsks] = useState<PhotoAskRow[]>([])
+  useEffect(() => {
+    safeAsks(supabase.from('video_photo_requests').select('session_id, video_url')).then(setPhotoAsks)
+  }, [])
+  /** 지금 열어 둔 수업에서 **풀이 사진을 받기로 켠** 영상 (유튜브 id 또는 링크 글자) */
+  const [hwPhotoAsk, setHwPhotoAsk] = useState<Set<string>>(new Set())
+  const 영상열쇠 = (u: string) => youtubeId(u) || String(u ?? '').trim()
   // 교재 과제 - 배정된 교재 기반 (다중 선택)
   const [hwSelectedTBIds, setHwSelectedTBIds] = useState<string[]>([])
   const [hwSelectedEPIds, setHwSelectedEPIds] = useState<string[]>([])  // 시험대비 선택
@@ -1328,6 +1338,9 @@ export default function TeacherLearningNotesPage() {
     setHwWorksheetRange(session?.hw_worksheet_range ?? '')
     setHwSelectedWSIds(session?.hw_worksheet_ids ?? [])
     setHwVideoUrls(session?.video_url ? session.video_url.split('\n').filter(Boolean) : [''])
+    // ★ 켜 둔 것을 **반드시 같이 읽어 온다.** 저장은 이 수업의 줄을 지우고 다시 넣기 때문에,
+    //   안 읽어 오면 일괄 배부 화면에서 켜 둔 것이 학습일지를 한 번 저장하는 순간 사라진다.
+    setHwPhotoAsk(new Set(asksOf(photoAsks, session?.id ?? '').map((a) => 영상열쇠(a.video_url))))
     setShowNoteModal(true)
   }
 
@@ -1905,7 +1918,9 @@ ${e?.message ?? '연결 실패'}
         videos: (() => {
           const urls = hwVideoUrls.map((u) => u.trim()).filter((u) => /^https?:\/\//.test(u))
           const proof = urls.filter((u) => lessonByYt[youtubeId(u) || '']?.kind === '증명').length
-          return { total: urls.length, proof }
+          // 지금 화면에 **켜 둔 그대로** 센다 — 저장하면 그렇게 나간다.
+          const b = photoBrief(urls, (u) => lessonByYt[youtubeId(u) || ''], hwPhotoAsk)
+          return { total: urls.length, proof, photo: b.photo, photoWord: b.photoWord }
         })(),
         // 그날 들어온 학습지 점수 — 발송 쪽과 같은 규칙(그날 제출 + 점수 있음)으로 고른다.
         // 위의 초록 칩이 보여 주는 것과 **같은 줄들**이다.
@@ -2039,9 +2054,11 @@ ${e?.message ?? '연결 실패'}
                 })()}
                 {session.video_url && (() => {
                   // 증명 백지 + 컨씨영상 풀이 사진 (원장님 2026-11-03)
-                  const proofUrls = session.video_url.split('\n').filter(Boolean).filter((u) => needsPhoto(lessonByYt[youtubeId(u) || '']))
+                  const 영상들 = session.video_url.split('\n').filter(Boolean)
+                  const 켠것 = asksOf(photoAsks, session.id)
+                  const proofUrls = photoUrlsOf(영상들, (u) => lessonByYt[youtubeId(u) || ''], 켠것)
                   return <ProofSubmissionChip proofUrls={proofUrls} subs={proofSubs.filter((p) => p.session_id === session.id)}
-                    label={photoLabel(proofUrls.map((u) => lessonByYt[youtubeId(u) || '']))}
+                    label={photoLabelOf(영상들, (u) => lessonByYt[youtubeId(u) || ''], 켠것)}
                     labelOf={(u) => lessonLabel(lessonByYt[youtubeId(u) || ''])} />
                 })()}
               {(session.progress_content || session.today_textbook_name) && (
@@ -2263,6 +2280,31 @@ ${e?.message ?? '연결 실패'}
     }
     sessionId = savedSession.id
     setNoteSession(savedSession)
+
+    // 「직접 푼 풀이 사진 받기」 — 이 수업 줄을 지우고 켠 것만 다시 넣는다 (원장님 2026-11-04).
+    // ★ 여기서 실패해도 **학습일지 저장은 계속 간다**(진도 체크와 같은 규칙). 표가 아직 없을 수도 있다.
+    // ★ 통째로 지우고 다시 넣지 않는다 — 넣다가 막히면 켜 둔 것이 **다 사라진다.**
+    //   켠 것을 먼저 넣고(upsert), 그다음 **뺀 것만** 지운다.
+    try {
+      const 영상들 = hwVideoUrls.map((u) => u.trim()).filter(Boolean)
+      const 켠것 = 영상들.filter((u) => hwPhotoAsk.has(영상열쇠(u)))
+      if (켠것.length) {
+        await supabase.from('video_photo_requests').upsert(켠것.map((u) => ({
+          student_id: noteStudent.id, session_id: sessionId, video_url: u,
+          youtube_id: youtubeId(u), requested_by: currentUser?.name ?? null,
+        })), { onConflict: 'session_id,video_url' })
+      }
+      const 뺄것 = asksOf(photoAsks, sessionId!)
+        .filter((a) => !켠것.some((u) => 영상열쇠(u) === 영상열쇠(a.video_url)))
+      if (뺄것.length) {
+        await supabase.from('video_photo_requests').delete()
+          .eq('session_id', sessionId).in('video_url', 뺄것.map((a) => a.video_url))
+      }
+      setPhotoAsks((prev) => [...prev.filter((a) => a.session_id !== sessionId),
+        ...켠것.map((u) => ({ session_id: sessionId!, video_url: u }))])
+    } catch (e) {
+      console.error('풀이 사진 받기 저장 오류:', e)
+    }
 
     // 교재별 진도 progress_checks 자동 업데이트
     // 이 블록은 부가 정보(진도 체크) 갱신용 - 여기서 오류가 나도(네트워크 순간 끊김, 동시저장 충돌 등)
@@ -4956,8 +4998,13 @@ ${e?.message ?? '연결 실패'}
                       onClose={() => setShowVideoPicker(false)} />
                   )}
                   <div className="space-y-2">
-                    {hwVideoUrls.map((url, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
+                    {hwVideoUrls.map((url, idx) => {
+                      // 증명·컨씨영상은 **종류만 보고** 저절로 사진을 낸다 — 켜고 끌 것이 없다.
+                      const 저절로 = needsPhoto(lessonByYt[youtubeId(url) || ''])
+                      const 켬 = hwPhotoAsk.has(영상열쇠(url))
+                      return (
+                      <div key={idx} className="space-y-1">
+                      <div className="flex gap-2 items-center">
                         <input type="url" value={url}
                           onChange={(e) => {
                             const next = [...hwVideoUrls]
@@ -4971,7 +5018,25 @@ ${e?.message ?? '연결 실패'}
                             className="text-gray-400 hover:text-red-400 text-lg shrink-0">✕</button>
                         )}
                       </div>
-                    ))}
+                      {url.trim() && (저절로 ? (
+                        <p className="text-[11px] pl-1" style={{ color: '#3B6D11' }}>
+                          <i className="ti ti-writing align-[-0.125em]" /> 이 영상은 원래 사진을 내는 영상이에요 (켜고 끌 것 없음)
+                        </p>
+                      ) : (
+                        <label className="flex items-center gap-1.5 pl-1 cursor-pointer select-none">
+                          <input type="checkbox" checked={켬}
+                            onChange={(e) => setHwPhotoAsk((prev) => {
+                              const next = new Set(prev)
+                              if (e.target.checked) next.add(영상열쇠(url)); else next.delete(영상열쇠(url))
+                              return next
+                            })} />
+                          <span className="text-[11px]" style={{ color: 켬 ? '#993C1D' : '#9ca3af' }}>
+                            직접 푼 풀이도 사진으로 받기
+                          </span>
+                        </label>
+                      ))}
+                      </div>
+                    )})}
                     {hwVideoUrls.map((url) => lessonByYt[youtubeId(url) || '']).some(Boolean) && (
                       <div className="flex flex-wrap gap-1">
                         {hwVideoUrls.map((url, i) => {

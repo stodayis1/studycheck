@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
-import { youtubeId, lessonLabel, needsPhoto, photoLabel, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, lessonLabel, photoUrlsOf, photoLabelOf, type LessonVideo } from '@/lib/lessonVideos'
+import { safeAsks, asksOf, type PhotoAskRow } from '@/lib/photoAsk'
 import { ProofSubmissionChip, type ProofSubmission } from '@/components/common/ProofSubmissionChip'
 
 interface ClassSession {
@@ -61,6 +62,7 @@ export default function ParentAssignmentsPage() {
   const [studentName, setStudentName] = useState('')
   const [lessonByYt, setLessonByYt] = useState<Record<string, LessonVideo>>({})
   const [proofSubs, setProofSubs] = useState<ProofSubmission[]>([])
+  const [photoAsks, setPhotoAsks] = useState<PhotoAskRow[]>([])
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [notes, setNotes] = useState<LearningNote[]>([])
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
@@ -100,12 +102,16 @@ export default function ParentAssignmentsPage() {
             .eq('student_id', s.id),
         ])
         // 수지쌤 강의 이름 · 증명 백지 제출 (학부모는 사진도 본다)
-        const [{ data: lvData }, { data: psData }] = await Promise.all([
+        const [{ data: lvData }, { data: psData }, asks] = await Promise.all([
           supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id').not('youtube_id', 'is', null),
           supabase.from('proof_submissions').select('session_id, video_url, photo_paths, submitted_at').eq('student_id', s.id),
+          // 선생님이 「직접 푼 풀이도 찍어 내라」고 켜 둔 영상 (원장님 2026-11-04)
+          // ★ 표가 아직 없어도 화면이 멈추면 안 된다 — 못 읽으면 「켠 것이 없다」로 본다
+          safeAsks(supabase.from('video_photo_requests').select('session_id, video_url').eq('student_id', s.id)),
         ])
         setLessonByYt(Object.fromEntries(((lvData || []) as LessonVideo[]).map((v) => [v.youtube_id!, v])))
         setProofSubs((psData || []) as ProofSubmission[])
+        setPhotoAsks(asks)
 
         if (ssData) {
           setSessions(ssData)
@@ -330,8 +336,8 @@ export default function ParentAssignmentsPage() {
                         <span className="text-[10px] text-gray-400">{videoUrls.length}개</span>
                         <span className="ml-auto">
                           <ProofSubmissionChip
-                            proofUrls={videoUrls.filter((u) => needsPhoto(lessonByYt[youtubeId(u) || '']))}
-                            label={photoLabel(videoUrls.map((u) => lessonByYt[youtubeId(u) || '']))}
+                            proofUrls={photoUrlsOf(videoUrls, (u) => lessonByYt[youtubeId(u) || ''], asksOf(photoAsks, session.id))}
+                            label={photoLabelOf(videoUrls, (u) => lessonByYt[youtubeId(u) || ''], asksOf(photoAsks, session.id))}
                             subs={proofSubs.filter((p) => p.session_id === session.id)}
                             labelOf={(u) => lessonLabel(lessonByYt[youtubeId(u) || ''])} />
                         </span>

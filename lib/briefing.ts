@@ -223,6 +223,13 @@ export interface BriefingVideos {
   total: number
   /** 그중 증명 강의 편수 — 하나라도 있으면 「증명 올리기」까지 안내한다 */
   proof: number
+  /**
+   * 그중 **사진을 내야 하는** 편수 — 증명·컨씨영상과, 선생님이 배부하면서 켜 둔 것
+   * (원장님 2026-11-04 「직접 풀이한것도 찍어 올리라고」). 안 넣으면 proof 로 센다(옛 호출).
+   */
+  photo?: number
+  /** 사진 안내에 쓸 말 — 「증명」 / 「풀이 사진」 / 「사진」 */
+  photoWord?: string
 }
 
 export interface BriefingNote {
@@ -354,8 +361,11 @@ export function hwLines(ses: BriefingSession, videos?: BriefingVideos): string[]
   //   학부모님은 영상 과제가 있는 줄도 모르셨다.
   const n = videos?.total ?? 0
   if (n > 0) {
-    out.push(videos!.proof > 0
-      ? `· 영상과제 ${n}개 시청 후 증명 올리기`
+    // 사진을 내는 영상이 섞였으면 **무엇을 올리는지**까지 적는다.
+    // photo 를 안 주는 옛 호출은 지금까지대로 증명 편수로 센다.
+    const 낼것 = videos!.photo ?? videos!.proof
+    out.push(낼것 > 0
+      ? `· 영상과제 ${n}개 시청 후 ${videos!.photoWord ?? '증명'} 올리기`
       : `· 영상과제 ${n}개 시청`)
   }
   return out

@@ -20,6 +20,8 @@
 // 버튼 뒤 페이지는 **그때 값을 떠놓은 사진**(report_links.data)이다.
 //   링크를 주워도 살아 있는 DB 로 넘어갈 수 없고, 남의 자녀 자료도 볼 수 없다.
 import { NextRequest, NextResponse } from 'next/server'
+import { photoBrief } from '@/lib/lessonVideos'
+import { safeAsks, asksOf } from '@/lib/photoAsk'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/aligo'
 import { randomBytes } from 'crypto'
@@ -206,16 +208,23 @@ async function run(opts: {
   const allYt = [...new Set(sessions.flatMap((x: any) =>
     String(x.video_url ?? '').split(/\r?\n/).map((u: string) => ytId(u)).filter(Boolean)))] as string[]
   const kindOf = new Map<string, string>()
+  const lessonOfYt = new Map<string, any>()
   if (allYt.length) {
-    const { data: lv } = await db.from('lesson_videos').select('youtube_id, kind').in('youtube_id', allYt)
-    for (const v of (lv ?? []) as any[]) kindOf.set(v.youtube_id, v.kind)
+    const { data: lv } = await db.from('lesson_videos').select('youtube_id, grade, kind').in('youtube_id', allYt)
+    for (const v of (lv ?? []) as any[]) { kindOf.set(v.youtube_id, v.kind); lessonOfYt.set(v.youtube_id, v) }
   }
+  // 선생님이 「직접 푼 풀이도 찍어 내라」고 켜 둔 영상 (원장님 2026-11-04).
+  // ★ 켜 놓고 여기에 안 적으면 **학부모님은 사진을 내야 하는 줄 모르신다.**
+  //   표가 아직 없어도(SQL 실행 전) 브리핑이 멈추면 안 된다 — 못 읽으면 「켠 것이 없다」로 본다.
+  const askRows = await safeAsks(
+    db.from('video_photo_requests').select('session_id, video_url').in('session_id', sessions.map((x: any) => x.id)))
   const videosOf = (x: any) => {
     // 주소가 아닌 글이 들어 있는 옛 기록은 세지 않는다(「도형의 성질 Lv. 3.5」 2026-07-24).
     const urls = String(x.video_url ?? '').split(/\r?\n/)
       .map((u: string) => u.trim()).filter((u: string) => /^https?:\/\//.test(u))
     const proof = urls.filter((u) => kindOf.get(ytId(u) ?? '') === '증명').length
-    return { total: urls.length, proof }
+    const b = photoBrief(urls, (u) => lessonOfYt.get(ytId(u) ?? ''), asksOf(askRows, x.id))
+    return { total: urls.length, proof, photo: b.photo, photoWord: b.photoWord }
   }
 
   // ★ 결석한 날 학부모가 가장 알고 싶은 것은 「보강이 언제인가」다.
