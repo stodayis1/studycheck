@@ -44,15 +44,43 @@ export interface MonthlyReport {
   retries: { kind: string; unit: string; score: number | null; passed: boolean }[]
   retrySummary: { total: number; passed: number }
   /**
-   * 학원 코어테스트 — 예비 1회 · 예비 2회 · 본고사 (원장님 2026-11-04
-   * 「월간보고서에는 학원 코어테스트 예비1회, 예비2회, 본고사 이거 추가하자.
-   *  영역별 성취도는 굳이 필요없으니 그자리에 대체할께」).
+   * 학원 코어테스트 — **그 해에 본 것 전부**, 본 날짜 순 (원장님 2026-11-04
+   * 「코어테스트 이전 기록도 다 나와야지 누적으로. 해당년도는 누적으로 막대그래프로
+   *  보여줘. 예비랑, 본고사 구별해서. 누적이 될수록 막대그래프 두께는 얇아지겠지만
+   *  그래도 변화추이를 볼수 있어야돼」).
    *
-   * ★ 그 달에 본 것만이 아니라 **그 달까지의 가장 최근 회차**를 보여 준다.
-   *   예비 1회는 지난달, 본고사는 이번 달인 일이 흔하다 — 그 달 것만 보면 늘 비어 보인다.
-   *   대신 **언제 본 것인지**를 같이 적는다.
+   * ★ 회차 셋만 보여 주던 것을 그만두고 **1월 1일부터 그 달까지** 쌓는다.
+   *   예비 1회·2회·본고사 한 바퀴를 한 해에 두 번 이상 돌기 때문에(실측: 본고사가 일곱 달에
+   *   걸쳐 있고, 한 학생이 많으면 열다섯 번) 회차 이름만으로는 어느 바퀴 것인지 가릴 수 없다.
+   *   그래서 **날짜가 열쇠**다. 막대마다 날짜를 적는다.
+   * ★ 예비와 본고사는 **색으로** 가른다 — 막대가 얇아져도 이것만은 보여야 한다.
    */
-  coreTests: { round: string; score: number | null; total: number | null; date: string | null }[]
+  coreTests: {
+    /** 본 날 (YYYY-MM-DD) */
+    date: string
+    /** 막대 밑에 적는 날짜 — 「5/11」 */
+    dateLabel: string
+    /** 회차 — 예비 1회 / 예비 2회 / 본고사 / 회차 미기재 */
+    round: string
+    /** 좁은 자리에 적는 짧은 이름 — 예비1 / 예비2 / 본고사 / 미기재 */
+    short: string
+    /** 색을 가르는 갈래 */
+    kind: '예비' | '본고사' | '기타'
+    score: number
+    total: number | null
+    /** 막대 높이 — 100점 환산 */
+    pct: number
+  }[]
+  /** 그 해 코어테스트 한 줄 요약 — 몇 회·평균·최고·처음→마지막 */
+  coreSummary: {
+    count: number
+    avg: number | null
+    best: number | null
+    first: number | null
+    last: number | null
+    preAvg: number | null
+    mainAvg: number | null
+  }
   /** 선생님이 남긴 말 — 그 달 **마지막** 알림장. 한 달 총평이 아니다. */
   teacherNote: string | null
   /**
@@ -71,35 +99,75 @@ export interface MonthlyReport {
 
 const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null)
 
-/** 코어테스트를 얼마나 거슬러 보나 — 한 학기 한 바퀴가 이 안에 들어온다. */
-export const CORE_WINDOW_DAYS = 120
-/** 그 날짜에서 n 일 전 (날짜만 더한다 — 시간대가 끼면 하루가 밀린다) */
-export const backDays = (date: string, n: number) =>
-  new Date(Date.parse(`${date}T00:00:00Z`) - n * 86400_000).toISOString().slice(0, 10)
-
-/** 보여 줄 회차와 그 순서. 화면도 이 순서로 찍는다. */
-export const CORE_ROUNDS = ['예비 1회', '예비 2회', '본고사'] as const
+/** 그 해 1월 1일 — 코어테스트는 **해마다** 다시 쌓는다. */
+export const yearStart = (date: string) => `${String(date).slice(0, 4)}-01-01`
 
 /**
- * 회차마다 **가장 나중에 본 것** 하나씩.
+ * 제목에서 회차를 읽는다.
  *
  * ★ 제목의 띄어쓰기가 들쭉날쭉하다 — 「예비 1회」와 「예비1회」가 둘 다 들어 있다(실측).
- *   띄어쓰기를 지우고 견준다. 제목이 비어 있는 줄도 있는데, 그건 어느 회차인지 알 수 없어
- *   **버린다**(아무 회차에나 끼워 넣으면 틀린 점수를 보여 주게 된다).
+ *   띄어쓰기를 지우고 본다.
+ * ★ 제목이 빈 줄이 25건 있다(실측). 그건 **버리지 않고** 「회차 미기재」로 둔다 —
+ *   25건 중 22건은 그날 그 학생의 유일한 기록이어서, 버리면 변화추이에 구멍이 난다.
+ *   다만 어느 회차인지는 **지어내지 않는다**(색도 예비·본고사와 다르게 둔다).
  */
-export function pickCoreTests(rows: any[]): MonthlyReport['coreTests'] {
-  const 민글자 = (x: any) => String(x ?? '').replace(/\s+/g, '')
-  return CORE_ROUNDS.map((round) => {
-    const 같은회차 = (rows ?? []).filter((r) => 민글자(r.title) === 민글자(round))
-    const last = [...같은회차].sort((a, b) =>
-      String(a.exam_date ?? '').localeCompare(String(b.exam_date ?? '')))[같은회차.length - 1]
+export function coreRoundOf(title: any): Pick<MonthlyReport['coreTests'][number], 'round' | 'short' | 'kind'> {
+  const t = String(title ?? '').replace(/\s+/g, '')
+  if (/본고사/.test(t)) return { round: '본고사', short: '본고사', kind: '본고사' }
+  if (/예비/.test(t)) {
+    const n = t.match(/[12]/)?.[0]
+    return n
+      ? { round: `예비 ${n}회`, short: `예비${n}`, kind: '예비' }
+      : { round: '예비', short: '예비', kind: '예비' }
+  }
+  const 적힌것 = String(title ?? '').trim()
+  return 적힌것
+    ? { round: 적힌것, short: 적힌것.slice(0, 4), kind: '기타' }
+    : { round: '회차 미기재', short: '미기재', kind: '기타' }
+}
+
+/**
+ * 그 해에 본 코어테스트 전부 — 본 날짜 순.
+ *
+ * ★ 같은 날 같은 회차가 두 번 적힌 것이 있다(실측 17묶음, 그중 6묶음은 점수까지 다르다 —
+ *   재채점으로 보인다). 막대를 둘로 세우면 학부모님이 두 번 본 것으로 읽으시므로
+ *   **나중에 적은 것 하나만** 남긴다. 지우는 것이 아니라 보여 줄 때만 하나로 본다.
+ */
+export function coreYearRows(rows: any[]): MonthlyReport['coreTests'] {
+  const 쓸것 = (rows ?? []).filter((r) => r?.exam_date && r?.score != null)
+  const 날짜순 = [...쓸것].sort((a, b) =>
+    String(a.exam_date).localeCompare(String(b.exam_date))
+    || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+  // Map 은 같은 열쇠에 다시 넣어도 **자리는 그대로**이고 값만 나중 것으로 바뀐다.
+  const 하나씩 = new Map<string, any>()
+  for (const r of 날짜순) 하나씩.set(`${r.exam_date}|${coreRoundOf(r.title).round}`, r)
+  return [...하나씩.values()].map((r) => {
+    const score = Number(r.score)
+    const total = r.total_score != null ? Number(r.total_score) : null
     return {
-      round,
-      score: last?.score != null ? Number(last.score) : null,
-      total: last?.total_score != null ? Number(last.total_score) : null,
-      date: last?.exam_date ?? null,
+      ...coreRoundOf(r.title),
+      date: String(r.exam_date),
+      dateLabel: `${Number(String(r.exam_date).slice(5, 7))}/${Number(String(r.exam_date).slice(8, 10))}`,
+      score,
+      total,
+      pct: total && total > 0 ? Math.round((score / total) * 100) : Math.round(score),
     }
   })
+}
+
+/** 그 해 한 줄 요약 — 몇 회·평균·최고·처음→마지막, 그리고 예비·본고사 따로 평균 */
+export function coreSummaryOf(list: MonthlyReport['coreTests']): MonthlyReport['coreSummary'] {
+  const p = (list ?? []).map((c) => c.pct)
+  const mean = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null)
+  return {
+    count: p.length,
+    avg: mean(p),
+    best: p.length ? Math.max(...p) : null,
+    first: p.length ? p[0] : null,
+    last: p.length ? p[p.length - 1] : null,
+    preAvg: mean((list ?? []).filter((c) => c.kind === '예비').map((c) => c.pct)),
+    mainAvg: mean((list ?? []).filter((c) => c.kind === '본고사').map((c) => c.pct)),
+  }
 }
 
 /** 학년 글자로 초·중·고를 가린다. 보여 줄 칸이 달라진다. */
@@ -137,11 +205,12 @@ export async function buildMonthlyReport(
       db.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }).limit(1000),
       db.from('student_textbooks').select('*').eq('student_id', studentId).eq('status', 'assigned'),
       db.from('student_exam_prep').select('*, inner_enough(*)').eq('student_id', studentId).gte('exam_date', from),
-      // 코어테스트 — 그 달까지 **최근 넉 달**치를 보고 회차별 마지막 것을 고른다.
-      db.from('exams').select('exam_date, title, score, total_score')
+      // 코어테스트 — **그 해 1월 1일부터 그 달까지** 전부(누적). 한 학생 한 해라 많아야 스무 줄.
+      // created_at 도 읽는다 — 같은 날 같은 회차가 두 번 적힌 것을 나중 것으로 가리는 데 쓴다.
+      db.from('exams').select('exam_date, title, score, total_score, created_at')
         .eq('student_id', studentId).eq('exam_type', '코어테스트')
-        .gte('exam_date', backDays(to, CORE_WINDOW_DAYS)).lte('exam_date', to)
-        .order('exam_date'),
+        .gte('exam_date', yearStart(to)).lte('exam_date', to)
+        .order('exam_date').order('created_at'),
       db.from('video_watch_logs').select('*').eq('student_id', studentId).in('session_id', ids.length ? ids : [noKey]),
       db.from('proof_submissions').select('id').eq('student_id', studentId).in('session_id', ids.length ? ids : [noKey]),
       db.from('feedbacks').select('content, created_at').eq('student_id', studentId)
@@ -214,6 +283,9 @@ export async function buildMonthlyReport(
   const watched = (vw ?? []).filter((v: any) => Number(v.coverage_pct ?? 0) > 0)
   const avgPct = avg(watched.map((v: any) => Math.round(Number(v.coverage_pct))))
 
+  // 코어테스트 — 그 해에 본 것 전부(누적). 요약도 이 목록에서 뽑는다.
+  const coreList = coreYearRows(core ?? [])
+
 
   return {
     student: { name: st.name, grade: st.grade, school: st.school ?? null, teacher: (st.teacher_name ?? '').split(/[,/\s]+/)[0] || null },
@@ -237,7 +309,8 @@ export async function buildMonthlyReport(
       score: w.score ?? null, passed: w.status === 'passed',
     })),
     retrySummary: { total: retriesRaw.length, passed: retriesRaw.filter((w: any) => w.status === 'passed').length },
-    coreTests: pickCoreTests(core ?? []),
+    coreTests: coreList,
+    coreSummary: coreSummaryOf(coreList),
     teacherNote: (fb ?? [])[0]?.content ?? null,
     notices: (allFb ?? [])
       .filter((f: any) => String(f.content ?? '').trim())

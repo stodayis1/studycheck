@@ -57,6 +57,24 @@ const CSS = `
 .mr .lvval b{font-size:11.5px;color:#712B13}
 .mr .lvval em{font-style:normal;display:inline-block;margin-left:4px;font-size:9.5px;font-weight:800;color:#0F6E56}
 .mr .none{font-size:11px;color:#B3A49B;margin:11px 0 0}
+.mr .cg{margin-top:11px;border:1px solid #EADFD6;border-radius:10px;background:#FFFBF7;padding:12px 13px 10px}
+.mr .cglg{display:flex;align-items:center;gap:11px;font-size:10px;color:#5B4639;margin-bottom:7px;flex-wrap:wrap}
+.mr .cglg span{display:inline-flex;align-items:center;gap:4px}
+.mr .cglg i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.mr .cglg em{font-style:normal;margin-left:auto;font-size:9.5px;color:#8C7B72}
+.mr .cpre{background:#9FE1CB}
+.mr .cmain{background:#712B13}
+.mr .cetc{background:#CDBFB5}
+.mr .cgscroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.mr .cgplot{position:relative;display:flex;align-items:stretch;gap:4px;height:146px;padding-top:15px;box-sizing:border-box;border-bottom:1px solid #D9C9BD}
+.mr .cggrid{position:absolute;left:0;right:0;top:15px;bottom:0;background:repeating-linear-gradient(to top,#EFE4DC 0,#EFE4DC 1px,transparent 1px,transparent 25%)}
+.mr .cgcol{position:relative;flex:1 1 0;min-width:0}
+.mr .cgbar{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:40px;min-height:2px;border-radius:3px 3px 0 0}
+.mr .cgv{position:absolute;left:0;right:0;text-align:center;font-size:9.5px;font-weight:800;color:#712B13;line-height:13px}
+.mr .cgx{display:flex;gap:4px;margin-top:5px}
+.mr .cgx>div{flex:1 1 0;min-width:0;text-align:center;overflow:hidden}
+.mr .cgx b{display:block;font-size:9px;font-weight:700;color:#5B4639;white-space:nowrap}
+.mr .cgx span{display:block;font-size:8.5px;color:#9C8A7F;white-space:nowrap;margin-top:1px}
 .mr .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:11px}
 .mr .box{border:1px solid #EADFD6;border-radius:10px;padding:13px 14px;background:#FFFBF7}
 .mr .box .t{font-size:11.5px;font-weight:800;margin-bottom:7px;display:flex;justify-content:space-between;gap:8px;color:#712B13}
@@ -82,6 +100,10 @@ const CSS = `
   .mr .lvrow{flex-wrap:wrap;gap:4px 8px}
   .mr .lvname{width:calc(100% - 80px)}
   .mr .bt{order:3;flex-basis:100%}
+  .mr .cgplot{height:124px;gap:3px}
+  .mr .cgx{gap:3px}
+  .mr .cgx b{font-size:8px}
+  .mr .cgx span{font-size:7.5px}
   .mr .ft{padding:12px 16px}
 }
 `
@@ -131,6 +153,15 @@ export function MonthlyReportView({ d }: { d: Data }) {
   const { student: s, lessons: L, homework: H } = d
   const 중고 = d.tier !== '초등'
   const 고등 = d.tier === '고등'
+  // ★ 이미 보내 드린 리포트는 그때 모양 그대로 저장돼 있다(report_links.data 스냅샷).
+  //   옛 스냅샷에는 coreTests 가 아예 없거나 옛 모양(pct 없음)이라 그대로 그리면 **그 링크가 깨진다.**
+  //   그래서 새 모양인 것만 골라 쓰고, 아니면 칸을 띄우지 않는다.
+  const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
+  const CS = d.coreSummary
+  // ★ 막대 굵기는 flex 가 알아서 나눠 가지되, **칸이 26px 보다 좁아지지는 않게** 한다.
+  //   폰(375px)에서 16회가 되면 칸이 17px 이 되어 「예비1」·「5/11」·「100」이 잘렸다(실측 2026-11-04).
+  //   좁으면 옆으로 밀어서 본다 — 눈금선과 밑줄까지 같이 밀려야 해서 폭을 숫자로 준다.
+  const CGMIN = core.length * 26 + Math.max(0, core.length - 1) * 4
   let no = 1
   const nx = () => String(no++).padStart(2, '0')
 
@@ -223,27 +254,61 @@ export function MonthlyReportView({ d }: { d: Data }) {
             </Sec>
           )}
 
-          {/* 학원 코어테스트 — 예전에 있던 성취도 막대 칸을 대신한다 (원장님 2026-11-04
-              「영역별 성취도는 굳이 필요없으니 그자리에 대체할께」).
-              그 달 것만이 아니라 **그 달까지의 가장 최근 회차**를 보여 주고, 언제 본 것인지 적는다.
-              셋 다 기록이 없으면 칸 자체를 띄우지 않는다. */}
-          {d.coreTests?.some((c) => c.score != null) && (
-            <Sec no={nx()} title="학원 코어테스트" note="예비 1회 · 예비 2회 · 본고사">
-              <div className="cols">
-                {d.coreTests.map((c) => (
-                  <div className="box" key={c.round}>
-                    <div className="t">
-                      {c.round}
-                      <span>{c.date ? `${Number(c.date.slice(5, 7))}월 ${Number(c.date.slice(8, 10))}일` : '아직'}</span>
+          {/* 학원 코어테스트 — 그 해에 본 것을 **쌓아서** 막대로 보여 준다 (원장님 2026-11-04
+              「해당년도는 누적으로 막대그래프로 보여줘. 예비랑, 본고사 구별해서. 누적이 될수록
+               막대그래프 두께는 얇아지겠지만 그래도 변화추이를 볼수 있어야돼」).
+              ★ 막대 굵기는 정하지 않는다 — flex 로 남은 폭을 나눠 가지므로 회가 쌓이면
+                저절로 얇아지고, 적으면 굵어진다(최대 40px 까지만).
+              ★ JS 를 쓰지 않는다. 카톡 인앱 브라우저에서 막히는 일이 있어 서버에서 그려 보낸다.
+              ★ 그 해 기록이 없으면 칸 자체를 띄우지 않는다. */}
+          {core.length > 0 && CS && (
+            <Sec
+              no={nx()}
+              title="학원 코어테스트"
+              note={`${d.period.year}년 ${CS.count}회 · 평균 ${CS.avg}점 · 최고 ${CS.best}점`}
+            >
+              <div className="cg">
+                <div className="cglg">
+                  <span><i className="cpre" />예비</span>
+                  <span><i className="cmain" />본고사</span>
+                  {core.some((c) => c.kind === '기타') && <span><i className="cetc" />회차 미기재</span>}
+                  <em>100점 만점</em>
+                </div>
+                <div className="cgscroll">
+                <div className="cgplot" style={{ minWidth: CGMIN }}>
+                  <div className="cggrid" />
+                  {core.map((c, i) => (
+                    <div className="cgcol" key={`${c.date}-${c.round}-${i}`}>
+                      <span className="cgv" style={{ bottom: `calc(${c.pct}% + 1px)` }}>{c.pct}</span>
+                      <div
+                        className={`cgbar ${c.kind === '본고사' ? 'cmain' : c.kind === '예비' ? 'cpre' : 'cetc'}`}
+                        style={{ height: `${Math.min(100, Math.max(0, c.pct))}%` }}
+                      />
                     </div>
-                    <p style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 0' }}>
-                      {c.score != null ? `${c.score}점` : '—'}
-                      {c.score != null && c.total != null && c.total !== 100 && (
-                        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.6 }}> / {c.total}</span>
-                      )}
-                    </p>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div className="cgx" style={{ minWidth: CGMIN }}>
+                  {core.map((c, i) => (
+                    <div key={`${c.date}-${c.round}-${i}`}>
+                      <b>{c.short}</b>
+                      <span>{c.dateLabel}</span>
+                    </div>
+                  ))}
+                </div>
+                </div>
+                <p className="note">
+                  {CS.count > 1 && (
+                    <>
+                      처음 {CS.first}점 → 마지막 {CS.last}점
+                      {CS.last! !== CS.first! && ` (${CS.last! > CS.first! ? '▲' : '▼'}${Math.abs(CS.last! - CS.first!)})`}
+                      {' · '}
+                    </>
+                  )}
+                  {CS.preAvg != null && `예비 평균 ${CS.preAvg}점`}
+                  {CS.preAvg != null && CS.mainAvg != null && ' · '}
+                  {CS.mainAvg != null && `본고사 평균 ${CS.mainAvg}점`}
+                  {core.length >= 8 && <><br />회차가 많아 좁은 화면에서는 그래프를 옆으로 밀어서 보실 수 있어요.</>}
+                </p>
               </div>
             </Sec>
           )}
