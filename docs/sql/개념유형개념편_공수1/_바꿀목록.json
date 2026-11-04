@@ -1,0 +1,1088 @@
+[
+ {
+  "id": 52843,
+  "no": "0101S1",
+  "before": "image:12x²-7x+3",
+  "after": "image:None"
+ },
+ {
+  "id": 52844,
+  "no": "0101S2",
+  "before": "image:x²+3xy+y²",
+  "after": "image:None"
+ },
+ {
+  "id": 52851,
+  "no": "0103S1",
+  "before": "image:⑴ a²+b²+c²-2ab+2bc-2ca",
+  "after": "image:None"
+ },
+ {
+  "id": 52852,
+  "no": "0103S2",
+  "before": "image:⑴ x³+y³-z³+3xyz",
+  "after": "image:None"
+ },
+ {
+  "id": 52854,
+  "no": "0104S1",
+  "before": "image:⑴ x⁴-2x³-2x²+3x-4",
+  "after": "image:None"
+ },
+ {
+  "id": 52855,
+  "no": "0104S2",
+  "before": "image:⑴ x⁴-2x³-7x²+8x+12",
+  "after": "image:None"
+ },
+ {
+  "id": 52857,
+  "no": "0105S1",
+  "before": "image:⑴ 25⑵ 52",
+  "after": "image:None"
+ },
+ {
+  "id": 52858,
+  "no": "0105S2",
+  "before": "image:14j2",
+  "after": "image:None"
+ },
+ {
+  "id": 52861,
+  "no": "0106S1",
+  "before": "image:⑴ 11⑵ 27",
+  "after": "image:None"
+ },
+ {
+  "id": 52869,
+  "no": "0108S2",
+  "before": "image:5j2",
+  "after": "image:None"
+ },
+ {
+  "id": 52872,
+  "no": "0109S1",
+  "before": "image:⑴ 몫: x²-x-2, 나머지: 5",
+  "after": "image:None"
+ },
+ {
+  "id": 52875,
+  "no": "0110S1",
+  "before": "image:3x²+1",
+  "after": "image:None"
+ },
+ {
+  "id": 52879,
+  "no": "0111S1",
+  "before": "image:몫: 15 Q{x}, 나머지: R",
+  "after": "image:None"
+ },
+ {
+  "id": 52880,
+  "no": "0111S2",
+  "before": "image:몫: xQ{x}+R, 나머지: -R",
+  "after": "image:None"
+ },
+ {
+  "id": 52882,
+  "no": "0112S1",
+  "before": "image:⑴ {a-b-2c}²",
+  "after": "image:None"
+ },
+ {
+  "id": 52883,
+  "no": "0112S2",
+  "before": "image:⑴ {a+b}{a-b}²",
+  "after": "number:21"
+ },
+ {
+  "id": 52885,
+  "no": "0201S1",
+  "before": "image:⑴ 몫: x²+3x+1, 나머지: 0",
+  "after": "image:None"
+ },
+ {
+  "id": 52886,
+  "no": "0201S2",
+  "before": "number:21",
+  "after": "image:None"
+ },
+ {
+  "id": 52887,
+  "no": "0201S3",
+  "before": "image:x=-3, y=-1",
+  "after": "number:2"
+ },
+ {
+  "id": 52889,
+  "no": "0202S1",
+  "before": "image:a=4, b=7",
+  "after": "image:None"
+ },
+ {
+  "id": 52890,
+  "no": "0202S2",
+  "before": "number:2",
+  "after": "image:None"
+ },
+ {
+  "id": 52891,
+  "no": "0202S3",
+  "before": "image:⑴ a=1, b=2, c=1",
+  "after": "number:64"
+ },
+ {
+  "id": 52893,
+  "no": "0203S1",
+  "before": "image:a=-3, b=2",
+  "after": "image:None"
+ },
+ {
+  "id": 52894,
+  "no": "0203S2",
+  "before": "number:64",
+  "after": "number:14"
+ },
+ {
+  "id": 52896,
+  "no": "0204S1",
+  "before": "image:a=-1, b=3",
+  "after": "number:-30"
+ },
+ {
+  "id": 52897,
+  "no": "0204S2",
+  "before": "number:14",
+  "after": "image:None"
+ },
+ {
+  "id": 52899,
+  "no": "0205S1",
+  "before": "number:-30",
+  "after": "image:None"
+ },
+ {
+  "id": 52900,
+  "no": "0205S2",
+  "before": "image:⑴ a=5, b=8, c=8⑵ 8.851",
+  "after": "number:32"
+ },
+ {
+  "id": 52901,
+  "no": "0205S3",
+  "before": "image:⑴ 5⑵ a=4, b=2",
+  "after": "number:11"
+ },
+ {
+  "id": 52903,
+  "no": "0206S1",
+  "before": "number:32",
+  "after": "number:1"
+ },
+ {
+  "id": 52904,
+  "no": "0206S2",
+  "before": "number:11",
+  "after": "image:None"
+ },
+ {
+  "id": 52905,
+  "no": "0206S3",
+  "before": "number:1",
+  "after": "image:None"
+ },
+ {
+  "id": 52907,
+  "no": "0207S1",
+  "before": "image:x+11",
+  "after": "image:None"
+ },
+ {
+  "id": 52908,
+  "no": "0207S2",
+  "before": "image:x+1",
+  "after": "number:1"
+ },
+ {
+  "id": 52910,
+  "no": "0208S1",
+  "before": "image:3x²-5x-7",
+  "after": "number:15"
+ },
+ {
+  "id": 52911,
+  "no": "0208S2",
+  "before": "number:1",
+  "after": "number:-4"
+ },
+ {
+  "id": 52912,
+  "no": "0208S3",
+  "before": "number:15",
+  "after": "number:-2"
+ },
+ {
+  "id": 52914,
+  "no": "0209S1",
+  "before": "number:-4",
+  "after": "number:3"
+ },
+ {
+  "id": 52915,
+  "no": "0209S2",
+  "before": "number:-2",
+  "after": "number:1"
+ },
+ {
+  "id": 52916,
+  "no": "0209S3",
+  "before": "number:3",
+  "after": "number:-1"
+ },
+ {
+  "id": 52918,
+  "no": "0210S1",
+  "before": "number:1",
+  "after": "image:None"
+ },
+ {
+  "id": 52919,
+  "no": "0210S2",
+  "before": "number:-1",
+  "after": "number:40"
+ },
+ {
+  "id": 52920,
+  "no": "0210S3",
+  "before": "image:⑴ a=-2, b=-3⑵ a=-6, b=8",
+  "after": "number:1"
+ },
+ {
+  "id": 52922,
+  "no": "0211S1",
+  "before": "number:40",
+  "after": "image:None"
+ },
+ {
+  "id": 52923,
+  "no": "0211S2",
+  "before": "number:1",
+  "after": "image:None"
+ },
+ {
+  "id": 52925,
+  "no": "0212S1",
+  "before": "image:⑴ ‌\u0007{a+b-1}{a²+b²-ab+a+b+1} 또는",
+  "after": "image:None"
+ },
+ {
+  "id": 52926,
+  "no": "0212S2",
+  "before": "image:⑴ {3x+y-1}{3x-y-1}",
+  "after": "image:None"
+ },
+ {
+  "id": 52928,
+  "no": "0213S1",
+  "before": "image:⑴ {x-1}{x-3}{x²-4x-4}",
+  "after": "image:None"
+ },
+ {
+  "id": 52930,
+  "no": "0214S1",
+  "before": "image:⑴ {x²+5}{x+2}{x-2}",
+  "after": "image:None"
+ },
+ {
+  "id": 52933,
+  "no": "0215S1",
+  "before": "image:⑴ {2y+1}{x+y-1}",
+  "after": "image:None"
+ },
+ {
+  "id": 52936,
+  "no": "0216S1",
+  "before": "image:⑴ {x+4}{x-1}²",
+  "after": "image:None"
+ },
+ {
+  "id": 52937,
+  "no": "0216S2",
+  "before": "image:{x-1}{x+1}{x²+2x+3}",
+  "after": "image:None"
+ },
+ {
+  "id": 52939,
+  "no": "0217S1",
+  "before": "image:⑴ 54⑵ 106",
+  "after": "image:None"
+ },
+ {
+  "id": 52942,
+  "no": "0218S1",
+  "before": "image:빗변의 길이가 c인 직각삼각형",
+  "after": "image:None"
+ },
+ {
+  "id": 52943,
+  "no": "0218S2",
+  "before": "image:정삼각형",
+  "after": "image:None"
+ },
+ {
+  "id": 52945,
+  "no": "0301S1",
+  "before": "image:⑴ -5-2i⑵ 23+7i⑶ -16-7i⑷ -2",
+  "after": "image:None"
+ },
+ {
+  "id": 52948,
+  "no": "0302S1",
+  "before": "image:⑴ - 13⑵ 1",
+  "after": "image:None"
+ },
+ {
+  "id": 52950,
+  "no": "0302S3",
+  "before": "image:-3, 0",
+  "after": "image:None"
+ },
+ {
+  "id": 52952,
+  "no": "0303S1",
+  "before": "image:⑴ x=-2, y=4⑵ x=3, y=1",
+  "after": "image:None"
+ },
+ {
+  "id": 52953,
+  "no": "0303S2",
+  "before": "image:x=-2, y=3",
+  "after": "image:None"
+ },
+ {
+  "id": 52955,
+  "no": "0304S1",
+  "before": "image:⑴ - 23⑵ 2+i",
+  "after": "image:None"
+ },
+ {
+  "id": 52959,
+  "no": "0305S2",
+  "before": "image:8+5i",
+  "after": "image:None"
+ },
+ {
+  "id": 52961,
+  "no": "0306S1",
+  "before": "image:i",
+  "after": "image:None"
+ },
+ {
+  "id": 52962,
+  "no": "0306S2",
+  "before": "image:-2+i, 2+i",
+  "after": "image:None"
+ },
+ {
+  "id": 52963,
+  "no": "0306S3",
+  "before": "image:-1-2i, 3-2i",
+  "after": "image:None"
+ },
+ {
+  "id": 52965,
+  "no": "0307S1",
+  "before": "image:⑴ 1+i⑵ -1-i⑶ i⑷ 256",
+  "after": "image:None"
+ },
+ {
+  "id": 52966,
+  "no": "0307S2",
+  "before": "image:51-50i",
+  "after": "image:None"
+ },
+ {
+  "id": 52969,
+  "no": "0308S1",
+  "before": "image:⑴ -1⑵ 9+3i",
+  "after": "image:None"
+ },
+ {
+  "id": 52972,
+  "no": "0309S1",
+  "before": "image:-b",
+  "after": "image:None"
+ },
+ {
+  "id": 52973,
+  "no": "0309S2",
+  "before": "image:-a-c",
+  "after": "image:None"
+ },
+ {
+  "id": 52976,
+  "no": "0401S1",
+  "before": "image:⑴ x= -1",
+  "after": "image:None"
+ },
+ {
+  "id": 52980,
+  "no": "0402S1",
+  "before": "image:⑴ - 43⑵ 2, - 32",
+  "after": "image:None"
+ },
+ {
+  "id": 52983,
+  "no": "0403S1",
+  "before": "image:⑴ x=-2 또는 x=2⑵ x=-5 또는 x=4",
+  "after": "image:None"
+ },
+ {
+  "id": 52986,
+  "no": "0404S1",
+  "before": "image:⑴ a<1⑵ a=1⑶ a>1",
+  "after": "image:None"
+ },
+ {
+  "id": 52987,
+  "no": "0404S2",
+  "before": "image:a",
+  "after": "image:None"
+ },
+ {
+  "id": 52988,
+  "no": "0404S3",
+  "before": "image:-4<k<-2 또는 k>-2",
+  "after": "image:None"
+ },
+ {
+  "id": 52990,
+  "no": "0405S1",
+  "before": "image:⑴ -1, 3⑵ a=1, b=-2",
+  "after": "image:None"
+ },
+ {
+  "id": 52993,
+  "no": "0406S1",
+  "before": "image:⑴ -3⑵ 12⑶ 20⑷ -4",
+  "after": "image:None"
+ },
+ {
+  "id": 52994,
+  "no": "0406S2",
+  "before": "image:⑴ j5⑵ j5",
+  "after": "image:None"
+ },
+ {
+  "id": 52997,
+  "no": "0407S1",
+  "before": "number:12",
+  "after": "image:None"
+ },
+ {
+  "id": 52998,
+  "no": "0407S2",
+  "before": "image:a=-1, b=-3",
+  "after": "image:None"
+ },
+ {
+  "id": 53001,
+  "no": "0408S1",
+  "before": "image:2, 12",
+  "after": "image:None"
+ },
+ {
+  "id": 53005,
+  "no": "0409S1",
+  "before": "image:두 근의 합: 3, 두 근의 곱: 34",
+  "after": "image:None"
+ },
+ {
+  "id": 53007,
+  "no": "0409S3",
+  "before": "number:79",
+  "after": "image:None"
+ },
+ {
+  "id": 53009,
+  "no": "0410S1",
+  "before": "image:⑴ x²-3x+2=0⑵ 2x²+3x+2=0",
+  "after": "image:None"
+ },
+ {
+  "id": 53012,
+  "no": "0411S1",
+  "before": "image:⑴ a=-6, b=-1⑵ a=-6, b=10",
+  "after": "image:None"
+ },
+ {
+  "id": 53013,
+  "no": "0411S2",
+  "before": "image:p=-4, q=2",
+  "after": "image:None"
+ },
+ {
+  "id": 53014,
+  "no": "0411S3",
+  "before": "image:x= 3",
+  "after": "image:None"
+ },
+ {
+  "id": 53020,
+  "no": "0502S1",
+  "before": "image:⑴ k<1⑵ k=1⑶ k>1",
+  "after": "image:None"
+ },
+ {
+  "id": 53025,
+  "no": "0503S3",
+  "before": "image:{3, 2}",
+  "after": "image:None"
+ },
+ {
+  "id": 53027,
+  "no": "0504S1",
+  "before": "image:⑴ k>- 94⑵ k= 14⑶ k<- 32",
+  "after": "image:None"
+ },
+ {
+  "id": 53028,
+  "no": "0504S2",
+  "before": "image:a",
+  "after": "image:None"
+ },
+ {
+  "id": 53030,
+  "no": "0505S1",
+  "before": "image:⑴ 최댓값: 5, 최솟값: -4",
+  "after": "image:None"
+ },
+ {
+  "id": 53034,
+  "no": "0506S1",
+  "before": "image:⑴ -6⑵ -1",
+  "after": "image:None"
+ },
+ {
+  "id": 53037,
+  "no": "0507S1",
+  "before": "image:⑴ 최댓값: 없다., 최솟값: -2",
+  "after": "image:None"
+ },
+ {
+  "id": 53040,
+  "no": "0508S1",
+  "before": "image:최댓값: 10, 최솟값: 1",
+  "after": "image:None"
+ },
+ {
+  "id": 53042,
+  "no": "0508S3",
+  "before": "image:최댓값: 6, 최솟값: -10",
+  "after": "image:None"
+ },
+ {
+  "id": 53045,
+  "no": "0509S2",
+  "before": "number:98",
+  "after": "number:98 m"
+ },
+ {
+  "id": 53047,
+  "no": "0601S1",
+  "before": "image:⑴ x=-1 또는 x=-3",
+  "after": "image:None"
+ },
+ {
+  "id": 53050,
+  "no": "0602S1",
+  "before": "image:⑴ x=-4 또는 x=1 또는 x= -3",
+  "after": "image:None"
+ },
+ {
+  "id": 53053,
+  "no": "0603S1",
+  "before": "image:⑴ x=",
+  "after": "image:None"
+ },
+ {
+  "id": 53054,
+  "no": "0603S2",
+  "before": "image:2j2",
+  "after": "image:None"
+ },
+ {
+  "id": 53055,
+  "no": "0603S3",
+  "before": "image:x=-1",
+  "after": "image:None"
+ },
+ {
+  "id": 53057,
+  "no": "0604S1",
+  "before": "image:x=-2",
+  "after": "image:None"
+ },
+ {
+  "id": 53058,
+  "no": "0604S2",
+  "before": "number:32",
+  "after": "image:None"
+ },
+ {
+  "id": 53060,
+  "no": "0605S1",
+  "before": "image:1-2i, 1+2i",
+  "after": "image:None"
+ },
+ {
+  "id": 53064,
+  "no": "0606S1",
+  "before": "image:a",
+  "after": "image:None"
+ },
+ {
+  "id": 53065,
+  "no": "0606S2",
+  "before": "image:k> 14",
+  "after": "image:None"
+ },
+ {
+  "id": 53069,
+  "no": "0607S2",
+  "before": "number:8",
+  "after": "number:8 m"
+ },
+ {
+  "id": 53072,
+  "no": "0608S2",
+  "before": "image:⑴ 5⑵ 14⑶ 32⑷ - 52",
+  "after": "image:None"
+ },
+ {
+  "id": 53073,
+  "no": "0608S3",
+  "before": "image:a=14, b=-8",
+  "after": "image:None"
+ },
+ {
+  "id": 53075,
+  "no": "0609S1",
+  "before": "image:3x³-x²+2x+1=0",
+  "after": "image:None"
+ },
+ {
+  "id": 53076,
+  "no": "0609S2",
+  "before": "image:x³+x+3=0",
+  "after": "image:None"
+ },
+ {
+  "id": 53078,
+  "no": "0610S1",
+  "before": "image:a=5, b=-26",
+  "after": "image:None"
+ },
+ {
+  "id": 53081,
+  "no": "0611S1",
+  "before": "image:⑴ -1⑵ 2⑶ -2⑷ -1",
+  "after": "image:None"
+ },
+ {
+  "id": 53084,
+  "no": "0612S1",
+  "before": "image:⑴",
+  "after": "image:None"
+ },
+ {
+  "id": 53088,
+  "no": "0613S1",
+  "before": "image:⑴ ‌\u0007",
+  "after": "image:None"
+ },
+ {
+  "id": 53089,
+  "no": "0613S2",
+  "before": "image:{-2, -2}, {2, 2}",
+  "after": "image:None"
+ },
+ {
+  "id": 53099,
+  "no": "0616S1",
+  "before": "number:7",
+  "after": "number:7 m"
+ },
+ {
+  "id": 53101,
+  "no": "0616S3",
+  "before": "number:10",
+  "after": "number:10 m"
+ },
+ {
+  "id": 53103,
+  "no": "0617S1",
+  "before": "image:⑴ {4, 6}, {6, 4}⑵ {3, 6}, {4, 4}, {6, 3}",
+  "after": "image:None"
+ },
+ {
+  "id": 53104,
+  "no": "0617S2",
+  "before": "image:-4, -2",
+  "after": "image:None"
+ },
+ {
+  "id": 53106,
+  "no": "0618S1",
+  "before": "image:⑴ x=6, y=3⑵ x=-1, y=-2",
+  "after": "image:None"
+ },
+ {
+  "id": 53108,
+  "no": "0701S1",
+  "before": "number:5",
+  "after": "image:None"
+ },
+ {
+  "id": 53110,
+  "no": "0701S3",
+  "before": "image:x",
+  "after": "image:None"
+ },
+ {
+  "id": 53112,
+  "no": "0702S1",
+  "before": "image:‌\u0007⑴ x<1⑵ -5",
+  "after": "image:None"
+ },
+ {
+  "id": 53113,
+  "no": "0702S2",
+  "before": "image:⑴ -2<x",
+  "after": "image:None"
+ },
+ {
+  "id": 53115,
+  "no": "0703S1",
+  "before": "image:‌\u0007⑴ x=1⑵ 해는 없다.\b",
+  "after": "image:None"
+ },
+ {
+  "id": 53121,
+  "no": "0705S1",
+  "before": "image:a>-14",
+  "after": "image:None"
+ },
+ {
+  "id": 53124,
+  "no": "0706S1",
+  "before": "number:-4",
+  "after": "image:None"
+ },
+ {
+  "id": 53125,
+  "no": "0706S2",
+  "before": "number:10",
+  "after": "image:None"
+ },
+ {
+  "id": 53127,
+  "no": "0707S1",
+  "before": "number:20",
+  "after": "image:None"
+ },
+ {
+  "id": 53131,
+  "no": "0708S1",
+  "before": "image:‌\u0007⑴ x<1 또는 x> 75\b",
+  "after": "image:None"
+ },
+ {
+  "id": 53132,
+  "no": "0708S2",
+  "before": "image:⑴ -8<x<2⑵ -2<x<18",
+  "after": "image:None"
+ },
+ {
+  "id": 53134,
+  "no": "0801S1",
+  "before": "image:‌\u0007⑴ -1",
+  "after": "image:None"
+ },
+ {
+  "id": 53135,
+  "no": "0801S2",
+  "before": "image:x<-2 또는 x>2",
+  "after": "image:None"
+ },
+ {
+  "id": 53137,
+  "no": "0802S1",
+  "before": "image:‌\u0007⑴ x",
+  "after": "image:None"
+ },
+ {
+  "id": 53138,
+  "no": "0802S2",
+  "before": "image:⑴ x",
+  "after": "image:None"
+ },
+ {
+  "id": 53141,
+  "no": "0803S2",
+  "before": "image:4 이상 14 이하",
+  "after": "image:None"
+ },
+ {
+  "id": 53145,
+  "no": "0804S2",
+  "before": "image:- 14 <x<1",
+  "after": "image:None"
+ },
+ {
+  "id": 53147,
+  "no": "0805S1",
+  "before": "image:a",
+  "after": "image:None"
+ },
+ {
+  "id": 53148,
+  "no": "0805S2",
+  "before": "number:4",
+  "after": "image:None"
+ },
+ {
+  "id": 53149,
+  "no": "0805S3",
+  "before": "image:a<-1 또는 a>4",
+  "after": "image:None"
+ },
+ {
+  "id": 53152,
+  "no": "0806S2",
+  "before": "image:1<a<4",
+  "after": "image:None"
+ },
+ {
+  "id": 53154,
+  "no": "0807S1",
+  "before": "number:-2",
+  "after": "image:None"
+ },
+ {
+  "id": 53157,
+  "no": "0808S1",
+  "before": "image:‌\u0007⑴ x<-2 또는 -1<x<2⑵ -1<x",
+  "after": "image:None"
+ },
+ {
+  "id": 53159,
+  "no": "0809S1",
+  "before": "image:a",
+  "after": "image:None"
+ },
+ {
+  "id": 53160,
+  "no": "0809S2",
+  "before": "image:-2<a",
+  "after": "image:None"
+ },
+ {
+  "id": 53161,
+  "no": "0809S3",
+  "before": "image:a",
+  "after": "image:None"
+ },
+ {
+  "id": 53163,
+  "no": "0810S1",
+  "before": "number:2",
+  "after": "image:None"
+ },
+ {
+  "id": 53164,
+  "no": "0810S2",
+  "before": "image:x>3",
+  "after": "image:None"
+ },
+ {
+  "id": 53166,
+  "no": "0811S1",
+  "before": "image:⑴ k",
+  "after": "image:None"
+ },
+ {
+  "id": 53169,
+  "no": "0812S1",
+  "before": "image:-2<a<-1",
+  "after": "image:None"
+ },
+ {
+  "id": 53170,
+  "no": "0812S2",
+  "before": "image:k",
+  "after": "image:None"
+ },
+ {
+  "id": 53171,
+  "no": "0812S3",
+  "before": "image:-3<a",
+  "after": "image:None"
+ },
+ {
+  "id": 53182,
+  "no": "0903S2",
+  "before": "image:⑴ 12⑵ 8",
+  "after": "image:None"
+ },
+ {
+  "id": 53195,
+  "no": "0907S1",
+  "before": "image:⑴ 47⑵ 31",
+  "after": "image:None"
+ },
+ {
+  "id": 53197,
+  "no": "0908S1",
+  "before": "image:⑴ 5⑵ 3⑶ 6⑷ 6",
+  "after": "image:None"
+ },
+ {
+  "id": 53199,
+  "no": "0908S3",
+  "before": "image:⑴ 풀이 참조 ⑵ 풀이 참조",
+  "after": "image:None"
+ },
+ {
+  "id": 53214,
+  "no": "0912S1",
+  "before": "image:⑴ 120⑵ 720⑶ 4320",
+  "after": "image:None"
+ },
+ {
+  "id": 53216,
+  "no": "0913S1",
+  "before": "image:⑴ 96⑵ 36",
+  "after": "image:None"
+ },
+ {
+  "id": 53217,
+  "no": "0913S2",
+  "before": "image:⑴ 96⑵ 108",
+  "after": "image:None"
+ },
+ {
+  "id": 53219,
+  "no": "0914S1",
+  "before": "image:54번째",
+  "after": "number:54 번째"
+ },
+ {
+  "id": 53222,
+  "no": "0915S1",
+  "before": "image:⑴ 5⑵ 9⑶ 7⑷ 5",
+  "after": "image:None"
+ },
+ {
+  "id": 53224,
+  "no": "0915S3",
+  "before": "image:⑴ 풀이 참조 ⑵ 풀이 참조",
+  "after": "image:None"
+ },
+ {
+  "id": 53230,
+  "no": "0917S1",
+  "before": "image:⑴ 165⑵ 455",
+  "after": "image:None"
+ },
+ {
+  "id": 53234,
+  "no": "0918S1",
+  "before": "image:⑴ 7200⑵ 5760",
+  "after": "image:None"
+ },
+ {
+  "id": 53238,
+  "no": "0919S1",
+  "before": "image:⑴ 36⑵ 110",
+  "after": "image:None"
+ },
+ {
+  "id": 53244,
+  "no": "0920S3",
+  "before": "image:⑴ 20⑵ 40",
+  "after": "image:None"
+ },
+ {
+  "id": 53246,
+  "no": "1001S1",
+  "before": "image:⑴",
+  "after": "image:None"
+ },
+ {
+  "id": 53247,
+  "no": "1001S2",
+  "before": "number:6",
+  "after": "image:None"
+ },
+ {
+  "id": 53248,
+  "no": "1001S3",
+  "before": "number:15",
+  "after": "image:None"
+ },
+ {
+  "id": 53250,
+  "no": "1002S1",
+  "before": "image:⑴ ‌\u0007",
+  "after": "image:None"
+ },
+ {
+  "id": 53251,
+  "no": "1002S2",
+  "before": "image:{-2, -2}, {2, 2}",
+  "after": "image:None"
+ },
+ {
+  "id": 53256,
+  "no": "1004S1",
+  "before": "image:⑴",
+  "after": "image:None"
+ },
+ {
+  "id": 53257,
+  "no": "1004S2",
+  "before": "number:1",
+  "after": "image:None"
+ },
+ {
+  "id": 53259,
+  "no": "1005S1",
+  "before": "image:A=",
+  "after": "image:None"
+ },
+ {
+  "id": 53260,
+  "no": "1005S2",
+  "before": "number:3",
+  "after": "image:None"
+ },
+ {
+  "id": 53266,
+  "no": "1007S1",
+  "before": "image:⑴",
+  "after": "image:None"
+ },
+ {
+  "id": 53274,
+  "no": "1010S1",
+  "before": "image:⑴",
+  "after": "image:None"
+ },
+ {
+  "id": 53277,
+  "no": "1011S1",
+  "before": "image:x=3, y=3",
+  "after": "image:None"
+ }
+]
