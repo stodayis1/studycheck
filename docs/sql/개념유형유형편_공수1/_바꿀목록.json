@@ -1,0 +1,1442 @@
+[
+ {
+  "id": 53290,
+  "no": "01004",
+  "before": "image:5x²+11xy-19y²",
+  "after": "image:None"
+ },
+ {
+  "id": 53297,
+  "no": "01011",
+  "before": "image:7x³+28y³",
+  "after": "image:None"
+ },
+ {
+  "id": 53325,
+  "no": "01039",
+  "before": "image:x²+1",
+  "after": "image:None"
+ },
+ {
+  "id": 53326,
+  "no": "01040",
+  "before": "image:x+1",
+  "after": "image:None"
+ },
+ {
+  "id": 53327,
+  "no": "01041",
+  "before": "image:몫: x²+3x-1, 나머지: -21",
+  "after": "image:None"
+ },
+ {
+  "id": 53414,
+  "no": "03002",
+  "before": "choice:④",
+  "after": "image:None"
+ },
+ {
+  "id": 53415,
+  "no": "03003",
+  "before": "choice:①",
+  "after": "number:4"
+ },
+ {
+  "id": 53417,
+  "no": "03005",
+  "before": "choice:④",
+  "after": "choice:①"
+ },
+ {
+  "id": 53418,
+  "no": "03006",
+  "before": "choice:②",
+  "after": "number:1"
+ },
+ {
+  "id": 53419,
+  "no": "03007",
+  "before": "choice:⑤",
+  "after": "image:None"
+ },
+ {
+  "id": 53420,
+  "no": "03008",
+  "before": "number:-2",
+  "after": "number:3"
+ },
+ {
+  "id": 53421,
+  "no": "03009",
+  "before": "number:-3",
+  "after": "choice:②"
+ },
+ {
+  "id": 53422,
+  "no": "03010",
+  "before": "number:15",
+  "after": "number:-2"
+ },
+ {
+  "id": 53423,
+  "no": "03011",
+  "before": "choice:②",
+  "after": "choice:③"
+ },
+ {
+  "id": 53424,
+  "no": "03012",
+  "before": "number:6",
+  "after": "choice:②"
+ },
+ {
+  "id": 53425,
+  "no": "03013",
+  "before": "choice:①",
+  "after": "number:18"
+ },
+ {
+  "id": 53426,
+  "no": "03014",
+  "before": "image:2x²+16",
+  "after": "number:-1"
+ },
+ {
+  "id": 53427,
+  "no": "03015",
+  "before": "choice:⑤",
+  "after": "choice:③"
+ },
+ {
+  "id": 53428,
+  "no": "03016",
+  "before": "choice:③",
+  "after": "choice:①"
+ },
+ {
+  "id": 53429,
+  "no": "03017",
+  "before": "choice:⑤",
+  "after": "choice:①"
+ },
+ {
+  "id": 53430,
+  "no": "03018",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53431,
+  "no": "03019",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53432,
+  "no": "03020",
+  "before": "choice:①",
+  "after": "choice:②"
+ },
+ {
+  "id": 53433,
+  "no": "03021",
+  "before": "choice:③",
+  "after": "number:20"
+ },
+ {
+  "id": 53434,
+  "no": "03022",
+  "before": "choice:⑤",
+  "after": "choice:③"
+ },
+ {
+  "id": 53435,
+  "no": "03023",
+  "before": "number:6",
+  "after": "number:2"
+ },
+ {
+  "id": 53436,
+  "no": "03024",
+  "before": "choice:②",
+  "after": "image:None"
+ },
+ {
+  "id": 53437,
+  "no": "03025",
+  "before": "choice:⑤",
+  "after": "choice:②"
+ },
+ {
+  "id": 53438,
+  "no": "03026",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53439,
+  "no": "03027",
+  "before": "choice:③",
+  "after": "number:-5"
+ },
+ {
+  "id": 53440,
+  "no": "03028",
+  "before": "choice:⑤",
+  "after": "image:None"
+ },
+ {
+  "id": 53441,
+  "no": "03029",
+  "before": "image:2유",
+  "after": "number:1"
+ },
+ {
+  "id": 53442,
+  "no": "03030",
+  "before": "choice:④",
+  "after": "choice:①"
+ },
+ {
+  "id": 53444,
+  "no": "03032",
+  "before": "number:9",
+  "after": "number:13"
+ },
+ {
+  "id": 53445,
+  "no": "03033",
+  "before": "choice:③",
+  "after": "choice:④"
+ },
+ {
+  "id": 53446,
+  "no": "03034",
+  "before": "image:998형",
+  "after": "choice:①"
+ },
+ {
+  "id": 53447,
+  "no": "03035",
+  "before": "choice:②",
+  "after": "choice:③"
+ },
+ {
+  "id": 53448,
+  "no": "03036",
+  "before": "choice:③",
+  "after": "number:8"
+ },
+ {
+  "id": 53449,
+  "no": "03037",
+  "before": "choice:①",
+  "after": "choice:④"
+ },
+ {
+  "id": 53475,
+  "no": "04002",
+  "before": "image:ㄷ",
+  "after": "choice:③"
+ },
+ {
+  "id": 53476,
+  "no": "04003",
+  "before": "number:4",
+  "after": "number:-14"
+ },
+ {
+  "id": 53477,
+  "no": "04004",
+  "before": "choice:⑤",
+  "after": "image:None"
+ },
+ {
+  "id": 53478,
+  "no": "04005",
+  "before": "choice:①",
+  "after": "number:48"
+ },
+ {
+  "id": 53479,
+  "no": "04006",
+  "before": "number:1",
+  "after": "choice:④"
+ },
+ {
+  "id": 53480,
+  "no": "04007",
+  "before": "image:7+2i",
+  "after": "number:-7"
+ },
+ {
+  "id": 53481,
+  "no": "04008",
+  "before": "number:3",
+  "after": "choice:④"
+ },
+ {
+  "id": 53482,
+  "no": "04009",
+  "before": "choice:②",
+  "after": "choice:①"
+ },
+ {
+  "id": 53483,
+  "no": "04010",
+  "before": "number:-2",
+  "after": "choice:④"
+ },
+ {
+  "id": 53484,
+  "no": "04011",
+  "before": "choice:③",
+  "after": "choice:①"
+ },
+ {
+  "id": 53485,
+  "no": "04012",
+  "before": "choice:②",
+  "after": "choice:①"
+ },
+ {
+  "id": 53486,
+  "no": "04013",
+  "before": "number:18",
+  "after": "choice:②"
+ },
+ {
+  "id": 53487,
+  "no": "04014",
+  "before": "number:-1",
+  "after": "number:6"
+ },
+ {
+  "id": 53488,
+  "no": "04015",
+  "before": "choice:③",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53489,
+  "no": "04016",
+  "before": "choice:①",
+  "after": "number:7"
+ },
+ {
+  "id": 53490,
+  "no": "04017",
+  "before": "choice:①",
+  "after": "choice:②"
+ },
+ {
+  "id": 53491,
+  "no": "04018",
+  "before": "choice:⑤",
+  "after": "choice:①"
+ },
+ {
+  "id": 53492,
+  "no": "04019",
+  "before": "choice:③",
+  "after": "choice:①"
+ },
+ {
+  "id": 53494,
+  "no": "04021",
+  "before": "number:20",
+  "after": "image:None"
+ },
+ {
+  "id": 53495,
+  "no": "04022",
+  "before": "choice:③",
+  "after": "choice:②"
+ },
+ {
+  "id": 53496,
+  "no": "04023",
+  "before": "number:2",
+  "after": "number:17"
+ },
+ {
+  "id": 53497,
+  "no": "04024",
+  "before": "image:4i",
+  "after": "choice:①"
+ },
+ {
+  "id": 53498,
+  "no": "04025",
+  "before": "choice:②",
+  "after": "number:503"
+ },
+ {
+  "id": 53499,
+  "no": "04026",
+  "before": "choice:⑤",
+  "after": "choice:①"
+ },
+ {
+  "id": 53500,
+  "no": "04027",
+  "before": "number:-5",
+  "after": "choice:②"
+ },
+ {
+  "id": 53501,
+  "no": "04028",
+  "before": "image:8i",
+  "after": "image:None"
+ },
+ {
+  "id": 53502,
+  "no": "04029",
+  "before": "number:1",
+  "after": "image:None"
+ },
+ {
+  "id": 53503,
+  "no": "04030",
+  "before": "choice:①",
+  "after": "choice:④"
+ },
+ {
+  "id": 53504,
+  "no": "04031",
+  "before": "choice:⑤",
+  "after": "choice:③"
+ },
+ {
+  "id": 53505,
+  "no": "04032",
+  "before": "number:13",
+  "after": "choice:④"
+ },
+ {
+  "id": 53507,
+  "no": "04034",
+  "before": "choice:①",
+  "after": "number:10"
+ },
+ {
+  "id": 53508,
+  "no": "04035",
+  "before": "choice:③",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53509,
+  "no": "04036",
+  "before": "number:8",
+  "after": "number:25"
+ },
+ {
+  "id": 53510,
+  "no": "04037",
+  "before": "choice:④",
+  "after": "choice:②"
+ },
+ {
+  "id": 53511,
+  "no": "04038",
+  "before": "choice:⑤",
+  "after": "choice:③"
+ },
+ {
+  "id": 53512,
+  "no": "05001",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53513,
+  "no": "05002",
+  "before": "number:-1",
+  "after": "choice:③"
+ },
+ {
+  "id": 53514,
+  "no": "05003",
+  "before": "image:x= 1-27i",
+  "after": "number:8"
+ },
+ {
+  "id": 53515,
+  "no": "05004",
+  "before": "number:-2",
+  "after": "number:6"
+ },
+ {
+  "id": 53516,
+  "no": "05005",
+  "before": "choice:②",
+  "after": "number:3"
+ },
+ {
+  "id": 53517,
+  "no": "05006",
+  "before": "choice:①",
+  "after": "choice:④"
+ },
+ {
+  "id": 53518,
+  "no": "05007",
+  "before": "choice:①",
+  "after": "number:-1"
+ },
+ {
+  "id": 53520,
+  "no": "05009",
+  "before": "number:0",
+  "after": "choice:②"
+ },
+ {
+  "id": 53521,
+  "no": "05010",
+  "before": "choice:②",
+  "after": "choice:④"
+ },
+ {
+  "id": 53522,
+  "no": "05011",
+  "before": "choice:③",
+  "after": "number:5"
+ },
+ {
+  "id": 53523,
+  "no": "05012",
+  "before": "choice:③",
+  "after": "choice:②"
+ },
+ {
+  "id": 53524,
+  "no": "05013",
+  "before": "image:실근",
+  "after": "number:4"
+ },
+ {
+  "id": 53525,
+  "no": "05014",
+  "before": "image:서로 다른 두 실근",
+  "after": "number:6"
+ },
+ {
+  "id": 53527,
+  "no": "05016",
+  "before": "number:1",
+  "after": "image:None"
+ },
+ {
+  "id": 53528,
+  "no": "05017",
+  "before": "choice:①",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53529,
+  "no": "05018",
+  "before": "choice:⑤",
+  "after": "choice:④"
+ },
+ {
+  "id": 53551,
+  "no": "05040",
+  "before": "image:None",
+  "after": "number:20 m"
+ },
+ {
+  "id": 53556,
+  "no": "06001",
+  "before": "choice:⑤",
+  "after": "number:23"
+ },
+ {
+  "id": 53558,
+  "no": "06003",
+  "before": "number:-14",
+  "after": "choice:③"
+ },
+ {
+  "id": 53559,
+  "no": "06004",
+  "before": "number:10",
+  "after": "number:-1"
+ },
+ {
+  "id": 53560,
+  "no": "06005",
+  "before": "number:48",
+  "after": "number:2"
+ },
+ {
+  "id": 53561,
+  "no": "06006",
+  "before": "choice:④",
+  "after": "choice:①"
+ },
+ {
+  "id": 53562,
+  "no": "06007",
+  "before": "number:-7",
+  "after": "number:9"
+ },
+ {
+  "id": 53563,
+  "no": "06008",
+  "before": "choice:④",
+  "after": "choice:①"
+ },
+ {
+  "id": 53564,
+  "no": "06009",
+  "before": "choice:①",
+  "after": "choice:②"
+ },
+ {
+  "id": 53565,
+  "no": "06010",
+  "before": "choice:④",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53566,
+  "no": "06011",
+  "before": "choice:①",
+  "after": "number:0"
+ },
+ {
+  "id": 53567,
+  "no": "06012",
+  "before": "choice:①",
+  "after": "choice:④"
+ },
+ {
+  "id": 53568,
+  "no": "06013",
+  "before": "choice:②",
+  "after": "number:-1"
+ },
+ {
+  "id": 53569,
+  "no": "06014",
+  "before": "number:6",
+  "after": "choice:①"
+ },
+ {
+  "id": 53570,
+  "no": "06015",
+  "before": "choice:⑤",
+  "after": "number:0"
+ },
+ {
+  "id": 53571,
+  "no": "06016",
+  "before": "number:7",
+  "after": "choice:④"
+ },
+ {
+  "id": 53572,
+  "no": "06017",
+  "before": "choice:②",
+  "after": "choice:③"
+ },
+ {
+  "id": 53573,
+  "no": "06018",
+  "before": "choice:①",
+  "after": "number:1"
+ },
+ {
+  "id": 53574,
+  "no": "06019",
+  "before": "choice:①",
+  "after": "image:None"
+ },
+ {
+  "id": 53575,
+  "no": "06020",
+  "before": "choice:②",
+  "after": "choice:③"
+ },
+ {
+  "id": 53576,
+  "no": "06021",
+  "before": "image:x²-3x+1=0",
+  "after": "number:7"
+ },
+ {
+  "id": 53577,
+  "no": "06022",
+  "before": "choice:②",
+  "after": "number:7"
+ },
+ {
+  "id": 53578,
+  "no": "06023",
+  "before": "number:17",
+  "after": "number:6"
+ },
+ {
+  "id": 53579,
+  "no": "06024",
+  "before": "choice:①",
+  "after": "image:None"
+ },
+ {
+  "id": 53580,
+  "no": "06025",
+  "before": "number:503",
+  "after": "number:3 cm"
+ },
+ {
+  "id": 53582,
+  "no": "06027",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53583,
+  "no": "06028",
+  "before": "image:x²-6x+9=0",
+  "after": "choice:④"
+ },
+ {
+  "id": 53584,
+  "no": "06029",
+  "before": "image:x²-10x+16=0",
+  "after": "number:2"
+ },
+ {
+  "id": 53585,
+  "no": "06030",
+  "before": "choice:④",
+  "after": "number:7"
+ },
+ {
+  "id": 53586,
+  "no": "06031",
+  "before": "choice:③",
+  "after": "number:35"
+ },
+ {
+  "id": 53587,
+  "no": "06032",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53589,
+  "no": "06034",
+  "before": "number:10",
+  "after": "number:26"
+ },
+ {
+  "id": 53590,
+  "no": "06035",
+  "before": "choice:⑤",
+  "after": "image:None"
+ },
+ {
+  "id": 53591,
+  "no": "06036",
+  "before": "number:25",
+  "after": "number:5"
+ },
+ {
+  "id": 53592,
+  "no": "06037",
+  "before": "choice:②",
+  "after": "choice:④"
+ },
+ {
+  "id": 53593,
+  "no": "06038",
+  "before": "choice:③",
+  "after": "choice:①"
+ },
+ {
+  "id": 53630,
+  "no": "07001",
+  "before": "choice:⑤",
+  "after": "image:None"
+ },
+ {
+  "id": 53631,
+  "no": "07002",
+  "before": "choice:③",
+  "after": "number:-4"
+ },
+ {
+  "id": 53632,
+  "no": "07003",
+  "before": "number:8",
+  "after": "choice:①"
+ },
+ {
+  "id": 53633,
+  "no": "07004",
+  "before": "number:6",
+  "after": "image:None"
+ },
+ {
+  "id": 53634,
+  "no": "07005",
+  "before": "number:3",
+  "after": "choice:①"
+ },
+ {
+  "id": 53636,
+  "no": "07007",
+  "before": "number:-1",
+  "after": "number:15"
+ },
+ {
+  "id": 53637,
+  "no": "07008",
+  "before": "choice:④",
+  "after": "number:2"
+ },
+ {
+  "id": 53638,
+  "no": "07009",
+  "before": "choice:②",
+  "after": "choice:④"
+ },
+ {
+  "id": 53639,
+  "no": "07010",
+  "before": "choice:④",
+  "after": "number:-1"
+ },
+ {
+  "id": 53640,
+  "no": "07011",
+  "before": "number:5",
+  "after": "choice:③"
+ },
+ {
+  "id": 53641,
+  "no": "07012",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53642,
+  "no": "07013",
+  "before": "number:4",
+  "after": "choice:③"
+ },
+ {
+  "id": 53643,
+  "no": "07014",
+  "before": "number:6",
+  "after": "number:-1"
+ },
+ {
+  "id": 53644,
+  "no": "07015",
+  "before": "choice:③",
+  "after": "number:5"
+ },
+ {
+  "id": 53645,
+  "no": "07016",
+  "before": "image:m>-1",
+  "after": "choice:③"
+ },
+ {
+  "id": 53646,
+  "no": "07017",
+  "before": "choice:⑤",
+  "after": "choice:①"
+ },
+ {
+  "id": 53647,
+  "no": "07018",
+  "before": "choice:④",
+  "after": "number:8"
+ },
+ {
+  "id": 53648,
+  "no": "07019",
+  "before": "number:-8",
+  "after": "choice:②"
+ },
+ {
+  "id": 53650,
+  "no": "07021",
+  "before": "choice:③",
+  "after": "choice:①"
+ },
+ {
+  "id": 53658,
+  "no": "07029",
+  "before": "image:None",
+  "after": "number:20 명"
+ },
+ {
+  "id": 53676,
+  "no": "08001",
+  "before": "number:-19",
+  "after": "choice:③"
+ },
+ {
+  "id": 53677,
+  "no": "08002",
+  "before": "choice:④",
+  "after": "image:None"
+ },
+ {
+  "id": 53678,
+  "no": "08003",
+  "before": "choice:③",
+  "after": "image:None"
+ },
+ {
+  "id": 53679,
+  "no": "08004",
+  "before": "choice:②",
+  "after": "choice:④"
+ },
+ {
+  "id": 53680,
+  "no": "08005",
+  "before": "choice:⑤",
+  "after": "number:3 초"
+ },
+ {
+  "id": 53681,
+  "no": "08006",
+  "before": "number:-2",
+  "after": "number:8"
+ },
+ {
+  "id": 53682,
+  "no": "08007",
+  "before": "number:22",
+  "after": "choice:③"
+ },
+ {
+  "id": 53683,
+  "no": "08008",
+  "before": "number:4",
+  "after": "number:16"
+ },
+ {
+  "id": 53684,
+  "no": "08009",
+  "before": "choice:③",
+  "after": "number:14"
+ },
+ {
+  "id": 53685,
+  "no": "08010",
+  "before": "number:2",
+  "after": "choice:②"
+ },
+ {
+  "id": 53686,
+  "no": "08011",
+  "before": "number:12",
+  "after": "image:None"
+ },
+ {
+  "id": 53687,
+  "no": "08012",
+  "before": "number:54",
+  "after": "image:None"
+ },
+ {
+  "id": 53688,
+  "no": "08013",
+  "before": "choice:①",
+  "after": "image:None"
+ },
+ {
+  "id": 53689,
+  "no": "08014",
+  "before": "choice:④",
+  "after": "number:2"
+ },
+ {
+  "id": 53690,
+  "no": "08015",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53691,
+  "no": "08016",
+  "before": "number:11",
+  "after": "choice:①"
+ },
+ {
+  "id": 53692,
+  "no": "08017",
+  "before": "choice:①",
+  "after": "number:12"
+ },
+ {
+  "id": 53693,
+  "no": "08018",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53694,
+  "no": "08019",
+  "before": "number:20",
+  "after": "choice:②"
+ },
+ {
+  "id": 53695,
+  "no": "08020",
+  "before": "choice:⑤",
+  "after": "number:-3"
+ },
+ {
+  "id": 53696,
+  "no": "08021",
+  "before": "image:162p",
+  "after": "number:1"
+ },
+ {
+  "id": 53697,
+  "no": "08022",
+  "before": "choice:③",
+  "after": "image:None"
+ },
+ {
+  "id": 53698,
+  "no": "08023",
+  "before": "number:100",
+  "after": "number:22"
+ },
+ {
+  "id": 53732,
+  "no": "09001",
+  "before": "number:23",
+  "after": "number:9"
+ },
+ {
+  "id": 53734,
+  "no": "09003",
+  "before": "choice:③",
+  "after": "number:9"
+ },
+ {
+  "id": 53735,
+  "no": "09004",
+  "before": "number:-1",
+  "after": "choice:③"
+ },
+ {
+  "id": 53736,
+  "no": "09005",
+  "before": "number:2",
+  "after": "choice:③"
+ },
+ {
+  "id": 53738,
+  "no": "09007",
+  "before": "number:9",
+  "after": "number:19"
+ },
+ {
+  "id": 53739,
+  "no": "09008",
+  "before": "choice:①",
+  "after": "number:40"
+ },
+ {
+  "id": 53740,
+  "no": "09009",
+  "before": "choice:②",
+  "after": "number:18"
+ },
+ {
+  "id": 53741,
+  "no": "09010",
+  "before": "choice:⑤",
+  "after": "choice:②"
+ },
+ {
+  "id": 53742,
+  "no": "09011",
+  "before": "number:0",
+  "after": "choice:④"
+ },
+ {
+  "id": 53743,
+  "no": "09012",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53744,
+  "no": "09013",
+  "before": "number:-1",
+  "after": "choice:①"
+ },
+ {
+  "id": 53745,
+  "no": "09014",
+  "before": "choice:①",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53746,
+  "no": "09015",
+  "before": "number:0",
+  "after": "number:3"
+ },
+ {
+  "id": 53747,
+  "no": "09016",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53748,
+  "no": "09017",
+  "before": "choice:③",
+  "after": "number:9"
+ },
+ {
+  "id": 53749,
+  "no": "09018",
+  "before": "number:1",
+  "after": "choice:②"
+ },
+ {
+  "id": 53750,
+  "no": "09019",
+  "before": "image:k< 12",
+  "after": "number:24"
+ },
+ {
+  "id": 53751,
+  "no": "09020",
+  "before": "choice:③",
+  "after": "number:18"
+ },
+ {
+  "id": 53752,
+  "no": "09021",
+  "before": "number:7",
+  "after": "number:50"
+ },
+ {
+  "id": 53753,
+  "no": "09022",
+  "before": "number:7",
+  "after": "number:540"
+ },
+ {
+  "id": 53754,
+  "no": "09023",
+  "before": "number:6",
+  "after": "number:96"
+ },
+ {
+  "id": 53755,
+  "no": "09024",
+  "before": "image:4cm 또는 8cm",
+  "after": "number:36"
+ },
+ {
+  "id": 53756,
+  "no": "09025",
+  "before": "number:3",
+  "after": "choice:④"
+ },
+ {
+  "id": 53757,
+  "no": "09026",
+  "before": "choice:①",
+  "after": "number:35"
+ },
+ {
+  "id": 53758,
+  "no": "09027",
+  "before": "choice:⑤",
+  "after": "number:66"
+ },
+ {
+  "id": 53759,
+  "no": "09028",
+  "before": "choice:④",
+  "after": "number:3"
+ },
+ {
+  "id": 53760,
+  "no": "09029",
+  "before": "number:2",
+  "after": "choice:③"
+ },
+ {
+  "id": 53761,
+  "no": "09030",
+  "before": "number:7",
+  "after": "choice:④"
+ },
+ {
+  "id": 53762,
+  "no": "09031",
+  "before": "number:35",
+  "after": "number:3"
+ },
+ {
+  "id": 53763,
+  "no": "09032",
+  "before": "choice:③",
+  "after": "number:24"
+ },
+ {
+  "id": 53764,
+  "no": "09033",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53765,
+  "no": "09034",
+  "before": "number:26",
+  "after": "number:7"
+ },
+ {
+  "id": 53766,
+  "no": "09035",
+  "before": "image:x³-2x²-1=0",
+  "after": "choice:②"
+ },
+ {
+  "id": 53767,
+  "no": "09036",
+  "before": "number:5",
+  "after": "choice:④"
+ },
+ {
+  "id": 53768,
+  "no": "09037",
+  "before": "choice:④",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53770,
+  "no": "09039",
+  "before": "choice:⑤",
+  "after": "number:576"
+ },
+ {
+  "id": 53771,
+  "no": "09040",
+  "before": "choice:①",
+  "after": "number:720"
+ },
+ {
+  "id": 53772,
+  "no": "09041",
+  "before": "choice:②",
+  "after": "number:64"
+ },
+ {
+  "id": 53773,
+  "no": "09042",
+  "before": "choice:④",
+  "after": "number:720"
+ },
+ {
+  "id": 53774,
+  "no": "09043",
+  "before": "number:1",
+  "after": "number:480"
+ },
+ {
+  "id": 53775,
+  "no": "09044",
+  "before": "choice:⑤",
+  "after": "choice:③"
+ },
+ {
+  "id": 53776,
+  "no": "09045",
+  "before": "number:6",
+  "after": "number:960"
+ },
+ {
+  "id": 53777,
+  "no": "09046",
+  "before": "number:37",
+  "after": "choice:④"
+ },
+ {
+  "id": 53778,
+  "no": "09047",
+  "before": "choice:②",
+  "after": "choice:④"
+ },
+ {
+  "id": 53779,
+  "no": "09048",
+  "before": "number:27",
+  "after": "number:2400"
+ },
+ {
+  "id": 53793,
+  "no": "09062",
+  "before": "image:None",
+  "after": "number:40 번째"
+ },
+ {
+  "id": 53823,
+  "no": "10001",
+  "before": "choice:③",
+  "after": "number:6"
+ },
+ {
+  "id": 53824,
+  "no": "10002",
+  "before": "number:1",
+  "after": "choice:④"
+ },
+ {
+  "id": 53825,
+  "no": "10003",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53826,
+  "no": "10004",
+  "before": "image:{-3, -1}, {3, 1}",
+  "after": "choice:④"
+ },
+ {
+  "id": 53827,
+  "no": "10005",
+  "before": "choice:①",
+  "after": "number:-11"
+ },
+ {
+  "id": 53828,
+  "no": "10006",
+  "before": "number:6",
+  "after": "number:17"
+ },
+ {
+  "id": 53829,
+  "no": "10007",
+  "before": "choice:②",
+  "after": "image:None"
+ },
+ {
+  "id": 53830,
+  "no": "10008",
+  "before": "choice:④",
+  "after": "number:22"
+ },
+ {
+  "id": 53831,
+  "no": "10009",
+  "before": "number:-5",
+  "after": "choice:②"
+ },
+ {
+  "id": 53832,
+  "no": "10010",
+  "before": "choice:③",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53833,
+  "no": "10011",
+  "before": "choice:⑤",
+  "after": "choice:②"
+ },
+ {
+  "id": 53834,
+  "no": "10012",
+  "before": "number:24",
+  "after": "number:5"
+ },
+ {
+  "id": 53835,
+  "no": "10013",
+  "before": "choice:②",
+  "after": "choice:③"
+ },
+ {
+  "id": 53836,
+  "no": "10014",
+  "before": "choice:①",
+  "after": "number:36"
+ },
+ {
+  "id": 53837,
+  "no": "10015",
+  "before": "choice:②",
+  "after": "number:-6"
+ },
+ {
+  "id": 53838,
+  "no": "10016",
+  "before": "choice:④",
+  "after": "choice:③"
+ },
+ {
+  "id": 53839,
+  "no": "10017",
+  "before": "number:5",
+  "after": "choice:①"
+ },
+ {
+  "id": 53840,
+  "no": "10018",
+  "before": "number:4",
+  "after": "image:None"
+ },
+ {
+  "id": 53841,
+  "no": "10019",
+  "before": "choice:②",
+  "after": "choice:①"
+ },
+ {
+  "id": 53842,
+  "no": "10020",
+  "before": "number:15",
+  "after": "choice:②"
+ },
+ {
+  "id": 53844,
+  "no": "10022",
+  "before": "number:40",
+  "after": "number:19"
+ },
+ {
+  "id": 53845,
+  "no": "10023",
+  "before": "choice:②",
+  "after": "choice:④"
+ },
+ {
+  "id": 53846,
+  "no": "10024",
+  "before": "number:5",
+  "after": "number:-20"
+ },
+ {
+  "id": 53847,
+  "no": "10025",
+  "before": "choice:②",
+  "after": "choice:⑤"
+ },
+ {
+  "id": 53848,
+  "no": "10026",
+  "before": "image:x=-1, y=3",
+  "after": "number:-8"
+ }
+]
