@@ -361,11 +361,15 @@ export function hwLines(ses: BriefingSession, videos?: BriefingVideos): string[]
   //   학부모님은 영상 과제가 있는 줄도 모르셨다.
   const n = videos?.total ?? 0
   if (n > 0) {
-    // 사진을 내는 영상이 섞였으면 **무엇을 올리는지**까지 적는다.
+    // 사진을 내는 영상이 섞였으면 **무엇을 몇 개** 올리는지까지 적는다.
+    // ★ 편수를 빼면 여덟 개 중 한 개를 내나 일곱 개를 내나 **글이 똑같다** —
+    //   선생님이 「직접 푼 풀이도 받기」를 더 켜도 브리핑이 안 바뀐다(원장님 2026-11-04에 잡으셨다).
+    //   다만 **영상 전부**를 내는 날은 편수가 군더더기라 빼고 적는다.
     // photo 를 안 주는 옛 호출은 지금까지대로 증명 편수로 센다.
     const 낼것 = videos!.photo ?? videos!.proof
+    const 몇개 = 낼것 > 0 && 낼것 < n ? ` ${낼것}개` : ''
     out.push(낼것 > 0
-      ? `· 영상과제 ${n}개 시청 후 ${videos!.photoWord ?? '증명'} 올리기`
+      ? `· 영상과제 ${n}개 시청 후 ${videos!.photoWord ?? '증명'}${몇개} 올리기`
       : `· 영상과제 ${n}개 시청`)
   }
   return out

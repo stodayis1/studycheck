@@ -97,7 +97,11 @@ export function photoBrief(
 ): { photo: number; photoWord: string } {
   const 낼것 = photoUrlsOf(urls, lessonOf, asks)
   const label = photoLabelOf(urls, lessonOf, asks)
-  return { photo: 낼것.length, photoWord: label === '증명 제출' ? '증명' : label === '풀이 제출' ? '풀이 사진' : '사진' }
+  // ★ 섞였을 때 그냥 「사진」이라고만 하면 학부모님은 **무엇을 올리는 건지** 모르신다.
+  return {
+    photo: 낼것.length,
+    photoWord: label === '증명 제출' ? '증명' : label === '풀이 제출' ? '풀이 사진' : '증명·풀이 사진',
+  }
 }
 
 /** 제출 칩·배지 이름: 증명만이면 「증명 제출」, 풀이만이면 「풀이 제출」, 섞이면 「사진 제출」 */
