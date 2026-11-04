@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { normalizeSchool } from '@/lib/school'
+import { VERSION_KEY, CURRENT_TERM, versionFor, versionCount } from '@/lib/examPrepVersion'
 
 interface Student {
   id: string
@@ -88,6 +89,11 @@ export default function TeacherExamPrepPage() {
   const [selStudent, setSelStudent] = useState<Student | null>(null)
   const [bulkMode, setBulkMode] = useState(false)  // 같은 조건 학생 전체 일괄 배정
   const [selLevel, setSelLevel] = useState('')
+  /**
+   * 학생마다 정해진 이너프원 버전 (원장님이 목차 파일 「적용대상」에 적어 주신 것).
+   * 적혀 있으면 학생을 고를 때 **그 버전이 저절로 골라진다.** 없으면 예전처럼 직접 고른다.
+   */
+  const [versionMap, setVersionMap] = useState<any>(null)
   const [selHighRange, setSelHighRange] = useState('')
   const [selUnitIds, setSelUnitIds] = useState<string[]>([])
   const [examDate, setExamDate] = useState('')
@@ -116,12 +122,14 @@ export default function TeacherExamPrepPage() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: sData }, { data: ieData }, { data: aData }, { data: esData }] = await Promise.all([
+    const [{ data: sData }, { data: ieData }, { data: vData }, { data: aData }, { data: esData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('inner_enough').select('*').order('school_name').order('grade').order('level').order('unit_no'),
+      supabase.from('app_settings').select('value').eq('key', VERSION_KEY).maybeSingle(),
       supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
       supabase.from('exam_schedule').select('*').order('exam_date'),
     ])
+    setVersionMap((vData as any)?.value ?? null)
     if (sData) {
       setStudents(sData)
       const uniqueSchools = [...new Set((sData as any[]).map((s: any) => s.school).filter(Boolean))].sort() as string[]
@@ -938,7 +946,13 @@ export default function TeacherExamPrepPage() {
                 ) : (
                   <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl">
                     {filteredStudents.filter(s => canEditStudent(s)).map(s => (
-                      <button key={s.id} onClick={() => { setSelStudent(s); setSelLevel(''); setSelUnitIds([]); setSelHighRange(''); setSelHighRange(''); setSelHighRange('') }}
+                      <button key={s.id} onClick={() => {
+                        setSelStudent(s); setSelUnitIds([]); setSelHighRange('')
+                        // ★ 그 학생에게 정해진 버전이 있으면 **저절로 골라 둔다**
+                        //   (원장님 2026-11-04 「해당학생에게 해당 목차가 배정될수 있도록」).
+                        //   안 적혀 있으면 빈 채로 둔다 — 멋대로 고르지 않는다.
+                        setSelLevel(versionFor(versionMap, s.name) ?? '')
+                      }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                           style={{ background: '#FAECE7', color: '#993C1D' }}>{s.name[0]}</div>
@@ -981,6 +995,15 @@ export default function TeacherExamPrepPage() {
                   <label className="block text-xs font-bold text-gray-700 mb-2">
                     반(레벨) * {isHighSchool(selStudent) && <span className="font-normal text-gray-400">S=상위반 · B=기본반</span>}
                   </label>
+                  {/* ★ 목차 파일 「적용대상」에 적힌 버전 — 저절로 골라 둔 것이라고 알려 준다.
+                      바꾸고 싶으면 다른 단추를 누르면 된다. */}
+                  {versionFor(versionMap, selStudent.name) && (
+                    <p className="text-[11px] mb-2" style={{ color: '#3B6D11' }}>
+                      <i className="ti ti-check align-[-0.125em]" />{' '}
+                      {selStudent.name} 학생은 <b>{versionFor(versionMap, selStudent.name)}</b> 버전이에요
+                      <span className="text-gray-400"> · {CURRENT_TERM} 목차에 적혀 있어요</span>
+                    </p>
+                  )}
                   {availableLevels.length === 0 ? (
                     <p className="text-xs text-red-400">해당 학교/학년 데이터가 없어요</p>
                   ) : (
