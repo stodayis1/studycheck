@@ -39,15 +39,79 @@ export function fmtDuration(sec: number | null | undefined): string {
 /** 컨씨영상 = 쎈 C단계 선별 문항을 강사가 직접 풀어 찍은 영상 (grade 「쎈C 중3-2」). AI 이름 부르기를 하지 않는다 (원장님 2026-11-03) */
 export const isSsenC = (v: Pick<LessonVideo, 'grade'> | null | undefined) => !!v?.grade?.startsWith('쎈C')
 
-/** 다 본 뒤 사진을 내는 영상 — 증명(백지 증명)과 컨씨영상(직접 푼 풀이) */
+/** 영상 **종류 때문에** 저절로 사진을 내는 것 — 증명(백지 증명)과 컨씨영상(직접 푼 풀이) */
 export const needsPhoto = (v: Pick<LessonVideo, 'grade' | 'kind'> | null | undefined) => v?.kind === '증명' || isSsenC(v)
 
-/** 제출 칩·배지 이름: 증명만이면 「증명 제출」, 컨씨만이면 「풀이 제출」, 섞이면 「사진 제출」 */
-export function photoLabel(lessons: (Pick<LessonVideo, 'grade' | 'kind'> | null | undefined)[]): string {
-  const ls = lessons.filter(needsPhoto)
-  if (ls.length && ls.every(isSsenC)) return '풀이 제출'
-  if (ls.some(isSsenC)) return '사진 제출'
-  return '증명 제출'
+/**
+ * 선생님이 **배부하면서 고른** 「이 영상은 직접 푼 풀이도 찍어 내라」 (video_photo_requests 한 줄).
+ *
+ * 왜 (원장님 2026-11-04)
+ *   「영상과제를 배부하면서 증명이 아니라 직접 풀이한것도 찍어 올리라고 할거거든.
+ *    직접풀이한거 찍어올릴수 있도록 창 만들어주려고」
+ *
+ * ★ 증명·컨씨는 **종류만 보고** 저절로 따라오던 것이고, 이건 그 밖의 영상(개념·대표예제·
+ *   바깥 링크)에 선생님이 하나씩 켜는 것이다. 둘은 같은 칸(ProofSubmitBox)·같은
+ *   보관함(proof-photos)·같은 표(proof_submissions)를 쓴다 — 길을 새로 내지 않는다.
+ */
+export type PhotoAsk = { video_url: string }
+
+/** 링크 견주는 열쇠 — 같은 영상이라도 뒤에 `?si=…` 가 붙어 들어온 것이 있다 */
+const urlKey = (u: string | null | undefined) => youtubeId(u) || String(u ?? '').trim()
+
+export function askedSet(asks: PhotoAsk[] | null | undefined): Set<string> {
+  return new Set((asks ?? []).map((a) => urlKey(a?.video_url)).filter(Boolean))
+}
+
+/** 이 영상이 **무슨 사진**을 내는 것인가 — 증명 / 풀이. 안 내면 null */
+export function photoKindOf(
+  url: string,
+  lesson: Pick<LessonVideo, 'grade' | 'kind'> | null | undefined,
+  asked?: Set<string> | null,
+): '증명' | '풀이' | null {
+  if (lesson?.kind === '증명') return '증명'
+  if (isSsenC(lesson)) return '풀이'
+  if (asked?.has(urlKey(url))) return '풀이'
+  return null
+}
+
+/** 그 수업의 영상 과제 중 **사진을 내야 하는 링크**만 (낸 순서 그대로) */
+export function photoUrlsOf(
+  urls: string[],
+  lessonOf: (url: string) => Pick<LessonVideo, 'grade' | 'kind'> | null | undefined,
+  asks?: PhotoAsk[] | Set<string> | null,
+): string[] {
+  const asked = asks instanceof Set ? asks : askedSet(asks)
+  return (urls ?? []).filter((u) => !!u && !!photoKindOf(u, lessonOf(u), asked))
+}
+
+/**
+ * 학부모 브리핑의 「다음 시간까지 과제」에 적을 **사진 올리기** 안내 (원장님 2026-11-04).
+ *
+ * ★ 켜 놓고 브리핑에 안 적으면 **학부모님은 사진을 내야 하는 줄 모르신다.**
+ *   세는 곳이 셋이다(카톡 발송 · 알림장 화면 · 학습일지 미리보기) — 셋 다 이걸 쓴다.
+ */
+export function photoBrief(
+  urls: string[],
+  lessonOf: (url: string) => Pick<LessonVideo, 'grade' | 'kind'> | null | undefined,
+  asks?: PhotoAsk[] | Set<string> | null,
+): { photo: number; photoWord: string } {
+  const 낼것 = photoUrlsOf(urls, lessonOf, asks)
+  const label = photoLabelOf(urls, lessonOf, asks)
+  return { photo: 낼것.length, photoWord: label === '증명 제출' ? '증명' : label === '풀이 제출' ? '풀이 사진' : '사진' }
+}
+
+/** 제출 칩·배지 이름: 증명만이면 「증명 제출」, 풀이만이면 「풀이 제출」, 섞이면 「사진 제출」 */
+export function photoLabelOf(
+  urls: string[],
+  lessonOf: (url: string) => Pick<LessonVideo, 'grade' | 'kind'> | null | undefined,
+  asks?: PhotoAsk[] | Set<string> | null,
+): string {
+  const asked = asks instanceof Set ? asks : askedSet(asks)
+  const kinds = (urls ?? []).map((u) => photoKindOf(u, lessonOf(u), asked)).filter(Boolean)
+  if (!kinds.length) return '사진 제출'
+  if (kinds.every((k) => k === '풀이')) return '풀이 제출'
+  if (kinds.every((k) => k === '증명')) return '증명 제출'
+  return '사진 제출'
 }
 
 /** 「03-증명2 · 세 변을 …」처럼 목록에 쓰는 이름 */

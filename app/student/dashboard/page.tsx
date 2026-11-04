@@ -10,7 +10,8 @@ import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { getSsenbSubChapterForConceptOrder, type SsenbProblem } from '@/lib/ssenbSteps'
-import { youtubeId, needsPhoto, isSsenC, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, photoKindOf, askedSet, type LessonVideo } from '@/lib/lessonVideos'
+import { safeAsks } from '@/lib/photoAsk'
 
 interface StudentInfo {
   id: string
@@ -113,6 +114,8 @@ export default function StudentDashboardPage() {
   const [lessonByYt, setLessonByYt] = useState<Record<string, LessonVideo>>({})
   const [watchLogs, setWatchLogs] = useState<{ session_id: string; video_url: string; coverage_pct: number; completed_at: string | null }[]>([])
   const [proofDone, setProofDone] = useState<Set<string>>(new Set())   // `${session_id}|${video_url}` — 증명 백지를 냈는지만
+  // 선생님이 「직접 푼 풀이도 찍어 내라」고 켜 둔 영상 (원장님 2026-11-04). `${session_id}|${영상열쇠}`
+  const [askedKeys, setAskedKeys] = useState<Set<string>>(new Set())
   const [worksheets, setWorksheets] = useState<StudentWorksheet[]>([])
   const [textbooks, setTextbooks] = useState<StudentTextbook[]>([])
   const [concepts, setConcepts] = useState<Concept[]>([])
@@ -195,12 +198,15 @@ export default function StudentDashboardPage() {
       const { data: noteData } = await supabase
         .from('learning_notes').select('*').in('session_id', ids)
       if (noteData) setNotes(noteData)
-      const [{ data: wl }, { data: lv }, { data: ps }] = await Promise.all([
+      const [{ data: wl }, { data: lv }, { data: ps }, asks] = await Promise.all([
         supabase.from('video_watch_logs').select('session_id, video_url, coverage_pct, completed_at').eq('student_id', sid).in('session_id', ids),
         supabase.from('lesson_videos').select('id, grade, kind, order_label, title, youtube_id'),
         supabase.from('proof_submissions').select('session_id, video_url').eq('student_id', sid).in('session_id', ids),
+        // ★ 표가 아직 없어도 화면이 멈추면 안 된다 — 못 읽으면 「켠 것이 없다」로 본다
+        safeAsks(supabase.from('video_photo_requests').select('session_id, video_url').eq('student_id', sid).in('session_id', ids)),
       ])
       if (ps) setProofDone(new Set(ps.map((p: any) => `${p.session_id}|${p.video_url}`)))
+      setAskedKeys(new Set(asks.map((a) => `${a.session_id}|${youtubeId(a.video_url) || String(a.video_url ?? '').trim()}`)))
       if (wl) setWatchLogs(wl as any)
       if (lv) setLessonByYt(Object.fromEntries((lv as LessonVideo[]).map((v) => [v.youtube_id!, v])))
     }
@@ -693,9 +699,17 @@ export default function StudentDashboardPage() {
                               <p className="text-[10px] text-gray-400">
                                 {wl?.completed_at ? <span className="text-green-600 font-bold">시청 완료 ✓</span>
                                   : wl ? `${Math.round(Number(wl.coverage_pct))}% 봄` : '아직 안 봄'}
-                                {needsPhoto(lesson) && (proofDone.has(`${selectedSession.id}|${url}`)
-                                  ? <span className="ml-1.5 text-green-600 font-bold">· {isSsenC(lesson) ? '풀이 사진' : '백지 증명'} 냄 ✓</span>
-                                  : <span className="ml-1.5 text-[#993C1D] font-bold">· {isSsenC(lesson) ? '풀이 사진' : '백지 증명'} 내야 해요</span>)}
+                                {(() => {
+                                  // 증명·컨씨는 저절로, 그 밖의 영상은 선생님이 켜 둔 것만
+                                  const 한줄열쇠 = new Set([`${yt || url.trim()}`])
+                                  const 켬 = askedKeys.has(`${selectedSession.id}|${yt || url.trim()}`) ? 한줄열쇠 : null
+                                  const kind = photoKindOf(url, lesson, 켬)
+                                  if (!kind) return null
+                                  const 이름 = kind === '풀이' ? '풀이 사진' : '백지 증명'
+                                  return proofDone.has(`${selectedSession.id}|${url}`)
+                                    ? <span className="ml-1.5 text-green-600 font-bold">· {이름} 냄 ✓</span>
+                                    : <span className="ml-1.5 text-[#993C1D] font-bold">· {이름} 내야 해요</span>
+                                })()}
                               </p>
                             )}
                           </div>

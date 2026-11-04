@@ -1,12 +1,13 @@
 // 증명 백지 제출 — 학생이 증명 영상을 다 본 뒤, 백지에 직접 쓴 증명 사진(최대 3장)을 낸다. 채점 없음.
 // 컨씨영상(쎈 C단계 풀이, grade 「쎈C …」)도 같은 길로 「직접 푼 풀이」 사진을 낸다 (원장님 2026-11-03).
+// 선생님이 배부하면서 켜 둔 영상(video_photo_requests)도 같은 길로 「직접 푼 풀이」를 낸다 (원장님 2026-11-04).
 // 학생은 이 API 로만 낸다(표·보관함에 직접 못 씀). 여기서 「내 과제인지 · 영상을 다 봤는지」를 확인한다.
 //   POST multipart: sessionId, videoUrl, photos(1~3, jpeg/png/webp, 각 5MB 이하)
 // 사진: proof-photos/<student_id>/<session_id>/<n>.jpg (비공개 — 선생님·그 학생 학부모만 열림)
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { needsPhoto } from '@/lib/lessonVideos'
+import { needsPhoto, askedSet } from '@/lib/lessonVideos'
 
 const MAX = 3
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -41,7 +42,16 @@ export async function POST(req: Request) {
   if (!urls.includes(videoUrl)) return NextResponse.json({ error: '과제에 없는 영상이에요.' }, { status: 400 })
   const yt = videoUrl.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1]
   const { data: lesson } = await db.from('lesson_videos').select('id, grade, kind').eq('youtube_id', yt ?? '').maybeSingle()
-  if (!needsPhoto(lesson)) return NextResponse.json({ error: '증명·컨씨 영상 과제만 사진을 내요.' }, { status: 400 })
+  // 증명·컨씨는 영상 **종류**로 저절로, 그 밖의 영상은 선생님이 배부하면서 켜 둔 것만 받는다.
+  // ★ 표가 아직 없으면(SQL 실행 전) 못 읽는다 — 그때는 「켠 것이 없다」로 보고 지금까지대로 돈다.
+  let asked = new Set<string>()
+  try {
+    const { data: asks } = await db.from('video_photo_requests').select('video_url').eq('session_id', sessionId)
+    asked = askedSet(asks ?? [])
+  } catch { /* 표가 없으면 켠 것이 없는 것으로 본다 */ }
+  if (!needsPhoto(lesson) && !asked.has(yt || videoUrl.trim())) {
+    return NextResponse.json({ error: '사진을 내는 영상 과제가 아니에요.' }, { status: 400 })
+  }
 
   // 영상을 다 봤나 — 시청 기록의 완료(90% 이상)
   const { data: log } = await db.from('video_watch_logs').select('completed_at')
@@ -59,7 +69,7 @@ export async function POST(req: Request) {
   const { data: old } = await db.from('proof_submissions').select('photo_paths')
     .eq('student_id', student.id).eq('session_id', sessionId).eq('video_url', videoUrl).maybeSingle()
   const { error: e2 } = await db.from('proof_submissions').upsert({
-    student_id: student.id, session_id: sessionId, lesson_video_id: lesson.id, video_url: videoUrl,
+    student_id: student.id, session_id: sessionId, lesson_video_id: lesson?.id ?? null, video_url: videoUrl,
     photo_paths: paths, submitted_at: new Date().toISOString(),
   }, { onConflict: 'student_id,session_id,video_url' })
   if (e2) return NextResponse.json({ error: '제출을 저장하지 못했어요.' }, { status: 500 })

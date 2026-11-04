@@ -6,7 +6,8 @@ import { createClient } from '@supabase/supabase-js'
 import { staffOrDeny } from '@/lib/apiAuth'
 import { staffCanSeeStudent } from '@/lib/teachers'
 import { fetchAll } from '@/lib/fetchAll'
-import { needsPhoto, photoLabel } from '@/lib/lessonVideos'
+import { photoUrlsOf, photoLabelOf } from '@/lib/lessonVideos'
+import { safeAsks, asksOf } from '@/lib/photoAsk'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -86,7 +87,7 @@ export async function GET(req: Request) {
   const vIds = withVideo.map((x) => x.id)
   const vChunks: string[][] = []
   for (let i = 0; i < vIds.length; i += 200) vChunks.push(vIds.slice(i, i + 200))
-  const [watchRes, proofRes, lvRes] = await Promise.all([
+  const [watchRes, proofRes, lvRes, askRes] = await Promise.all([
     Promise.all(vChunks.map((c) =>
       supabase.from('video_watch_logs')
         .select('session_id, video_url, coverage_pct, completed_at, watch_seconds, focus_lost_seconds').in('session_id', c))),
@@ -95,7 +96,12 @@ export async function GET(req: Request) {
     vIds.length
       ? supabase.from('lesson_videos').select('youtube_id, grade, kind, title, order_label')
       : Promise.resolve({ data: [] as any[], error: null }),
+    // 선생님이 「직접 푼 풀이도 찍어 내라」고 켜 둔 영상 (원장님 2026-11-04)
+    // ★ 표가 아직 없어도(SQL 실행 전) 보고가 멈추면 안 된다 — 못 읽으면 「켠 것이 없다」로 본다
+    Promise.all(vChunks.map((c) =>
+      safeAsks(supabase.from('video_photo_requests').select('session_id, video_url').in('session_id', c)))),
   ])
+  const askRows = askRes.flat()
   const watchRows: any[] = []
   for (const { data } of watchRes) watchRows.push(...(data ?? []))
   const proofRows: any[] = []
@@ -201,13 +207,14 @@ export async function GET(req: Request) {
     })
 
     // 증명 영상이 섞인 날만 — 증명을 안 내준 날에 「증명 0/0」이 뜨면 잔소리가 된다
-    // 컨씨영상(직접 푼 풀이 사진)도 같은 배지 — 이름만 「풀이」「사진」 (photoLabel)
-    const proofUrls = urls.filter((u) => needsPhoto(lv.get(ytId(u) ?? '')))
+    // 컨씨영상·선생님이 켜 둔 영상(직접 푼 풀이 사진)도 같은 배지 — 이름만 「풀이」「사진」 (photoLabelOf)
+    const 켠것 = asksOf(askRows, x.id)
+    const proofUrls = photoUrlsOf(urls, (u) => lv.get(ytId(u) ?? ''), 켠것)
     if (proofUrls.length) {
       const got = proofUrls.filter((u) => subs.some((p) => p.video_url === u)).length
       push(x.student_id, x.session_date, {
         kind: 'proof',
-        label: `${photoLabel(proofUrls.map((u) => lv.get(ytId(u) ?? ''))).replace(' 제출', '')} ${got}/${proofUrls.length}`,
+        label: `${photoLabelOf(urls, (u) => lv.get(ytId(u) ?? ''), 켠것).replace(' 제출', '')} ${got}/${proofUrls.length}`,
         value: Math.round((got / proofUrls.length) * 100),
         unit: '%',
         title: proofUrls.map((u, i) =>

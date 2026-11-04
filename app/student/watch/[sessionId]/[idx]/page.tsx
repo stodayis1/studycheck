@@ -7,7 +7,8 @@
 import { use, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, isSsenC, needsPhoto, type LessonVideo } from '@/lib/lessonVideos'
+import { youtubeId, mergeRanges, coveredSeconds, fmtDuration, COMPLETE_PCT, isSsenC, photoKindOf, askedSet, type LessonVideo } from '@/lib/lessonVideos'
+import { safeAsks } from '@/lib/photoAsk'
 import { SOL_LINES, nameToneUrl, solLineUrl, solCallText, type SolCallKey, LEC_LINES, lecLineUrl, lecCallText, type LecCallKey, planLectureCalls, CALL_REPLIES, type CallResponse, buildQuiz, type QuizChoice, QUIZ_RATE, CIRCLED } from '@/lib/nameCalls'
 import { ProofSubmitBox } from '@/components/student/ProofSubmitBox'
 
@@ -49,6 +50,8 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
   const [sessionDate, setSessionDate] = useState('')
   const [allUrls, setAllUrls] = useState<string[]>([])
   const [lesson, setLesson] = useState<LessonVideo | null>(null)
+  // 선생님이 「이 영상은 직접 푼 풀이도 찍어 내라」고 켜 둔 것 (원장님 2026-11-04)
+  const [asked, setAsked] = useState<Set<string>>(new Set())
   const lessonRef = useRef<LessonVideo | null>(null)          // 유튜브·화면 이벤트(처음 만든 함수)에서 지금 강의를 읽으려고
   lessonRef.current = lesson
   const [log, setLog] = useState<Log | null>(null)
@@ -100,11 +103,14 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
       if (!s || !u || !youtubeId(u)) { setError('영상을 찾을 수 없어요.'); return }
       setUrl(u); setAllUrls(urls); setSessionDate(s.session_date)
       const yt = youtubeId(u)!
-      const [{ data: lv }, { data: lg }] = await Promise.all([
+      const [{ data: lv }, { data: lg }, asks] = await Promise.all([
         supabase.from('lesson_videos').select('*').eq('youtube_id', yt).maybeSingle(),
         supabase.from('video_watch_logs').select('*').eq('student_id', sid).eq('session_id', sessionId).eq('video_url', u).maybeSingle(),
+        // ★ 표가 아직 없어도 화면이 멈추면 안 된다 — 못 읽으면 「켠 것이 없다」로 본다
+        safeAsks(supabase.from('video_photo_requests').select('session_id, video_url').eq('session_id', sessionId)),
       ])
       if (lv) setLesson(lv as LessonVideo)
+      setAsked(askedSet(asks))
       const l: Log = {
         id: lg?.id, watch_seconds: lg?.watch_seconds ?? 0, covered_seconds: lg?.covered_seconds ?? 0,
         coverage_pct: Number(lg?.coverage_pct ?? 0), played_seconds: lg?.played_seconds ?? 0,
@@ -427,10 +433,14 @@ export default function WatchPage({ params }: { params: Promise<{ sessionId: str
         <p className="text-[11px] text-gray-400">건너뛴 부분은 시청 시간에 안 들어가요. 영상 속 문제는 멈추고 연습장에 풀어 보세요.</p>
       </div>
 
-      {/* 증명 영상: 다 본 뒤 백지에 써서 사진 제출 · 컨씨영상: 직접 푼 풀이 사진 제출 (채점 없음) */}
-      {needsPhoto(lesson) && studentId && url && (
+      {/* 다 본 뒤 사진 제출 (채점 없음)
+          · 증명 영상 — 백지에 써서
+          · 컨씨영상 — 직접 푼 풀이
+          · 선생님이 배부하면서 켜 둔 영상 — 직접 푼 풀이 (원장님 2026-11-04) */}
+      {studentId && url && photoKindOf(url, lesson, asked) && (
         <ProofSubmitBox studentId={studentId} sessionId={sessionId} videoUrl={url} watched={!!log?.completed_at}
-          formula={/공식.*써 보기/.test(lesson.title)} solve={isSsenC(lesson)} />
+          formula={/공식.*써 보기/.test(lesson?.title ?? '')}
+          solve={photoKindOf(url, lesson, asked) === '풀이'} />
       )}
 
       {/* 장면 목차 */}

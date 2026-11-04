@@ -4,6 +4,8 @@
 // ★ 발송 라우트와 미리보기 스크립트가 **이 함수 하나**를 같이 쓴다.
 //   따로 두면 "미리보기에선 멀쩡했는데 실제로 간 건 달랐다" 가 된다.
 import { SupabaseClient } from '@supabase/supabase-js'
+import { photoBrief } from './lessonVideos'
+import { safeAsks } from './photoAsk'
 import { fbImages, hwLines } from './briefing.ts'
 import { fetchOpsMakeups, type OpsMakeup } from './opsMakeups.ts'
 import { fetchOpsExtraClasses } from './opsExtraClasses.ts'
@@ -30,9 +32,19 @@ async function videosOf(db: SupabaseClient, ses: any) {
   if (!urls.length) return { total: 0, proof: 0 }
   const ids = [...new Set(urls.map(ytId).filter(Boolean))] as string[]
   if (!ids.length) return { total: urls.length, proof: 0 }
-  const { data } = await db.from('lesson_videos').select('youtube_id, kind').in('youtube_id', ids)
+  const [{ data }, asks] = await Promise.all([
+    db.from('lesson_videos').select('youtube_id, grade, kind').in('youtube_id', ids),
+    // 선생님이 켜 둔 「직접 푼 풀이 사진」 (원장님 2026-11-04). 못 읽으면 「켠 것이 없다」로 본다.
+    safeAsks(db.from('video_photo_requests').select('session_id, video_url').eq('session_id', ses?.id ?? '')),
+  ])
   const proofIds = new Set((data ?? []).filter((v: any) => v.kind === '증명').map((v: any) => v.youtube_id))
-  return { total: urls.length, proof: urls.filter((u) => proofIds.has(ytId(u) ?? '')).length }
+  const lessonOf = new Map((data ?? []).map((v: any) => [v.youtube_id, v]))
+  const b = photoBrief(urls, (u) => lessonOf.get(ytId(u) ?? ''), asks)
+  return {
+    total: urls.length,
+    proof: urls.filter((u) => proofIds.has(ytId(u) ?? '')).length,
+    photo: b.photo, photoWord: b.photoWord,
+  }
 }
 
 export async function snapshots(db: SupabaseClient, student: any, date: string, ses: any, note: any, fbs: any[]) {
