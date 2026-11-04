@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { NewStudentSteps, type NewStudent } from '@/components/teacher/NewStudentSteps'
 import { TodayAbsences } from '@/components/teacher/TodayAbsences'
+import { ONBOARDING_KEY, showOnboarding } from '@/lib/onboarding'
 import SchoolScheduleCalendar from '@/components/teacher/SchoolScheduleCalendar'
 import { Header } from '@/components/common/Header'
 import { useEffect, useState } from 'react'
@@ -79,6 +80,11 @@ export default function TeacherDashboardPage() {
    * 첫 수업일이 최근인 학생만 본다. 첫 수업일은 OPS 에서 매일 가져온다(lib/opsFirstClass).
    */
   const [newStudents, setNewStudents] = useState<NewStudent[]>([])
+  /**
+   * 연습 안내를 띄울 사람인가 — **새로 오신 선생님께만 일주일**
+   * (원장님 2026-11-04 「왜 나한테도 뜨냐… 새로온 강사분에게 일주일만」).
+   */
+  const [showGuide, setShowGuide] = useState(false)
   const [stats, setStats] = useState({
     todayStudents: 0, unwrittenNotes: 0, pendingScore: 0, pendingShare: 0,
     activeWorksheets: 0, activeTextbooks: 0, needsAction: 0,
@@ -103,7 +109,7 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
-      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes(); fetchConsultRequests(); fetchNewStudents()
+      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes(); fetchConsultRequests(); fetchOnboarding(); fetchNewStudents()
       fetchNewConsultations()
     }
   }, [currentUser])
@@ -141,6 +147,13 @@ export default function TeacherDashboardPage() {
   // 상담기록이 아예 없는 학생도 '상담 필요'로 본다.
   // (2026-10-08 원장님 지시로 변경. 그 전에는 "기록이 없으면 기준 날짜가 없으니 제외
   //  했었음 — 2026-09-17 원칙)
+  /** 연습 안내를 띄울 사람인지 본다. 설정에 적힌 날까지만 뜬다. */
+  async function fetchOnboarding() {
+    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+    const { data } = await supabase.from('app_settings').select('value').eq('key', ONBOARDING_KEY).maybeSingle()
+    setShowGuide(showOnboarding((data as any)?.value, currentUser, today))
+  }
+
   /** 첫 수업일이 최근 NEW_DAYS 일 안인 재원생 — 그 학생만 안내를 띄운다. */
   async function fetchNewStudents() {
     const NEW_DAYS = 21
@@ -449,7 +462,7 @@ export default function TeacherDashboardPage() {
         {/* 새로 온 학생 — 교재 배정부터 첫 학습일지까지 **순서대로** (원장님 2026-11-04).
             반·시간표까지는 OPS 에서 들어오고, 그다음부터가 선생님 몫인데 그걸 아는 길이
             머릿속밖에 없었다. 할 일이 다 끝난 학생은 저절로 사라진다. */}
-        {newStudents.length > 0 && <NewStudentSteps students={newStudents} />}
+        {showGuide && newStudents.length > 0 && <NewStudentSteps students={newStudents} />}
 
         {/* 하루 업무 흐름 — 출근해서 처음 보는 자리에 둔다(원장님 2026-10-12).
             매뉴얼 안에만 있으면 새로 오신 선생님이 찾아 들어가지 않는다.

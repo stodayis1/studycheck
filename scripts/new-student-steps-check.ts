@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/newStudentSteps.ts')
 const { buildSteps, allDone, stepLabel } = await import(pathToFileURL(target).href)
+const { showOnboarding, addOnboarding, pruneOnboarding, ONBOARDING_DAYS } = await import(pathToFileURL(path.resolve('lib/onboarding.ts')).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -83,6 +84,43 @@ T('대시보드가 이 안내를 실제로 띄운다', () => {
   const src = fs.readFileSync(path.resolve('app/teacher/dashboard/page.tsx'), 'utf8')
   return src.includes('<NewStudentSteps') && src.includes('fetchNewStudents()')
     && /first_class_date/.test(src)
+})
+
+// ── 누구에게 띄우나 (원장님 2026-11-04) ───────────────────────────────────
+//   「왜 나한테도 뜨냐. 최대호 선생님한테만 보이면 되는데. 새로온 강사분에게 일주일만」
+const 설정 = { '최대호': '2026-11-11' }
+
+T('적힌 선생님께만 뜬다', () =>
+  showOnboarding(설정, { name: '최대호', role: 'teacher' }, '2026-11-04') === true
+  && showOnboarding(설정, { name: '주한', role: 'teacher' }, '2026-11-04') === false)
+
+// ★ 원장님께 날마다 뜨던 것이 이번에 고친 것이다.
+T('원장님·행정 선생님께는 안 뜬다', () =>
+  showOnboarding(설정, { name: '최대호', role: 'admin' }, '2026-11-04') === false
+  && showOnboarding(설정, { name: '최대호', role: 'staff' }, '2026-11-04') === false)
+
+T('적힌 날이 지나면 저절로 사라진다', () =>
+  showOnboarding(설정, { name: '최대호', role: 'teacher' }, '2026-11-11') === true
+  && showOnboarding(설정, { name: '최대호', role: 'teacher' }, '2026-11-12') === false)
+
+T('설정이 없거나 이상하면 아무에게도 안 뜬다', () =>
+  showOnboarding(null, { name: '최대호', role: 'teacher' }, '2026-11-04') === false
+  && showOnboarding({ '최대호': '언제까지' }, { name: '최대호', role: 'teacher' }, '2026-11-04') === false
+  && showOnboarding(설정, null, '2026-11-04') === false)
+
+T('일주일을 더하면 그날까지 보인다', () => {
+  const v = addOnboarding(null, '홍길동', '2026-11-04')
+  return v['홍길동'] === '2026-11-11' && ONBOARDING_DAYS === 7
+})
+
+T('지난 사람은 설정에서 지운다 (끝없이 길어지지 않게)', () => {
+  const v = pruneOnboarding({ '옛날': '2026-10-01', '최대호': '2026-11-11' }, '2026-11-04')
+  return !('옛날' in v) && v['최대호'] === '2026-11-11'
+})
+
+T('대시보드가 이 판단을 실제로 쓴다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/dashboard/page.tsx'), 'utf8')
+  return src.includes('showOnboarding(') && /showGuide && newStudents\.length > 0/.test(src)
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
