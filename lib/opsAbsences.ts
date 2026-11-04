@@ -65,8 +65,17 @@ export async function fetchOpsAbsences(date: string): Promise<OpsAbsence[]> {
   }
 }
 
-/** 「오늘은 ○○ 학생 결석입니다」 — 한 줄로 */
-export function absenceLine(name: string, grade: string | null, a: { reason: string | null; makeupRequired: boolean }): string {
-  const 뒤 = [a.reason?.trim() || null, a.makeupRequired ? '보강 대상' : null].filter(Boolean).join(' · ')
+/**
+ * 「오늘은 ○○ 학생 결석입니다」 — 한 줄로.
+ *
+ * ★ **보강 여부는 적지 않는다** (원장님 2026-11-04 「여행 개인사정 다 보강해.
+ *   보강안함은 안띄워도됨. 보강을 안하는 경우는 장기여행(일주일 이상)의 경우 원비
+ *   차감했을 때야」).
+ *   거의 모두 보강 대상이라 딱지가 알려 주는 것이 없고, OPS 의 makeup_required 가
+ *   여행·개인사정을 「보강 안 함」으로 들고 있는 줄이 있어서 **틀린 것을 알려 주게 된다.**
+ *   진짜 보강 안 하는 건(원비 차감한 장기여행)은 드물다.
+ */
+export function absenceLine(name: string, grade: string | null, a: { reason: string | null }): string {
+  const 뒤 = a.reason?.trim() || ''
   return `${name}${grade ? `(${grade})` : ''} 학생 결석${뒤 ? ` — ${뒤}` : ''}`
 }

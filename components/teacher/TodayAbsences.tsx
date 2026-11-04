@@ -41,13 +41,9 @@ export function TodayAbsences() {
           <div key={it.studentId} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{ background: '#FAECE7' }}>
             <span className="text-[13px] font-bold text-gray-800">{it.name}</span>
             <span className="text-[11px] text-gray-500">{it.grade}</span>
+            {/* ★ 보강 여부는 적지 않는다 — 여행·개인사정도 다 보강하신다(원장님 2026-11-04).
+                진짜 보강 안 하는 건은 원비를 깎은 장기여행뿐이라 드물다. */}
             {it.reason && <span className="text-[11px] text-gray-600">· {it.reason}</span>}
-            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-              style={it.makeupRequired
-                ? { background: '#FAEEDA', color: '#633806' }
-                : { background: '#f3f4f6', color: '#6b7280' }}>
-              {it.makeupRequired ? '보강 대상' : '보강 안 함'}
-            </span>
           </div>
         ))}
       </div>
