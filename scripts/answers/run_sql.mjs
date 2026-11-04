@@ -8,6 +8,8 @@
 //   update problems p set answer_kind='number', answer_text = v.txt from (values …)
 //   update problems p set …, answer_unit = v.unit from (values ('12'::bigint,'46','°'),…)  ← 단위
 //   update problems set answer_kind='image', answer_text = null where id in ('12'::bigint,…)
+//   update problems p set answer_kind = v.kind, … from (values (12::bigint,'choice','③'::text,null::text),…)
+//     ← 줄마다 종류가 다른 꼴(make_sql_from_read.py). 한 권을 통째로 다시 쓸 때 쓴다.
 import fs from 'fs'
 import { createClient } from '@supabase/supabase-js'
 for (const f of ['.env.local','.env']) { if(!fs.existsSync(f))continue;
@@ -28,6 +30,11 @@ const nulling = /answer_text\s*=\s*null/.test(sql)
 const unitCol  = /answer_unit\s*=\s*v\.unit/.test(sql)
 const unitNull = /answer_unit\s*=\s*null/.test(sql)
 
+// 줄마다 종류가 다른 꼴 — 종류를 줄에서 읽는다(윗줄의 kind 는 쓰지 않는다)
+const kindCol = /answer_kind\s*=\s*v\.kind/.test(sql)
+const quad =[...sql.matchAll(/\(\s*'?(\d+)'?::bigint\s*,\s*'([a-z]+)'\s*,\s*(?:'((?:[^']|'')*)'|null)(?:::text)?\s*,\s*(?:'((?:[^']|'')*)'|null)(?:::text)?\s*\)/g)]
+             .map(m=>[Number(m[1]), m[2], m[3]===undefined?null:m[3].replace(/''/g,"'"), m[4]===undefined?null:m[4].replace(/''/g,"'")])
+
 const trip =[...sql.matchAll(/\(\s*'(\d+)'::bigint\s*,\s*'([^']*)'\s*,\s*(?:'([^']*)'|null)\s*\)/g)]
              .map(m=>[Number(m[1]), m[2], m[3] ?? null])
 const pairs=[...sql.matchAll(/\(\s*'(\d+)'::bigint\s*,\s*'([^']*)'\s*\)/g)].map(m=>[Number(m[1]), m[2], null])
@@ -35,21 +42,22 @@ const rows = unitCol ? trip : pairs
 const onlyIds=[...sql.matchAll(/^\s*'(\d+)'::bigint/gm)].map(m=>Number(m[1]))
 
 // 값끼리 묶어 한 번에 고친다(id 는 100개씩 — 더 넣으면 in() 이 조용히 잘린다)
-const SEP='\u0000'
-const groups=new Map()                      // '값SEP단위' → id 목록
-if (nulling) groups.set(SEP, onlyIds)
-else for (const [id,txt,unit] of rows) {
-  const k = txt + SEP + (unit ?? '')
-  if(!groups.has(k)) groups.set(k,[])
-  groups.get(k).push(id)
-}
-const partsOf = k => { const i=k.indexOf(SEP); return [k.slice(0,i), k.slice(i+1) || null] }
+// 묶음 키는 {종류, 글자, 단위} 를 통째로 담는다 — 빈 글자와 「없음」을 섞으면 안 된다
+const groups=new Map()                      // JSON 키 → id 목록
+const add=(k,id)=>{ const s=JSON.stringify(k); if(!groups.has(s))groups.set(s,[]); groups.get(s).push(id) }
+if (kindCol) { if(!quad.length){console.error('줄마다 종류가 다른 꼴인데 값을 하나도 못 읽었다');process.exit(1)}
+               for (const [id,k,t,u] of quad) add({kind:k, txt:t, unit:u}, id) }
+else if (nulling) for (const id of onlyIds) add({kind, txt:null, unit:unitNull?null:undefined}, id)
+else for (const [id,txt,unit] of rows)
+  add({kind, txt, unit: unitCol ? unit : (unitNull ? null : undefined)}, id)
 
 const total=[...groups.values()].reduce((a,b)=>a+b.length,0)
-console.log(`${file}\n  값 ${groups.size}가지 · 문항 ${total}개` + (kind?` · answer_kind='${kind}'`:'')
+console.log(`${file}\n  값 ${groups.size}가지 · 문항 ${total}개`
+            + (kindCol?' · 종류는 줄마다':(kind?` · answer_kind='${kind}'`:''))
             + (unitCol?' · 단위 있음':'') + (unitNull?' · 단위 비움':''))
 if (DRY) {
-  for (const [k,ids] of groups) { const [t,u]=partsOf(k); console.log(`  ${nulling?'(비움)':t}${u?' '+u:''} ${ids.length}개`) }
+  for (const [s,ids] of groups) { const v=JSON.parse(s)
+    console.log(`  ${v.kind??'(그대로)'} / ${v.txt===null?'(비움)':v.txt}${v.unit?' '+v.unit:''} ${ids.length}개`) }
   process.exit(0)
 }
 
@@ -58,22 +66,21 @@ if (DRY) {
 let done=0, bad=null
 outer:
 for (const [key, ids] of groups) {
-  const [t,u]=partsOf(key)
-  const txt = nulling ? null : t
+  const v=JSON.parse(key)
+  const txt = v.txt ?? null
   const patch = {answer_text:txt}
-  if (kind) patch.answer_kind = kind
-  if (unitCol) patch.answer_unit = u
-  else if (unitNull) patch.answer_unit = null
+  if (v.kind) patch.answer_kind = v.kind
+  if (v.unit !== undefined) patch.answer_unit = v.unit ?? null
   for (let i=0;i<ids.length;i+=100) {
     const part=ids.slice(i,i+100)
     // 바꾼 뒤 값을 **되읽어** 확인한다 — 수만 세면 종류·단위가 안 바뀐 것을 놓친다
     const {data,error}=await db.from('problems').update(patch).in('id',part).select('id,answer_kind,answer_text,answer_unit')
     if (error) { bad=error.message; break outer }
     if (data.length!==part.length) { bad=`${txt}: ${part.length}개 중 ${data.length}개만 바뀜`; break outer }
-    const off=data.find(r=>r.answer_text!==txt
-      || (kind && r.answer_kind!==kind)
-      || ((unitCol||unitNull) && (r.answer_unit ?? null)!==(patch.answer_unit ?? null)))
-    if (off) { bad=`${off.id}: 넣으려던 ${kind??'(그대로)'}/${txt}${u?'/'+u:''} · 들어간 ${off.answer_kind}/${off.answer_text}${off.answer_unit?'/'+off.answer_unit:''}`; break outer }
+    const off=data.find(r=>(r.answer_text ?? null)!==txt
+      || (v.kind && r.answer_kind!==v.kind)
+      || (v.unit !== undefined && (r.answer_unit ?? null)!==(v.unit ?? null)))
+    if (off) { bad=`${off.id}: 넣으려던 ${v.kind??'(그대로)'}/${txt}${v.unit?'/'+v.unit:''} · 들어간 ${off.answer_kind}/${off.answer_text}${off.answer_unit?'/'+off.answer_unit:''}`; break outer }
     done+=data.length
   }
 }

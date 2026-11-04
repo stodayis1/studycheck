@@ -86,8 +86,9 @@ def write(name, head, body):
 
 def stmt(sel):
     b = 'update problems p set answer_kind = v.kind, answer_text = v.txt, answer_unit = v.unit\nfrom (values\n'
-    b += ',\n'.join(f"  ({i}::bigint, {q(k)}, {q(t) if t is not None else 'null'}, "
-                    f"{q(u) if u else 'null'})" for i, k, t, u in sel)
+    # ★ null 을 그냥 쓰면 VALUES 의 그 칸이 unknown 이 돼 「타입을 알 수 없다」로 멈춘다
+    b += ',\n'.join(f"  ({i}::bigint, {q(k)}, {q(t) if t is not None else 'null'}::text, "
+                    f"{q(u) if u else 'null'}::text)" for i, k, t, u in sel)
     b += '\n) as v(id, kind, txt, unit)\nwhere p.id = v.id;\n'
     return b
 
