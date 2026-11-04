@@ -78,7 +78,7 @@ export default function VideoAssignPage() {
     try {
       // 재원생만. 휴원생은 과제를 받을 수 없다.
       const all = await fetchAllRows<StudentLite>(() => supabase.from('students')
-        .select('id, name, grade, teacher_name, is_active, on_leave')
+        .select('id, name, grade, teacher_name, is_active, on_leave, is_test')
         .eq('is_active', true).order('id'))
       const mine = all.filter((s) => !s.on_leave && canViewStudent(s))
       setStudents(mine)

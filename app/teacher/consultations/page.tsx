@@ -74,7 +74,7 @@ export default function ConsultationsPage() {
   async function fetchData() {
     setLoading(true)
     const [{ data: sData }, { data: cData }, { data: rData }] = await Promise.all([
-      supabase.from('students').select('id, name, school, grade, teacher_name').eq('is_active', true).order('name'),
+      supabase.from('students').select('id, name, school, grade, teacher_name, is_test').eq('is_active', true).order('name'),
       supabase.from('consultations').select('*').order('consulted_at', { ascending: false }),
       supabase.from('consultation_requests').select('*').eq('status', 'open').order('created_at', { ascending: false }),
     ])

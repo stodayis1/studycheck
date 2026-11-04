@@ -31,6 +31,7 @@ interface Student {
   school: string
   grade: string
   teacher_name: string
+  is_test?: boolean
   wise_step: string
   parent_phone?: string | null
   on_leave?: boolean
@@ -975,6 +976,10 @@ export default function TeacherLearningNotesPage() {
   // 주임모드로 넓게 "보이는" 것과는 별개로 실제 기록 작성/수정/삭제는 여기로만 한정한다 (주임은 보기 전용)
   function isEditable(s: Student) {
     if (isAdmin()) return true
+    // ★ 연습용(가짜) 학생은 **누구나 쓸 수 있다** — 담당이 없기 때문이다
+    //   (원장님 2026-11-04 「담당은 없어야지 누구나 볼수 있어야 하니까」).
+    //   보기만 되고 쓰지 못하면 연습이 안 된다.
+    if ((s as any).is_test) return true
     if (!currentUser?.name || !s.teacher_name) return false
     // 콤마/공백으로 구분된 여러 강사명에서 본인 이름 찾기
     const teachers = splitTeachers(s.teacher_name)

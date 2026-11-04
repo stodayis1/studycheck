@@ -22,16 +22,19 @@ const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { persistSession: false } })
 
-/** 받는 사람 — 재원생 학부모. 퇴원생(is_active=false)·휴원생(on_leave)은 뺀다. */
+/**
+ * 받는 사람 — 재원생 학부모. 퇴원생(is_active=false)·휴원생(on_leave)은 뺀다.
+ * ★ 연습용(가짜) 학생도 뺀다 — 강사 번호가 적혀 있을 수 있다(원장님 2026-11-04).
+ */
 async function recipients() {
   const db = admin()
   const { data, error } = await db.from('students')
-    .select('name, grade, parent_phone, is_active, on_leave')
+    .select('name, grade, parent_phone, is_active, on_leave, is_test')
     .eq('is_active', true)
   if (error) throw new Error(`명단을 읽지 못했어요: ${error.message}`)
   const by = new Map<string, { phone: string; names: string[] }>()
   for (const s of (data ?? []) as any[]) {
-    if (s.on_leave) continue
+    if (s.on_leave || s.is_test) continue
     const phone = String(s.parent_phone ?? '').replace(/\D/g, '')
     if (!/^01[016-9]\d{7,8}$/.test(phone)) continue
     const hit = by.get(phone) ?? { phone, names: [] }
