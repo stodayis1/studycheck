@@ -18,8 +18,9 @@ title = sys.argv[3] if len(sys.argv) > 3 else os.path.basename(d)
 rows = json.load(io.open(os.path.join(d, 'list.json'), encoding='utf8'))
 
 QH, AH, W = 200, 76, 660
+LBL = 174
 # ★ 기본 글꼴은 한글·원문자(①)를 못 그린다 — DB 값이 □□ 로 나와 **대조 자체가 안 된다**
-FONT = ImageFont.truetype('C:/Windows/Fonts/malgun.ttf', 13)
+FONT = ImageFont.truetype('C:/Windows/Fonts/malgun.ttf', 16)
 tiles = []
 for r in rows:
     f = os.path.join(d, r['no'] + '_q.png')
