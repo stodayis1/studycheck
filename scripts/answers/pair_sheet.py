@@ -11,13 +11,15 @@ import json
 import os
 import sys
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 d, out = sys.argv[1], sys.argv[2]
 title = sys.argv[3] if len(sys.argv) > 3 else os.path.basename(d)
 rows = json.load(io.open(os.path.join(d, 'list.json'), encoding='utf8'))
 
-QH, AH, W = 150, 46, 660
+QH, AH, W = 200, 76, 660
+# ★ 기본 글꼴은 한글·원문자(①)를 못 그린다 — DB 값이 □□ 로 나와 **대조 자체가 안 된다**
+FONT = ImageFont.truetype('C:/Windows/Fonts/malgun.ttf', 13)
 tiles = []
 for r in rows:
     f = os.path.join(d, r['no'] + '_q.png')
@@ -40,15 +42,15 @@ WD = 180 + max(max(q.width, a.width if a else 0) for _, q, a in tiles)
 HT = 24 + sum(q.height + (a.height if a else 0) + 34 for _, q, a in tiles)
 im = Image.new('RGB', (WD, HT), (255, 255, 255))
 dr = ImageDraw.Draw(im)
-dr.text((6, 6), title, fill=(0, 0, 0))
+dr.text((6, 6), title, fill=(0, 0, 0), font=FONT)
 y = 24
 for r, q, a in tiles:
-    dr.text((4, y + 2), f"{r['no']} 문제", fill=(190, 30, 30))
-    dr.text((4, y + 16), f"DB {r['txt']}", fill=(20, 90, 190))
+    dr.text((4, y + 2), f"{r['no']} 문제", fill=(190, 30, 30), font=FONT)
+    dr.text((4, y + 18), f"DB {r['txt']}", fill=(20, 90, 190), font=FONT)
     im.paste(q, (175, y))
     y += q.height + 3
     if a:
-        dr.text((4, y + 2), '정답그림', fill=(120, 120, 120))
+        dr.text((4, y + 2), '정답그림', fill=(120, 120, 120), font=FONT)
         im.paste(a, (175, y))
         y += a.height + 3
     dr.line([(0, y + 10), (WD, y + 10)], fill=(200, 200, 200))
