@@ -35,12 +35,20 @@ T('미리 들은 결석은 띄운다', () =>
   isPreTold('여행') && isPreTold('개인사정') && isPreTold('가족여행') && isPreTold(null) && isPreTold(''))
 
 T('한 줄 글에 이름·학년·사유가 들어간다', () =>
-  absenceLine('홍길동', '초5', { reason: '여행', makeupRequired: false }) === '홍길동(초5) 학생 결석 — 여행'
-  && absenceLine('홍길동', '중1', { reason: '개인사정', makeupRequired: true })
-    === '홍길동(중1) 학생 결석 — 개인사정 · 보강 대상')
+  absenceLine('홍길동', '초5', { reason: '여행' }) === '홍길동(초5) 학생 결석 — 여행'
+  && absenceLine('홍길동', '중1', { reason: '개인사정' }) === '홍길동(중1) 학생 결석 — 개인사정')
 
 T('사유가 없어도 말이 된다', () =>
-  absenceLine('홍길동', null, { reason: null, makeupRequired: false }) === '홍길동 학생 결석')
+  absenceLine('홍길동', null, { reason: null }) === '홍길동 학생 결석')
+
+// ★ 여행·개인사정도 **다 보강하신다** — 「보강 안 함」을 적으면 틀린 것을 알려 주게 된다.
+//   OPS 의 makeup_required 가 여행을 「보강 안 함」으로 들고 있는 줄이 있다.
+T('보강 여부는 적지 않는다', () => {
+  const 카드 = fs.readFileSync(path.resolve('components/teacher/TodayAbsences.tsx'), 'utf8')
+  const lib = fs.readFileSync(path.resolve('lib/opsAbsences.ts'), 'utf8')
+  return !카드.includes('보강 안 함') && !카드.includes('보강 대상')
+    && !lib.includes("'보강 대상'")
+})
 
 // ── 서버에서 거르는 것들 ───────────────────────────────────────────────────
 T('보이는 범위를 새로 만들지 않는다 (다른 화면과 같은 규칙)', () => {
