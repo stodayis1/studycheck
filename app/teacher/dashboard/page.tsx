@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { NewStudentSteps, type NewStudent } from '@/components/teacher/NewStudentSteps'
 import SchoolScheduleCalendar from '@/components/teacher/SchoolScheduleCalendar'
 import { Header } from '@/components/common/Header'
 import { useEffect, useState } from 'react'
@@ -72,6 +73,11 @@ interface HandoffNote {
 
 export default function TeacherDashboardPage() {
   const { currentUser, isAdmin, canViewStudent, isSupervisorModeActive, supervisorLabel } = useAuth()
+  /**
+   * 새로 온 학생 — 「무엇을 어디서」 순서대로 보여 준다 (원장님 2026-11-04).
+   * 첫 수업일이 최근인 학생만 본다. 첫 수업일은 OPS 에서 매일 가져온다(lib/opsFirstClass).
+   */
+  const [newStudents, setNewStudents] = useState<NewStudent[]>([])
   const [stats, setStats] = useState({
     todayStudents: 0, unwrittenNotes: 0, pendingScore: 0, pendingShare: 0,
     activeWorksheets: 0, activeTextbooks: 0, needsAction: 0,
@@ -96,7 +102,7 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (currentUser) {
       fetchStats(); fetchBulkSetting(); fetchAnnouncements()
-      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes(); fetchConsultRequests()
+      fetchFirstClassChecks(); fetchOverdueConsults(); fetchHandoffNotes(); fetchConsultRequests(); fetchNewStudents()
       fetchNewConsultations()
     }
   }, [currentUser])
@@ -134,6 +140,20 @@ export default function TeacherDashboardPage() {
   // 상담기록이 아예 없는 학생도 '상담 필요'로 본다.
   // (2026-10-08 원장님 지시로 변경. 그 전에는 "기록이 없으면 기준 날짜가 없으니 제외
   //  했었음 — 2026-09-17 원칙)
+  /** 첫 수업일이 최근 NEW_DAYS 일 안인 재원생 — 그 학생만 안내를 띄운다. */
+  async function fetchNewStudents() {
+    const NEW_DAYS = 21
+    const from = new Date(Date.now() + 9 * 3600_000 - NEW_DAYS * 86400_000).toISOString().slice(0, 10)
+    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+    const { data } = await supabase.from('students')
+      .select('id, name, grade, teacher_name, first_class_date, is_test')
+      .eq('is_active', true).not('first_class_date', 'is', null)
+      .gte('first_class_date', from).lte('first_class_date', today)
+      .order('first_class_date', { ascending: false })
+    setNewStudents(((data ?? []) as any[]).filter((s) => canViewStudent(s))
+      .map((s) => ({ id: s.id, name: s.name, grade: s.grade, first_class_date: s.first_class_date })))
+  }
+
   async function fetchOverdueConsults() {
     const { data: allStudents } = await supabase.from('students')
       .select('id, name, school, grade, teacher_name').eq('is_active', true)
@@ -419,6 +439,11 @@ export default function TeacherDashboardPage() {
 
         {/* 자동 발송 점검 — 원장에게만, 카톡 브리핑 예약이 안 돌거나 실패했을 때만 뜬다 */}
         {isAdmin() && <CronHealthNotice />}
+
+        {/* 새로 온 학생 — 교재 배정부터 첫 학습일지까지 **순서대로** (원장님 2026-11-04).
+            반·시간표까지는 OPS 에서 들어오고, 그다음부터가 선생님 몫인데 그걸 아는 길이
+            머릿속밖에 없었다. 할 일이 다 끝난 학생은 저절로 사라진다. */}
+        {newStudents.length > 0 && <NewStudentSteps students={newStudents} />}
 
         {/* 하루 업무 흐름 — 출근해서 처음 보는 자리에 둔다(원장님 2026-10-12).
             매뉴얼 안에만 있으면 새로 오신 선생님이 찾아 들어가지 않는다.
