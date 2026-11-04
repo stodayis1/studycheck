@@ -43,8 +43,16 @@ export interface MonthlyReport {
   /** 오답 재도전 */
   retries: { kind: string; unit: string; score: number | null; passed: boolean }[]
   retrySummary: { total: number; passed: number }
-  /** 영역별 성취도 */
-  areas: { label: string; value: number }[]
+  /**
+   * 학원 코어테스트 — 예비 1회 · 예비 2회 · 본고사 (원장님 2026-11-04
+   * 「월간보고서에는 학원 코어테스트 예비1회, 예비2회, 본고사 이거 추가하자.
+   *  영역별 성취도는 굳이 필요없으니 그자리에 대체할께」).
+   *
+   * ★ 그 달에 본 것만이 아니라 **그 달까지의 가장 최근 회차**를 보여 준다.
+   *   예비 1회는 지난달, 본고사는 이번 달인 일이 흔하다 — 그 달 것만 보면 늘 비어 보인다.
+   *   대신 **언제 본 것인지**를 같이 적는다.
+   */
+  coreTests: { round: string; score: number | null; total: number | null; date: string | null }[]
   /** 선생님이 남긴 말 — 그 달 **마지막** 알림장. 한 달 총평이 아니다. */
   teacherNote: string | null
   /**
@@ -62,6 +70,37 @@ export interface MonthlyReport {
 }
 
 const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null)
+
+/** 코어테스트를 얼마나 거슬러 보나 — 한 학기 한 바퀴가 이 안에 들어온다. */
+export const CORE_WINDOW_DAYS = 120
+/** 그 날짜에서 n 일 전 (날짜만 더한다 — 시간대가 끼면 하루가 밀린다) */
+export const backDays = (date: string, n: number) =>
+  new Date(Date.parse(`${date}T00:00:00Z`) - n * 86400_000).toISOString().slice(0, 10)
+
+/** 보여 줄 회차와 그 순서. 화면도 이 순서로 찍는다. */
+export const CORE_ROUNDS = ['예비 1회', '예비 2회', '본고사'] as const
+
+/**
+ * 회차마다 **가장 나중에 본 것** 하나씩.
+ *
+ * ★ 제목의 띄어쓰기가 들쭉날쭉하다 — 「예비 1회」와 「예비1회」가 둘 다 들어 있다(실측).
+ *   띄어쓰기를 지우고 견준다. 제목이 비어 있는 줄도 있는데, 그건 어느 회차인지 알 수 없어
+ *   **버린다**(아무 회차에나 끼워 넣으면 틀린 점수를 보여 주게 된다).
+ */
+export function pickCoreTests(rows: any[]): MonthlyReport['coreTests'] {
+  const 민글자 = (x: any) => String(x ?? '').replace(/\s+/g, '')
+  return CORE_ROUNDS.map((round) => {
+    const 같은회차 = (rows ?? []).filter((r) => 민글자(r.title) === 민글자(round))
+    const last = [...같은회차].sort((a, b) =>
+      String(a.exam_date ?? '').localeCompare(String(b.exam_date ?? '')))[같은회차.length - 1]
+    return {
+      round,
+      score: last?.score != null ? Number(last.score) : null,
+      total: last?.total_score != null ? Number(last.total_score) : null,
+      date: last?.exam_date ?? null,
+    }
+  })
+}
 
 /** 학년 글자로 초·중·고를 가린다. 보여 줄 칸이 달라진다. */
 export function tierOf(grade: string): Tier {
@@ -90,7 +129,7 @@ export async function buildMonthlyReport(
     .eq('student_id', studentId).gte('session_date', from).lte('session_date', to).order('session_date')
   const ids = (ses ?? []).map((x: any) => x.id)
   const noKey = '00000000-0000-0000-0000-000000000000'
-  const [{ data: notes }, { data: ws }, { data: tb }, { data: ep }, { data: vw }, { data: pf }, { data: fb },
+  const [{ data: notes }, { data: ws }, { data: tb }, { data: ep }, { data: core }, { data: vw }, { data: pf }, { data: fb },
          { data: allFb }, { data: mrc }] =
     await Promise.all([
       db.from('learning_notes').select('*').in('session_id', ids.length ? ids : [noKey]),
@@ -98,6 +137,11 @@ export async function buildMonthlyReport(
       db.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }).limit(1000),
       db.from('student_textbooks').select('*').eq('student_id', studentId).eq('status', 'assigned'),
       db.from('student_exam_prep').select('*, inner_enough(*)').eq('student_id', studentId).gte('exam_date', from),
+      // 코어테스트 — 그 달까지 **최근 넉 달**치를 보고 회차별 마지막 것을 고른다.
+      db.from('exams').select('exam_date, title, score, total_score')
+        .eq('student_id', studentId).eq('exam_type', '코어테스트')
+        .gte('exam_date', backDays(to, CORE_WINDOW_DAYS)).lte('exam_date', to)
+        .order('exam_date'),
       db.from('video_watch_logs').select('*').eq('student_id', studentId).in('session_id', ids.length ? ids : [noKey]),
       db.from('proof_submissions').select('id').eq('student_id', studentId).in('session_id', ids.length ? ids : [noKey]),
       db.from('feedbacks').select('content, created_at').eq('student_id', studentId)
@@ -170,12 +214,6 @@ export async function buildMonthlyReport(
   const watched = (vw ?? []).filter((v: any) => Number(v.coverage_pct ?? 0) > 0)
   const avgPct = avg(watched.map((v: any) => Math.round(Number(v.coverage_pct))))
 
-  const areas: MonthlyReport['areas'] = [
-    { label: '출결 성실도', value: rate },
-    { label: '과제 달성률', value: avg(ach) ?? 0 },
-    { label: '과제 성취도', value: avg(sco) ?? 0 },
-  ]
-  if (daily.length) areas.push({ label: '데일리테스트', value: avg(daily.map((d) => d.score))! })
 
   return {
     student: { name: st.name, grade: st.grade, school: st.school ?? null, teacher: (st.teacher_name ?? '').split(/[,/\s]+/)[0] || null },
@@ -199,7 +237,7 @@ export async function buildMonthlyReport(
       score: w.score ?? null, passed: w.status === 'passed',
     })),
     retrySummary: { total: retriesRaw.length, passed: retriesRaw.filter((w: any) => w.status === 'passed').length },
-    areas,
+    coreTests: pickCoreTests(core ?? []),
     teacherNote: (fb ?? [])[0]?.content ?? null,
     notices: (allFb ?? [])
       .filter((f: any) => String(f.content ?? '').trim())
