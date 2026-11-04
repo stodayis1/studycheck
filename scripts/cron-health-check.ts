@@ -21,6 +21,7 @@ const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('l
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
 const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
 const { leaveDiff, leaveLine } = await import(pathToFileURL(path.resolve('lib/opsLeave.ts')).href)
+const { chooseApproved, buttonsMatch } = await import(pathToFileURL(path.resolve('lib/briefingTemplate.ts')).href)
 const { fetchAligoRows, summarize, aligoProblems } = await import(pathToFileURL(path.resolve('lib/aligoResults.ts')).href)
 const { RESEND_KEY, pickResend, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 
@@ -385,6 +386,40 @@ T('하루 한 번 도는 자리에서 실제로 부른다', () => {
   const src = fs.readFileSync(path.resolve('lib/cronBriefing.ts'), 'utf8')
   return src.includes('syncLeaveFromOps(db)')
 })
+
+// ── 같은 본문으로 승인된 템플릿이 여럿일 때 (2026-11-04) ──────────────────
+//   승인된 템플릿은 **고칠 수가 없다**(알리고). 버튼 이름 오타를 고치려면 새것을 등록해야
+//   하고, 그러면 옛것과 새것이 같이 승인 상태로 남는다. 아무거나 고르면 오타가 있는
+//   옛 판을 계속 쓴다.
+const 바른버튼: [string, string][] = [['레벨학습지 점수 현황', 'u1'], ['출결·과제달성률 현황', 'u2']]
+const 템플릿 = (code: string, 상태: string, 이름들: string[]) =>
+  ({ templtCode: code, inspStatus: 상태, buttons: 이름들.map((n, i) => ({ name: n, linkMo: `u${i + 1}` })) })
+
+T('버튼 이름이 맞는 승인본을 먼저 고른다 (오타 난 옛 판을 안 쓴다)', () => {
+  const 옛것 = 템플릿('UM_OLD', 'APR', ['레벨학습지 점수 현황t', '출결·과제달성률 현황'])
+  const 새것 = 템플릿('UM_NEW', 'APR', ['레벨학습지 점수 현황', '출결·과제달성률 현황'])
+  return chooseApproved([옛것, 새것], 바른버튼)?.templtCode === 'UM_NEW'
+    && chooseApproved([새것, 옛것], 바른버튼)?.templtCode === 'UM_NEW'   // 순서와 상관없이
+})
+
+// ★ 맞는 것이 없어도 **발송은 계속돼야 한다** — 버튼은 등록된 것을 그대로 보내므로 나간다.
+T('맞는 것이 없으면 첫 승인본을 그대로 쓴다', () =>
+  chooseApproved([템플릿('UM_OLD', 'APR', ['레벨학습지 점수 현황t', '출결·과제달성률 현황'])], 바른버튼)
+    ?.templtCode === 'UM_OLD')
+
+T('승인 안 된 것은 고르지 않는다', () =>
+  chooseApproved([템플릿('UM_A', 'REQ', ['레벨학습지 점수 현황', '출결·과제달성률 현황'])], 바른버튼) === undefined
+  && chooseApproved([], 바른버튼) === undefined)
+
+T('승인 전인 새 판이 있어도 지금 승인된 판으로 보낸다', () => {
+  const 옛것 = 템플릿('UM_OLD', 'APR', ['레벨학습지 점수 현황t', '출결·과제달성률 현황'])
+  const 심사중 = 템플릿('UM_NEW', 'REQ', ['레벨학습지 점수 현황', '출결·과제달성률 현황'])
+  return chooseApproved([옛것, 심사중], 바른버튼)?.templtCode === 'UM_OLD'
+})
+
+T('버튼 개수가 다르거나 없으면 맞다고 하지 않는다', () =>
+  buttonsMatch(템플릿('x', 'APR', ['레벨학습지 점수 현황']), 바른버튼) === false
+  && buttonsMatch({ inspStatus: 'APR' }, 바른버튼) === false)
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
