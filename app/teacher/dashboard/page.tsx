@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { NewStudentSteps, type NewStudent } from '@/components/teacher/NewStudentSteps'
+import { TodayAbsences } from '@/components/teacher/TodayAbsences'
 import SchoolScheduleCalendar from '@/components/teacher/SchoolScheduleCalendar'
 import { Header } from '@/components/common/Header'
 import { useEffect, useState } from 'react'
@@ -439,6 +440,11 @@ export default function TeacherDashboardPage() {
 
         {/* 자동 발송 점검 — 원장에게만, 카톡 브리핑 예약이 안 돌거나 실패했을 때만 뜬다 */}
         {isAdmin() && <CronHealthNotice />}
+
+        {/* 오늘 결석 — 미리 들은 결석을 당일 아침에 알려 준다 (원장님 2026-11-04
+            「당일 되면 까먹기 마련… 그래야 이중으로 또 연락이 안가지」).
+            담당 선생님과 행정 선생님 모두에게 뜬다. 결석이 없으면 아무것도 안 뜬다. */}
+        <TodayAbsences />
 
         {/* 새로 온 학생 — 교재 배정부터 첫 학습일지까지 **순서대로** (원장님 2026-11-04).
             반·시간표까지는 OPS 에서 들어오고, 그다음부터가 선생님 몫인데 그걸 아는 길이
