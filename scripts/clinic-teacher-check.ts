@@ -125,6 +125,32 @@ T('학생 등록·수정·엑셀 세 곳에서 채움쌤을 받는다', () => {
 T('엑셀의 「담임강사」 열은 그대로 읽는다', () =>
   src('app/teacher/students/page.tsx').includes("row['담임강사'] ?? row['키움쌤']"))
 
+// ★ 한 명씩 열어 고치면 중등만 101명이다 — 한꺼번에 넣는 자리가 있어야 한다
+//   (원장님 2026-11-05 「한꺼번에 지정하는것 만들어줘」).
+T('클리닉 담임을 한꺼번에 넣는 자리가 있다', () => {
+  const s = src('app/teacher/students/page.tsx')
+  return s.includes('클리닉 담임 한꺼번에')
+    && s.includes('const bulkTargets = students.filter')
+    && s.includes('applyBulkClinic')
+    && s.includes('if (!confirm(말.replace')          // 바꾸기 전에 한 번 묻는다
+})
+
+// ★ 학년 조건으로 통째로 update 하면 화면에 안 보이던 학생까지 바뀐다. **고른 id 로만** 바꾼다.
+T('한꺼번에 넣기가 고른 학생 id 로만 바꾼다', () => {
+  const s = src('app/teacher/students/page.tsx')
+  const 블록 = /async function applyBulkClinic\(\)[\s\S]*?\n  \}/.exec(s)?.[0] ?? ''
+  return 블록.includes(".in('id', 묶음)")
+    && 블록.includes('bulkTargets.map')
+    && !블록.includes(".eq('grade'")
+})
+
+// ★ 퇴원·휴원·연습용 학생까지 바뀌면 안 된다.
+T('한꺼번에 넣기가 재원 학생만 고른다', () => {
+  const s = src('app/teacher/students/page.tsx')
+  const 블록 = /const bulkTargets = students\.filter\([\s\S]*?teachersOf\(s\)\.includes\(bulkMain\)\)\)/.exec(s)?.[0] ?? ''
+  return 블록.includes('s.is_active') && 블록.includes('!s.on_leave') && 블록.includes('is_test')
+})
+
 // ── SQL ────────────────────────────────────────────────────────────────
 T('SQL 이 칸과 **정책 두 개**를 같이 넓힌다', () => {
   const s = src('docs/sql/채움쌤_칸추가와_정책확대.sql')
