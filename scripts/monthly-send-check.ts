@@ -303,6 +303,26 @@ T('한 줄 평이 없으면 **요약해서** 채운다', () => {
     && api.includes('model: AI_TEXT_MODEL, thinking: NO_THINKING')
 })
 
+// ★ 미리보기와 발송이 **같은 함수**로 채워야 「미리보기엔 없었는데 나간 건 있었다」가 안 된다.
+T('미리보기도 발송과 같은 함수로 채운다', () => {
+  const api = src('app/api/monthly-report/route.ts')
+  return (api.match(/await fillComment\(data, months\)/g) ?? []).length === 2   // GET · POST 둘 다
+    && api.includes("q.get('autoComment') !== '0'")
+})
+
+// ★ 글상자를 고쳤는데 아래 보고서가 안 바뀌면 「반영이 안 된다」로 보인다
+//   (원장님 2026-11-05 「AI생성은 되는데 이게 보고서에는 왜 반영이 안되는거지?」).
+T('글상자를 고치면 미리보기에 바로 보인다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  return ui.includes("d={{ ...mNew, comment: (mComment ?? '').trim() || mNew.comment }}")
+    && !ui.includes('한 줄 평 반영하기')          // 따로 눌러야 하던 단추는 없앴다
+})
+
+T('서버가 요약해 준 글이 글상자에도 올라온다 (고쳐 쓰시게)', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  return ui.includes("if (!talk && !mComment && (j.data?.comment ?? '').trim()) setMComment(j.data.comment)")
+})
+
 // ★ 알림장이 한 건도 없으면 부르지 않는다 — 돈만 든다.
 T('요약할 거리가 없으면 AI 를 안 부른다', () => {
   const 빈것 = { studentName: '홍길동', months: 1 as const, notices: [] as any[] }
@@ -313,8 +333,10 @@ T('요약할 거리가 없으면 AI 를 안 부른다', () => {
 // ★ 요약에 실패했다고 리포트를 안 보내면 더 나쁘다.
 T('요약이 실패해도 리포트는 그대로 만든다', () => {
   const api = src('app/api/monthly-report/route.ts')
-  const 블록 = /if \(hasSomethingToSummarize\(재료\)\) \{[\s\S]*?\n      \}/.exec(api)?.[0] ?? ''
-  return 블록.includes('catch') && !블록.includes('return NextResponse')
+  const 블록 = /async function fillComment\([\s\S]*?\n\}/.exec(api)?.[0] ?? ''
+  return 블록.includes('try {') && 블록.includes('catch')
+    && !블록.includes('return NextResponse') && !블록.includes('throw')
+    && 블록.includes('if (!hasSomethingToSummarize(재료)) return')   // 거리가 없으면 안 부른다
 })
 
 // ★ 미리보기와 발송이 **같은 글**로 물어야 어긋나지 않는다.

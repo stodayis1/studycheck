@@ -504,7 +504,9 @@ export default function TeacherReportsPage() {
       const r = await apiFetch(`/api/monthly-report?studentId=${studentId}&year=${year}&month=${month}&months=${mMonths}`)
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '불러오지 못했어요.')
-      setMNew({ ...j.data, comment: talk || null })
+      setMNew({ ...j.data, comment: talk || j.data?.comment || null })
+      // ★ 서버가 요약해 채워 준 한 줄 평을 **글상자에도** 올린다 — 선생님이 고쳐 쓰실 수 있게.
+      if (!talk && !mComment && (j.data?.comment ?? '').trim()) setMComment(j.data.comment)
     } catch (e: any) { alert(e.message); setMNew(null) }
     setMNewBusy(false)
   }
@@ -1077,12 +1079,14 @@ export default function TeacherReportsPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-gray-400 mb-2">
-                      위 「선생님 한 줄 평」이 리포트의 「담당 선생님 코멘트」 칸에 그대로 들어갑니다.
-                      <button onClick={() => mStudent && loadNewMonthly(mStudent.id, mYear, mMonth, mComment)}
-                        className="ml-1.5 underline" style={{ color: '#712B13' }}>한 줄 평 반영하기</button>
+                      위 「선생님 한 줄 평」이 아래 「담당 선생님 코멘트」 칸에 <b>고치는 대로 바로</b> 들어갑니다.
+                      비워 두시면 알림장을 요약해 채운 글이 그대로 나갑니다.
                     </p>
                     <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: '#e5e7eb' }}>
-                      {mNew ? <MonthlyReportView d={mNew} />
+                      {/* ★ 글상자를 고치면 **바로** 보인다 — 예전에는 따로 「반영하기」를 눌러야
+                          바뀌어서, AI 로 만든 한 줄 평이 보고서에 안 들어간 것처럼 보였다
+                          (원장님 2026-11-05). */}
+                      {mNew ? <MonthlyReportView d={{ ...mNew, comment: (mComment ?? '').trim() || mNew.comment }} />
                         : <p className="py-16 text-center text-sm text-gray-400">{mNewBusy ? '불러오는 중…' : '「불러오기」를 눌러 주세요.'}</p>}
                     </div>
                   </div>
