@@ -221,6 +221,9 @@ export function MonthlyReportView({ d }: { d: Data }) {
   // ★ 옛 스냅샷에는 books 가 없다 — 그때는 예전 모양(교재 이름 칩)으로 그린다.
   const books: any[] | null = Array.isArray((d as any).books) ? (d as any).books : null
   const booksDone: any[] = Array.isArray((d as any).booksDone) ? (d as any).booksDone : []
+  // 한 달치인지 두 달치인지 — 옛 스냅샷에는 months 가 없다(그때는 다 한 달이었다).
+  const 두달 = (d.period as any)?.months === 2
+  const 기간말 = 두달 ? '두 달' : '한 달'
   const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
   // 그래프에 뜬 달의 시험 범위 (원장님 2026-11-05). 옛 스냅샷에는 없다 — 그러면 안 띄운다.
   const ranges: any[] = Array.isArray((d as any).coreRanges)
@@ -247,7 +250,7 @@ export function MonthlyReportView({ d }: { d: Data }) {
           <div>
             <div className="kick">LEARNING REPORT · {d.period.dateLabel}</div>
             <div className="ttl">{s.name} 학생 학습 리포트</div>
-            <div className="sub">{d.period.label} 한 달 수업 태도 및 진도 안내</div>
+            <div className="sub">{d.period.label} {기간말} 수업 태도 및 진도 안내</div>
           </div>
           <div className="br">
             <div className="k">{d.tier} 과정</div>
@@ -265,7 +268,7 @@ export function MonthlyReportView({ d }: { d: Data }) {
         <div className="body">
           <div className="cards">
             {[
-              ['이번 달 수업', `${L.total}회`, `정시 ${L.onTime} · 지각 ${L.late} · 결석 ${L.absent}`],
+              [`${두달 ? '두 달간' : '이번 달'} 수업`, `${L.total}회`, `정시 ${L.onTime} · 지각 ${L.late} · 결석 ${L.absent}`],
               ['출석률', `${L.rate}%`, L.absent ? `결석 ${L.absent}회` : '빠짐없이 등원'],
               ['과제 달성률', `${H.achievement ?? '-'}%`, '내준 과제를 해온 비율'],
               ['과제 성취도', `${H.score ?? '-'}%`, '해온 과제의 정확도'],
@@ -317,13 +320,13 @@ export function MonthlyReportView({ d }: { d: Data }) {
           {d.unitLevels.length > 0 && (
             <Sec no={nx()} title="단원별 도달 레벨" note={`${d.unitLevels.length}단원 · 레벨 6이 끝`}>
               {d.unitLevels.map((u, i) => <UnitLevel key={i} {...u} />)}
-              <p className="note">▲ 는 이번 달에 오른 칸입니다. 한 단원은 70점을 넘겨야 다음 레벨로 갑니다.</p>
+              <p className="note">▲ 는 {두달 ? '두 달 사이에' : '이번 달에'} 오른 칸입니다. 한 단원은 70점을 넘겨야 다음 레벨로 갑니다.</p>
             </Sec>
           )}
 
           {/* 이번 달에 푼 학습지가 있을 때만 */}
           {d.worksheetSummary.total > 0 && (
-            <Sec no={nx()} title="이번 달 학습지" note={`${d.worksheetSummary.total}장 · 통과 ${d.worksheetSummary.passed}장`}>
+            <Sec no={nx()} title={두달 ? '그동안 푼 학습지' : '이번 달 학습지'} note={`${d.worksheetSummary.total}장 · 통과 ${d.worksheetSummary.passed}장`}>
               <Chips>
                 {d.worksheets.map((w, i) => (
                   <Chip key={i} on={w.passed}>{w.unit} · {w.level}레벨 {w.score != null ? `${w.score}점` : '채점 전'}{w.passed ? ' ✓' : ''}</Chip>))}
@@ -471,7 +474,7 @@ export function MonthlyReportView({ d }: { d: Data }) {
               <div className="box">
                 <div className="t">수업 태도<span>{L.absent ? '보강 필요' : '성실'}</span></div>
                 {/* 선생님이 직접 쓴 한 줄 평이 먼저. 없으면 이번 달 알림장에서 가져온다. */}
-                <p>{d.comment?.trim() || d.teacherNote?.slice(0, 220) || '이번 달 알림장에 남긴 말씀이 없습니다.'}</p>
+                <p>{d.comment?.trim() || d.teacherNote?.slice(0, 220) || `${두달 ? '그동안' : '이번 달'} 알림장에 남긴 말씀이 없습니다.`}</p>
               </div>
               <div className="box">
                 <div className="t">과제 수행<span>달성률 {H.achievement ?? '-'}%</span></div>
@@ -487,7 +490,7 @@ export function MonthlyReportView({ d }: { d: Data }) {
                 ['STEP 2', 중고 ? '오답 다시 풀기' : '단원 다시 채우기',
                   중고 ? '틀린 문제의 쌍둥이·유사 문제로 다시 확인합니다.' : '70점을 못 넘은 단원을 다시 풀어 통과시킵니다.'],
                 ['STEP 3', 중고 ? '시험 범위 마무리' : '다음 단원 예습',
-                  중고 ? '남은 이너프원 회차를 시험 전까지 끝냅니다.' : '다음 달 진도를 미리 한 번 훑습니다.'],
+                  중고 ? '남은 이너프원 회차를 시험 전까지 끝냅니다.' : `다음 ${기간말} 진도를 미리 한 번 훑습니다.`],
               ].map(([n, t, p]) => (
                 <div className="step" key={n}>
                   <div className="n">{n}</div><div className="t">{t}</div><p>{p}</p>

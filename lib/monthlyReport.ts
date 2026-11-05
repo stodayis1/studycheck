@@ -17,7 +17,13 @@ export type Tier = '초등' | '중등' | '고등'
 export interface MonthlyReport {
   student: { name: string; grade: string; school: string | null; teacher: string | null }
   tier: Tier
-  period: { year: number; month: number; label: string; dateLabel: string }
+  /**
+   * 덮는 기간. year·month 는 **끝 달**이고 months 가 1이면 한 달, 2면 두 달이다
+   * (원장님 2026-11-05 「2개월치를 설정할수 있어야 하지않아?」).
+   * ★ 옛 스냅샷에는 months·from·to 가 없다 — 읽는 쪽은 없으면 한 달로 본다.
+   */
+  period: { year: number; month: number; months?: 1 | 2; label: string; dateLabel: string
+            from?: string; to?: string }
   /** 수업·출결 */
   lessons: { total: number; onTime: number; late: number; absent: number; rate: number }
   /** 과제 */
@@ -215,15 +221,43 @@ export function tierOf(grade: string): Tier {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
+/**
+ * 리포트가 덮는 기간 — **한 달 또는 두 달** (원장님 2026-11-05
+ * 「이 월간보고서를 2달에 한번 보낼거거든. 10월만 설정하게 되면 말이 안되지 않나?」).
+ *
+ *   span(2026, 10, 1) → 2026-10-01 ~ 2026-10-31 · 「2026년 10월」
+ *   span(2026, 10, 2) → 2026-09-01 ~ 2026-10-31 · 「2026년 9~10월」
+ *   span(2027,  1, 2) → 2026-12-01 ~ 2027-01-31 · 「2026년 12월~2027년 1월」
+ *
+ * ★ **끝 달**이 기준이다(year·month 는 마지막 달). 두 달이면 그 앞 달부터 센다.
+ *   해를 넘어가도 맞아야 한다 — 1월 두 달치는 **작년 12월**부터다.
+ */
+export function span(year: number, month: number, months: 1 | 2 = 1) {
+  const 시작 = new Date(year, month - 1 - (months - 1), 1)
+  const sy = 시작.getFullYear(), sm = 시작.getMonth() + 1
+  const lastDay = new Date(year, month, 0).getDate()
+  return {
+    from: `${sy}-${pad(sm)}-01`,
+    to: `${year}-${pad(month)}-${pad(lastDay)}`,
+    label: months === 1 ? `${year}년 ${month}월`
+      : sy === year ? `${year}년 ${sm}~${month}월`
+      : `${sy}년 ${sm}월~${year}년 ${month}월`,
+    dateLabel: `${sy}. ${sm}. 1. – ${year}. ${month}. ${lastDay}.`,
+  }
+}
+
 export async function buildMonthlyReport(
   db: { from: (t: string) => any },
   studentId: string,
   year: number,
   month: number,
+  /** 몇 달치인지 — 두 달에 한 번 보내면 2 (원장님 2026-11-05) */
+  months: 1 | 2 = 1,
 ): Promise<MonthlyReport | null> {
-  const from = `${year}-${pad(month)}-01`
+  const 기간 = span(year, month, months)
+  const from = 기간.from
+  const to = 기간.to
   const lastDay = new Date(year, month, 0).getDate()
-  const to = `${year}-${pad(month)}-${pad(lastDay)}`
 
   const { data: st } = await db.from('students')
     .select('id, name, grade, school, teacher_name').eq('id', studentId).maybeSingle()
@@ -376,7 +410,7 @@ export async function buildMonthlyReport(
   return {
     student: { name: st.name, grade: st.grade, school: st.school ?? null, teacher: (st.teacher_name ?? '').split(/[,/\s]+/)[0] || null },
     tier: tierOf(st.grade),
-    period: { year, month, label: `${year}년 ${month}월`, dateLabel: `${year}. ${month}. ${lastDay}.` },
+    period: { year, month, months, label: 기간.label, dateLabel: 기간.dateLabel, from, to },
     lessons: { total, onTime, late, absent, rate },
     homework: { achievement: avg(ach), score: avg(sco) },
     textbooks: 진행중.map((b) => [b.type, b.name, b.course].filter(Boolean).join(' ')),

@@ -500,7 +500,7 @@ export default function TeacherReportsPage() {
   async function loadNewMonthly(studentId: string, year: number, month: number, talk?: string) {
     setMNewBusy(true); setMLink(null)
     try {
-      const r = await apiFetch(`/api/monthly-report?studentId=${studentId}&year=${year}&month=${month}`)
+      const r = await apiFetch(`/api/monthly-report?studentId=${studentId}&year=${year}&month=${month}&months=${mMonths}`)
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '불러오지 못했어요.')
       setMNew({ ...j.data, comment: talk || null })
@@ -509,13 +509,13 @@ export default function TeacherReportsPage() {
   }
   async function makeMonthlyLink() {
     if (!mStudent) return
-    if (!confirm(`${mStudent.name} 학생의 ${mYear}년 ${mMonth}월 리포트 링크를 만들까요?
+    if (!confirm(`${mStudent.name} 학생의 ${기간말()} 리포트 링크를 만들까요?
 만들기만 하고 보내지는 않습니다.`)) return
     setMNewBusy(true)
     try {
       const r = await apiFetch('/api/monthly-report', {
         method: 'POST',
-        body: JSON.stringify({ studentIds: [mStudent.id], year: mYear, month: mMonth, comment: { [mStudent.id]: mComment } }),
+        body: JSON.stringify({ studentIds: [mStudent.id], year: mYear, month: mMonth, months: mMonths, comment: { [mStudent.id]: mComment } }),
       })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '만들지 못했어요.')
@@ -528,10 +528,22 @@ export default function TeacherReportsPage() {
   // ── 학년별 월말보고서 일괄 생성·발송 (원장님 2026-11-05) ──────────────
   //   「한명한명 링크를 만들어서 일일이 보낼수가 없거든」
   const [bGrades, setBGrades] = useState<string[]>([])
+  // 몇 달치 리포트인가 — 두 달에 한 번 보내시므로 (원장님 2026-11-05
+  //   「10월만 설정하게 되면 말이 안되지 않나? 2개월치를 설정할수 있어야 하지않아?」)
+  //   고른 달이 **끝 달**이다. 2개월이면 그 앞 달부터 센다.
+  const [mMonths, setMMonths] = useState<1 | 2>(2)
   const [bResend, setBResend] = useState(false)
   // 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05)
   const [bTellTeachers, setBTellTeachers] = useState(true)
   const [bTeacherSms, setBTeacherSms] = useState<any[] | null>(null)
+  /** 고른 기간 이름 — 「2026년 10월」 / 「2026년 9~10월」 (해를 넘기면 「2026년 12월~2027년 1월」) */
+  function 기간말() {
+    if (mMonths === 1) return `${mYear}년 ${mMonth}월`
+    const 앞 = new Date(mYear, mMonth - 2, 1)
+    return 앞.getFullYear() === mYear
+      ? `${mYear}년 ${앞.getMonth() + 1}~${mMonth}월`
+      : `${앞.getFullYear()}년 ${앞.getMonth() + 1}월~${mYear}년 ${mMonth}월`
+  }
   const [bBusy, setBBusy] = useState(false)
   const [bResult, setBResult] = useState<any[] | null>(null)
 
@@ -539,7 +551,7 @@ export default function TeacherReportsPage() {
     if (!bTargets.length) return
     // ★ 진짜로 학부모님께 나간다. 숫자를 보여 주고 한 번 묻는다.
     if (!confirm(
-      `${bTargets.length}명의 ${mYear}년 ${mMonth}월 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
+      `${bTargets.length}명의 ${기간말()} 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
       + (bResend ? '이미 보낸 분께도 다시 보냅니다.\n' : '이번 달에 이미 보낸 분은 건너뜁니다.\n')
       + (bTellTeachers ? '보낸 뒤 담당 선생님께 문자로 알립니다.\n' : '')
       + '계속할까요?')) return
@@ -548,7 +560,7 @@ export default function TeacherReportsPage() {
       const r = await apiFetch('/api/monthly-report', {
         method: 'POST',
         body: JSON.stringify({
-          studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth,
+          studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth, months: mMonths,
           send: true, resend: bResend, tellTeachers: bTellTeachers,
         }),
       })
@@ -875,7 +887,7 @@ export default function TeacherReportsPage() {
                   <i className="ti ti-send align-[-0.125em]" /> 학년별로 한 번에 만들고 보내기
                 </p>
                 <p className="text-[11px] mb-2.5" style={{ color: '#A16207' }}>
-                  위에서 고른 <b>{mYear}년 {mMonth}월</b> 기준이에요. 고른 학년 학생의 리포트를 만들어
+                  위에서 고른 <b>{기간말()}</b> 기준이에요. 고른 학년 학생의 리포트를 만들어
                   <b> 학부모님 카톡으로 바로 보냅니다.</b>
                 </p>
                 <div className="flex gap-1.5 flex-wrap mb-2.5">
@@ -963,7 +975,11 @@ export default function TeacherReportsPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex gap-2 items-center">
+              <p className="text-[11px] text-gray-400 mb-1.5">
+                고른 기간: <b style={{ color: '#374151' }}>{기간말()}</b>
+                {mMonths === 2 && ' — 고른 달이 끝 달이고, 그 앞 달부터 두 달치예요.'}
+              </p>
+              <div className="flex gap-2 items-center flex-wrap">
                 <select value={mYear} onChange={e => setMYear(Number(e.target.value))}
                   className="text-sm rounded-xl px-3 py-2 outline-none flex-1"
                   style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
@@ -973,6 +989,12 @@ export default function TeacherReportsPage() {
                   className="text-sm rounded-xl px-3 py-2 outline-none flex-1"
                   style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
                   {Array.from({length:12},(_,i)=>i+1).map(m => <option key={m} value={m}>{m}월</option>)}
+                </select>
+                <select value={mMonths} onChange={e => setMMonths(Number(e.target.value) === 2 ? 2 : 1)}
+                  className="text-sm rounded-xl px-3 py-2 outline-none flex-1"
+                  style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                  <option value={1}>1개월치</option>
+                  <option value={2}>2개월치</option>
                 </select>
                 <button onClick={() => { if (!mStudent) return; loadMonthlyData(mStudent, mYear, mMonth); loadNewMonthly(mStudent.id, mYear, mMonth) }}
                   disabled={!mStudent || mLoading}
