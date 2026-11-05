@@ -9,18 +9,12 @@
 //   원장님이 손으로 실행하신다. 배포가 먼저 올라가는 일이 있으므로, 못 읽으면
 //   「켜 둔 것이 하나도 없다」로 보고 지나간다 — 지금까지 돌던 증명·컨씨는 그대로 돈다.
 
+import { safeRows } from './safeRows'
+
 export type PhotoAskRow = { session_id: string; video_url: string }
 
-/** 못 읽으면 빈 목록 (표가 아직 없거나 권한이 없을 때) */
-export async function safeAsks(q: PromiseLike<{ data: any; error: any }>): Promise<PhotoAskRow[]> {
-  try {
-    const { data, error } = await q
-    if (error) return []
-    return (data ?? []) as PhotoAskRow[]
-  } catch {
-    return []
-  }
-}
+/** 못 읽으면 빈 목록 (표가 아직 없거나 권한이 없을 때) — 규칙은 lib/safeRows.ts 한 곳에 */
+export const safeAsks = (q: PromiseLike<{ data: any; error: any }>) => safeRows<PhotoAskRow>(q)
 
 /** 한 수업의 것만 골라 낸다 */
 export const asksOf = (rows: PhotoAskRow[] | null | undefined, sessionId: string) =>

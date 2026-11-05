@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isTeacherOf } from '@/lib/teachers'
+import { isMine } from '@/lib/teachers'
 
 const SESSION_KEY = 'studycheck_student'
 const ADMIN_MODE_KEY = 'studycheck_admin_mode'
@@ -191,10 +191,14 @@ export function useAuth() {
     return (grade ?? '').trim().charAt(0)
   }
 
-  /** 담당 강사 칸(「김은수, 박경미」)에 내 이름이 있나 */
-  function isMyStudent(student: { teacher_name?: string | null }) {
-    if (!currentUser?.name || !student.teacher_name) return false
-    return isTeacherOf(student.teacher_name, currentUser.name)
+  /**
+   * 담당 강사 칸(「김은수, 박경미」)에 내 이름이 있나 —
+   * **키움쌤(teacher_name)과 채움쌤(clinic_teacher_name) 둘 다** 본다 (원장님 2026-11-05
+   * 「채움쌤도 학생 학습일지 같이 쓰고 볼수 있어야해」).
+   */
+  function isMyStudent(student: { teacher_name?: string | null; clinic_teacher_name?: string | null }) {
+    if (!currentUser?.name) return false
+    return isMine(student, currentUser.name)
   }
 
   /**
@@ -221,7 +225,7 @@ export function useAuth() {
   // 이 학생을 "볼" 권한이 있는지 - 화면마다 제각각 구현되어 있던 teacher_name 매칭 로직을 한 곳으로 모음.
   // (수정/삭제 권한은 별개 - 이 함수는 "조회"만 판단하며, 실제 수정 가능 여부는 각 화면에서 isAdmin()/
   // canManageAllStudents()로 그대로 따로 체크해야 함).
-  function canViewStudent(student: { grade?: string | null; teacher_name?: string | null; is_test?: boolean | null }) {
+  function canViewStudent(student: { grade?: string | null; teacher_name?: string | null; clinic_teacher_name?: string | null; is_test?: boolean | null }) {
     // ★ 연습용(가짜) 학생은 **담당이 없어도 누구에게나** 보인다
     //   (원장님 2026-11-04 「담당은 없어야지 누구나 볼수 있어야 하니까」).
     //   새로 오신 강사분이 이 학생으로 연습하신다. 주임모드에서도 보여야 한다.
@@ -241,7 +245,7 @@ export function useAuth() {
   // 이 학생의 기록을 "고칠" 권한이 있는지 - canViewStudent와 짝이다.
   // 주임모드는 담당 학년 범위를 넓게 "보기만" 하는 것이므로 여기서는 제외한다(확인용).
   // 즉 주임은 중등 전체가 보이지만, 점수 입력·교재 배정 같은 기록은 본인 담당 학생에게만 남길 수 있다.
-  function canEditStudent(student: { teacher_name?: string | null }) {
+  function canEditStudent(student: { teacher_name?: string | null; clinic_teacher_name?: string | null }) {
     if (canManageAllStudents()) return true
     return isMyStudent(student)
   }

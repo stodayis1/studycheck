@@ -61,8 +61,13 @@ export default function BulkProgressPage() {
   useEffect(() => { if (currentUser) fetchStudents() }, [currentUser])
 
   async function fetchStudents() {
-    let q = supabase.from('students').select('id, name, school, grade, teacher_name').eq('is_active', true).order('name')
-    if (!isAdmin() && currentUser?.name) q = q.ilike('teacher_name', `%${currentUser.name}%`)
+    let q = supabase.from('students').select('id, name, school, grade, teacher_name, clinic_teacher_name').eq('is_active', true).order('name')
+    // ★ 키움쌤 칸만 보면 **채움쌤 학생이 통째로 안 보인다** (원장님 2026-11-05).
+    //   두 칸을 or 로 본다 — 서버에서 거르는 자리라 화면 판단(useAuth)과 따로 손봐야 한다.
+    if (!isAdmin() && currentUser?.name) {
+      const n = currentUser.name
+      q = q.or(`teacher_name.ilike.%${n}%,clinic_teacher_name.ilike.%${n}%`)
+    }
     const { data } = await q
     setStudents(data ?? [])
   }

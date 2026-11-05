@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { normalizeSchool } from '@/lib/school'
-import { splitTeachers } from '@/lib/teachers'
+import { splitTeachers, teachersOf, isMine, teacherLabels } from '@/lib/teachers'
 
 // 시간표 칸 — 원장님 편집 화면과 선생님 「변경 요청」 화면이 **같은 목록**을 쓴다.
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
@@ -49,7 +49,10 @@ interface Student {
   school: string
   grade: string
   class_time: string
+  /** 키움쌤 — 메인 담임 (원장님 2026-11-05) */
   teacher_name: string
+  /** 채움쌤 — 클리닉 담임. 학생을 보고 학습일지를 쓰는 범위는 키움쌤과 같다 */
+  clinic_teacher_name?: string
   parent_name: string
   parent_phone: string
   is_active: boolean
@@ -117,6 +120,14 @@ export default function TeacherStudentsPage() {
   const [searchText, setSearchText] = useState('')
   const [teacherFilter, setTeacherFilter] = useState('')
   const [gradeFilter, setGradeFilter] = useState('')
+  // 클리닉 담임 한꺼번에 지정 (원장님 2026-11-05 「내가 필요할 때 나눌수 있도록만 해줘」)
+  //   한 명씩 열어 고치면 중등만 101명이다. 학년·담임으로 걸러 한 번에 넣는다.
+  const [showBulkClinic, setShowBulkClinic] = useState(false)
+  const [bulkGrades, setBulkGrades] = useState<string[]>([])
+  const [bulkMain, setBulkMain] = useState('')          // 키움쌤(담임)으로 한 번 더 좁히기
+  const [bulkClinicName, setBulkClinicName] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkDone, setBulkDone] = useState<{ n: number; 이름: string } | null>(null)
   // 재원 / 휴원 — 퇴원생은 어느 쪽에도 안 나온다(원장님: 퇴원은 안 보여도 됨)
   const [statusTab, setStatusTab] = useState<'재원' | '휴원'>('재원')
   const [returning, setReturning] = useState<string | null>(null)
@@ -136,7 +147,7 @@ export default function TeacherStudentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const EMPTY_STUDENT: Student = {
-    name: '', school: '', grade: '', class_time: '', teacher_name: '',
+    name: '', school: '', grade: '', class_time: '', teacher_name: '', clinic_teacher_name: '',
     parent_name: '', parent_phone: '', is_active: true, textbook_grade: 'B', wise_step: 'W',
   }
   // 시간표 변경 요청 — 원장님은 전부, 선생님은 본인이 올린 것만 보인다(RLS).
@@ -176,13 +187,47 @@ export default function TeacherStudentsPage() {
   // 강사는 본인 담당만 (canViewStudent가 이 우선순위를 그대로 반영함)
   const myStudents = students.filter((s) => canViewStudent(s))
 
+  /** 한꺼번에 지정할 대상 — 재원 학생 중 고른 학년(+담임) */
+  const bulkTargets = students.filter((s) =>
+    s.is_active && !s.on_leave && !(s as any).is_test
+    && bulkGrades.includes((s.grade ?? '').trim())
+    && (!bulkMain || teachersOf(s).includes(bulkMain)))
+
+  /**
+   * 고른 학생들의 클리닉 담임을 한 번에 바꾼다.
+   * ★ 이름을 비우고 누르면 **지우기**다 — 그래서 확인을 한 번 받는다.
+   * ★ id 로만 바꾼다. 학년 조건으로 통째로 update 하지 않는다 —
+   *   화면에 보이는 그 학생들만 바뀌어야 한다.
+   */
+  async function applyBulkClinic() {
+    const 이름 = bulkClinicName.trim()
+    if (!bulkTargets.length) return
+    const 지우기 = !이름
+    const 말 = 지우기
+      ? `${bulkTargets.length}명의 클리닉 담임을 **지웁니다**. 계속할까요?`
+      : `${bulkTargets.length}명의 클리닉 담임을 「${이름}」으로 넣습니다. 계속할까요?`
+    if (!confirm(말.replace(/\*\*/g, ''))) return
+    setBulkBusy(true)
+    let n = 0
+    // 한 번에 다 보내지 않고 쪼갠다 — 한 묶음이 실패해도 나머지는 들어간다.
+    const ids = bulkTargets.map((x) => x.id!).filter(Boolean)
+    for (let i = 0; i < ids.length; i += 50) {
+      const 묶음 = ids.slice(i, i + 50)
+      const { error } = await supabase.from('students')
+        .update({ clinic_teacher_name: 지우기 ? null : 이름 }).in('id', 묶음)
+      if (!error) n += 묶음.length
+    }
+    setBulkBusy(false)
+    setBulkDone({ n, 이름: 지우기 ? '' : 이름 })
+    fetchStudents()
+  }
+
   // 수정/삭제 가능 여부 - 주임모드로 넓게 "보이는" 것과는 별개로, 실제 관리 권한은 기존과 동일하게
   // 관리자/직원이거나 내가 진짜 담당(teacher_name)인 경우로 한정한다 (주임은 보기 전용)
   function isEditable(s: Student) {
     if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = splitTeachers(s.teacher_name)
-    return teachers.includes(currentUser.name)
+    // 키움쌤·채움쌤 둘 다 — 판단은 lib/teachers.ts 한 곳에 (원장님 2026-11-05)
+    return isMine(s, currentUser?.name)
   }
 
   // 재원/휴원 — 다른 버튼(강사별·학년별)과 학생 목록 모두 이 안에서만 센다
@@ -194,8 +239,7 @@ export default function TeacherStudentsPage() {
   const teacherCounts = (() => {
     const map = new Map<string, number>()
     statusStudents.forEach((s) => {
-      const teachers = splitTeachers(s.teacher_name)
-      teachers.forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
+      teachersOf(s).forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
     })
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'ko'))
   })()
@@ -222,10 +266,7 @@ export default function TeacherStudentsPage() {
     const searchMatch = s.name?.includes(searchText) || s.school?.includes(searchText)
     if (!searchMatch) return false
     if (gradeFilter && (s.grade ?? '').trim() !== gradeFilter) return false
-    if (teacherFilter) {
-      const teachers = splitTeachers(s.teacher_name)
-      if (!teachers.includes(teacherFilter)) return false
-    }
+    if (teacherFilter && !teachersOf(s).includes(teacherFilter)) return false
     return true
   })
 
@@ -246,7 +287,10 @@ export default function TeacherStudentsPage() {
             school:        normalizeSchool(String(row['학교'] ?? '')),   // 「신원중학교」→「신원중」
             grade:         String(row['학년'] ?? '').trim(),
             class_time:    String(row['수업'] ?? '').trim(),
-            teacher_name:  String(row['담임강사'] ?? '').trim(),
+            // 쓰시던 열 이름(담임강사)을 그대로 받는다 — 사무실 파일이 안 깨지게.
+            //   새 이름(키움쌤)으로 적어 오셔도 받는다.
+            teacher_name:  String(row['담임강사'] ?? row['키움쌤'] ?? '').trim(),
+            clinic_teacher_name: String(row['채움쌤'] ?? row['클리닉담임'] ?? '').trim(),
             parent_name:   String(row['보호자이름'] ?? '').trim(),
             parent_phone:  String(row['보호자연락처'] ?? '').trim(),
             is_active:     true,
@@ -274,6 +318,7 @@ export default function TeacherStudentsPage() {
       const { error } = await supabase.from('students').insert({
         name: student.name, school: student.school, grade: student.grade,
         class_time: student.class_time, teacher_name: student.teacher_name,
+        clinic_teacher_name: student.clinic_teacher_name || null,
         parent_name: student.parent_name, parent_phone: student.parent_phone,
         is_active: true, textbook_grade: 'B',
       })
@@ -328,6 +373,7 @@ export default function TeacherStudentsPage() {
       .update({
         name: editStudent.name, school, grade: editStudent.grade,
         class_time: editStudent.class_time, teacher_name: editStudent.teacher_name,
+        clinic_teacher_name: (editStudent.clinic_teacher_name ?? '').trim() || null,
         parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
         textbook_grade: editStudent.textbook_grade,
         wise_step: editStudent.wise_step || 'W',
@@ -466,7 +512,7 @@ export default function TeacherStudentsPage() {
       //   학교만 「신원6」(원래는 「신원초」)로 적은 채 새로 만들어 계정이 둘이 됐다.
       //   학교·학년은 사람마다 적는 꼴이 달라서 중복을 막는 기준이 될 수 없다.
       const { data: sameName } = await supabase
-        .from('students').select('id, school, grade, teacher_name, parent_phone, is_active')
+        .from('students').select('id, school, grade, teacher_name, clinic_teacher_name, parent_phone, is_active')
         .eq('name', name)
       const live = (sameName ?? []).filter((x: any) => x.is_active)
       if (live.length > 0) {
@@ -506,6 +552,7 @@ export default function TeacherStudentsPage() {
         name, school, grade: newStudent.grade.trim(),
         class_time: classTimeText,
         teacher_name: newStudent.teacher_name.trim(),
+        clinic_teacher_name: (newStudent.clinic_teacher_name ?? '').trim() || null,
         parent_name: newStudent.parent_name.trim(),
         parent_phone: newStudent.parent_phone.trim(),
         is_active: true,
@@ -644,6 +691,11 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                 className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg">
                 <i className="ti ti-table-import align-[-0.125em]" /> 엑셀 업로드
               </button>
+              <button onClick={() => { setBulkDone(null); setShowBulkClinic(true) }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg"
+                style={{ background: '#EAF3DE', color: '#27500A', border: '1px solid #9FE1CB' }}>
+                <i className="ti ti-users-group align-[-0.125em]" /> 클리닉 담임 한꺼번에
+              </button>
               <button onClick={() => { setNewStudent(EMPTY_STUDENT); setNewSchedules([]); setShowAddModal(true) }}
                 className="px-3 py-1.5 bg-[#9FE1CB] text-white text-xs font-semibold rounded-lg">
                 + 학생 등록
@@ -654,6 +706,88 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
       />
 
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" />
+
+      {/* 클리닉 담임 한꺼번에 지정 — 학년(+담임)으로 걸러 한 번에 넣는다 (원장님 2026-11-05).
+          ★ 「중1·중2는 강루비, 중3은 최윤실」처럼 나누시는 자리다. 두 번 나눠 누르면 된다. */}
+      {showBulkClinic && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+             onClick={() => setShowBulkClinic(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 space-y-4"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">클리닉 담임 한꺼번에 지정</h3>
+              <button onClick={() => setShowBulkClinic(false)} className="text-gray-400"><i className="ti ti-x" /></button>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-1.5">① 어느 학년에</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {gradeCounts.map(([g, count]) => (
+                  <button key={g}
+                    onClick={() => setBulkGrades((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])}
+                    className={cx('px-3 py-1.5 rounded-full text-xs font-semibold',
+                      bulkGrades.includes(g) ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
+                    {g} {count}명
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {teacherCounts.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-1.5">② 담임으로 더 좁히기 (안 골라도 돼요)</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {teacherCounts.map(([t]) => (
+                    <button key={t} onClick={() => setBulkMain(bulkMain === t ? '' : t)}
+                      className={cx('px-3 py-1.5 rounded-full text-xs font-semibold',
+                        bulkMain === t ? 'bg-[#085041] text-white' : 'bg-gray-100 text-gray-600')}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-1.5">③ 클리닉 담임 이름</p>
+              <input type="text" value={bulkClinicName} onChange={(e) => setBulkClinicName(e.target.value)}
+                placeholder="예: 강루비 (두 분이면 「강루비, 최윤실」)"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+              <p className="text-[11px] text-gray-400 mt-1">
+                비워 두고 누르면 그 학생들의 클리닉 담임을 <b>지웁니다</b>.
+                계정이 없는 선생님 이름도 적어 두실 수 있어요 — 나중에 계정이 생기면 그때부터 보입니다.
+              </p>
+            </div>
+
+            <div className="rounded-xl p-3" style={{ background: '#F7F7F5' }}>
+              <p className="text-xs font-bold text-gray-700">
+                대상 {bulkTargets.length}명
+                {bulkGrades.length === 0 && <span className="font-normal text-gray-400"> — 학년을 골라 주세요</span>}
+              </p>
+              {bulkTargets.length > 0 && (
+                <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                  {bulkTargets.slice(0, 12).map((x) => x.name).join(' · ')}
+                  {bulkTargets.length > 12 && ` 외 ${bulkTargets.length - 12}명`}
+                </p>
+              )}
+            </div>
+
+            {bulkDone && (
+              <p className="text-xs font-bold" style={{ color: '#27500A' }}>
+                {bulkDone.이름
+                  ? `${bulkDone.n}명에게 「${bulkDone.이름}」을 넣었어요.`
+                  : `${bulkDone.n}명의 클리닉 담임을 지웠어요.`}
+              </p>
+            )}
+
+            <button onClick={applyBulkClinic} disabled={!bulkTargets.length || bulkBusy}
+              className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
+              style={{ background: '#085041' }}>
+              {bulkBusy ? '넣는 중…' : `${bulkTargets.length}명에게 넣기`}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-4 py-4 space-y-4 md:px-6">
 
@@ -749,7 +883,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                   <table className="w-full text-xs">
                     <thead className="bg-white border-b border-gray-100">
                       <tr>
-                        {['이름','학교','학년','수업시간','담임강사','보호자'].map((h) => (
+                        {['이름','학교','학년','수업시간','담임강사','클리닉 담임','보호자'].map((h) => (
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -770,6 +904,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                           <td className="px-3 py-2 text-gray-600">{s.grade}</td>
                           <td className="px-3 py-2 text-gray-600">{s.class_time}</td>
                           <td className="px-3 py-2 text-gray-600">{s.teacher_name}</td>
+                          <td className="px-3 py-2 text-gray-600">{s.clinic_teacher_name}</td>
                           <td className="px-3 py-2 text-gray-600">{s.parent_name}</td>
                         </tr>
                       ))}
@@ -904,7 +1039,12 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                         </span>
                       )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
-                      {student.teacher_name && <Badge variant="blue" size="sm">{student.teacher_name}</Badge>}
+                      {student.teacher_name && (
+                        <Badge variant="blue" size="sm">{teacherLabels(student.grade).mainChip} {student.teacher_name}</Badge>
+                      )}
+                      {student.clinic_teacher_name && (
+                        <Badge variant="green" size="sm">{teacherLabels(student.grade).clinicChip} {student.clinic_teacher_name}</Badge>
+                      )}
                       {/* 교재 등급 */}
                       <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full', GRADE_COLORS[student.textbook_grade] ?? 'bg-gray-100 text-gray-500')}>
                         {student.textbook_grade ?? 'B'}등급
@@ -1081,7 +1221,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label:'이름',       key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label: teacherLabels(editStudent.grade).main,   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label: teacherLabels(editStudent.grade).clinic, key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (
@@ -1314,7 +1455,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label:'이름 *',     key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label: teacherLabels(newStudent.grade).main,   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label: teacherLabels(newStudent.grade).clinic, key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (

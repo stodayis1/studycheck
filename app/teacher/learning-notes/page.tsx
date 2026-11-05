@@ -16,7 +16,7 @@ import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
-import { splitTeachers } from '@/lib/teachers'
+import { splitTeachers, teachersOf, teacherLabels } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
@@ -520,7 +520,7 @@ export default function TeacherLearningNotesPage() {
       (ses ?? []).length
         ? supabase.from('learning_notes').select('session_id, attendance').in('session_id', (ses ?? []).map((x) => x.id))
         : Promise.resolve({ data: [] as any[] }),
-      supabase.from('students').select('id, name, grade, teacher_name').in('id', ids),
+      supabase.from('students').select('id, name, grade, teacher_name, clinic_teacher_name').in('id', ids),
     ])
     // ★ 판정은 lib/missingNotes.ts 한 곳에만 둔다 — 선생님께 가는 알림 문자와
     //   **같은 함수**를 써야 「원장님 화면엔 3건인데 문자엔 5건」이 안 생긴다.
@@ -990,9 +990,11 @@ export default function TeacherLearningNotesPage() {
     //   (원장님 2026-11-04 「담당은 없어야지 누구나 볼수 있어야 하니까」).
     //   보기만 되고 쓰지 못하면 연습이 안 된다.
     if ((s as any).is_test) return true
-    if (!currentUser?.name || !s.teacher_name) return false
+    if (!currentUser?.name) return false
     // 콤마/공백으로 구분된 여러 강사명에서 본인 이름 찾기
-    const teachers = splitTeachers(s.teacher_name)
+    // ★ 키움쌤(메인)과 채움쌤(클리닉)을 **둘 다** 본다 — 채움쌤도 학습일지를 쓰고 본다
+    //   (원장님 2026-11-05). 판단은 lib/teachers.ts 한 곳에 있다.
+    const teachers = teachersOf(s)
     // 직원(행정)은 본인 담당 학생이 따로 없으므로, 본인이 근무하는 관과 같은 관 소속
     // 담당 강사의 학생이면 모두 보이게 한다 (예: 코어관 근무 직원 → 코어관 강사진 학생 전체)
     if (currentUser.role === 'staff') {
@@ -1990,6 +1992,12 @@ ${e?.message ?? '연결 실패'}
             )}
             {student.teacher_name && (
               <span className={cx(칩, 'bg-white/80 text-gray-500')}>{mainTeacher(student.teacher_name)}</span>
+            )}
+            {/* 채움쌤(클리닉 담임)도 같이 보여 준다 — 이 학생을 같이 맡는 분이다 (원장님 2026-11-05) */}
+            {(student as any).clinic_teacher_name && (
+              <span className={cx(칩, 'bg-white/80')} style={{ color: '#3B6D11' }}>
+                {teacherLabels(student.grade).clinicChip} {mainTeacher((student as any).clinic_teacher_name)}
+              </span>
             )}
           </div>
         </div>
@@ -3530,6 +3538,7 @@ ${e?.message ?? '연결 실패'}
                             <p className="text-sm font-bold text-gray-800 truncate">{student.name}</p>
                             <p className="text-[11px] text-gray-400 truncate">
                               {student.grade}{student.teacher_name ? ` · ${student.teacher_name} 선생님` : ''}
+                              {(student as any).clinic_teacher_name ? ` · ${teacherLabels(student.grade).clinicChip} ${(student as any).clinic_teacher_name} 선생님` : ''}
                             </p>
                           </div>
                           {!editable && <span className="text-[10px] font-bold text-gray-300 shrink-0">보기 전용</span>}
