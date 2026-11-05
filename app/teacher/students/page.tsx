@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { normalizeSchool } from '@/lib/school'
-import { splitTeachers } from '@/lib/teachers'
+import { splitTeachers, teachersOf, isMine } from '@/lib/teachers'
 
 // 시간표 칸 — 원장님 편집 화면과 선생님 「변경 요청」 화면이 **같은 목록**을 쓴다.
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
@@ -49,7 +49,10 @@ interface Student {
   school: string
   grade: string
   class_time: string
+  /** 키움쌤 — 메인 담임 (원장님 2026-11-05) */
   teacher_name: string
+  /** 채움쌤 — 클리닉 담임. 학생을 보고 학습일지를 쓰는 범위는 키움쌤과 같다 */
+  clinic_teacher_name?: string
   parent_name: string
   parent_phone: string
   is_active: boolean
@@ -136,7 +139,7 @@ export default function TeacherStudentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const EMPTY_STUDENT: Student = {
-    name: '', school: '', grade: '', class_time: '', teacher_name: '',
+    name: '', school: '', grade: '', class_time: '', teacher_name: '', clinic_teacher_name: '',
     parent_name: '', parent_phone: '', is_active: true, textbook_grade: 'B', wise_step: 'W',
   }
   // 시간표 변경 요청 — 원장님은 전부, 선생님은 본인이 올린 것만 보인다(RLS).
@@ -180,9 +183,8 @@ export default function TeacherStudentsPage() {
   // 관리자/직원이거나 내가 진짜 담당(teacher_name)인 경우로 한정한다 (주임은 보기 전용)
   function isEditable(s: Student) {
     if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const teachers = splitTeachers(s.teacher_name)
-    return teachers.includes(currentUser.name)
+    // 키움쌤·채움쌤 둘 다 — 판단은 lib/teachers.ts 한 곳에 (원장님 2026-11-05)
+    return isMine(s, currentUser?.name)
   }
 
   // 재원/휴원 — 다른 버튼(강사별·학년별)과 학생 목록 모두 이 안에서만 센다
@@ -194,8 +196,7 @@ export default function TeacherStudentsPage() {
   const teacherCounts = (() => {
     const map = new Map<string, number>()
     statusStudents.forEach((s) => {
-      const teachers = splitTeachers(s.teacher_name)
-      teachers.forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
+      teachersOf(s).forEach((t) => map.set(t, (map.get(t) ?? 0) + 1))
     })
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'ko'))
   })()
@@ -222,10 +223,7 @@ export default function TeacherStudentsPage() {
     const searchMatch = s.name?.includes(searchText) || s.school?.includes(searchText)
     if (!searchMatch) return false
     if (gradeFilter && (s.grade ?? '').trim() !== gradeFilter) return false
-    if (teacherFilter) {
-      const teachers = splitTeachers(s.teacher_name)
-      if (!teachers.includes(teacherFilter)) return false
-    }
+    if (teacherFilter && !teachersOf(s).includes(teacherFilter)) return false
     return true
   })
 
@@ -246,7 +244,10 @@ export default function TeacherStudentsPage() {
             school:        normalizeSchool(String(row['학교'] ?? '')),   // 「신원중학교」→「신원중」
             grade:         String(row['학년'] ?? '').trim(),
             class_time:    String(row['수업'] ?? '').trim(),
-            teacher_name:  String(row['담임강사'] ?? '').trim(),
+            // 쓰시던 열 이름(담임강사)을 그대로 받는다 — 사무실 파일이 안 깨지게.
+            //   새 이름(키움쌤)으로 적어 오셔도 받는다.
+            teacher_name:  String(row['담임강사'] ?? row['키움쌤'] ?? '').trim(),
+            clinic_teacher_name: String(row['채움쌤'] ?? row['클리닉담임'] ?? '').trim(),
             parent_name:   String(row['보호자이름'] ?? '').trim(),
             parent_phone:  String(row['보호자연락처'] ?? '').trim(),
             is_active:     true,
@@ -274,6 +275,7 @@ export default function TeacherStudentsPage() {
       const { error } = await supabase.from('students').insert({
         name: student.name, school: student.school, grade: student.grade,
         class_time: student.class_time, teacher_name: student.teacher_name,
+        clinic_teacher_name: student.clinic_teacher_name || null,
         parent_name: student.parent_name, parent_phone: student.parent_phone,
         is_active: true, textbook_grade: 'B',
       })
@@ -328,6 +330,7 @@ export default function TeacherStudentsPage() {
       .update({
         name: editStudent.name, school, grade: editStudent.grade,
         class_time: editStudent.class_time, teacher_name: editStudent.teacher_name,
+        clinic_teacher_name: (editStudent.clinic_teacher_name ?? '').trim() || null,
         parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
         textbook_grade: editStudent.textbook_grade,
         wise_step: editStudent.wise_step || 'W',
@@ -466,7 +469,7 @@ export default function TeacherStudentsPage() {
       //   학교만 「신원6」(원래는 「신원초」)로 적은 채 새로 만들어 계정이 둘이 됐다.
       //   학교·학년은 사람마다 적는 꼴이 달라서 중복을 막는 기준이 될 수 없다.
       const { data: sameName } = await supabase
-        .from('students').select('id, school, grade, teacher_name, parent_phone, is_active')
+        .from('students').select('id, school, grade, teacher_name, clinic_teacher_name, parent_phone, is_active')
         .eq('name', name)
       const live = (sameName ?? []).filter((x: any) => x.is_active)
       if (live.length > 0) {
@@ -506,6 +509,7 @@ export default function TeacherStudentsPage() {
         name, school, grade: newStudent.grade.trim(),
         class_time: classTimeText,
         teacher_name: newStudent.teacher_name.trim(),
+        clinic_teacher_name: (newStudent.clinic_teacher_name ?? '').trim() || null,
         parent_name: newStudent.parent_name.trim(),
         parent_phone: newStudent.parent_phone.trim(),
         is_active: true,
@@ -749,7 +753,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                   <table className="w-full text-xs">
                     <thead className="bg-white border-b border-gray-100">
                       <tr>
-                        {['이름','학교','학년','수업시간','담임강사','보호자'].map((h) => (
+                        {['이름','학교','학년','수업시간','키움쌤','채움쌤','보호자'].map((h) => (
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -770,6 +774,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                           <td className="px-3 py-2 text-gray-600">{s.grade}</td>
                           <td className="px-3 py-2 text-gray-600">{s.class_time}</td>
                           <td className="px-3 py-2 text-gray-600">{s.teacher_name}</td>
+                          <td className="px-3 py-2 text-gray-600">{s.clinic_teacher_name}</td>
                           <td className="px-3 py-2 text-gray-600">{s.parent_name}</td>
                         </tr>
                       ))}
@@ -904,7 +909,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                         </span>
                       )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
-                      {student.teacher_name && <Badge variant="blue" size="sm">{student.teacher_name}</Badge>}
+                      {student.teacher_name && <Badge variant="blue" size="sm">키움 {student.teacher_name}</Badge>}
+                      {student.clinic_teacher_name && <Badge variant="green" size="sm">채움 {student.clinic_teacher_name}</Badge>}
                       {/* 교재 등급 */}
                       <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full', GRADE_COLORS[student.textbook_grade] ?? 'bg-gray-100 text-gray-500')}>
                         {student.textbook_grade ?? 'B'}등급
@@ -1081,7 +1087,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label:'이름',       key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label:'키움쌤 (메인 담임)',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label:'채움쌤 (클리닉 담임)', key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (
@@ -1314,7 +1321,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label:'이름 *',     key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'담임강사',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label:'키움쌤 (메인 담임)',   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label:'채움쌤 (클리닉 담임)', key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (

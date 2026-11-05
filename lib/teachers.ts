@@ -31,6 +31,33 @@ export function isTeacherOf(teacherName: string | null | undefined, who?: string
 }
 
 /**
+ * 한 학생을 맡은 선생님 — **키움쌤과 채움쌤 둘 다** (원장님 2026-11-05).
+ *
+ *   키움쌤(메인 담임, students.teacher_name)          — 실력을 키운다. 진도와 전체 방향
+ *   채움쌤(클리닉 담임, students.clinic_teacher_name) — 빈 곳을 채운다. 구멍 메우고 다지기
+ *
+ * ★ 「채움쌤도 학생 학습일지 같이 쓰고 볼수 있어야 해」(원장님 2026-11-05).
+ *   그래서 **보이는 범위·고치는 범위 판단은 전부 이 함수 하나**를 쓴다.
+ *   화면마다 `splitTeachers(s.teacher_name).includes(내이름)` 을 따로 쓰면, 한 곳만
+ *   빠뜨려도 채움쌤에게 그 화면만 조용히 비어 보인다(2026-10-14에 같은 일이 있었다).
+ * ★ 같은 분이 키움쌤이자 채움쌤일 수 있다 — 겹치면 한 번만 센다.
+ */
+export type StudentTeachers = { teacher_name?: string | null; clinic_teacher_name?: string | null }
+
+export function teachersOf(student: StudentTeachers | null | undefined): string[] {
+  return [...new Set([
+    ...splitTeachers(student?.teacher_name),
+    ...splitTeachers(student?.clinic_teacher_name),
+  ])]
+}
+
+/** 이 학생을 내가 맡았나 — 키움쌤이든 채움쌤이든 */
+export function isMine(student: StudentTeachers | null | undefined, who?: string | null): boolean {
+  if (!who) return false
+  return teachersOf(student).includes(who)
+}
+
+/**
  * 서버에서 「이 직원이 이 학생을 봐도 되나」.
  *
  * students 조회 정책(docs/sql/학생조회_강사담당만_2026-10-29.sql)과 **같은 규칙**이다.
@@ -42,10 +69,10 @@ export function isTeacherOf(teacherName: string | null | undefined, who?: string
  */
 export function staffCanSeeStudent(
   who: { role?: string | null; name?: string | null; supervisorGrades?: string[] | null },
-  student: { grade?: string | null; teacher_name?: string | null },
+  student: { grade?: string | null; teacher_name?: string | null; clinic_teacher_name?: string | null },
 ): boolean {
   if (who.role === 'admin' || who.role === 'staff') return true
-  if (isTeacherOf(student.teacher_name, who.name)) return true
+  if (isMine(student, who.name)) return true          // 키움쌤·채움쌤 둘 다
   const g = String(student.grade ?? '').trim()
   return !!g && (who.supervisorGrades ?? []).includes(g)
 }

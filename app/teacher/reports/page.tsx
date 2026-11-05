@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { computeCurriculumProgressGroups } from '@/lib/curriculumProgress'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { isExamAbsence } from '@/lib/attendance'
-import { splitTeachers } from '@/lib/teachers'
+import { teachersOf, isMine } from '@/lib/teachers'
 import { MonthlyReportView } from '@/components/report/MonthlyReport'
 
 // 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
@@ -37,6 +37,7 @@ interface Student {
   school: string
   grade: string
   teacher_name: string
+  clinic_teacher_name?: string | null
 }
 
 interface WorksheetRecord {
@@ -346,16 +347,13 @@ export default function TeacherReportsPage() {
   }
 
   const currentGrades = GRADE_GROUPS.find((g) => g.label === selectedGroup)?.grades ?? []
-  const teachers = [...new Set(
-    students.flatMap((s) => splitTeachers(s.teacher_name))
-  )].sort()
+  // 키움쌤·채움쌤 둘 다 — 채움쌤 이름으로도 거를 수 있어야 한다 (원장님 2026-11-05)
+  const teachers = [...new Set(students.flatMap((s) => teachersOf(s)))].sort()
 
   // 직원(행정)도 보고서 발송 업무를 할 수 있어야 함
   const myStudents = students.filter((s) => {
     if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    const ts = splitTeachers(s.teacher_name)
-    return ts.includes(currentUser.name)
+    return isMine(s, currentUser?.name)        // 키움쌤·채움쌤 둘 다
   })
 
   const filteredStudents = myStudents.filter((s) => {
@@ -365,9 +363,7 @@ export default function TeacherReportsPage() {
       s.grade?.includes('고')
     )
     const gradeFilterMatch = selectedGrade ? s.grade === selectedGrade : true
-    const teacherMatch = selectedTeacher
-      ? splitTeachers(s.teacher_name).includes(selectedTeacher)
-      : true
+    const teacherMatch = selectedTeacher ? teachersOf(s).includes(selectedTeacher) : true
     const searchMatch = s.name.includes(searchText) || s.school?.includes(searchText)
     return gradeMatch && gradeFilterMatch && teacherMatch && searchMatch
   })
@@ -807,8 +803,7 @@ export default function TeacherReportsPage() {
 
   const myStudentsForGrade = students.filter((s) => {
     if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    return splitTeachers(s.teacher_name).includes(currentUser.name)
+    return isMine(s, currentUser?.name)        // 키움쌤·채움쌤 둘 다
   }).filter((s) => s.name.includes(gSearchText) || s.school?.includes(gSearchText))
 
   async function saveGradeAsImage() {
@@ -842,8 +837,7 @@ export default function TeacherReportsPage() {
 
   const myStudentsForMonthly = students.filter((s) => {
     if (canManageAllStudents()) return true
-    if (!currentUser?.name || !s.teacher_name) return false
-    return splitTeachers(s.teacher_name).includes(currentUser.name)
+    return isMine(s, currentUser?.name)        // 키움쌤·채움쌤 둘 다
   }).filter((s) => s.name.includes(mSearchText) || s.school?.includes(mSearchText))
 
   return (
