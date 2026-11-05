@@ -39,7 +39,7 @@ export const MONTHLY_BODY_LIMIT = 1000
 // 칸마다의 상한. 골격이 약 170자라 넉넉하다. 선생님 한마디만 길어질 수 있어 거기에 몰아 준다.
 const CAP = {
   학생명: 20,
-  기간: 14,
+  기간: 26,          // 「2026년 12월~2027년 1월」(19자)까지 들어가야 한다
   출석: 30,
   과제달성률: 14,
   과제성취도: 14,
@@ -87,7 +87,7 @@ export function buildMonthlyMessage(r: MonthlyReport, url: string): MonthlyMessa
   //   실린다 — 「오늘 15분 지각을 해서…」 같은 글이 한 달 총평 자리에 들어갔다
   //   (2026-10-24 이지훈·윤수지에서 확인). 안 쓰셨으면 무난한 문장으로 둔다.
   const 한마디 = (r.comment ?? '').trim()
-    || `${r.period.month}월 한 달 기록을 정리했습니다. 단원별 도달 레벨을 함께 봐 주세요.`
+    || `${(r.period as any).months === 2 ? '두 달' : `${r.period.month}월 한 달`} 기록을 정리했습니다. 단원별 도달 레벨을 함께 봐 주세요.`
 
   const body = MONTHLY_TEMPLATE
     .replace('#{학생명}', cut(r.student.grade ? `${r.student.name}(${r.student.grade})` : r.student.name, CAP.학생명))

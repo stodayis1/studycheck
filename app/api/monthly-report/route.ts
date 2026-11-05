@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
 import { denyIfNotStaff } from '@/lib/apiAuth'
-import { buildMonthlyReport } from '@/lib/monthlyReport'
+import { buildMonthlyReport, span } from '@/lib/monthlyReport'
 import { buildMonthlyMessage, resolveMonthlyTemplate } from '@/lib/monthlyReportTemplate'
 import { aligoConfig, sendAlimtalk, AligoError } from '@/lib/aligo'
 import { buildTeacherSms, type SentReport } from '@/lib/monthlyTeacherSms'
@@ -36,10 +36,11 @@ export async function GET(req: NextRequest) {
   const q = new URL(req.url).searchParams
   const studentId = q.get('studentId')
   const year = Number(q.get('year')), month = Number(q.get('month'))
+  const months = Number(q.get('months')) === 2 ? 2 : 1
   if (!studentId || !year || !month) {
     return NextResponse.json({ error: '학생과 달을 골라 주세요.' }, { status: 400 })
   }
-  const data = await buildMonthlyReport(db(), studentId, year, month)
+  const data = await buildMonthlyReport(db(), studentId, year, month, months)
   if (!data) return NextResponse.json({ error: '학생을 찾지 못했어요.' }, { status: 404 })
   return NextResponse.json({ data })
 }
@@ -67,6 +68,8 @@ export async function POST(req: NextRequest) {
   const b = await req.json().catch((): any => null)
   const ids: string[] = b?.studentIds ?? []
   const year = Number(b?.year), month = Number(b?.month)
+  /** 몇 달치인지 — 두 달에 한 번 보내면 2 (원장님 2026-11-05) */
+  const months: 1 | 2 = Number(b?.months) === 2 ? 2 : 1
   const send = !!b?.send
   const resend = !!b?.resend
   /** 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05) */
@@ -100,7 +103,7 @@ export async function POST(req: NextRequest) {
     const { data: prev } = await supabase.from('report_links')
       .select('student_id, kakao_sent_at')
       .eq('report_type', 'monthly_report')
-      .eq('period_start', `${year}-${String(month).padStart(2, '0')}-01`)
+      .eq('period_start', span(year, month, months).from)
       .not('kakao_sent_at', 'is', null)
     for (const r of (prev ?? []) as any[]) 이미보냄.add(String(r.student_id))
   }
@@ -115,7 +118,7 @@ export async function POST(req: NextRequest) {
       out.push({ studentId: id, name: '?', url: null, skipped: '이번 달에 이미 보냈어요.' })
       continue
     }
-    const data = await buildMonthlyReport(supabase, id, year, month)
+    const data = await buildMonthlyReport(supabase, id, year, month, months)
     if (!data) { out.push({ studentId: id, name: '?', url: null, error: '학생을 찾지 못했어요.' }); continue }
     // 선생님이 적어 둔 한 줄 평이 있으면 같이 박는다.
     const c = (b?.comment ?? {})[id]
@@ -126,8 +129,8 @@ export async function POST(req: NextRequest) {
       student_id: id,
       report_type: 'monthly_report',
       period_label: data.period.label,
-      period_start: `${year}-${String(month).padStart(2, '0')}-01`,
-      period_end: `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`,
+      period_start: span(year, month, months).from,
+      period_end: span(year, month, months).to,
       data,
       token,
       sent_at: new Date().toISOString(),
@@ -182,7 +185,7 @@ export async function POST(req: NextRequest) {
   if (send && tellTeachers && 보낸것.length) {
     try {
       const phones = await fetchOpsTeacherPhones()
-      for (const m of buildTeacherSms(`${year}년 ${month}월`, 보낸것)) {
+      for (const m of buildTeacherSms(span(year, month, months).label, 보낸것)) {
         const phone = phones.get(m.teacher)
         if (!phone) {
           선생님알림.push({ teacher: m.teacher, count: m.count, ok: false, error: '연락처가 없어요 (수학OPS 직원 정보)' })

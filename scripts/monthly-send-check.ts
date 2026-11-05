@@ -22,6 +22,7 @@ const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('l
 const { buildMonthlyMessage, MONTHLY_TEMPLATE, MONTHLY_BUTTON_NAME, MONTHLY_BODY_LIMIT } =
   await import(pathToFileURL(target).href)
 const { buildTeacherSms, PER_SMS } = await import(pathToFileURL(path.resolve('lib/monthlyTeacherSms.ts')).href)
+const { span, buildMonthlyReport } = await import(pathToFileURL(path.resolve('lib/monthlyReport.ts')).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -29,6 +30,29 @@ function T(name: string, fn: () => boolean) {
   let ok = false, err = ''
   try { ok = fn() } catch (e: any) { err = e?.message ?? String(e) }
   if (ok) { pass++; console.log(`✓ ${name}`) } else console.log(`✗ ${name}${err ? ` — ${err}` : ''}`)
+}
+async function TA(name: string, fn: () => Promise<boolean>) {
+  total++
+  let ok = false, err = ''
+  try { ok = await fn() } catch (e: any) { err = e?.message ?? String(e) }
+  if (ok) { pass++; console.log(`✓ ${name}`) } else console.log(`✗ ${name}${err ? ` — ${err}` : ''}`)
+}
+
+/**
+ * 가짜 DB — 아무것도 안 들어 있는 상태로 buildMonthlyReport 를 **실제로 돌려** 본다.
+ * ★ 기간(period)을 눈으로 확인하려는 것이다. 문자열만 봐서는
+ *   「span 은 맞는데 buildMonthlyReport 가 그걸 안 쓰는」 경우를 못 잡는다(실제로 겪었다).
+ */
+function 가짜DB(학생: any) {
+  const Q = (rows: any[], one: any = undefined): any => {
+    const q: any = {}
+    for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'order', 'limit', 'not', 'range']) q[m] = () => q
+    q.maybeSingle = () => ({ then: (r: any) => r({ data: one ?? rows[0] ?? null, error: null }) })
+    q.single = q.maybeSingle
+    q.then = (r: any) => r({ data: rows, error: null })
+    return q
+  }
+  return { from: (t: string) => (t === 'students' ? Q([], 학생) : Q([])) }
 }
 const src = (p: string) => fs.readFileSync(path.resolve(p), 'utf8')
 
@@ -64,6 +88,80 @@ T('한 줄 평이 없으면 무난한 문장으로 채운다 (빈칸이 나가�
 T('본문이 1,000자를 넘으면 넘었다고 알려 준다', () => {
   const m = buildMonthlyMessage(리포트({ comment: '가'.repeat(2000) }), 'https://x/y')
   return m.bodyLen <= MONTHLY_BODY_LIMIT && !m.overLimit     // 칸마다 잘라서 한도 안에 들어온다
+})
+
+// ── 몇 달치인가 ────────────────────────────────────────────────────────
+// ★ 두 달에 한 번 보내시는데 한 달만 잡으면 **한 달이 통째로 빠진다**
+//   (원장님 2026-11-05 「10월만 설정하게 되면 말이 안되지 않나?」).
+T('한 달치는 그 달 1일~말일', () => {
+  const r = span(2026, 10, 1)
+  return r.from === '2026-10-01' && r.to === '2026-10-31' && r.label === '2026년 10월'
+})
+
+T('두 달치는 **앞 달 1일**부터 그 달 말일까지', () => {
+  const r = span(2026, 10, 2)
+  return r.from === '2026-09-01' && r.to === '2026-10-31' && r.label === '2026년 9~10월'
+})
+
+// ★ 1월 두 달치는 **작년 12월**부터다. 여기서 틀리면 12월이 영영 안 나간다.
+T('해를 넘어가도 맞다 (1월 두 달치 = 작년 12월부터)', () => {
+  const r = span(2027, 1, 2)
+  return r.from === '2026-12-01' && r.to === '2027-01-31'
+    && r.label === '2026년 12월~2027년 1월'
+})
+
+T('2월 말일(28·29일)도 맞게 잡는다', () =>
+  span(2026, 2, 1).to === '2026-02-28' && span(2028, 2, 1).to === '2028-02-29')
+
+T('3월 두 달치는 2월부터 (말일이 앞 달 기준으로 새면 안 된다)', () => {
+  const r = span(2026, 3, 2)
+  return r.from === '2026-02-01' && r.to === '2026-03-31'
+})
+
+// ★ 기간 이름이 알림톡 변수 칸(#{기간})에 안 잘려야 한다.
+T('가장 긴 기간 이름도 알림톡 칸에 들어간다', () => {
+  const 긴것 = span(2027, 1, 2).label           // 「2026년 12월~2027년 1월」
+  const m = buildMonthlyMessage({ ...리포트(), period: { ...리포트().period, ...span(2027, 1, 2), months: 2 } } as any, 'https://x/y')
+  return m.body.includes(긴것) && !m.body.includes('…')
+})
+
+T('API 와 화면이 months 를 같이 넘긴다', () => {
+  const api = src('app/api/monthly-report/route.ts')
+  const ui = src('app/teacher/reports/page.tsx')
+  return api.includes('buildMonthlyReport(supabase, id, year, month, months)')
+    && api.includes('span(year, month, months).from')
+    && api.includes('span(year, month, months).to')
+    && ui.includes('months: mMonths')
+    && ui.includes('&months=${mMonths}')
+    && ui.includes('<option value={2}>2개월치</option>')
+})
+
+// ★ 두 달치인데 「이번 달」이라고 적히면 말이 안 된다.
+T('두 달치면 화면 글도 「두 달」로 바뀐다', () => {
+  const v = src('components/report/MonthlyReport.tsx')
+  return v.includes("const 두달 = (d.period as any)?.months === 2")
+    && v.includes('{기간말} 수업 태도') && v.includes("두달 ? '두 달간' : '이번 달'")
+})
+
+// ★ span 이 맞아도 buildMonthlyReport 가 그걸 안 쓰면 소용이 없다 — **돌려서** 본다.
+await TA('리포트를 실제로 만들어 보면 기간이 두 달이다', async () => {
+  const db = 가짜DB({ id: 's1', name: '홍길동', grade: '중3', school: '가상중', teacher_name: '스미스마이클' })
+  const r: any = await buildMonthlyReport(db, 's1', 2026, 10, 2)
+  return !!r && r.period.months === 2 && r.period.label === '2026년 9~10월'
+    && r.period.from === '2026-09-01' && r.period.to === '2026-10-31'
+})
+
+await TA('한 달치로 만들면 한 달이다', async () => {
+  const db = 가짜DB({ id: 's1', name: '홍길동', grade: '중3', school: '가상중', teacher_name: '스미스마이클' })
+  const r: any = await buildMonthlyReport(db, 's1', 2026, 10, 1)
+  return !!r && r.period.months === 1 && r.period.label === '2026년 10월'
+    && r.period.from === '2026-10-01' && r.period.to === '2026-10-31'
+})
+
+await TA('안 주면 지금까지대로 한 달이다 (옛 호출)', async () => {
+  const db = 가짜DB({ id: 's1', name: '홍길동', grade: '중3', school: '가상중', teacher_name: '스미스마이클' })
+  const r: any = await buildMonthlyReport(db, 's1', 2027, 1)
+  return !!r && r.period.label === '2027년 1월' && r.period.from === '2027-01-01'
 })
 
 // ── 발송 길 ────────────────────────────────────────────────────────────
