@@ -155,7 +155,7 @@ export default function TeacherReportsPage() {
   const [dailyTestSessions, setDailyTestSessions] = useState<{ session_date: string; daily_test_unit: string | null; daily_test_score: number }[]>([])
 
   // 월간보고서 상태
-  const [activeTab, setActiveTab] = useState<'report' | 'monthly' | 'grade' | 'ranking'>('report')
+  const [activeTab, setActiveTab] = useState<'report' | 'monthly' | 'ranking'>('report')
   const [mStudent, setMStudent] = useState<Student | null>(null)
   const [mSearchText, setMSearchText] = useState('')
   const [mYear, setMYear] = useState(new Date().getFullYear())
@@ -175,11 +175,8 @@ export default function TeacherReportsPage() {
   const [mLink, setMLink] = useState<string | null>(null)
 
   // 성적표(코어테스트+학습지) 상태
-  const [gStudent, setGStudent] = useState<Student | null>(null)
-  const [gSearchText, setGSearchText] = useState('')
   const [gData, setGData] = useState<any>(null)
   const [gLoading, setGLoading] = useState(false)
-  const gradeRef = useRef<HTMLDivElement>(null)
 
   // 코어테스트 학년별 등수 상태 (관리자 전용) - 매달 회차별로 같은 학년끼리 점수를 비교해 등수를 매긴다
   const [rankGrade, setRankGrade] = useState<string | null>(null)
@@ -532,6 +529,9 @@ export default function TeacherReportsPage() {
   //   「한명한명 링크를 만들어서 일일이 보낼수가 없거든」
   const [bGrades, setBGrades] = useState<string[]>([])
   const [bResend, setBResend] = useState(false)
+  // 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05)
+  const [bTellTeachers, setBTellTeachers] = useState(true)
+  const [bTeacherSms, setBTeacherSms] = useState<any[] | null>(null)
   const [bBusy, setBBusy] = useState(false)
   const [bResult, setBResult] = useState<any[] | null>(null)
 
@@ -541,19 +541,21 @@ export default function TeacherReportsPage() {
     if (!confirm(
       `${bTargets.length}명의 ${mYear}년 ${mMonth}월 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
       + (bResend ? '이미 보낸 분께도 다시 보냅니다.\n' : '이번 달에 이미 보낸 분은 건너뜁니다.\n')
+      + (bTellTeachers ? '보낸 뒤 담당 선생님께 문자로 알립니다.\n' : '')
       + '계속할까요?')) return
-    setBBusy(true); setBResult(null)
+    setBBusy(true); setBResult(null); setBTeacherSms(null)
     try {
       const r = await apiFetch('/api/monthly-report', {
         method: 'POST',
         body: JSON.stringify({
           studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth,
-          send: true, resend: bResend,
+          send: true, resend: bResend, tellTeachers: bTellTeachers,
         }),
       })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '보내지 못했어요.')
       setBResult(j.links ?? [])
+      setBTeacherSms(j.teacherSms ?? [])
     } catch (e: any) { alert(e.message) }
     setBBusy(false)
   }
@@ -831,39 +833,6 @@ export default function TeacherReportsPage() {
     return parts.join(' ')
   }
 
-  const myStudentsForGrade = students.filter((s) => {
-    if (canManageAllStudents()) return true
-    return isMine(s, currentUser?.name)        // 키움쌤·채움쌤 둘 다
-  }).filter((s) => s.name.includes(gSearchText) || s.school?.includes(gSearchText))
-
-  async function saveGradeAsImage() {
-    if (!gradeRef.current) return
-    const html2canvas = (await import('html2canvas')).default
-    const el = gradeRef.current
-    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: 'white', width: el.offsetWidth, height: el.offsetHeight, windowWidth: el.offsetWidth, windowHeight: el.offsetHeight, imageTimeout: 0, allowTaint: true })
-    const url = canvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${gData?.student?.name}_성적표.png`
-    a.click()
-    // 이미지를 저장(=발송 준비)하는 시점에 앱 알림을 켜둔 학부모/학생에게도 푸시 발송
-    if (gData?.student?.id) {
-      apiFetch('/api/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target: { studentIds: [gData.student.id] },
-          payload: {
-            title: `${gData.student.name} 학생 성적표`,
-            body: '새 성적표가 도착했어요. 눌러서 확인해보세요.',
-            tag: 'grade-report',
-          },
-        }),
-      })
-        .then((r) => reportPushResult(r, '보고서'))
-        .catch((e) => reportSendError(e, '보고서'))
-    }
-  }
 
   const myStudentsForMonthly = students.filter((s) => {
     if (canManageAllStudents()) return true
@@ -883,8 +852,11 @@ export default function TeacherReportsPage() {
 
         {/* 탭 */}
         <div className="flex gap-2">
-          {([['report','학습 보고서'],['monthly','월간 보고서'],['grade','성적표'], ...((isAdmin() || isSupervisorModeActive()) ? [['ranking','코어테스트 등수']] : [])] as [string,string][]).map(([tab,label]) => (
-            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'grade'|'ranking')}
+          {/* ★ 「성적표」는 뺐다 (원장님 2026-11-05 「성적표 메뉴는 필요 없을거 같아」) —
+              안 쓰시는 데다 월간 보고서와 내용이 겹쳤다. 코어테스트 점수·학습지 기록은
+              그대로 남아 있고(지운 것은 화면뿐이다), 월간 보고서에서 본다. */}
+          {([['report','학습 보고서'],['monthly','월간 보고서'], ...((isAdmin() || isSupervisorModeActive()) ? [['ranking','코어테스트 등수']] : [])] as [string,string][]).map(([tab,label]) => (
+            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'ranking')}
               className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
               style={activeTab === tab ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#6b7280' }}>
               {label}
@@ -919,10 +891,18 @@ export default function TeacherReportsPage() {
                     )
                   })}
                 </div>
-                <label className="flex items-center gap-1.5 mb-2.5 cursor-pointer select-none">
+                <label className="flex items-center gap-1.5 mb-1.5 cursor-pointer select-none">
                   <input type="checkbox" checked={bResend} onChange={(e) => setBResend(e.target.checked)} />
                   <span className="text-[11px]" style={{ color: bResend ? '#B45309' : '#A16207' }}>
                     이번 달에 이미 보낸 분께도 <b>다시 보내기</b>
+                  </span>
+                </label>
+                {/* 담당 선생님께 문자 — 알림톡이 아니라 문자다(선생님께 가는 글은 그때그때 달라
+                    템플릿으로 못 만든다). 번호는 수학OPS 직원 정보에서 가져온다. */}
+                <label className="flex items-center gap-1.5 mb-2.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={bTellTeachers} onChange={(e) => setBTellTeachers(e.target.checked)} />
+                  <span className="text-[11px]" style={{ color: '#A16207' }}>
+                    보낸 뒤 <b>담당 선생님께 문자로 알리기</b> (키움쌤·채움쌤 모두)
                   </span>
                 </label>
                 <button onClick={sendMonthlyBulk} disabled={!bTargets.length || bBusy}
@@ -951,6 +931,17 @@ export default function TeacherReportsPage() {
                         <p style={{ color: '#A16207' }}>
                           실패한 분도 <b>링크는 이미 만들어져</b> 있어요. 아래에서 그 학생을 골라 주소를 복사해 보내시면 됩니다.
                         </p>
+                      )}
+                      {bTeacherSms && bTeacherSms.length > 0 && (
+                        <div className="pt-1.5 mt-1.5" style={{ borderTop: '1px dashed #FDE68A' }}>
+                          <p className="font-bold">
+                            담당 선생님께 문자 {bTeacherSms.filter((x: any) => x.ok).length}통
+                            {bTeacherSms.some((x: any) => !x.ok) && ` · 못 보냄 ${bTeacherSms.filter((x: any) => !x.ok).length}통`}
+                          </p>
+                          {bTeacherSms.filter((x: any) => !x.ok).map((x: any, i: number) => (
+                            <p key={`t${i}`} style={{ color: '#B91C1C' }}>· {x.teacher} 선생님 — {x.error}</p>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )
@@ -1348,177 +1339,6 @@ export default function TeacherReportsPage() {
           </div>
         )}
 
-        {/* ══ 성적표 탭 (코어테스트 + 학습지 누적) ══ */}
-        {activeTab === 'grade' && (
-          <div className="space-y-4">
-            <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-              <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">학생 선택</p>
-              <input value={gSearchText} onChange={e => setGSearchText(e.target.value)} placeholder="이름 검색"
-                className="w-full text-sm rounded-xl px-3 py-2 mb-3 outline-none"
-                style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }} />
-              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                {myStudentsForGrade.map(s => (
-                  <button key={s.id} onClick={() => { setGStudent(s); loadGradeData(s) }}
-                    className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
-                    style={gStudent?.id === s.id ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#374151' }}>
-                    {s.name} <span style={{ opacity: 0.5 }}>{s.grade}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {gLoading && <div className="text-center py-8 text-sm text-gray-400">불러오는 중...</div>}
-
-            {gData && !gLoading && (
-              gData.coreTests.length === 0 && gData.unitStats.length === 0 ? (
-                <div className="rounded-2xl p-8 text-center" style={{ background: 'white', border: '1px solid #f3f4f6' }}>
-                  <p className="mb-2"><i className="ti ti-clipboard-list" style={{ fontSize: 32, color: '#d1d5db' }} /></p>
-                  <p className="text-sm text-gray-400">아직 코어테스트나 학습지 점수 기록이 없어요</p>
-                </div>
-              ) : (
-                <>
-                  <div ref={gradeRef} style={{ background: 'white', borderRadius: 20, padding: 28, fontFamily: 'Pretendard, sans-serif', border: '1px solid #e5e7eb' }}>
-                    {/* 헤더 */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                      <img src="/icon-192.png" alt="" style={{ width: 36, height: 36, borderRadius: 9 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 10, color: '#D85A30', fontWeight: 500, letterSpacing: 2, marginBottom: 2 }}>수학의지혜 · 성적표</div>
-                        <div style={{ fontSize: 20, fontWeight: 500, color: '#0f3460' }}>{gData.student.name}</div>
-                        <div style={{ fontSize: 11, color: '#9ca3af' }}>{gData.student.school} · {gData.student.grade}</div>
-                      </div>
-                    </div>
-                    <div style={{ height: 1, background: 'rgba(15,52,96,0.15)', marginBottom: 20 }} />
-
-                    {/* 요약 지표 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
-                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460' }}>
-                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>최근 코어테스트</div>
-                        <div style={{ fontSize: 20, fontWeight: 500, color: '#0f3460' }}>{gData.latestCorePct ?? '-'}<span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 2 }}>{gData.latestCorePct != null ? '%' : ''}</span></div>
-                        {gData.coreTrend && (
-                          <div style={{ fontSize: 10, marginTop: 4, fontWeight: 500, color: gData.coreTrend === '상승' ? '#0f3460' : gData.coreTrend === '하락' ? '#dc2626' : '#D85A30' }}>
-                            {gData.coreTrend === '상승' ? '▲ 상승' : gData.coreTrend === '하락' ? '▼ 하락' : '● 유지'}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460' }}>
-                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 8 }}>{gData.coreTests.length}회 평균 · 최고</div>
-                        <div style={{ fontSize: 20, fontWeight: 500, color: '#0f3460' }}>{gData.coreAvgPct ?? '-'}<span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 2 }}>%</span></div>
-                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>최고 {gData.coreBestPct ?? '-'}%</div>
-                      </div>
-                    </div>
-
-                    {/* 코어테스트 추이 차트 */}
-                    {gData.coreTests.length > 0 && (
-                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
-                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>코어테스트 점수 추이 (최근 {gData.coreTests.length}회)</div>
-                        {(() => {
-                          const chartW = 400, chartH = 140, padL = 26, padR = 10, padT = 16, padB = 40
-                          const innerW = chartW - padL - padR, innerH = chartH - padT - padB
-                          const n = gData.coreTests.length
-                          const gap = innerW / n
-                          const pts = gData.coreTests.map((c: any, i: number) => {
-                            const cx = padL + gap * i + gap / 2
-                            const cy = padT + innerH - ((c.pct ?? 0) / 100) * innerH
-                            return { cx, cy, ...c }
-                          })
-                          const d = pts.map((p: any, i: number) => `${i === 0 ? 'M' : 'L'}${p.cx},${p.cy}`).join(' ')
-                          return (
-                            <svg viewBox={`0 0 ${chartW} ${chartH}`} width="100%" style={{ display: 'block' }}>
-                              {[100, 85, 50].map(v => {
-                                const y = padT + innerH - (v / 100) * innerH
-                                return (
-                                  <g key={v}>
-                                    <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke={v === 85 ? 'rgba(15,52,96,0.35)' : '#e5e7eb'} strokeWidth={v === 85 ? 1 : 0.6} strokeDasharray="4 3" />
-                                    <text x={padL - 3} y={y + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">{v}</text>
-                                  </g>
-                                )
-                              })}
-                              <path d={d} fill="none" stroke="#0f3460" strokeWidth={2} />
-                              {pts.map((p: any, i: number) => (
-                                <g key={i}>
-                                  <circle cx={p.cx} cy={p.cy} r={3.5} fill="#0f3460" />
-                                  <text x={p.cx} y={p.cy - 9} textAnchor="middle" fontSize={9} fontWeight="500" fill="#0f3460">{p.pct}%</text>
-                                  <text x={p.cx} y={padT + innerH + 14} textAnchor="middle" fontSize={8.5} fontWeight="500" fill="#374151">{p.dateLabel}</text>
-                                  <text x={p.cx} y={padT + innerH + 25} textAnchor="middle" fontSize={7.5} fill="#9ca3af">{p.title}</text>
-                                </g>
-                              ))}
-                            </svg>
-                          )
-                        })()}
-                        {/* 회차별 상세 - 날짜/회차/시험범위를 목록으로도 보여줘 차트 라벨보다 명확하게 확인 가능 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid #e9edf3' }}>
-                          {gData.coreTests.map((c: any, i: number) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                              <span style={{ fontSize: 9, color: '#9ca3af', flexShrink: 0, width: 34 }}>{c.dateLabel}</span>
-                              <span style={{ fontSize: 9, fontWeight: 500, color: '#0f3460', flexShrink: 0 }}>{c.title}</span>
-                              <span style={{ fontSize: 10, color: '#374151', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {c.range || '시험범위 미입력'}
-                              </span>
-                              <span style={{ fontSize: 10, fontWeight: 500, color: (c.pct ?? 0) >= 85 ? '#0f3460' : (c.pct ?? 0) >= 70 ? '#D85A30' : '#dc2626', flexShrink: 0 }}>{c.pct}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 학습지 단원별 평균 */}
-                    {gData.unitStats.length > 0 && (
-                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
-                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>학습지 단원별 평균 (최근 {gData.unitStats.length}개 단원)</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {gData.unitStats.map((u: any, i: number) => (
-                            <div key={i}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                <span style={{ fontSize: 10, color: '#374151', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>{u.unit}</span>
-                                <span style={{ fontSize: 10, fontWeight: 500, color: u.avg >= 85 ? '#0f3460' : u.avg >= 70 ? '#D85A30' : '#dc2626', flexShrink: 0 }}>{u.avg}점</span>
-                              </div>
-                              <div style={{ height: 5, background: '#e9edf3', borderRadius: 4 }}>
-                                <div style={{ height: 5, borderRadius: 4, width: `${u.avg}%`, background: u.avg >= 85 ? '#0f3460' : u.avg >= 70 ? '#D85A30' : '#dc2626' }} />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 학습지 요약 */}
-                    {gData.wsCount > 0 && (
-                      <div style={{ background: '#f7f8fa', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #0f3460', marginBottom: 8 }}>
-                        <div style={{ fontSize: 9, color: '#0f3460', fontWeight: 500, letterSpacing: 1, marginBottom: 10 }}>학습지 전체 현황</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
-                          <div><div style={{ fontSize: 18, fontWeight: 500, color: '#0f3460' }}>{gData.wsCount}</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>총 학습지</div></div>
-                          <div><div style={{ fontSize: 18, fontWeight: 500, color: gData.wsAvg != null ? (gData.wsAvg >= 85 ? '#0f3460' : gData.wsAvg >= 70 ? '#D85A30' : '#dc2626') : '#9ca3af' }}>{gData.wsAvg ?? '-'}</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>평균점수</div></div>
-                          <div><div style={{ fontSize: 18, fontWeight: 500, color: (gData.wsPassRate ?? 0) >= 80 ? '#0f3460' : '#D85A30' }}>{gData.wsPassRate ?? '-'}%</div><div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>통과율</div></div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 분석 코멘트 */}
-                    {gData.comment && (
-                      <div style={{ background: '#FAECE7', borderRadius: 12, padding: '12px 14px', borderLeft: '3px solid #D85A30', marginBottom: 8 }}>
-                        <div style={{ fontSize: 9, color: '#993C1D', fontWeight: 500, letterSpacing: 1, marginBottom: 6 }}>학습 분석</div>
-                        <div style={{ fontSize: 11, color: '#712B13', lineHeight: 1.7 }}>{gData.comment}</div>
-                      </div>
-                    )}
-
-                    {/* 푸터 */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                      <div style={{ fontSize: 9, color: '#9ca3af' }}>수학의지혜 학원</div>
-                      <div style={{ fontSize: 9, color: '#9ca3af' }}>{new Date().toISOString().slice(0,10)}</div>
-                    </div>
-                  </div>
-
-                  <button onClick={saveGradeAsImage}
-                    className="w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
-                    style={{ background: '#1a1a2e', color: 'white' }}>
-                    <i className="ti ti-download" style={{ fontSize: 16 }} />
-                    이미지 저장 (카카오톡 전송용)
-                  </button>
-                </>
-              )
-            )}
-          </div>
-        )}
 
         {/* ══ 코어테스트 등수 탭 (관리자·주임모드) ══ */}
         {activeTab === 'ranking' && (isAdmin() || isSupervisorModeActive()) && (

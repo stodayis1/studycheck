@@ -21,6 +21,7 @@ import { pathToFileURL } from 'node:url'
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/monthlyReportTemplate.ts')
 const { buildMonthlyMessage, MONTHLY_TEMPLATE, MONTHLY_BUTTON_NAME, MONTHLY_BODY_LIMIT } =
   await import(pathToFileURL(target).href)
+const { buildTeacherSms, PER_SMS } = await import(pathToFileURL(path.resolve('lib/monthlyTeacherSms.ts')).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -125,6 +126,56 @@ T('월간 리포트는 **브리핑과 다른 템플릿 코드**로 보낸다', (
     && api().includes('tpl!.code!')
 })
 
+// ── 담당 선생님께 문자 ──────────────────────────────────────────────────
+// ★ 알림톡이 아니라 **문자**다 — 선생님께 가는 글은 그때그때 학생 이름·수가 달라
+//   승인 템플릿으로 만들 수 없다(lib/opsSms.ts 에 같은 설명).
+const 보낸것 = (n: number, t: string[]) => ({ studentId: `s${n}`, name: `학생${n}`, url: `https://x/${n}`, teachers: t })
+
+T('키움쌤·채움쌤 **둘 다** 받는다', () => {
+  const ms = buildTeacherSms('2026년 11월', [보낸것(1, ['신애진', '강루비'])])
+  return ms.length === 2 && ms.map((m: any) => m.teacher).sort().join() === '강루비,신애진'
+    && ms.every((m: any) => m.text.includes('학생1') && m.text.includes('https://x/1'))
+})
+
+T('선생님별로 자기 학생만 묶인다', () => {
+  const ms = buildTeacherSms('2026년 11월', [보낸것(1, ['신애진']), 보낸것(2, ['주한']), 보낸것(3, ['신애진'])])
+  const 신 = ms.find((m: any) => m.teacher === '신애진')
+  return ms.length === 2 && 신.count === 2
+    && 신.text.includes('학생1') && 신.text.includes('학생3') && !신.text.includes('학생2')
+})
+
+// ★ 문자는 길면 끊긴다. 여덟 명이 넘으면 나눠 보낸다.
+T('여덟 명이 넘으면 나눠 보낸다', () => {
+  const ms = buildTeacherSms('2026년 11월', Array.from({ length: 9 }, (_, i) => 보낸것(i + 1, ['신애진'])))
+  return ms.length === 2 && ms[0].count === PER_SMS && ms[1].count === 1
+    && ms[0].text.includes('(1/2)') && ms[1].text.includes('(2/2)')
+    && ms.every((m: any) => m.text.length < 1000)
+})
+
+T('담당이 없는 학생은 아무에게도 안 간다 (빈 문자 금지)', () =>
+  buildTeacherSms('2026년 11월', [보낸것(1, []), 보낸것(2, ['  '])]).length === 0
+  && buildTeacherSms('2026년 11월', []).length === 0)
+
+// ★ 학부모님께 **실제로 나간 것만** 알려야 한다 — 건너뛰거나 실패한 학생이 섞이면
+//   선생님이 「나갔구나」로 읽는다.
+T('실제로 나간 학생만 선생님께 알린다', () => {
+  const s = api()
+  return /보낸것\.push\(\{ studentId: id, name: data\.student\.name, url, teachers: teachersOf/.test(s)
+    && /out\.push\(\{ studentId: id, name: data\.student\.name, url, sent: true \}\)\s*\n\s*보낸것\.push/.test(s)
+})
+
+T('선생님 문자가 실패해도 학부모 발송은 막지 않는다', () => {
+  const s = api()
+  const 블록 = /if \(send && tellTeachers && 보낸것\.length\) \{[\s\S]*?\n  \}/.exec(s)?.[0] ?? ''
+  return 블록.includes('try {') && 블록.includes('catch') && !/return NextResponse/.test(블록)
+    && s.includes("refType: 'monthly_report_teacher'")
+})
+
+T('번호가 없는 선생님은 까닭을 돌려준다', () => {
+  const s = api()
+  return s.includes('연락처가 없어요 (수학OPS 직원 정보)')
+})
+
 // ── 화면 ───────────────────────────────────────────────────────────────
 T('보고서 화면에 학년별 일괄 보내기가 있다 (원장님만)', () => {
   const s = src('app/teacher/reports/page.tsx')
@@ -132,6 +183,13 @@ T('보고서 화면에 학년별 일괄 보내기가 있다 (원장님만)', () 
     && s.includes('{isAdmin() && (')
     && s.includes('sendMonthlyBulk')
     && s.includes('학부모님께 카톡으로 보냅니다')      // 누르기 전에 한 번 묻는다
+})
+
+T('선생님께 알릴지 고를 수 있고 결과도 보여 준다', () => {
+  const s = src('app/teacher/reports/page.tsx')
+  return s.includes('담당 선생님께 문자로 알리기')
+    && s.includes('tellTeachers: bTellTeachers')
+    && s.includes('담당 선생님께 문자 ')
 })
 
 T('결과를 보냄·건너뜀·실패로 나눠 보여 준다', () => {

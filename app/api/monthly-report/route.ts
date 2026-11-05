@@ -16,6 +16,10 @@ import { denyIfNotStaff } from '@/lib/apiAuth'
 import { buildMonthlyReport } from '@/lib/monthlyReport'
 import { buildMonthlyMessage, resolveMonthlyTemplate } from '@/lib/monthlyReportTemplate'
 import { aligoConfig, sendAlimtalk, AligoError } from '@/lib/aligo'
+import { buildTeacherSms, type SentReport } from '@/lib/monthlyTeacherSms'
+import { sendSmsViaOps } from '@/lib/opsSms'
+import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
+import { teachersOf } from '@/lib/teachers'
 
 export const runtime = 'nodejs'
 
@@ -65,6 +69,8 @@ export async function POST(req: NextRequest) {
   const year = Number(b?.year), month = Number(b?.month)
   const send = !!b?.send
   const resend = !!b?.resend
+  /** 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05) */
+  const tellTeachers = !!b?.tellTeachers
   if (!ids.length || !year || !month) {
     return NextResponse.json({ error: '학생과 달을 골라 주세요.' }, { status: 400 })
   }
@@ -101,6 +107,8 @@ export async function POST(req: NextRequest) {
   const out: { studentId: string; name: string; url: string | null
                error?: string; skipped?: string; sent?: boolean }[] = []
   const APP = 'https://studycheck-five.vercel.app'
+  /** 학부모님께 실제로 나간 것 — 담당 선생님께 알릴 때 쓴다 */
+  const 보낸것: SentReport[] = []
 
   for (const id of ids) {
     if (이미보냄.has(id)) {
@@ -134,7 +142,8 @@ export async function POST(req: NextRequest) {
     // ── 카톡으로 보내기 ────────────────────────────────────────────────
     // ★ 한 명이 실패해도 **나머지는 계속 간다.** 링크는 이미 만들어졌으니 손으로도 보낼 수 있다.
     const { data: st } = await supabase.from('students')
-      .select('name, parent_phone, is_active, skip_lesson_note').eq('id', id).maybeSingle()
+      .select('name, parent_phone, is_active, skip_lesson_note, teacher_name, clinic_teacher_name')
+      .eq('id', id).maybeSingle()
     const phone = String((st as any)?.parent_phone ?? '').trim()
     if ((st as any)?.skip_lesson_note) {
       out.push({ studentId: id, name: data.student.name, url, skipped: '연습용 학생이라 안 보냈어요.' }); continue
@@ -160,10 +169,32 @@ export async function POST(req: NextRequest) {
         .update({ kakao_sent_at: new Date().toISOString(), kakao_mid: r?.mid ? String(r.mid) : null })
         .eq('token', token)
       out.push({ studentId: id, name: data.student.name, url, sent: true })
+      보낸것.push({ studentId: id, name: data.student.name, url, teachers: teachersOf(st as any) })
     } catch (e: any) {
       const 까닭 = e instanceof AligoError ? e.message : (e?.message ?? '보내지 못했어요.')
       out.push({ studentId: id, name: data.student.name, url, error: 까닭 })
     }
   }
-  return NextResponse.json({ links: out })
+  // ── 담당 선생님께 문자로 알리기 ────────────────────────────────────
+  // ★ 학부모님께 **실제로 나간 것만** 알린다. 건너뛰거나 실패한 학생은 안 넣는다.
+  // ★ 여기서 실패해도 **학부모 발송은 이미 끝났다.** 결과만 돌려주고 막지 않는다.
+  const 선생님알림: { teacher: string; count: number; ok: boolean; error?: string }[] = []
+  if (send && tellTeachers && 보낸것.length) {
+    try {
+      const phones = await fetchOpsTeacherPhones()
+      for (const m of buildTeacherSms(`${year}년 ${month}월`, 보낸것)) {
+        const phone = phones.get(m.teacher)
+        if (!phone) {
+          선생님알림.push({ teacher: m.teacher, count: m.count, ok: false, error: '연락처가 없어요 (수학OPS 직원 정보)' })
+          continue
+        }
+        const r = await sendSmsViaOps({ to: phone, text: m.text, refType: 'monthly_report_teacher' })
+        선생님알림.push({ teacher: m.teacher, count: m.count, ok: r.ok, error: r.ok ? undefined : r.error })
+      }
+    } catch (e: any) {
+      선생님알림.push({ teacher: '-', count: 0, ok: false, error: e?.message ?? '문자를 보내지 못했어요.' })
+    }
+  }
+
+  return NextResponse.json({ links: out, teacherSms: 선생님알림 })
 }
