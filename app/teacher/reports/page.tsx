@@ -731,7 +731,19 @@ export default function TeacherReportsPage() {
     if (!mData) return
     setMGenerating(true)
     try {
-      const prompt = `다음은 수학 학원 학생의 한 달 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회/시험기간 결석 ${mData.attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
+      // ★ 선생님이 쓰신 **알림장을 요약**하는 것이 본래 뜻이다 (원장님 2026-10-24
+      //   「한달동안 써준 알림장 내용을 너가 요약정리해서」, 2026-11-05 「2개월치면
+      //    선생님이 쓴 코멘트 내용을 요약정리해서 보내줘야 하거든」).
+      //   예전에는 숫자만 넘겨서, 정작 선생님 말씀이 한 줄도 안 들어갔다.
+      const 알림장 = ((mNew as any)?.notices ?? [])
+        .map((n: any) => `(${String(n?.date ?? '').slice(5)}) ${String(n?.content ?? '').trim()}`)
+        .filter((t: string) => t.length > 6)
+      const 기간 = mMonths === 2 ? '두 달' : '한 달'
+      const prompt = `다음은 수학 학원 학생의 ${기간} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(3~5문장)을 작성해주세요. 이모지 사용 금지.`
+        + (알림장.length
+            ? ` **담당 선생님이 ${기간} 동안 쓰신 알림장 ${알림장.length}건을 먼저 읽고, 그 내용을 요약해 녹여 주세요.** 숫자보다 선생님 말씀이 중심입니다. 알림장: ${알림장.join(' / ')}`
+            : '')
+        + ` 참고 숫자 — 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회/시험기간 결석 ${mData.attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
       const res = await apiFetch('/api/generate-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
       const data = await res.json()
       setMComment(data.message ?? '')

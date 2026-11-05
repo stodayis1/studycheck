@@ -274,6 +274,39 @@ T('번호가 없는 선생님은 까닭을 돌려준다', () => {
   return s.includes('연락처가 없어요 (수학OPS 직원 정보)')
 })
 
+// ── 담당 선생님 코멘트 ─────────────────────────────────────────────────
+// ★ 예전에는 알림장을 **220자에서 잘라** 문장 한가운데가 끊겼다
+//   (원장님 2026-11-05 「지금 이미지에서와 같이 잘리면 안돼」).
+// ★ 두 달치면 알림장이 한 건일 수가 없다 — 날짜와 함께 **전부** 싣는다
+//   (원장님 「분명히 1건은 아닐거란 말이지」).
+T('코멘트를 자르지 않는다 (220자 자르기가 사라졌다)', () => {
+  const v = src('components/report/MonthlyReport.tsx')
+  return !/teacherNote\?\.slice\(0, ?220\)/.test(v)
+    && !/comment[\s\S]{0,40}\.slice\(0, ?\d+\)/.test(v)
+})
+
+T('한 줄 평이 없으면 알림장을 **전부** 날짜와 함께 싣는다', () => {
+  const v = src('components/report/MonthlyReport.tsx')
+  return v.includes('const 알림장 = (d.notices ?? [])')
+    && v.includes('알림장.map((n: any, i: number)')
+    && v.includes('className="nt"')
+    && /note=\{!한줄평 && 알림장\.length > 1 \? `알림장 \$\{알림장\.length\}건`/.test(v)
+})
+
+T('글이 길면 두 칸으로 쪼개지 않고 한 칸을 넓게 쓴다', () => {
+  const v = src('components/report/MonthlyReport.tsx')
+  return v.includes('const 긴코멘트 =') && v.includes("`cols${긴코멘트 ? ' wide' : ''}`")
+    && v.includes('.mr .cols.wide{grid-template-columns:1fr}')
+})
+
+// ★ AI 한 줄 평이 숫자만 보고 쓰면 정작 **선생님 말씀이 한 줄도 안 들어간다.**
+T('AI 한 줄 평이 알림장을 읽고 요약한다', () => {
+  const r = src('app/teacher/reports/page.tsx')
+  return r.includes('((mNew as any)?.notices ?? [])')
+    && r.includes('알림장 ${알림장.length}건을 먼저 읽고')
+    && r.includes('숫자보다 선생님 말씀이 중심입니다')
+})
+
 // ── 화면 ───────────────────────────────────────────────────────────────
 T('보고서 화면에 학년별 일괄 보내기가 있다 (원장님만)', () => {
   const s = src('app/teacher/reports/page.tsx')
