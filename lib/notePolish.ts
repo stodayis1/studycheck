@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { checkPolish } from './polishGuard'
 
 // 최신 모델을 쓰되, 계정에서 못 쓰면 쓰던 모델로 내려간다 — 기능이 통째로 죽는 것보다 낫다.
-const MODELS = ['claude-sonnet-5-5', 'claude-sonnet-4-5']
+const MODELS = ['claude-sonnet-5-5', 'claude-haiku-5-5']
 const CHUNK = 40
 const MAX_ITEMS = 160
 

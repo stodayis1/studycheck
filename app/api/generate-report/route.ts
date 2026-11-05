@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { AI_TEXT_MODEL, NO_THINKING, textOf, wasCut } from '@/lib/aiModels'
 import { createClient } from '@supabase/supabase-js'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import Anthropic from '@anthropic-ai/sdk'
@@ -223,11 +224,14 @@ export async function POST(req: NextRequest) {
     try {
       const prompt = `다음은 수학 학원 학생의 ${type === 'monthly' ? '한 달' : '한 분기'} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(2~3문장)을 작성해주세요. 이모지 사용 금지. 학생 이름: ${student.name}, 학년: ${student.grade}, 수업 횟수: ${totalSessions}회, 출결: 정시 ${attendance.정시}회/지각 ${attendance.지각}회/결석 ${attendance.결석}회/시험기간 결석 ${attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${hwRate}%, 학습지 평균: ${avgScore ?? '미채점'}점, 통과율: ${passRate}%, 교재진도: ${curriculumProgress.map((g) => `${g.grade} ${g.semester}학기 ${g.round}회독 ${g.rate}%`).join(', ')}`
       const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 500,
+        model: AI_TEXT_MODEL,
+        thinking: NO_THINKING,          // 켜 두면 생각이 max_tokens 를 먹어 답이 잘린다
+        max_tokens: 1500,
         messages: [{ role: 'user', content: prompt }],
       })
-      aiComment = message.content[0].type === 'text' ? message.content[0].text : ''
+      // ★ content[0] 을 믿지 않는다 — 글 블록을 찾아서 꺼낸다 (lib/aiModels.ts)
+      aiComment = textOf(message)
+      if (wasCut(message)) console.error('AI 코멘트가 잘렸어요 (max_tokens).')
     } catch (e) {
       console.error('AI 코멘트 생성 실패:', e)
     }

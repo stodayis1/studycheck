@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { denyIfNotStaff } from '@/lib/apiAuth'
+import { AI_TEXT_MODEL, NO_THINKING, textOf, wasCut } from '@/lib/aiModels'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -53,12 +54,16 @@ export async function POST(req: NextRequest) {
     }
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 500,
+      model: AI_TEXT_MODEL,
+      // ★ 생각하기를 끈다 — 켜 두면 생각도 max_tokens 를 먹어 답이 잘린다.
+      thinking: NO_THINKING,
+      max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    // ★ content[0] 을 믿지 않는다 — 글 블록을 찾아서 꺼낸다 (lib/aiModels.ts)
+    const text = textOf(message)
+    if (wasCut(message)) console.error('AI 글이 잘렸어요 (max_tokens). 길이를 늘려야 합니다.')
 
     return NextResponse.json({ message: text })
   } catch (error) {
