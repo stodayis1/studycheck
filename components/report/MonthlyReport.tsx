@@ -57,6 +57,19 @@ const CSS = `
 .mr .lvval b{font-size:11.5px;color:#712B13}
 .mr .lvval em{font-style:normal;display:inline-block;margin-left:4px;font-size:9.5px;font-weight:800;color:#0F6E56}
 .mr .none{font-size:11px;color:#B3A49B;margin:11px 0 0}
+.mr .bkrow{margin-top:12px}
+.mr .bkhd{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.mr .bkt{flex:0 0 auto;font-size:9px;font-weight:800;color:#fff;border-radius:4px;padding:2px 6px;line-height:1}
+.mr .bkn{font-size:12px;font-weight:800;color:#3A2A20;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mr .bkc{flex:0 0 auto;font-size:10px;color:#9C8A7F}
+.mr .bkp{margin-left:auto;flex:0 0 auto;font-size:12px;font-weight:800;white-space:nowrap}
+.mr .bkbar{height:7px;border-radius:999px;background:#F0E9E3;overflow:hidden}
+.mr .bkbar i{display:block;height:7px;border-radius:999px;min-width:3px}
+.mr .bksub{font-size:9.5px;color:#9C8A7F;margin-top:3px}
+.mr .bkdone{margin-top:15px;padding-top:11px;border-top:1px solid #EADFD6}
+.mr .bkdone>.t{font-size:10.5px;font-weight:800;color:#5B4639;margin:0 0 7px}
+.mr .bkd{display:inline-flex;align-items:center;gap:5px;border:1px solid #EADFD6;border-radius:999px;padding:3.5px 9px;font-size:10.5px;color:#5B4639;background:#FFFBF7}
+.mr .bkd i{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto}
 .mr .cg{margin-top:11px;border:1px solid #EADFD6;border-radius:10px;background:#FFFBF7;padding:12px 13px 10px}
 .mr .cglg{display:flex;align-items:center;gap:11px;font-size:10px;color:#5B4639;margin-bottom:7px;flex-wrap:wrap}
 .mr .cglg span{display:inline-flex;align-items:center;gap:4px}
@@ -109,6 +122,8 @@ const CSS = `
   .mr .lvrow{flex-wrap:wrap;gap:4px 8px}
   .mr .lvname{width:calc(100% - 80px)}
   .mr .bt{order:3;flex-basis:100%}
+  .mr .bkn{font-size:11.5px}
+  .mr .bkc{font-size:9.5px}
   .mr .cgax{height:130px;padding-top:18px}
   .mr .cgplot{height:130px;padding-top:18px}
   .mr .cggrid{top:18px}
@@ -152,6 +167,35 @@ const Chip = ({ children, on }: { children: React.ReactNode; on?: boolean }) => 
 const Chips = ({ children }: { children: React.ReactNode }) => <div className="chips">{children}</div>
 const None = ({ children }: { children: React.ReactNode }) => <p className="none">{children}</p>
 
+/**
+ * 교재 한 권의 진도 막대 (원장님 2026-11-05
+ * 「현재 진행하고 있는 교재의 진도율과 지금까지 완료한 교재정도만 01번 진도칸에」).
+ *
+ * ★ 진도율을 **모를 때는 0% 막대를 그리지 않는다.** 0% 는 「하나도 안 했다」는 말이라
+ *   선생님이 아직 안 적었을 뿐인 교재가 그렇게 나가면 안 된다.
+ */
+function BookBar({ b }: { b: any }) {
+  const 모름 = typeof b?.pct !== 'number'
+  const pct = 모름 ? 0 : Math.min(100, Math.max(0, b.pct))
+  return (
+    <div className="bkrow">
+      <div className="bkhd">
+        <span className="bkt" style={{ background: b.color }}>{b.short}</span>
+        <span className="bkn">{b.name}</span>
+        {b.course && <span className="bkc">{b.course}</span>}
+        <span className="bkp" style={{ color: 모름 ? '#B3A49B' : b.color }}>{모름 ? '집계 전' : `${pct}%`}</span>
+      </div>
+      {/* ★ 0%% 는 막대를 아예 안 그린다 — 조금이라도 보이게 하려고 둔 최소 너비 때문에
+          "아주 조금은 했다"로 보이면 안 된다. */}
+      <div className="bkbar">{!모름 && pct > 0 && <i style={{ width: `${pct}%`, background: b.color }} />}</div>
+      {!모름 && b.by === '개념' && b.total ? (
+        <p className="bksub">개념 {b.total}개 중 {b.done}개 끝냈어요</p>
+      ) : null}
+      {모름 && <p className="bksub">아직 진도율이 적히지 않았어요</p>}
+    </div>
+  )
+}
+
 function Sec({ no, title, note, children }: { no: string; title: string; note?: string; children: React.ReactNode }) {
   return (
     <div className="sec">
@@ -168,6 +212,9 @@ export function MonthlyReportView({ d }: { d: Data }) {
   // ★ 이미 보내 드린 리포트는 그때 모양 그대로 저장돼 있다(report_links.data 스냅샷).
   //   옛 스냅샷에는 coreTests 가 아예 없거나 옛 모양(pct 없음)이라 그대로 그리면 **그 링크가 깨진다.**
   //   그래서 새 모양인 것만 골라 쓰고, 아니면 칸을 띄우지 않는다.
+  // ★ 옛 스냅샷에는 books 가 없다 — 그때는 예전 모양(교재 이름 칩)으로 그린다.
+  const books: any[] | null = Array.isArray((d as any).books) ? (d as any).books : null
+  const booksDone: any[] = Array.isArray((d as any).booksDone) ? (d as any).booksDone : []
   const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
   const CS = d.coreSummary
   // ★ 막대 굵기는 flex 가 알아서 나눠 가지되, **칸이 30px 보다 좁아지지는 않게** 한다.
@@ -219,9 +266,41 @@ export function MonthlyReportView({ d }: { d: Data }) {
             ))}
           </div>
 
-          <Sec no={nx()} title="진도" note={`${d.textbooks.length}권 진행 중`}>
-            <Chips>{d.textbooks.length ? d.textbooks.map((t) => <Chip key={t} on>{t}</Chip>) : <None>배정된 교재가 없습니다.</None>}</Chips>
-            {d.progress.length > 0 && <Chips>{d.progress.map((p, i) => <Chip key={i}>{p.slice(0, 44)}</Chip>)}</Chips>}
+          {/* 진도 — **지금 푸는 교재의 진도율**과 **끝낸 교재**만 (원장님 2026-11-05
+              「진도를 저렇게 제목으로 나열해도 학부모님들은 모르시거든」).
+              ★ 이미 보내 드린 리포트는 그때 모양 그대로 저장돼 있다(report_links.data).
+                옛 스냅샷에는 books 가 없다 — 그때는 **예전 모양 그대로** 그린다.
+                안 그러면 보내 드린 링크의 진도 칸이 통째로 빈다. */}
+          <Sec no={nx()} title="진도"
+               note={books
+                 ? [books.length ? `${books.length}권 진행 중` : '', booksDone.length ? `${booksDone.length}권 끝냄` : '']
+                     .filter(Boolean).join(' · ')
+                 : `${d.textbooks.length}권 진행 중`}>
+            {books ? (
+              <>
+                {books.length ? books.map((b: any, i: number) => <BookBar key={i} b={b} />)
+                  : <None>지금 푸는 교재가 없습니다.</None>}
+                {booksDone.length > 0 && (
+                  <div className="bkdone">
+                    <p className="t">지금까지 끝낸 교재</p>
+                    <div className="chips">
+                      {booksDone.map((b: any, i: number) => (
+                        <span className="bkd" key={i}>
+                          <i style={{ background: b.color }} />{b.name}{b.course ? ` ${b.course}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <Chips>{d.textbooks.length ? d.textbooks.map((t) => <Chip key={t} on>{t}</Chip>) : <None>배정된 교재가 없습니다.</None>}</Chips>
+                {((d as any).progress ?? []).length > 0 && (
+                  <Chips>{((d as any).progress as string[]).map((p, i) => <Chip key={i}>{p.slice(0, 44)}</Chip>)}</Chips>
+                )}
+              </>
+            )}
           </Sec>
 
           {/* ★ 핵심 — 단원별로 몇 레벨까지 올라갔는지. 초·중·고 모두 (원장님 2026-10-20) */}

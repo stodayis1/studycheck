@@ -8,7 +8,8 @@
 // ★ 만든 값을 report_links.data 에 **그대로 박아 둔다**(스냅샷).
 //   나중에 교재가 바뀌거나 학습지가 지워져도, 그때 보내 드린 리포트는 그대로 남아야 한다.
 //   매일 브리핑의 버튼 뒤 화면도 같은 방식이다.
-import { textbookLabel } from './utils'
+import { textbookLabel, fetchAllRows } from './utils'
+import { bookRate, bookStyle, bookOrder } from './bookProgress'
 
 export type Tier = '초등' | '중등' | '고등'
 
@@ -20,9 +21,33 @@ export interface MonthlyReport {
   lessons: { total: number; onTime: number; late: number; absent: number; rate: number }
   /** 과제 */
   homework: { achievement: number | null; score: number | null }
-  /** 진도 */
+  /**
+   * 진도 — **지금 푸는 교재의 진도율**과 **끝낸 교재**만 (원장님 2026-11-05
+   * 「진도를 저렇게 제목으로 나열해도 학부모님들은 모르시거든. 현재 진행하고 있는
+   *  교재의 진도율과 지금까지 완료한 교재정도만 01번 진도칸에 넣어주는게 더 좋을거 같아」).
+   *
+   * ★ 예전에는 교재 이름 칩과 「[개념서] 6 원기둥~구」 같은 진도 글을 늘어놓았다.
+   *   학부모님은 그 글이 무슨 뜻인지 모르신다. textbooks 는 **옛 보고서 호환**과
+   *   맨 아래 「다음 달 계획」에 쓰려고 남겨 둔다.
+   */
   textbooks: string[]
-  progress: string[]
+  /** 지금 푸는 교재 — 종류·이름·학년/학기·진도율. pct 가 null 이면 **아직 모른다**(0% 아님) */
+  books: {
+    name: string
+    type: string
+    /** 「개념」「유형」「심화」「연산」 */
+    short: string
+    color: string
+    /** 「초6-2」 — 고등은 「고1」 (학기는 초·중등만 붙인다) */
+    course: string
+    pct: number | null
+    done: number | null
+    total: number | null
+    /** 진도율을 어떻게 냈나 — 연산서는 선생님이 적은 달성률, 그 밖은 개념 체크 */
+    by: '달성률' | '개념'
+  }[]
+  /** 지금까지 끝낸 교재 — 최근에 시작한 것부터 */
+  booksDone: { name: string; type: string; short: string; color: string; course: string }[]
   /** 데일리테스트 */
   daily: { date: string; score: number }[]
   /**
@@ -197,13 +222,19 @@ export async function buildMonthlyReport(
     .eq('student_id', studentId).gte('session_date', from).lte('session_date', to).order('session_date')
   const ids = (ses ?? []).map((x: any) => x.id)
   const noKey = '00000000-0000-0000-0000-000000000000'
-  const [{ data: notes }, { data: ws }, { data: tb }, { data: ep }, { data: core }, { data: vw }, { data: pf }, { data: fb },
+  const [{ data: notes }, { data: ws }, { data: tb }, pcAll, { data: ep }, { data: core }, { data: vw }, { data: pf }, { data: fb },
          { data: allFb }, { data: mrc }] =
     await Promise.all([
       db.from('learning_notes').select('*').in('session_id', ids.length ? ids : [noKey]),
       // ★ 단원별 도달 레벨은 **누적**이라 그 학생 것을 다 읽어야 한다(한 명이면 양이 적다).
       db.from('student_worksheets').select('*').eq('student_id', studentId).order('assigned_at', { ascending: false }).limit(1000),
-      db.from('student_textbooks').select('*').eq('student_id', studentId).eq('status', 'assigned'),
+      // ★ 끝낸 교재도 같이 읽는다 — 보고서에 「지금까지 끝낸 교재」를 적는다.
+      //   paused(잠시 멈춤)는 뺀다. 진행 중도 끝낸 것도 아니어서 학부모님께 설명이 안 된다.
+      db.from('student_textbooks').select('*').eq('student_id', studentId)
+        .in('status', ['assigned', 'completed']).order('assigned_at', { ascending: false }),
+      // 개념 체크 — 한 학생 것이 많으면 900줄에 가깝다(실측 최대 887). 끝까지 읽는다.
+      fetchAllRows(() => db.from('progress_checks')
+        .select('concept_id, student_textbook_id, check_count').eq('student_id', studentId).order('id')),
       db.from('student_exam_prep').select('*, inner_enough(*)').eq('student_id', studentId).gte('exam_date', from),
       // 코어테스트 — **그 해 1월 1일부터 그 달까지** 전부(누적). 한 학생 한 해라 많아야 스무 줄.
       // created_at 도 읽는다 — 같은 날 같은 회차가 두 번 적힌 것을 나중 것으로 가리는 데 쓴다.
@@ -224,6 +255,33 @@ export async function buildMonthlyReport(
       db.from('monthly_report_comments').select('comment')
         .eq('student_id', studentId).eq('year', year).eq('month', month).maybeSingle(),
     ])
+
+  // ── 교재 진도율 ──────────────────────────────────────────────────────
+  // ★ 개념은 **그 학생 교재의 학년 것만** 읽는다. 전체(926행, 2026-11-05)를 읽으면
+  //   곧 1000행에 잘려 진도율이 조용히 틀어진다.
+  const 교재들 = ((tb ?? []) as any[]).filter((t) => (t?.textbook_name ?? '').trim())
+  const 학년들 = [...new Set(교재들.map((t: any) => String(t?.grade ?? '').trim()).filter(Boolean))]
+  const { data: con } = 학년들.length
+    ? await db.from('concepts').select('id, grade, semester').in('grade', 학년들)
+    : { data: [] as any[] }
+  const 체크 = (pcAll ?? []) as any[]
+  const 교재칸 = (t: any) => {
+    const st = bookStyle(t?.textbook_type)
+    const 전체이름 = textbookLabel(t)                       // 「개념+유형라이트 초6-2」
+    const name = String(t?.textbook_name ?? '').trim()
+    return {
+      name,
+      type: String(t?.textbook_type ?? '').trim(),
+      short: st.short,
+      color: st.color,
+      // 「초6-2」만 떼어 낸다 — 붙이는 규칙(고등은 학기를 안 붙인다)은 textbookLabel 한 곳에 있다.
+      course: 전체이름.startsWith(name) ? 전체이름.slice(name.length).trim() : '',
+    }
+  }
+  const 진행중 = 교재들.filter((t: any) => String(t?.status ?? '') === 'assigned')
+    .sort((a: any, b: any) => bookOrder(a?.textbook_type) - bookOrder(b?.textbook_type))
+    .map((t: any) => ({ ...교재칸(t), ...bookRate(t, (con ?? []) as any[], 체크) }))
+  const 끝낸것 = 교재들.filter((t: any) => String(t?.status ?? '') === 'completed').map(교재칸)
 
   const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
   let onTime = 0, late = 0, absent = 0
@@ -293,8 +351,9 @@ export async function buildMonthlyReport(
     period: { year, month, label: `${year}년 ${month}월`, dateLabel: `${year}. ${month}. ${lastDay}.` },
     lessons: { total, onTime, late, absent, rate },
     homework: { achievement: avg(ach), score: avg(sco) },
-    textbooks: (tb ?? []).map((t: any) => textbookLabel(t, { withType: true })).filter(Boolean),
-    progress: (ses ?? []).map((x: any) => x.progress_content).filter(Boolean).slice(0, 3),
+    textbooks: 진행중.map((b) => [b.type, b.name, b.course].filter(Boolean).join(' ')),
+    books: 진행중,
+    booksDone: 끝낸것,
     daily,
     unitLevels,
     worksheets: main.slice(0, 8).map((w: any) => ({
