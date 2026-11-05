@@ -82,6 +82,12 @@ const CSS = `
 .mr .cgax{position:relative;flex:0 0 auto;width:21px;height:152px;padding-top:20px;box-sizing:border-box}
 .mr .cgax div{position:relative;height:100%}
 .mr .cgax i{position:absolute;right:0;font-style:normal;font-size:8.5px;color:#B3A49B;line-height:1;transform:translateY(50%)}
+.mr .cgrg{margin-top:11px;padding-top:9px;border-top:1px dashed #E3D6CB}
+.mr .cgrg .t{font-size:10px;font-weight:800;color:#5B4639;margin:0 0 5px}
+.mr .cgrg li{display:flex;gap:8px;font-size:10.5px;color:#5B4639;line-height:1.55;margin-top:3px}
+.mr .cgrg b{flex:0 0 48px;font-weight:800;color:#712B13}
+.mr .cgrg span{min-width:0;white-space:pre-line}
+.mr .cgrg ul{list-style:none;margin:0;padding:0}
 .mr .cgscroll{flex:1 1 0;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:2px}
 .mr .cgplot{position:relative;display:flex;align-items:stretch;gap:0;height:152px;padding-top:20px;box-sizing:border-box;border-bottom:1px solid #D9C9BD}
 .mr .cggrid{position:absolute;left:0;right:0;top:20px;bottom:0;background:repeating-linear-gradient(to top,#EFE4DC 0,#EFE4DC 1px,transparent 1px,transparent 50%)}
@@ -216,6 +222,10 @@ export function MonthlyReportView({ d }: { d: Data }) {
   const books: any[] | null = Array.isArray((d as any).books) ? (d as any).books : null
   const booksDone: any[] = Array.isArray((d as any).booksDone) ? (d as any).booksDone : []
   const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
+  // 그래프에 뜬 달의 시험 범위 (원장님 2026-11-05). 옛 스냅샷에는 없다 — 그러면 안 띄운다.
+  const ranges: any[] = Array.isArray((d as any).coreRanges)
+    ? (d as any).coreRanges.filter((r: any) => typeof r?.month === 'number' && String(r?.scope ?? '').trim())
+    : []
   const CS = d.coreSummary
   // ★ 막대 굵기는 flex 가 알아서 나눠 가지되, **칸이 30px 보다 좁아지지는 않게** 한다.
   //   폰(375px)에서 16회가 되면 칸이 17px 이 되어 「예비1」·「5/11」·「100」이 잘렸다(실측 2026-11-04).
@@ -440,6 +450,18 @@ export function MonthlyReportView({ d }: { d: Data }) {
                   {CS.mainAvg != null && `본고사 평균 ${CS.mainAvg}점`}
                   {core.length >= 8 && <><br />회차가 많아 좁은 화면에서는 그래프를 옆으로 밀어서 보실 수 있어요.</>}
                 </p>
+                {ranges.length > 0 && (
+                  <div className="cgrg">
+                    <p className="t">그 달 코어테스트 범위</p>
+                    <ul>
+                      {ranges.map((r: any) => (
+                        <li key={r.month}>
+                          <b>{r.month}월</b><span>{r.scope}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </Sec>
           )}

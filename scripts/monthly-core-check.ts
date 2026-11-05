@@ -201,6 +201,28 @@ T('자료 쪽에 옛 모양이 남아 있지 않다', () => {
     && src.includes('coreYearRows') && src.includes('coreSummary')
 })
 
+// ★ 그래프에 뜬 **달의 시험 범위**를 코어테스트 칸 안에 적는다 (원장님 2026-11-05
+//   「6월 범위, 8월범위, 10월범위 이렇게 작성해줘 코어테스트 박스안에서」).
+//   실제로 본 날은 6/26 · 8/7 · 8/14 처럼 흩어져 있고 시행일은 매달 20일이라 **달**로 맞춘다.
+T('본 달의 시험 범위를 읽어 코어테스트 칸에 적는다', () => {
+  const lib = fs.readFileSync(path.resolve('lib/monthlyReport.ts'), 'utf8')
+  const view = fs.readFileSync(path.resolve('components/report/MonthlyReport.tsx'), 'utf8')
+  return lib.includes("from('core_test_ranges')")
+    && lib.includes("-20`))")                 // 시행일은 매달 20일
+    && lib.includes('coreRanges,')
+    && view.includes('className="cgrg"')
+    && view.includes('{r.month}월')
+})
+
+// ★ 표가 아직 없으면(SQL 실행 전) 빈 목록이다 — 없는 범위를 지어내지 않는다.
+T('범위를 못 읽으면 그 줄을 아예 안 띄운다', () => {
+  const lib = fs.readFileSync(path.resolve('lib/monthlyReport.ts'), 'utf8')
+  const view = fs.readFileSync(path.resolve('components/report/MonthlyReport.tsx'), 'utf8')
+  return lib.includes("safeRows(db.from('core_test_ranges')")
+    && /const ranges: any\[\] = Array\.isArray\(\(d as any\)\.coreRanges\)/.test(view)
+    && view.includes('{ranges.length > 0 && (')
+})
+
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
 process.exit(pass === total ? 0 : 1)

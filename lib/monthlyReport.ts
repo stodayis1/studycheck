@@ -9,6 +9,7 @@
 //   나중에 교재가 바뀌거나 학습지가 지워져도, 그때 보내 드린 리포트는 그대로 남아야 한다.
 //   매일 브리핑의 버튼 뒤 화면도 같은 방식이다.
 import { textbookLabel, fetchAllRows } from './utils'
+import { safeRows } from './safeRows'
 import { bookRate, bookStyle, bookOrder } from './bookProgress'
 
 export type Tier = '초등' | '중등' | '고등'
@@ -96,6 +97,16 @@ export interface MonthlyReport {
     /** 막대 높이 — 100점 환산 */
     pct: number
   }[]
+  /**
+   * 그래프에 뜬 **달의 코어테스트 범위** (원장님 2026-11-05
+   * 「6월 범위, 8월범위, 10월범위 이렇게 작성해줘 코어테스트 박스안에서」).
+   *
+   * ★ 범위는 학생 것이 아니라 **학원 공통**이다 — core_test_ranges 에서 그 학년 것을 읽는다.
+   *   시행일은 매달 20일이지만 실제로 본 날은 달마다 흩어져 있어(6/26 · 8/7 · 8/14 …)
+   *   **달**로 맞춘다. 한 달에 예비1·예비2·본고사를 보더라도 범위는 그 달 하나다.
+   * ★ 표가 아직 없거나 그 학년 줄이 없으면 **빈 목록**이다 — 없는 것을 지어내지 않는다.
+   */
+  coreRanges: { month: number; scope: string }[]
   /** 그 해 코어테스트 한 줄 요약 — 몇 회·평균·최고·처음→마지막 */
   coreSummary: {
     count: number
@@ -283,6 +294,23 @@ export async function buildMonthlyReport(
     .map((t: any) => ({ ...교재칸(t), ...bookRate(t, (con ?? []) as any[], 체크) }))
   const 끝낸것 = 교재들.filter((t: any) => String(t?.status ?? '') === 'completed').map(교재칸)
 
+  // ── 코어테스트 범위 ─────────────────────────────────────────────────
+  // 그래프에 뜬 달만 읽는다. 시행일은 매달 20일이다.
+  const coreList0 = coreYearRows(core ?? [])
+  const 본달들 = [...new Set(coreList0.map((c) => String(c.date).slice(0, 7)))]   // 'YYYY-MM'
+  const 학년 = String(st.grade ?? '').trim()
+  // ★ 표가 아직 없어도(SQL 실행 전) 보고서가 멈추면 안 된다 — 못 읽으면 빈 목록으로 지나간다.
+  const 범위줄 = 학년 && 본달들.length
+    ? await safeRows(db.from('core_test_ranges').select('test_date, scope')
+        .eq('grade', 학년).in('test_date', 본달들.map((m) => `${m}-20`)))
+    : []
+  const coreRanges = 본달들
+    .map((m) => {
+      const row = 범위줄.find((r: any) => String(r?.test_date ?? '').slice(0, 7) === m)
+      return row ? { month: Number(m.slice(5, 7)), scope: String(row.scope ?? '').trim() } : null
+    })
+    .filter((x): x is { month: number; scope: string } => !!x && !!x.scope)
+
   const noteBy = new Map((notes ?? []).map((n: any) => [n.session_id, n]))
   let onTime = 0, late = 0, absent = 0
   const ach: number[] = [], sco: number[] = [], daily: MonthlyReport['daily'] = []
@@ -342,7 +370,7 @@ export async function buildMonthlyReport(
   const avgPct = avg(watched.map((v: any) => Math.round(Number(v.coverage_pct))))
 
   // 코어테스트 — 그 해에 본 것 전부(누적). 요약도 이 목록에서 뽑는다.
-  const coreList = coreYearRows(core ?? [])
+  const coreList = coreList0
 
 
   return {
@@ -369,6 +397,7 @@ export async function buildMonthlyReport(
     })),
     retrySummary: { total: retriesRaw.length, passed: retriesRaw.filter((w: any) => w.status === 'passed').length },
     coreTests: coreList,
+    coreRanges,
     coreSummary: coreSummaryOf(coreList),
     teacherNote: (fb ?? [])[0]?.content ?? null,
     notices: (allFb ?? [])
