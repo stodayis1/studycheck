@@ -229,11 +229,11 @@ export function MonthlyReportView({ d }: { d: Data }) {
   // 한 달치인지 두 달치인지 — 옛 스냅샷에는 months 가 없다(그때는 다 한 달이었다).
   const 두달 = (d.period as any)?.months === 2
   const 기간말 = 두달 ? '두 달' : '한 달'
-  // 선생님 한 줄 평 — 있으면 그대로(자르지 않는다), 없으면 알림장을 날짜와 함께 전부
+  // 선생님 한 줄 평 — 있으면 **자르지 않고** 그대로. 없으면 안내 한 줄.
+  //   알림장은 요약의 **재료**일 뿐 화면에 싣지 않는다 (원장님 2026-11-05).
   const 한줄평 = (d.comment ?? '').trim()
-  const 알림장 = (d.notices ?? []).filter((n: any) => String(n?.content ?? '').trim())
   //   글이 길면 두 칸으로 나누지 않고 **한 칸을 넓게** 쓴다 — 두 달치는 길다
-  const 긴코멘트 = (한줄평 ? 한줄평.length : 알림장.reduce((n: number, x: any) => n + String(x?.content ?? '').length, 0)) > 160
+  const 긴코멘트 = 한줄평.length > 160
   const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
   // 그래프에 뜬 달의 시험 범위 (원장님 2026-11-05). 옛 스냅샷에는 없다 — 그러면 안 띄운다.
   const ranges: any[] = Array.isArray((d as any).coreRanges)
@@ -481,26 +481,19 @@ export function MonthlyReportView({ d }: { d: Data }) {
 
           {/* 담당 선생님 코멘트
               ★ **자르지 않는다** (원장님 2026-11-05 「지금 이미지에서와 같이 잘리면 안돼」).
-                예전에는 알림장을 220자에서 잘라 문장 한가운데가 끊겼다.
-              ★ 한 줄 평이 없으면 그 기간 **알림장을 날짜와 함께 모두** 싣는다 — 두 달치면
-                한 건일 수가 없다(원장님 「분명히 1건은 아닐거란 말이지」).
-                지어내지 않고 선생님이 쓰신 글 그대로다. */}
-          <Sec no={nx()} title="담당 선생님 코멘트"
-               note={!한줄평 && 알림장.length > 1 ? `알림장 ${알림장.length}건` : undefined}>
+                예전에는 220자에서 잘라 문장 한가운데가 끊겼다.
+              ★ **알림장을 그대로 늘어놓지도 않는다** (원장님 2026-11-05
+                「왜 수업태도는 모두다 나열되어 있는거지?」). 두 달치면 열 건이 넘는다 —
+                학부모님은 그 벽을 안 읽으신다. 요약한 **한 줄 평**만 싣는다
+                (원장님 2026-10-24 「한달동안 써준 알림장 내용을 너가 요약정리해서」).
+                한 줄 평은 링크를 찍을 때 채워 넣는다(app/api/monthly-report). */}
+          <Sec no={nx()} title="담당 선생님 코멘트">
             <div className={`cols${긴코멘트 ? ' wide' : ''}`}>
               <div className="box">
                 <div className="t">수업 태도<span>{L.absent ? '보강 필요' : '성실'}</span></div>
-                {한줄평 ? <p>{한줄평}</p>
-                  : 알림장.length ? (
-                    <div>
-                      {알림장.map((n: any, i: number) => (
-                        <p className="nt" key={i}>
-                          <b>{String(n?.date ?? '').slice(5).replace('-', '월 ')}일{n?.teacher ? ` · ${n.teacher} 선생님` : ''}</b>
-                          <span>{String(n?.content ?? '').trim()}</span>
-                        </p>
-                      ))}
-                    </div>
-                  ) : <p>{두달 ? '그동안' : '이번 달'} 알림장에 남긴 말씀이 없습니다.</p>}
+                {한줄평
+                  ? <p>{한줄평}</p>
+                  : <p>{두달 ? '그동안' : '이번 달'} 선생님이 남긴 한 줄 평이 없습니다.</p>}
               </div>
               <div className="box">
                 <div className="t">과제 수행<span>달성률 {H.achievement ?? '-'}%</span></div>

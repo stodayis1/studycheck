@@ -16,6 +16,9 @@ import { denyIfNotStaff } from '@/lib/apiAuth'
 import { buildMonthlyReport, span } from '@/lib/monthlyReport'
 import { buildMonthlyMessage, resolveMonthlyTemplate } from '@/lib/monthlyReportTemplate'
 import { aligoConfig, sendAlimtalk, AligoError } from '@/lib/aligo'
+import Anthropic from '@anthropic-ai/sdk'
+import { AI_TEXT_MODEL, NO_THINKING, textOf } from '@/lib/aiModels'
+import { commentPrompt, hasSomethingToSummarize } from '@/lib/monthlyComment'
 import { buildTeacherSms, type SentReport } from '@/lib/monthlyTeacherSms'
 import { sendSmsViaOps } from '@/lib/opsSms'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
@@ -74,6 +77,12 @@ export async function POST(req: NextRequest) {
   const resend = !!b?.resend
   /** 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05) */
   const tellTeachers = !!b?.tellTeachers
+  /**
+   * 한 줄 평이 없는 학생은 **알림장을 요약해 채운다** (원장님 2026-11-05
+   * 「왜 수업태도는 모두다 나열되어 있는거지?」 — 늘어놓지 말고 요약해서).
+   * 기본으로 켠다. 건당 0.2원이라 전교생을 돌려도 20원이다.
+   */
+  const autoComment = b?.autoComment !== false
   if (!ids.length || !year || !month) {
     return NextResponse.json({ error: '학생과 달을 골라 주세요.' }, { status: 400 })
   }
@@ -123,6 +132,33 @@ export async function POST(req: NextRequest) {
     // 선생님이 적어 둔 한 줄 평이 있으면 같이 박는다.
     const c = (b?.comment ?? {})[id]
     if (c) data.comment = String(c)
+
+    // 없으면 **알림장을 요약해** 채운다. 늘어놓지 않는다.
+    // ★ 요약에 실패해도 리포트는 그대로 만든다 — 그 칸만 비는 것이 나간 것이 없는 것보다 낫다.
+    if (autoComment && !(data.comment ?? '').trim()) {
+      const 재료 = {
+        studentName: data.student.name, studentGrade: data.student.grade,
+        months, notices: data.notices ?? [],
+        numbers: {
+          sessions: data.lessons.total, onTime: data.lessons.onTime,
+          late: data.lessons.late, absent: data.lessons.absent,
+          hwRate: data.homework.achievement, hwScore: data.homework.score,
+        },
+      }
+      if (hasSomethingToSummarize(재료)) {
+        try {
+          const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+          const m = await ai.messages.create({
+            model: AI_TEXT_MODEL, thinking: NO_THINKING, max_tokens: 1500,
+            messages: [{ role: 'user', content: commentPrompt(재료) }],
+          })
+          const 요약 = textOf(m)
+          if (요약) data.comment = 요약
+        } catch (e: any) {
+          console.error('한 줄 평 요약 실패:', e?.message ?? e)
+        }
+      }
+    }
 
     const token = randomBytes(16).toString('hex')
     const { error } = await supabase.from('report_links').insert({
