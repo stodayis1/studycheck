@@ -528,6 +528,36 @@ export default function TeacherReportsPage() {
     setMNewBusy(false)
   }
 
+  // ── 학년별 월말보고서 일괄 생성·발송 (원장님 2026-11-05) ──────────────
+  //   「한명한명 링크를 만들어서 일일이 보낼수가 없거든」
+  const [bGrades, setBGrades] = useState<string[]>([])
+  const [bResend, setBResend] = useState(false)
+  const [bBusy, setBBusy] = useState(false)
+  const [bResult, setBResult] = useState<any[] | null>(null)
+
+  async function sendMonthlyBulk() {
+    if (!bTargets.length) return
+    // ★ 진짜로 학부모님께 나간다. 숫자를 보여 주고 한 번 묻는다.
+    if (!confirm(
+      `${bTargets.length}명의 ${mYear}년 ${mMonth}월 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
+      + (bResend ? '이미 보낸 분께도 다시 보냅니다.\n' : '이번 달에 이미 보낸 분은 건너뜁니다.\n')
+      + '계속할까요?')) return
+    setBBusy(true); setBResult(null)
+    try {
+      const r = await apiFetch('/api/monthly-report', {
+        method: 'POST',
+        body: JSON.stringify({
+          studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth,
+          send: true, resend: bResend,
+        }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? '보내지 못했어요.')
+      setBResult(j.links ?? [])
+    } catch (e: any) { alert(e.message) }
+    setBBusy(false)
+  }
+
   // ── 월간보고서 데이터 로딩 ──
   async function loadMonthlyData(student: Student, year: number, month: number) {
     setMLoading(true)
@@ -840,6 +870,12 @@ export default function TeacherReportsPage() {
     return isMine(s, currentUser?.name)        // 키움쌤·채움쌤 둘 다
   }).filter((s) => s.name.includes(mSearchText) || s.school?.includes(mSearchText))
 
+  /** 고른 학년의 재원 학생 (지금 보이는 범위 안에서) */
+  const B_GRADE_SORT = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
+  const bTargets = myStudentsForMonthly.filter((s) => bGrades.includes((s.grade ?? '').trim()))
+  const bGradeList = [...new Set(myStudentsForMonthly.map((s) => (s.grade ?? '').trim()).filter(Boolean))]
+    .sort((a, b) => B_GRADE_SORT.indexOf(a) - B_GRADE_SORT.indexOf(b))
+
   return (
     <div style={{ background: '#ffffff', minHeight: '100vh' }}>
       <Header title="보고서" subtitle="학생별 학습 현황" />
@@ -859,6 +895,69 @@ export default function TeacherReportsPage() {
         {/* ══ 월간보고서 탭 ══ */}
         {activeTab === 'monthly' && (
           <div className="space-y-4">
+            {/* 학년별 일괄 — 한 명씩 링크를 만들어 보내기 어렵다는 말씀에 (원장님 2026-11-05).
+                ★ 원장님만 보인다. 실제로 학부모님께 나가는 일이다. */}
+            {isAdmin() && (
+              <div className="rounded-2xl p-4" style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A' }}>
+                <p className="text-xs font-bold mb-2" style={{ color: '#92400E' }}>
+                  <i className="ti ti-send align-[-0.125em]" /> 학년별로 한 번에 만들고 보내기
+                </p>
+                <p className="text-[11px] mb-2.5" style={{ color: '#A16207' }}>
+                  위에서 고른 <b>{mYear}년 {mMonth}월</b> 기준이에요. 고른 학년 학생의 리포트를 만들어
+                  <b> 학부모님 카톡으로 바로 보냅니다.</b>
+                </p>
+                <div className="flex gap-1.5 flex-wrap mb-2.5">
+                  {bGradeList.map((g) => {
+                    const n = myStudentsForMonthly.filter((s) => (s.grade ?? '').trim() === g).length
+                    return (
+                      <button key={g}
+                        onClick={() => setBGrades((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])}
+                        className="px-3 py-1.5 rounded-full text-xs font-semibold"
+                        style={bGrades.includes(g) ? { background: '#92400E', color: 'white' } : { background: 'white', color: '#92400E', border: '1px solid #FDE68A' }}>
+                        {g} {n}명
+                      </button>
+                    )
+                  })}
+                </div>
+                <label className="flex items-center gap-1.5 mb-2.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={bResend} onChange={(e) => setBResend(e.target.checked)} />
+                  <span className="text-[11px]" style={{ color: bResend ? '#B45309' : '#A16207' }}>
+                    이번 달에 이미 보낸 분께도 <b>다시 보내기</b>
+                  </span>
+                </label>
+                <button onClick={sendMonthlyBulk} disabled={!bTargets.length || bBusy}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
+                  style={{ background: '#92400E' }}>
+                  {bBusy ? '만들고 보내는 중…' : `${bTargets.length}명에게 만들고 보내기`}
+                </button>
+                {bResult && (() => {
+                  const 보냄 = bResult.filter((x) => x.sent)
+                  const 건너뜀 = bResult.filter((x) => x.skipped)
+                  const 실패 = bResult.filter((x) => x.error)
+                  return (
+                    <div className="mt-3 text-[11px] space-y-1" style={{ color: '#92400E' }}>
+                      <p className="font-bold">
+                        보냄 {보냄.length}명
+                        {건너뜀.length > 0 && ` · 건너뜀 ${건너뜀.length}명`}
+                        {실패.length > 0 && ` · 실패 ${실패.length}명`}
+                      </p>
+                      {건너뜀.slice(0, 20).map((x, i) => (
+                        <p key={`s${i}`} style={{ color: '#A16207' }}>· {x.name} — {x.skipped}</p>
+                      ))}
+                      {실패.slice(0, 20).map((x, i) => (
+                        <p key={`e${i}`} style={{ color: '#B91C1C' }}>· {x.name} — {x.error}</p>
+                      ))}
+                      {실패.length > 0 && (
+                        <p style={{ color: '#A16207' }}>
+                          실패한 분도 <b>링크는 이미 만들어져</b> 있어요. 아래에서 그 학생을 골라 주소를 복사해 보내시면 됩니다.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
             <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
               <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">학생 · 월 선택</p>
               <input value={mSearchText} onChange={e => setMSearchText(e.target.value)} placeholder="이름 검색"

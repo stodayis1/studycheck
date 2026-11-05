@@ -142,7 +142,13 @@ export async function sendAlimtalk(cfg: AligoConfig, msg: {
   buttons?: AligoButton[]
   /** 알림톡이 안 닿을 때 문자로 보낼 내용. cfg.failover 가 켜져 있을 때만 쓰인다. */
   failoverMessage?: string
-}): Promise<AligoSendResult> {
+},
+/**
+ * 이 건에만 쓸 템플릿 코드. 안 주면 설정값(브리핑 템플릿)을 쓴다.
+ * ★ 월간 리포트처럼 **다른 템플릿**으로 보낼 때 쓴다 (원장님 2026-11-05).
+ *   템플릿마다 환경변수를 늘리지 않고, 부르는 쪽이 찾아서 넘긴다.
+ */
+tplCode?: string): Promise<AligoSendResult> {
   const to = digits(msg.to)
   if (to.length < 10) throw new AligoError(`받는 번호가 이상해요: ${msg.to}`)
 
@@ -150,7 +156,7 @@ export async function sendAlimtalk(cfg: AligoConfig, msg: {
     apikey: cfg.apiKey,
     userid: cfg.userId,
     senderkey: cfg.senderKey,
-    tpl_code: cfg.tplCode,
+    tpl_code: tplCode || cfg.tplCode,
     sender: digits(cfg.senderPhone),
     receiver_1: to,
     subject_1: msg.subject.slice(0, 50),

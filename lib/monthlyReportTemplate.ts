@@ -13,6 +13,8 @@
 //   본문에는 「열어 볼 이유」만 담는다. 변수가 적을수록 심사도 수월하고, 글자 단위
 //   대조가 어긋날 자리도 줄어든다.
 import type { MonthlyReport } from './monthlyReport'
+import { aligoPost } from './aligo'
+import { chooseApproved } from './briefingTemplate'
 
 /** 알리고 콘솔에 **그대로** 넣을 원문. */
 export const MONTHLY_TEMPLATE = `[수학의지혜 월간 학습 리포트]
@@ -103,4 +105,79 @@ export function buildMonthlyMessage(r: MonthlyReport, url: string): MonthlyMessa
     overLimit: body.length > MONTHLY_BODY_LIMIT,
     url,
   }
+}
+
+/**
+ * 알리고에 **등록·승인된** 월간 리포트 템플릿을 찾는다.
+ *
+ * ★ 알리고는 변수를 채워 주지 않는다 — 우리가 만든 본문이 승인된 템플릿과 **글자 단위로**
+ *   같아야 나가고, 안 맞으면 **에러도 없이 그냥 안 간다**. 그래서 코드를 손으로 적어 두지 않고
+ *   목록에서 **본문이 같은 것**을 찾는다. 템플릿을 새로 등록해도 코드를 고칠 필요가 없다.
+ * ★ 승인된 템플릿은 고칠 수 없어서 같은 본문이 여러 판 남는다 — 버튼 이름이 맞는 판을
+ *   먼저 고른다(브리핑과 같은 규칙, chooseApproved).
+ * ★ 버튼은 **등록된 그대로** 돌려준다. 보낼 때 그걸 쓰면 어긋날 수가 없다.
+ */
+export interface MonthlyTemplate {
+  code: string | null
+  /** 알리고에 등록된 버튼 이름 (보낼 때 이 이름을 그대로 쓴다) */
+  buttonName: string
+  /** 못 찾았으면 **무엇을 해야 하는지** */
+  note: string
+}
+
+const LIST_PATH = '/akv10/template/list/'
+let cache: { at: number; t: MonthlyTemplate } | null = null
+const CACHE_MS = 5 * 60 * 1000
+
+export async function resolveMonthlyTemplate(): Promise<MonthlyTemplate> {
+  if (cache && Date.now() - cache.at < CACHE_MS) return cache.t
+
+  const apikey = process.env.ALIGO_API_KEY
+  const userid = process.env.ALIGO_USER_ID
+  const senderkey = process.env.ALIGO_SENDER_KEY
+  if (!apikey || !userid || !senderkey) {
+    return { code: null, buttonName: MONTHLY_BUTTON_NAME, note: '알리고 설정값(ALIGO_API_KEY 등)이 아직 없어요.' }
+  }
+
+  let json: any
+  try {
+    json = await aligoPost(LIST_PATH, new URLSearchParams({ apikey, userid, senderkey }).toString())
+  } catch (e: any) {
+    return { code: null, buttonName: MONTHLY_BUTTON_NAME, note: `알리고에 연결하지 못했어요: ${e?.message ?? e}` }
+  }
+  // ★ 알리고는 실패해도 HTTP 200 이다. code 로만 성패를 안다.
+  if (!json || Number(json.code) !== 0) {
+    return { code: null, buttonName: MONTHLY_BUTTON_NAME, note: json?.message ?? '알리고 응답을 읽지 못했어요.' }
+  }
+
+  // 알리고는 줄바꿈을 \r\n 으로 돌려준다. 우리 상수는 \n 이라 맞춰 놓고 본다.
+  const body = (t: any) => String(t?.templtContent ?? '').replace(/\r\n/g, '\n')
+  const same = (json.list ?? []).filter((t: any) => body(t) === MONTHLY_TEMPLATE)
+  if (!same.length) {
+    const t: MonthlyTemplate = {
+      code: null, buttonName: MONTHLY_BUTTON_NAME,
+      note: '알리고에 월간 리포트 템플릿이 아직 등록되지 않았어요. '
+          + 'MONTHLY_TEMPLATE 원문을 그대로 등록하고 승인받아 주세요 (lib/monthlyReportTemplate.ts).',
+    }
+    cache = { at: Date.now(), t }
+    return t
+  }
+  const want: [string, string][] = [[MONTHLY_BUTTON_NAME, 'WL']]
+  const picked = chooseApproved(same, want)
+  if (!picked) {
+    const t: MonthlyTemplate = {
+      code: null, buttonName: MONTHLY_BUTTON_NAME,
+      note: `월간 리포트 템플릿이 등록은 돼 있는데 아직 **승인 전**이에요 (지금 상태: ${same.map((x: any) => x.inspStatus).join(', ')}).`,
+    }
+    cache = { at: Date.now(), t }
+    return t
+  }
+  const t: MonthlyTemplate = {
+    code: String(picked.templtCode),
+    // 등록된 버튼 이름을 그대로 쓴다 — 우리 상수와 다르면 **등록된 쪽**이 맞다.
+    buttonName: String(picked?.buttons?.[0]?.name ?? MONTHLY_BUTTON_NAME),
+    note: '',
+  }
+  cache = { at: Date.now(), t }
+  return t
 }
