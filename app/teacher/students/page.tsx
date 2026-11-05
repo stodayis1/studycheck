@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { normalizeSchool } from '@/lib/school'
-import { splitTeachers, teachersOf, isMine } from '@/lib/teachers'
+import { splitTeachers, teachersOf, isMine, teacherLabels } from '@/lib/teachers'
 
 // 시간표 칸 — 원장님 편집 화면과 선생님 「변경 요청」 화면이 **같은 목록**을 쓴다.
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
@@ -753,7 +753,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                   <table className="w-full text-xs">
                     <thead className="bg-white border-b border-gray-100">
                       <tr>
-                        {['이름','학교','학년','수업시간','키움쌤','채움쌤','보호자'].map((h) => (
+                        {['이름','학교','학년','수업시간','담임강사','클리닉 담임','보호자'].map((h) => (
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -909,8 +909,12 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                         </span>
                       )}
                       {student.grade && <Badge variant="gray" size="sm">{student.grade}</Badge>}
-                      {student.teacher_name && <Badge variant="blue" size="sm">키움 {student.teacher_name}</Badge>}
-                      {student.clinic_teacher_name && <Badge variant="green" size="sm">채움 {student.clinic_teacher_name}</Badge>}
+                      {student.teacher_name && (
+                        <Badge variant="blue" size="sm">{teacherLabels(student.grade).mainChip} {student.teacher_name}</Badge>
+                      )}
+                      {student.clinic_teacher_name && (
+                        <Badge variant="green" size="sm">{teacherLabels(student.grade).clinicChip} {student.clinic_teacher_name}</Badge>
+                      )}
                       {/* 교재 등급 */}
                       <span className={cx('text-[10px] font-bold px-2 py-0.5 rounded-full', GRADE_COLORS[student.textbook_grade] ?? 'bg-gray-100 text-gray-500')}>
                         {student.textbook_grade ?? 'B'}등급
@@ -1087,8 +1091,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label:'이름',       key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'키움쌤 (메인 담임)',   key:'teacher_name', placeholder:'담임 선생님 이름' },
-              { label:'채움쌤 (클리닉 담임)', key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
+              { label: teacherLabels(editStudent.grade).main,   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label: teacherLabels(editStudent.grade).clinic, key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (
@@ -1321,8 +1325,8 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label:'이름 *',     key:'name',         placeholder:'학생 이름' },
               { label:'학교',       key:'school',       placeholder:'학교명' },
               { label:'학년',       key:'grade',        placeholder:'예: 중3, 고1' },
-              { label:'키움쌤 (메인 담임)',   key:'teacher_name', placeholder:'담임 선생님 이름' },
-              { label:'채움쌤 (클리닉 담임)', key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
+              { label: teacherLabels(newStudent.grade).main,   key:'teacher_name', placeholder:'담임 선생님 이름' },
+              { label: teacherLabels(newStudent.grade).clinic, key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
             ].map(({ label, key, placeholder }) => (

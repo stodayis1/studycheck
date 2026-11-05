@@ -18,7 +18,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/teachers.ts')
-const { teachersOf, isMine, staffCanSeeStudent, splitTeachers } = await import(pathToFileURL(target).href)
+const { teachersOf, isMine, staffCanSeeStudent, splitTeachers, teacherLabels } = await import(pathToFileURL(target).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -100,13 +100,25 @@ T('담당 판단을 손으로 짠 곳이 더 남아 있지 않다', () => {
   return 남은곳.length === 0
 })
 
+// ★ 「키움쌤·채움쌤」 호칭은 **고등에서만** 쓴다 (원장님 2026-11-05 「키움쌤, 채움쌤은 고등에 한정」).
+//   칸과 보이는 범위는 학년과 상관없이 같다 — 부르는 말만 다르다.
+T('호칭은 고등에서만 키움·채움이다', () =>
+  teacherLabels('고1').main.startsWith('키움쌤') && teacherLabels('고1').clinic.startsWith('채움쌤')
+  && teacherLabels('고3').clinicChip === '채움'
+  && teacherLabels('중2').main === '담임강사' && teacherLabels('중2').clinic === '클리닉 담임'
+  && teacherLabels('초5').clinicChip === '클리닉'
+  && teacherLabels(null).main === '담임강사')
+
+T('호칭이 달라도 **보이는 범위는 같다**', () =>
+  isMine({ teacher_name: '김은수', clinic_teacher_name: '강루비', grade: '중2' }, '강루비') === true
+  && isMine({ teacher_name: '김은수', clinic_teacher_name: '강루비', grade: '고1' }, '강루비') === true)
+
 // ── 저장·입력 ──────────────────────────────────────────────────────────
 T('학생 등록·수정·엑셀 세 곳에서 채움쌤을 받는다', () => {
   const s = src('app/teacher/students/page.tsx')
   return (s.match(/clinic_teacher_name/g) ?? []).length >= 8
     && s.includes("row['채움쌤']")                       // 엑셀
-    && s.includes("label:'채움쌤 (클리닉 담임)'")          // 등록·수정 칸
-    && (s.match(/label:'채움쌤 \(클리닉 담임\)'/g) ?? []).length === 2
+    && (s.match(/teacherLabels\((?:edit|new)Student\.grade\)\.clinic/g) ?? []).length === 2   // 등록·수정 칸
 })
 
 // ★ 사무실에서 쓰던 엑셀의 「담임강사」 열이 그대로 읽혀야 한다 — 안 그러면 업로드가 통째로 빈다.

@@ -16,7 +16,7 @@ import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
-import { splitTeachers, teachersOf } from '@/lib/teachers'
+import { splitTeachers, teachersOf, teacherLabels } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
@@ -1996,7 +1996,7 @@ ${e?.message ?? '연결 실패'}
             {/* 채움쌤(클리닉 담임)도 같이 보여 준다 — 이 학생을 같이 맡는 분이다 (원장님 2026-11-05) */}
             {(student as any).clinic_teacher_name && (
               <span className={cx(칩, 'bg-white/80')} style={{ color: '#3B6D11' }}>
-                채움 {mainTeacher((student as any).clinic_teacher_name)}
+                {teacherLabels(student.grade).clinicChip} {mainTeacher((student as any).clinic_teacher_name)}
               </span>
             )}
           </div>
@@ -3538,7 +3538,7 @@ ${e?.message ?? '연결 실패'}
                             <p className="text-sm font-bold text-gray-800 truncate">{student.name}</p>
                             <p className="text-[11px] text-gray-400 truncate">
                               {student.grade}{student.teacher_name ? ` · ${student.teacher_name} 선생님` : ''}
-                              {(student as any).clinic_teacher_name ? ` · 채움 ${(student as any).clinic_teacher_name} 선생님` : ''}
+                              {(student as any).clinic_teacher_name ? ` · ${teacherLabels(student.grade).clinicChip} ${(student as any).clinic_teacher_name} 선생님` : ''}
                             </p>
                           </div>
                           {!editable && <span className="text-[10px] font-bold text-gray-300 shrink-0">보기 전용</span>}

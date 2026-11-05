@@ -51,6 +51,20 @@ export function teachersOf(student: StudentTeachers | null | undefined): string[
   ])]
 }
 
+/**
+ * 화면에 적을 **담임 칸 이름** — 「키움쌤·채움쌤」 호칭은 **고등에서만** 쓴다
+ * (원장님 2026-11-05 「키움쌤, 채움쌤은 고등에 한정」).
+ *
+ * 중등·초등은 지금까지 쓰던 말 그대로다. 칸(teacher_name · clinic_teacher_name)과
+ * 보이는 범위는 학년과 상관없이 **똑같다** — 부르는 말만 다르다.
+ */
+export function teacherLabels(grade?: string | null) {
+  const 고등 = String(grade ?? '').trim().startsWith('고')
+  return 고등
+    ? { main: '키움쌤 (메인 담임)', clinic: '채움쌤 (클리닉 담임)', mainChip: '키움', clinicChip: '채움' }
+    : { main: '담임강사',          clinic: '클리닉 담임',        mainChip: '담임', clinicChip: '클리닉' }
+}
+
 /** 이 학생을 내가 맡았나 — 키움쌤이든 채움쌤이든 */
 export function isMine(student: StudentTeachers | null | undefined, who?: string | null): boolean {
   if (!who) return false
