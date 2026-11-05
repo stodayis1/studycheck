@@ -23,6 +23,7 @@ const { buildMonthlyMessage, MONTHLY_TEMPLATE, MONTHLY_BUTTON_NAME, MONTHLY_BODY
   await import(pathToFileURL(target).href)
 const { buildTeacherSms, PER_SMS } = await import(pathToFileURL(path.resolve('lib/monthlyTeacherSms.ts')).href)
 const { span, buildMonthlyReport } = await import(pathToFileURL(path.resolve('lib/monthlyReport.ts')).href)
+const { commentPrompt, hasSomethingToSummarize } = await import(pathToFileURL(path.resolve('lib/monthlyComment.ts')).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -285,12 +286,56 @@ T('코멘트를 자르지 않는다 (220자 자르기가 사라졌다)', () => {
     && !/comment[\s\S]{0,40}\.slice\(0, ?\d+\)/.test(v)
 })
 
-T('한 줄 평이 없으면 알림장을 **전부** 날짜와 함께 싣는다', () => {
+// ★ 반대쪽으로 지나치면 안 된다 — 자르지 않는다고 **다 늘어놓으면** 글의 벽이 된다
+//   (원장님 2026-11-05 「왜 수업태도는 모두다 나열되어 있는거지?」). 요약만 싣는다.
+T('알림장을 화면에 늘어놓지 않는다', () => {
   const v = src('components/report/MonthlyReport.tsx')
-  return v.includes('const 알림장 = (d.notices ?? [])')
-    && v.includes('알림장.map((n: any, i: number)')
-    && v.includes('className="nt"')
-    && /note=\{!한줄평 && 알림장\.length > 1 \? `알림장 \$\{알림장\.length\}건`/.test(v)
+  return !v.includes('알림장.map(')
+    && !v.includes('className="nt"')
+    && v.includes('선생님이 남긴 한 줄 평이 없습니다')
+})
+
+T('한 줄 평이 없으면 **요약해서** 채운다', () => {
+  const api = src('app/api/monthly-report/route.ts')
+  return api.includes('commentPrompt(재료)')
+    && api.includes('hasSomethingToSummarize(재료)')
+    && api.includes('const autoComment = b?.autoComment !== false')
+    && api.includes('model: AI_TEXT_MODEL, thinking: NO_THINKING')
+})
+
+// ★ 알림장이 한 건도 없으면 부르지 않는다 — 돈만 든다.
+T('요약할 거리가 없으면 AI 를 안 부른다', () => {
+  const 빈것 = { studentName: '홍길동', months: 1 as const, notices: [] as any[] }
+  const 있는것 = { studentName: '홍길동', months: 1 as const, notices: [{ date: '2026-10-05', content: '오늘 잘했습니다.' }] }
+  return hasSomethingToSummarize(빈것) === false && hasSomethingToSummarize(있는것) === true
+})
+
+// ★ 요약에 실패했다고 리포트를 안 보내면 더 나쁘다.
+T('요약이 실패해도 리포트는 그대로 만든다', () => {
+  const api = src('app/api/monthly-report/route.ts')
+  const 블록 = /if \(hasSomethingToSummarize\(재료\)\) \{[\s\S]*?\n      \}/.exec(api)?.[0] ?? ''
+  return 블록.includes('catch') && !블록.includes('return NextResponse')
+})
+
+// ★ 미리보기와 발송이 **같은 글**로 물어야 어긋나지 않는다.
+T('미리보기와 발송이 같은 요약 글을 쓴다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  const api = src('app/api/monthly-report/route.ts')
+  return ui.includes('commentPrompt({') && api.includes('commentPrompt(재료)')
+    && ui.includes('autoComment: bAutoComment')
+})
+
+T('요약 글이 날짜 나열이 아니라 **흐름**으로 묶으라고 한다', () => {
+  const 글 = commentPrompt({
+    studentName: '홍길동', studentGrade: '중1', months: 2,
+    notices: [{ date: '2026-09-02', content: '일차방정식 계산을 어려워했습니다.' },
+              { date: '2026-10-21', content: '활용 단원에서 풀이 방향을 못 잡았습니다.' }],
+    numbers: { sessions: 24, hwRate: 88 },
+  })
+  return 글.includes('알림장 2건을 먼저 읽고')
+    && 글.includes('날짜를 하나하나 나열하지 말고')
+    && 글.includes('두 달')
+    && 글.includes('이모지와 마크다운은 쓰지')
 })
 
 T('글이 길면 두 칸으로 쪼개지 않고 한 칸을 넓게 쓴다', () => {
@@ -301,10 +346,15 @@ T('글이 길면 두 칸으로 쪼개지 않고 한 칸을 넓게 쓴다', () =>
 
 // ★ AI 한 줄 평이 숫자만 보고 쓰면 정작 **선생님 말씀이 한 줄도 안 들어간다.**
 T('AI 한 줄 평이 알림장을 읽고 요약한다', () => {
-  const r = src('app/teacher/reports/page.tsx')
-  return r.includes('((mNew as any)?.notices ?? [])')
-    && r.includes('알림장 ${알림장.length}건을 먼저 읽고')
-    && r.includes('숫자보다 선생님 말씀이 중심입니다')
+  const ui = src('app/teacher/reports/page.tsx')
+  const 글 = commentPrompt({
+    studentName: '홍길동', months: 1,
+    notices: [{ date: '2026-10-05', content: '오늘은 풀이 과정을 또박또박 적었습니다.' }],
+  })
+  return ui.includes('notices: ((mNew as any)?.notices ?? [])')   // 화면이 알림장을 넘긴다
+    && 글.includes('먼저 읽고')
+    && 글.includes('숫자보다 선생님 말씀이 중심입니다')
+    && 글.includes('오늘은 풀이 과정을 또박또박 적었습니다.')      // 알림장이 실제로 들어간다
 })
 
 // ── 화면 ───────────────────────────────────────────────────────────────

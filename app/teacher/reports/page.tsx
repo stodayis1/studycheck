@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { commentPrompt } from '@/lib/monthlyComment'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { unitLabel } from '@/lib/worksheetTitle'
@@ -535,6 +536,7 @@ export default function TeacherReportsPage() {
   const [bResend, setBResend] = useState(false)
   // 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05)
   const [bTellTeachers, setBTellTeachers] = useState(true)
+  const [bAutoComment, setBAutoComment] = useState(true)
   const [bTeacherSms, setBTeacherSms] = useState<any[] | null>(null)
   /** 고른 기간 이름 — 「2026년 10월」 / 「2026년 9~10월」 (해를 넘기면 「2026년 12월~2027년 1월」) */
   function 기간말() {
@@ -553,6 +555,7 @@ export default function TeacherReportsPage() {
     if (!confirm(
       `${bTargets.length}명의 ${기간말()} 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
       + (bResend ? '이미 보낸 분께도 다시 보냅니다.\n' : '이번 달에 이미 보낸 분은 건너뜁니다.\n')
+      + (bAutoComment ? '한 줄 평이 없는 학생은 알림장을 요약해 채웁니다.\n' : '')
       + (bTellTeachers ? '보낸 뒤 담당 선생님께 문자로 알립니다.\n' : '')
       + '계속할까요?')) return
     setBBusy(true); setBResult(null); setBTeacherSms(null)
@@ -561,7 +564,7 @@ export default function TeacherReportsPage() {
         method: 'POST',
         body: JSON.stringify({
           studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth, months: mMonths,
-          send: true, resend: bResend, tellTeachers: bTellTeachers,
+          send: true, resend: bResend, tellTeachers: bTellTeachers, autoComment: bAutoComment,
         }),
       })
       const j = await r.json()
@@ -731,19 +734,19 @@ export default function TeacherReportsPage() {
     if (!mData) return
     setMGenerating(true)
     try {
-      // ★ 선생님이 쓰신 **알림장을 요약**하는 것이 본래 뜻이다 (원장님 2026-10-24
-      //   「한달동안 써준 알림장 내용을 너가 요약정리해서」, 2026-11-05 「2개월치면
-      //    선생님이 쓴 코멘트 내용을 요약정리해서 보내줘야 하거든」).
-      //   예전에는 숫자만 넘겨서, 정작 선생님 말씀이 한 줄도 안 들어갔다.
-      const 알림장 = ((mNew as any)?.notices ?? [])
-        .map((n: any) => `(${String(n?.date ?? '').slice(5)}) ${String(n?.content ?? '').trim()}`)
-        .filter((t: string) => t.length > 6)
-      const 기간 = mMonths === 2 ? '두 달' : '한 달'
-      const prompt = `다음은 수학 학원 학생의 ${기간} 학습 데이터입니다. 학부모에게 보내는 따뜻하고 전문적인 한 줄 평(3~5문장)을 작성해주세요. 이모지 사용 금지.`
-        + (알림장.length
-            ? ` **담당 선생님이 ${기간} 동안 쓰신 알림장 ${알림장.length}건을 먼저 읽고, 그 내용을 요약해 녹여 주세요.** 숫자보다 선생님 말씀이 중심입니다. 알림장: ${알림장.join(' / ')}`
-            : '')
-        + ` 참고 숫자 — 학생 이름: ${mData.student.name}, 학년: ${mData.student.grade}, 수업 횟수: ${mData.totalSessions}회, 출결: 정시 ${mData.attendance.정시}회/지각 ${mData.attendance.지각}회/결석 ${mData.attendance.결석}회/시험기간 결석 ${mData.attendance.시험기간}회(학교 시험이라 쉰 날 — 결석이 아님), 과제달성률: ${mData.hwRate}%, 학습지 평균: ${mData.avgScore ?? '미채점'}점, 통과율: ${mData.passRate}%, 교재진도: ${mData.tbProgress.map((t: any) => t.name + ' ' + t.rate + '%').join(', ')}`
+      // ★ 한 줄 평을 만드는 글은 **lib/monthlyComment.ts 한 곳**에 있다 —
+      //   링크를 찍을 때 서버가 쓰는 것과 **같은 글**이어야 미리보기와 발송이 안 어긋난다.
+      const prompt = commentPrompt({
+        studentName: mData.student.name,
+        studentGrade: mData.student.grade,
+        months: mMonths,
+        notices: ((mNew as any)?.notices ?? []),
+        numbers: {
+          sessions: mData.totalSessions,
+          onTime: mData.attendance.정시, late: mData.attendance.지각, absent: mData.attendance.결석,
+          hwRate: mData.hwRate, hwScore: mData.avgScore,
+        },
+      })
       const res = await apiFetch('/api/generate-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
       const data = await res.json()
       setMComment(data.message ?? '')
@@ -923,6 +926,14 @@ export default function TeacherReportsPage() {
                 </label>
                 {/* 담당 선생님께 문자 — 알림톡이 아니라 문자다(선생님께 가는 글은 그때그때 달라
                     템플릿으로 못 만든다). 번호는 수학OPS 직원 정보에서 가져온다. */}
+                {/* 한 줄 평이 없는 학생은 알림장을 **요약해** 채운다 — 늘어놓지 않는다
+                    (원장님 2026-11-05). 건당 0.2원이라 전교생을 돌려도 20원이다. */}
+                <label className="flex items-center gap-1.5 mb-1.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={bAutoComment} onChange={(e) => setBAutoComment(e.target.checked)} />
+                  <span className="text-[11px]" style={{ color: '#A16207' }}>
+                    한 줄 평이 없는 학생은 <b>알림장을 요약해 채우기</b> (학생당 0.2원)
+                  </span>
+                </label>
                 <label className="flex items-center gap-1.5 mb-2.5 cursor-pointer select-none">
                   <input type="checkbox" checked={bTellTeachers} onChange={(e) => setBTellTeachers(e.target.checked)} />
                   <span className="text-[11px]" style={{ color: '#A16207' }}>
