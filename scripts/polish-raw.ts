@@ -44,7 +44,7 @@ const RULES = `너는 수학학원 선생님이 쓴 글을 다듬는 교정자�
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const payload = targets.map((i) => ({ id: `${i.kind}:${i.id}`, 종류: i.kind === 'progress' ? '진도' : '알림장', 글: i.before }))
 
-for (const model of ['claude-sonnet-5-5', 'claude-sonnet-4-5']) {
+for (const model of ['claude-sonnet-5-5', 'claude-haiku-5-5']) {
   try {
     const msg = await client.messages.create({
       model, max_tokens: 8000,

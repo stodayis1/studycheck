@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { AI_VISION_MODEL, textOf, wasCut } from '@/lib/aiModels'
 import Anthropic from '@anthropic-ai/sdk'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 
@@ -13,8 +14,9 @@ export async function POST(req: NextRequest) {
     const { image, mimeType } = await req.json()
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 2000,
+      model: AI_VISION_MODEL,
+      // ★ Sonnet 5.5 는 생각하기를 끌 수 없다(400). 생각도 max_tokens 를 쓰므로 넉넉히 준다.
+      max_tokens: 6000,
       messages: [{
         role: 'user',
         content: [
@@ -55,7 +57,9 @@ export async function POST(req: NextRequest) {
       }]
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    // ★ content[0] 을 믿지 않는다 — 글 블록을 찾아서 꺼낸다 (lib/aiModels.ts)
+    const text = textOf(message)
+    if (wasCut(message)) throw new Error('사진에서 읽은 글이 잘렸어요 (max_tokens).')
     const clean = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
 

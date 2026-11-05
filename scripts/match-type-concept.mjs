@@ -39,7 +39,7 @@ const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABA
   auth: { persistSession: false },
 })
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-const MODELS = ['claude-sonnet-5-5', 'claude-sonnet-4-5']
+const MODELS = ['claude-sonnet-5-5', 'claude-haiku-5-5']
 
 async function all(table, sel, tweak = (q) => q) {
   const out = []
