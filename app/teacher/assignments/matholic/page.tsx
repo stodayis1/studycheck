@@ -35,18 +35,20 @@ import { cx, fetchAllRows } from '@/lib/utils'
 import {
   parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, DAILY_MAX_GAP_DAYS, resolveUnit, gradeFromCourse,
   isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, nameDiffers, isTextbookLinked, levelForInsert, DEFAULT_LEVEL,
-  type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate,
+  isDiagnostic, parseDiagnosticTitle,
+  type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate, type DiagnosticParts,
 } from '@/lib/matholic'
 
 /**
  * 한 줄을 어떻게 처리할지. 사람이 바꿀 수 있다.
  *   daily — 학습일지의 데일리테스트 칸에 적는다 (학습지가 아니다)
  *   core  — 평가관리의 코어테스트로 적는다 (TOMA 수학경시대회가 여기다)
+ *   exam  — 평가관리의 **진단평가**로 적는다 (주간·주말평가. 원장님 2026-11-06)
  *   excluded — 일부러 안 넣는다 (이너프원 = 내신대비교재). 빠진 것과 구분해서 보여 준다
  *   fill  — 이미 있는 학습지의 점수 칸을 채운다
  *   new   — 학습지를 새로 만들어 넣는다
  */
-type Mode = 'daily' | 'core' | 'fill' | 'new' | 'skip' | 'excluded' | 'done'
+type Mode = 'daily' | 'core' | 'exam' | 'fill' | 'new' | 'skip' | 'excluded' | 'done'
 interface Plan {
   row: MatholicRow
   /** 후보 학생들. 둘 이상이면 사람이 골라야 한다 */
@@ -59,6 +61,11 @@ interface Plan {
   sessionId: string | null
   /** 코어테스트일 때 회차 이름 (예비 1회 · 예비 2회 · 본고사) */
   coreRound: string | null
+  /**
+   * 진단평가일 때 제목에서 떼어낸 단원과 단계 (원장님 2026-11-06 「제목에 맞춰 단원에
+   * 맞게 넣어주고」). 평가관리의 `unit_name` · `level` 칸에 그대로 들어간다.
+   */
+  exam?: DiagnosticParts | null
   /** 개념 사전에서 찾아낸 단원. 못 찾았으면 null 이고, 그때는 제목 글자를 그대로 쓴다 */
   unit: ResolvedUnit | null
   /**
@@ -88,7 +95,7 @@ export default function MatholicImportPage() {
    *   그 이름도 저절로 걸려야 한다.
    */
   const [books, setBooks] = useState<string[]>([])
-  const [done, setDone] = useState<{ daily: number; core: number; filled: number; created: number; skipped: number; failed: string[] } | null>(null)
+  const [done, setDone] = useState<{ daily: number; core: number; exam: number; filled: number; created: number; skipped: number; failed: string[] } | null>(null)
 
   /** 붙여넣은 글자를 읽고, 학생과 학습지를 찾아 둔다. 저장은 하지 않는다. */
   async function handleRead() {
@@ -162,6 +169,15 @@ export default function MatholicImportPage() {
             .eq('exam_type', '코어테스트').in('student_id', chunk).in('exam_date', coreDates).order('id'))))).flat()
       const coreByKey = new Map(cores.map((e) => [`${e.student_id}|${e.exam_date}|${e.title ?? ''}`, e.score]))
 
+      // 진단평가도 같은 날 같은 단원을 두 번 넣지 않는다 — 하루에 두 번 돌릴 수 있어서다
+      // (원장님 2026-11-06, 초등 저녁 7시 30분 · 중등 밤 10시).
+      const examDates = [...new Set(res.rows.filter((r) => isDiagnostic(r)).map((r) => r.date))]
+      const exams = examDates.length === 0 || ids.length === 0 ? [] : (await Promise.all(
+        chunks.map((chunk) => fetchAllRows<{ student_id: string; exam_date: string; unit_name: string | null; score: number | null }>(
+          () => supabase.from('exams').select('id, student_id, exam_date, unit_name, score')
+            .eq('exam_type', '진단평가').in('student_id', chunk).in('exam_date', examDates).order('id'))))).flat()
+      const examByKey = new Map(exams.map((e) => [`${e.student_id}|${e.exam_date}|${e.unit_name ?? ''}`, e.score]))
+
       setPlans(res.rows.map((row, i): Plan => {
         const students = found[i]
         if (isEnoughOne(row, bookNames)) {
@@ -202,6 +218,21 @@ export default function MatholicImportPage() {
           }
           return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: round, unit: null,
             mode: 'core', why: tag(`평가관리 · 코어테스트 ${round} 로 넣습니다`) }
+        }
+
+        // ★ 주간·주말평가는 학습지가 아니라 **평가관리의 진단평가**로 간다
+        //   (원장님 2026-11-06 「주간평가는 평가로 들어가야해. 진단평가에 넣으면 됨」).
+        //   코어테스트(월간평가)를 먼저 본 뒤라야 월간평가가 여기로 새지 않는다.
+        if (isDiagnostic(row)) {
+          const d = parseDiagnosticTitle(row.title)
+          const already = examByKey.get(`${sid}|${row.date}|${d.unitName ?? ''}`)
+          if (already != null) {
+            return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
+              mode: 'done', why: tag(`평가관리에 진단평가 ${already}점이 이미 있어요`) }
+          }
+          const 단원말 = d.unitName ? `단원 「${d.unitName}」` : '단원을 못 읽었어요 — 제목은 메모에 남깁니다'
+          return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
+            mode: 'exam', why: tag(`평가관리 · 진단평가로 넣습니다 (${단원말}${d.level != null ? ` · ${d.level}단계` : ''})`) }
         }
 
         if (isDailyTest(row)) {
@@ -278,6 +309,7 @@ export default function MatholicImportPage() {
   const count = useMemo(() => ({
     daily: plans.filter((p) => p.mode === 'daily').length,
     core: plans.filter((p) => p.mode === 'core').length,
+    exam: plans.filter((p) => p.mode === 'exam').length,
     excluded: plans.filter((p) => p.mode === 'excluded').length,
     fill: plans.filter((p) => p.mode === 'fill').length,
     neo: plans.filter((p) => p.mode === 'new').length,
@@ -291,9 +323,9 @@ export default function MatholicImportPage() {
 
   /** 고른 대로 저장한다. 한 건이 실패해도 나머지는 계속 간다 — 실패한 것은 이름을 남긴다. */
   async function handleSave() {
-    if (!confirm(`학습일지 데일리테스트 ${count.daily}건, 코어테스트 ${count.core}건, 학습지 점수 채우기 ${count.fill}건, 학습지 새로 만들기 ${count.neo}건을 넣습니다. 계속할까요?`)) return
+    if (!confirm(`학습일지 데일리테스트 ${count.daily}건, 코어테스트 ${count.core}건, 진단평가 ${count.exam}건, 학습지 점수 채우기 ${count.fill}건, 학습지 새로 만들기 ${count.neo}건을 넣습니다. 계속할까요?`)) return
     setSaving(true)
-    let daily = 0, core = 0, filled = 0, created = 0
+    let daily = 0, core = 0, exam = 0, filled = 0, created = 0
     const failed: string[] = []
     for (const p of plans) {
       const who = p.students.find((s) => s.id === p.studentId)
@@ -315,6 +347,20 @@ export default function MatholicImportPage() {
           })
           if (error) throw new Error(error.message)
           core++
+        } else if (p.mode === 'exam' && p.studentId) {
+          // 평가관리의 진단평가. 선생님들이 손으로 넣는 꼴과 **똑같이** 넣는다 —
+          //   unit_name = 단원 이름 · level = 단계 · total_score = 100 (점수는 백분율).
+          // ★ 제목을 그대로 memo 에 남긴다 — 단원을 못 읽은 줄도 어디서 온 것인지 보여야 한다.
+          const { error } = await supabase.from('exams').insert({
+            student_id: p.studentId, exam_type: '진단평가', exam_date: p.row.date,
+            unit_name: p.exam?.unitName ?? null, level: p.exam?.level ?? null,
+            score: p.row.score, total_score: 100,
+            teacher_name: currentUser?.name ?? null,
+            memo: ['매쓰홀릭', p.row.right != null ? `${p.row.right}/${p.row.total}` : '', p.row.title]
+              .filter(Boolean).join(' · '),
+          })
+          if (error) throw new Error(error.message)
+          exam++
         } else if (p.mode === 'fill' && p.wsId) {
           // ★ status 는 scored 까지만. passed 로 올리면 초등 70점 미만이 트리거에 막힌다.
           const { error } = await supabase.from('student_worksheets')
@@ -373,9 +419,9 @@ export default function MatholicImportPage() {
       } catch (e: any) { failed.push(`${label} — ${e?.message ?? '실패'}`) }
     }
     setSaving(false)
-    setDone({ daily, core, filled, created, skipped: count.skip, failed })
+    setDone({ daily, core, exam, filled, created, skipped: count.skip, failed })
     setPlans((prev) => prev.map((p) =>
-      (p.mode === 'daily' || p.mode === 'core' || p.mode === 'fill' || p.mode === 'new'
+      (p.mode === 'daily' || p.mode === 'core' || p.mode === 'exam' || p.mode === 'fill' || p.mode === 'new'
         ? { ...p, mode: 'done' as Mode, why: '넣었어요' } : p)))
   }
 
@@ -412,6 +458,7 @@ export default function MatholicImportPage() {
             <div className="flex flex-wrap gap-1.5">
               <span className={cx(칩, 'bg-amber-50 text-amber-700')}>학습일지 데일리테스트 {count.daily}</span>
               <span className={cx(칩, 'bg-purple-50 text-purple-700')}>코어테스트 {count.core}</span>
+              <span className={cx(칩, 'bg-orange-50 text-orange-700')}>진단평가 {count.exam}</span>
               <span className={cx(칩, 'bg-green-50 text-green-700')}>학습지 점수 채우기 {count.fill}</span>
               <span className={cx(칩, 'bg-blue-50 text-blue-700')}>새로 만들기 {count.neo}</span>
               <span className={cx(칩, 'bg-gray-100 text-gray-600')}>이미 들어감 {count.done}</span>
@@ -439,6 +486,7 @@ export default function MatholicImportPage() {
                     : p.mode === 'done' ? 'bg-gray-50 border-gray-200'
                       : p.mode === 'daily' ? 'bg-amber-50 border-amber-200'
                         : p.mode === 'core' ? 'bg-purple-50 border-purple-200'
+                        : p.mode === 'exam' ? 'bg-orange-50 border-orange-200'
                         : p.mode === 'new' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200')}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-gray-900">{p.row.student}</span>
@@ -469,19 +517,24 @@ export default function MatholicImportPage() {
                     {p.mode === 'core' && (
                       <span className={cx(칩, 'bg-purple-100 text-purple-800')}>평가관리 · 코어테스트 {p.coreRound}</span>
                     )}
+                    {p.mode === 'exam' && (
+                      <span className={cx(칩, 'bg-orange-100 text-orange-800')}>
+                        평가관리 · 진단평가 {p.exam?.unitName ?? '단원 없음'}{p.exam?.level != null ? ` ${p.exam.level}단계` : ''}
+                      </span>
+                    )}
                     {p.mode === 'excluded' && (
                       <span className={cx(칩, 'bg-gray-200 text-gray-700')}>이너프원 · 넣지 않음</span>
                     )}
                     {/* ★ 어느 갈래로 들어가는지 — 레벨학습지·오답학습지·쌍둥이.
                         이게 없으면 「비상교과서」가 쌍둥이로 걸렸는지 **화면만 보고는 알 수 없다.** */}
-                    {p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'excluded' && p.studentId && (() => {
+                    {p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'exam' && p.mode !== 'excluded' && p.studentId && (() => {
                       const 갈래 = worksheetTypeOf(p.row, books)
                       const [말, 색] = 갈래 === 'twin' ? ['쌍둥이 학습지', 'bg-indigo-100 text-indigo-800']
                         : 갈래 === 'similar' ? ['오답학습지', 'bg-rose-100 text-rose-800']
                         : ['레벨학습지', 'bg-emerald-100 text-emerald-800']
                       return <span className={cx(칩, 색)}>{말}</span>
                     })()}
-                    {p.mode !== 'done' && p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'excluded' && p.studentId && (
+                    {p.mode !== 'done' && p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'exam' && p.mode !== 'excluded' && p.studentId && (
                       <>
                         <select value={p.wsId ?? ''} onChange={(e) => {
                           const id = e.target.value || null
@@ -507,11 +560,11 @@ export default function MatholicImportPage() {
               ))}
             </div>
 
-            {(count.daily > 0 || count.core > 0 || count.fill > 0 || count.neo > 0) && (
+            {(count.daily > 0 || count.core > 0 || count.exam > 0 || count.fill > 0 || count.neo > 0) && (
               <button onClick={handleSave} disabled={saving}
                 className="w-full text-sm font-bold py-2.5 rounded-xl disabled:opacity-40"
                 style={{ background: '#9FE1CB', color: '#0f3d2e' }}>
-                {saving ? '넣는 중…' : `③ ${count.daily + count.core + count.fill + count.neo}건 넣기`}
+                {saving ? '넣는 중…' : `③ ${count.daily + count.core + count.exam + count.fill + count.neo}건 넣기`}
               </button>
             )}
           </div>
@@ -520,7 +573,7 @@ export default function MatholicImportPage() {
         {done && (
           <div className="rounded-2xl p-4" style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC' }}>
             <p className="text-xs font-bold" style={{ color: '#166534' }}>
-              끝났어요 — 학습일지 데일리테스트 {done.daily}건 · 코어테스트 {done.core}건 · 학습지 점수 채움 {done.filled}건 ·
+              끝났어요 — 학습일지 데일리테스트 {done.daily}건 · 코어테스트 {done.core}건 · 진단평가 {done.exam}건 · 학습지 점수 채움 {done.filled}건 ·
               학습지 새로 만듦 {done.created}건 · 안 넣음 {done.skipped}건
             </p>
             {done.failed.length > 0 && (

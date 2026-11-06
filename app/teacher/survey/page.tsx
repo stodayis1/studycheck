@@ -3,18 +3,33 @@
 // 설문 답 보기 — /teacher/survey (원장 전용)
 //
 // 원장님 2026-10-24 「설문조사로 앱으로 만들어서 … 링크 통해 후기 받는게」
-// 링크로 들어온 답이 여기 쌓인다. 상담 신청자와 개설 희망 강좌 집계를 한 화면에서 본다.
+// 원장님 2026-11-06 「스터디체크에 학부모 설문 만들어 달라니까」 (11/21 부모학교 — 행사별 설문)
+//
+// 링크로 들어온 답이 여기 쌓인다. 상담 신청자와 집계를 한 화면에서 본다.
+// ★ 행사를 먼저 고른다. 행사마다 survey_key 가 달라 답이 섞이지 않는다 (lib/surveyEvents.ts).
 
 import { useEffect, useMemo, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { supabase } from '@/lib/supabase'
+import { SURVEY_EVENTS, LEGACY_EVENT, findEventByKey } from '@/lib/surveyEvents'
 
 const GREEN = '#085041'
 const MINT = '#F0FBF7'
 const PEACH = '#F5C4B3'
 const BROWN = '#712B13'
+
+const BASE = 'https://studycheck-five.vercel.app'
+/** 고를 수 있는 행사 — 새 행사가 먼저 나온다 (방금 치른 것을 바로 본다) */
+const PICKABLE = [...[...SURVEY_EVENTS].reverse(), LEGACY_EVENT]
+const linkOf = (slug: string) => BASE + (slug ? `/survey/${slug}` : '/survey')
+const smsOf = (e: { name: string; slug: string }) =>
+  '[수학의지혜]\n'
+  + `오늘 ${e.name}에 와 주셔서 고맙습니다.\n`
+  + '짧은 설문 하나 부탁드립니다. 적어 주신 한 줄이 다음 시간을 바꿉니다.\n'
+  + '상담 신청도 여기서 받습니다.\n'
+  + linkOf(e.slug)
 
 type Row = {
   id: string; created_at: string
@@ -24,6 +39,9 @@ type Row = {
   consult: boolean; consult_times: string[]; consult_how: string[]
   wish: string | null; courses: string[]; courses_etc: string | null
   agree_public: boolean; source: string
+  /** 행사별 답 (별점·상담 체크·동의) — answers 칸이 없으면 비어 있다 */
+  answers?: { stars?: Record<string, number>; recommend?: number
+    consult_new?: string[]; consult_now?: string[] } | null
 }
 
 const when = (iso: string) => {
@@ -33,6 +51,10 @@ const when = (iso: string) => {
 
 export default function SurveyPage() {
   const { isAdmin, loading: authLoading } = useAuth()
+  // 어느 행사의 답을 보는가 — 기본은 가장 최근 행사
+  const [evKey, setEvKey] = useState(PICKABLE[0].key)
+  const ev = PICKABLE.find((e) => e.key === evKey) ?? PICKABLE[0]
+  const topics = findEventByKey(evKey)?.topics ?? []
   const [rows, setRows] = useState<Row[]>([])
   const [courses, setCourses] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,11 +71,7 @@ export default function SurveyPage() {
   const [q, setQ] = useState('')
   const [gradeF, setGradeF] = useState('')
   const [extra, setExtra] = useState('')
-  const [smsText, setSmsText] = useState(
-    '[수학의지혜]\n오늘 설명회에 와 주셔서 고맙습니다.\n'
-    + '짧은 설문 하나 부탁드립니다. 적어 주신 한 줄이 다음 수업을 바꿉니다.\n'
-    + '상담 신청도 여기서 받습니다.\n'
-    + 'https://studycheck-five.vercel.app/survey')
+  const [smsText, setSmsText] = useState(smsOf(PICKABLE[0]))
   const [pre, setPre] = useState<any>(null)
   const [smsBusy, setSmsBusy] = useState(false)
   const [smsErr, setSmsErr] = useState('')
@@ -119,8 +137,11 @@ export default function SurveyPage() {
     if (j) { setSmsDone(j); setPre(null) }
   }
 
+  // 행사를 바꾸면 그 행사 답을 다시 읽고, 보낼 문자 글도 그 행사 것으로 바꾼다
   useEffect(() => {
-    apiFetch('/api/survey?key=설명회')
+    setLoading(true); setErr(''); setRows([]); setOpen(null); setTab('all')
+    setSmsText(smsOf(ev)); setPre(null); setSmsDone(null)
+    apiFetch(`/api/survey?key=${encodeURIComponent(evKey)}`)
       .then((r) => r.json())
       .then((j) => {
         if (j.error) { setErr(j.error); return }
@@ -128,7 +149,8 @@ export default function SurveyPage() {
       })
       .catch(() => setErr('불러오지 못했어요.'))
       .finally(() => setLoading(false))
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evKey])
 
   // 개설 희망 강좌 집계 — 많이 고른 것부터
   const tally = useMemo(() => {
@@ -136,6 +158,31 @@ export default function SurveyPage() {
     for (const r of rows) for (const c of r.courses ?? []) n.set(c, (n.get(c) ?? 0) + 1)
     return [...n.entries()].sort((a, b) => b[1] - a[1])
   }, [rows])
+
+  // 꼭지별 별점 평균 — answers 가 있는 답만 센다.
+  // ★ docs/sql/설문_행사별답_칸추가.sql 을 실행하기 전에 들어온 답은 별점이 「바라는 점」 글 안에
+  //   글자로 남는다. 그 답은 여기서 세지 않으므로 「몇 건으로 낸 평균인지」를 함께 적는다.
+  const starAvg = useMemo(() => {
+    if (!topics.length) return null
+    const per = topics.map(() => ({ n: 0, sum: 0 }))
+    const rec = { n: 0, sum: 0 }
+    for (const r of rows) {
+      const a = r.answers
+      if (!a) continue
+      topics.forEach((_, i) => {
+        const v = Number(a.stars?.[String(i)])
+        if (Number.isFinite(v) && v > 0) { per[i].n++; per[i].sum += v }
+      })
+      const v = Number(a.recommend)
+      if (Number.isFinite(v) && v > 0) { rec.n++; rec.sum += v }
+    }
+    return {
+      per: per.map((s) => (s.n ? s.sum / s.n : null)),
+      counts: per.map((s) => s.n),
+      rec: rec.n ? rec.sum / rec.n : null,
+      recN: rec.n,
+    }
+  }, [rows, topics])
 
   const 상담 = rows.filter((r) => r.consult)
   const shown = tab === 'consult' ? 상담
@@ -145,10 +192,22 @@ export default function SurveyPage() {
   if (authLoading) return <Wrap><P>불러오는 중…</P></Wrap>
   if (!isAdmin()) return <Wrap><P>원장님만 볼 수 있는 화면입니다.</P></Wrap>
 
-  const LINK = 'https://studycheck-five.vercel.app/survey'
+  const LINK = linkOf(ev.slug)
 
   return (
     <Wrap>
+      {/* 행사 고르기 — 행사마다 답이 따로 쌓인다 */}
+      <div className="mb-3 flex gap-1.5 flex-wrap">
+        {PICKABLE.map((e) => (
+          <button key={e.key} onClick={() => setEvKey(e.key)}
+            className="rounded-full px-3.5 py-1.5 text-xs font-bold border"
+            style={evKey === e.key ? { background: GREEN, color: '#fff', borderColor: GREEN }
+              : { background: '#fff', color: '#6b7280', borderColor: '#e5e7eb' }}>
+            {e.tab}
+          </button>
+        ))}
+      </div>
+
       {/* 보낼 링크 */}
       <div className="rounded-2xl px-4 py-3.5 mb-4" style={{ background: MINT, border: '1px solid #C7DED6' }}>
         <p className="text-xs font-bold mb-1.5" style={{ color: GREEN }}>학부모님께 보낼 링크</p>
@@ -320,8 +379,42 @@ export default function SurveyPage() {
           <div className="grid grid-cols-3 gap-2 mb-4">
             <Stat n={rows.length} label="받은 답" />
             <Stat n={상담.length} label="상담 신청" warm />
-            <Stat n={rows.filter((r) => r.agree_public).length} label="후기 공개 동의" />
+            {starAvg
+              ? <Stat text={starAvg.rec ? starAvg.rec.toFixed(1) : '-'} label="추천 별점 평균" />
+              : <Stat n={rows.filter((r) => r.agree_public).length} label="후기 공개 동의" />}
           </div>
+
+          {/* 꼭지별 만족도 — 그날 말씀하신 차례대로 */}
+          {!!starAvg && rows.length > 0 && (
+            <div className="rounded-2xl border p-4 mb-4">
+              <p className="text-sm font-bold mb-2.5" style={{ color: GREEN }}>꼭지별 만족도</p>
+              <div className="space-y-1.5">
+                {topics.map((t, i) => {
+                  const avg = starAvg.per[i]
+                  return (
+                    <div key={t.title} className="flex items-center gap-2.5">
+                      <span className="w-44 shrink-0 text-[12.5px] truncate" title={t.title}>{t.title}</span>
+                      <div className="flex-1 h-2.5 rounded-full bg-gray-100 min-w-0">
+                        <div className="h-full rounded-full"
+                          style={{ background: GREEN, width: `${Math.round(((avg ?? 0) / 5) * 100)}%` }} />
+                      </div>
+                      <span className="w-20 shrink-0 text-right text-[12.5px] font-bold tabular-nums">
+                        {avg ? `${avg.toFixed(1)}점` : '-'}
+                        <span className="ml-1 font-normal text-gray-400">({starAvg.counts[i]})</span>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              {starAvg.counts.some((n) => n < rows.length) && (
+                <p className="mt-2 text-[11px] text-gray-400">
+                  괄호는 별점이 숫자로 들어온 답 수입니다. 받은 답({rows.length}건)보다 적으면 그 답은
+                  별점이 「바라는 점」 글 안에 글자로 들어 있습니다 — docs/sql/설문_행사별답_칸추가.sql 을
+                  아직 실행하지 않은 동안 들어온 답입니다.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* 개설 희망 강좌 */}
           {tally.length > 0 && (
@@ -368,6 +461,10 @@ export default function SurveyPage() {
                     <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold"
                       style={{ background: MINT, color: GREEN }}>{r.rating}</span>
                   )}
+                  {!!r.answers?.recommend && (
+                    <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold"
+                      style={{ background: MINT, color: GREEN }}>추천 ★{r.answers.recommend}</span>
+                  )}
                   {r.consult && (
                     <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold"
                       style={{ background: PEACH, color: BROWN }}>상담 신청</span>
@@ -378,8 +475,19 @@ export default function SurveyPage() {
                   <div className="border-t bg-gray-50/70 px-3.5 py-3 text-[12.5px] space-y-2">
                     <L k="보호자">{[r.guardian_name, r.phone].filter(Boolean).join(' · ') || '-'}</L>
                     <L k="학교 · 지금 공부">{[r.school, r.study_now].filter(Boolean).join(' · ') || '-'}</L>
-                    {r.consult && (
-                      <L k="상담 희망">{[...(r.consult_times ?? []), ...(r.consult_how ?? [])].join(' · ') || '-'}</L>
+                    {r.consult && !!(r.consult_times?.length || r.consult_how?.length) && (
+                      <L k="상담 희망">{[...(r.consult_times ?? []), ...(r.consult_how ?? [])].join(' · ')}</L>
+                    )}
+                    {!!r.answers?.consult_new?.length && (
+                      <L k="상담 (처음)">{r.answers.consult_new.join(' · ')}</L>
+                    )}
+                    {!!r.answers?.consult_now?.length && (
+                      <L k="상담 (재원생)">{r.answers.consult_now.join(' · ')}</L>
+                    )}
+                    {!!r.answers?.stars && topics.length > 0 && (
+                      <L k="꼭지별 별점">
+                        {topics.map((t, i) => `${t.title} ★${r.answers!.stars?.[String(i)] ?? '-'}`).join('\n')}
+                      </L>
                     )}
                     {r.helpful && <L k="도움이 된 내용">{r.helpful}</L>}
                     {r.want_more && <L k="더 듣고 싶은 것">{r.want_more}</L>}
@@ -387,7 +495,8 @@ export default function SurveyPage() {
                     {(r.courses?.length || r.courses_etc) && (
                       <L k="희망 강좌">{[...(r.courses ?? []), r.courses_etc].filter(Boolean).join(' · ')}</L>
                     )}
-                    <L k="후기 공개">{r.agree_public ? '동의하셨습니다' : '동의 안 하심'}</L>
+                    {/* 후기 공개 동의는 설명회 설문에만 있던 항목이다 — 행사 설문에는 묻지 않는다 */}
+                    {!starAvg && <L k="후기 공개">{r.agree_public ? '동의하셨습니다' : '동의 안 하심'}</L>}
                   </div>
                 )}
               </div>
@@ -408,11 +517,11 @@ function L({ k, children }: { k: string; children: React.ReactNode }) {
   )
 }
 
-function Stat({ n, label, warm }: { n: number; label: string; warm?: boolean }) {
+function Stat({ n, text, label, warm }: { n?: number; text?: string; label: string; warm?: boolean }) {
   return (
     <div className="rounded-xl border px-3 py-3 text-center"
       style={warm ? { background: PEACH, borderColor: PEACH } : { background: '#fff' }}>
-      <p className="text-2xl font-bold tabular-nums" style={{ color: warm ? BROWN : GREEN }}>{n}</p>
+      <p className="text-2xl font-bold tabular-nums" style={{ color: warm ? BROWN : GREEN }}>{text ?? n}</p>
       <p className="mt-0.5 text-[11.5px]" style={{ color: warm ? BROWN : '#6b7280' }}>{label}</p>
     </div>
   )
@@ -425,7 +534,7 @@ const P = ({ children }: { children: React.ReactNode }) => (
 function Wrap({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="학부모 설문" subtitle="설명회 후기 · 상담 신청 · 개설 희망 강좌" />
+      <Header title="학부모 설문" subtitle="행사별 후기 · 만족도 · 상담 신청" />
       <div className="mx-auto max-w-3xl px-4 py-5">{children}</div>
     </div>
   )
