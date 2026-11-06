@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       }
       out.push({
         ...공통, comment, tone: 문제, source: 고른것.source,
-        note: 고른것.source === 'data' ? '알림장이 없어 **학습 기록**으로 썼어요. 읽어 보고 고쳐 주세요.' : undefined,
+        note: 고른것.source === 'data' ? '알림장이 없어 학습 기록으로 썼어요. 읽어 보고 고쳐 주세요.' : undefined,
       })
     } catch (e: any) {
       out.push({ studentId: id, name: '?', error: e?.message ?? '만들지 못했어요.' })
