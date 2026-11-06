@@ -125,7 +125,7 @@ def draw_mark(layer, B, m, t=1.0, scale=1.0):
         a = math.radians(-90 + 360 * t); tip = (c[0] + r * math.cos(a), c[1] + r * math.sin(a))
     elif typ == 'label':
         f = ImageFont.truetype(_FONT, int(m.get('size', 34) * scale))
-        txt = m.get('label', ''); a = int(255 * min(1, t * 1.5))
+        txt = m.get('label', '').replace('−', '–'); a = int(255 * min(1, t * 1.5))
         x, y = P[0]
         for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2)):           # 흰 테두리 — 그림 선 위에서도 읽히게
             d.text((x + ox, y + oy), txt, font=f, fill=(255, 255, 255, a), anchor='mm')

@@ -110,7 +110,7 @@ def right_panel(im, P, step):
     tw = d.textlength(head, font=font(40, True))
     d.text((44 + tw + 22, 46), f"{P.get('grade', '공통수학2')} · {P['sub_chapter']}", font=font(22), fill=SOFT)
     R0, RW = 1484, 410
-    bf = font(32, True); bl = wrap(d, step['bubble'], bf, RW - 50)[:4]
+    bf = font(32, True); bl = wrap(d, step['bubble'].replace('−', '–'), bf, RW - 50)[:4]   # 맑은 고딕엔 빼기표(U+2212)가 없어 □ 로 깨진다 → 반각 줄표 (2026-11-06)
     by0 = 120; bh = 48 * len(bl) + 38
     d.rounded_rectangle((R0, by0, R0 + RW, by0 + bh), 26, fill=CARD, outline=LINE, width=3)
     d.polygon([(R0 + 250, by0 + bh - 2), (R0 + 300, by0 + bh - 2), (R0 + 290, by0 + bh + 34)], fill=CARD)
