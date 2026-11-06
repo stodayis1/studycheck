@@ -137,6 +137,14 @@ export interface MonthlyReport {
    *   「마지막에 원장TALK는 없어도 될듯. 담당 선생님 코멘트 정도만 있으면 될듯해」).
    */
   comment: string | null
+  /**
+   * 그 한 줄 평이 **무엇으로 쓴 글인지** (원장님 2026-11-06).
+   *   'notes' = 선생님 알림장을 요약 · 'data' = 알림장이 없어 학습 기록으로 정리
+   * ★ 'data' 면 리포트 칸 이름이 「수업 태도」가 아니라 「이번 달 학습 요약」이 된다 —
+   *   선생님이 쓰신 글이 아닌데 그렇게 보이면 안 된다.
+   * ★ 옛 스냅샷에는 이 값이 없다. 없으면 'notes' 로 본다(칸 이름 그대로).
+   */
+  commentFrom?: 'notes' | 'data' | null
 }
 
 const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null)

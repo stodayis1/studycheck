@@ -23,7 +23,8 @@ const { buildMonthlyMessage, MONTHLY_TEMPLATE, MONTHLY_BUTTON_NAME, MONTHLY_BODY
   await import(pathToFileURL(target).href)
 const { buildTeacherSms, PER_SMS } = await import(pathToFileURL(path.resolve('lib/monthlyTeacherSms.ts')).href)
 const { span, buildMonthlyReport } = await import(pathToFileURL(path.resolve('lib/monthlyReport.ts')).href)
-const { commentPrompt, hasSomethingToSummarize, toneProblems, BAD_TONE } =
+const { commentPrompt, hasSomethingToSummarize, toneProblems, BAD_TONE,
+        dataPrompt, promptFor, recordLines, hasRecordsWorthWriting, tidyUnit, commentSourceOf } =
   await import(pathToFileURL(path.resolve('lib/monthlyComment.ts')).href)
 
 let pass = 0, total = 0
@@ -298,8 +299,8 @@ T('알림장을 화면에 늘어놓지 않는다', () => {
 
 T('한 줄 평이 없으면 **요약해서** 채운다', () => {
   const api = src('app/api/monthly-report/route.ts')
-  return api.includes('commentPrompt(재료)')
-    && api.includes('hasSomethingToSummarize(재료)')
+  return api.includes('promptFor(재료 as any)')
+    && api.includes('commentSourceOf(data, months)')
     && api.includes('const autoComment = b?.autoComment !== false')
     && api.includes('model: AI_TEXT_MODEL, thinking: NO_THINKING')
 })
@@ -337,14 +338,14 @@ T('요약이 실패해도 리포트는 그대로 만든다', () => {
   const 블록 = /async function fillComment\([\s\S]*?\n\}/.exec(api)?.[0] ?? ''
   return 블록.includes('try {') && 블록.includes('catch')
     && !블록.includes('return NextResponse') && !블록.includes('throw')
-    && 블록.includes('if (!hasSomethingToSummarize(재료)) return')   // 거리가 없으면 안 부른다
+    && 블록.includes('if (!고른것) return')   // 알림장도 기록도 없으면 안 부른다
 })
 
 // ★ 미리보기와 발송이 **같은 글**로 물어야 어긋나지 않는다.
 T('미리보기와 발송이 같은 요약 글을 쓴다', () => {
   const ui = src('app/teacher/reports/page.tsx')
   const api = src('app/api/monthly-report/route.ts')
-  return ui.includes('commentPrompt({') && api.includes('commentPrompt(재료)')
+  return ui.includes('commentPrompt({') && api.includes('promptFor(재료 as any)')
     && ui.includes('autoComment: bAutoComment')
 })
 
@@ -434,11 +435,18 @@ T('지시문이 3인칭과 상투 마무리를 못박아 막는다', () => {
     && 글.includes('없는 말을 보태지 마세요')
 })
 
+T('다시 시킬 때 무엇이 걸렸는지 짚어 준다', () => {
+  const lib = src('lib/monthlyComment.ts')
+  return lib.includes('방금 쓴 글에 이런 문제가 있었습니다')
+    && lib.includes('선생님이 쓰신 글을 줄이는 것이지')          // 알림장으로 쓴 글
+    && lib.includes('기록에 있는 숫자만 쓰는 글입니다')          // 학습 기록으로 쓴 글
+})
+
 T('말투가 걸리면 서버가 한 번 더 시킨다', () => {
   for (const f of ['app/api/monthly-report/route.ts', 'app/api/monthly-report/comments/route.ts']) {
     const s = src(f)
     const ok = s.includes('toneProblems')
-      && s.includes('방금 쓴 글에 이런 문제가 있었습니다')
+      && s.includes('retryHint(문제, 고른것.source)')   // 무엇으로 쓴 글이냐에 따라 다르게 짚는다
       && s.includes('toneProblems(다시).length < 문제.length')   // 나아질 때만 갈아끼운다
     if (!ok) return false
   }
@@ -452,7 +460,7 @@ T('한꺼번에 만들어 보는 길이 있다 (원장님만, 보내지는 않�
   const s = src('app/api/monthly-report/comments/route.ts')
   return s.includes("denyIfNotStaff(req, { adminOnly: true })")
     && !s.includes('sendAlimtalk') && !s.includes('report_links')   // 링크도 카톡도 없다
-    && s.includes('hasSomethingToSummarize')                        // 알림장 없으면 안 부른다
+    && s.includes('promptFor(재료 as any)')                          // 쓸 거리가 없으면 안 부른다
 })
 
 T('한 명 실패해도 나머지 한 줄 평은 계속 만든다', () => {
@@ -486,8 +494,117 @@ T('학년을 바꾸면 만들어 둔 한 줄 평을 버린다', () => {
 T('발송 API 가 학생별 한 줄 평을 받아 쓰고, 받은 것은 AI 로 덮지 않는다', () => {
   const s = src('app/api/monthly-report/route.ts')
   return s.includes('const c = (b?.comment ?? {})[id]')
-    && s.includes("if (c) data.comment = String(c)")
+    && s.includes('data.comment = String(c)')
     && s.includes("if ((data?.comment ?? '').trim()) return")      // 이미 있으면 AI 를 안 부른다
+})
+
+// ── 알림장이 없을 때 **학습 기록으로** 쓴다 (원장님 2026-11-06) ─────────
+// 「한줄평이 생성이 안되는 경우는 선생님이 알림장을 안쓴거잖아. 너가 학습데이터…를 보고
+//   정리해주면 어떨까. 빈곳이 있는 상태로 보내는건 좀 아닌듯」
+const 기록 = {
+  sessions: 23, rate: 96, absent: 1, hwRate: 99, hwScore: 81,
+  worksheets: { total: 6, passed: 6 },
+  levelUps: [{ unit: '1. 삼각형의 성질~2. 사각형의 성질', from: 0, to: 3.5 },
+             { unit: '1. 삼각형의 성질(이등변삼각형)', from: 0, to: 3 },
+             { unit: '오답학습지 오답+유사 과제', from: 0, to: 4 }],
+  core: { count: 6, avg: 77, best: 85, first: 76, last: 85 },
+  books: [{ name: '유형서 쎈B', pct: 75 }], booksDone: ['개념리피트', '쎈B', '개념리피트'],
+}
+
+T('알림장이 있으면 알림장으로, 없으면 학습 기록으로 쓴다', () => {
+  const 있음 = promptFor({ studentName: 'ㄱ', months: 1,
+    notices: [{ date: '2026-10-05', content: '풀이 과정을 또박또박 적었습니다.' }], records: 기록 })
+  const 없음 = promptFor({ studentName: 'ㄱ', months: 1, notices: [], records: 기록 })
+  return 있음?.source === 'notes' && 없음?.source === 'data'
+    && 있음!.prompt !== 없음!.prompt
+})
+
+// ★ 둘 다 없는데 억지로 쓰면 **없는 말을 지어낸다.** 그때는 비워 둔다.
+T('알림장도 기록도 없으면 비워 둔다 (지어내지 않는다)', () => {
+  const 빈것 = promptFor({ studentName: 'ㄱ', months: 1, notices: [], records: { sessions: 0 } })
+  const 출석만 = promptFor({ studentName: 'ㄱ', months: 1, notices: [], records: { sessions: 17, rate: 100 } })
+  return 빈것 === null && 출석만 === null
+    && hasRecordsWorthWriting({ sessions: 0, hwRate: 90 }) === false
+})
+
+T('모르는 값을 0 으로 내보내지 않는다', () => {
+  const 줄 = recordLines({ sessions: 10, rate: 100, hwRate: null, hwScore: null,
+    core: { count: 0 }, books: [{ name: '쎈', pct: null }] })
+  return 줄.some((t: string) => t.includes('수업 10회'))
+    && !줄.some((t: string) => t.includes('과제'))          // 모르면 아예 안 쓴다
+    && !줄.some((t: string) => t.includes('코어테스트'))
+    && 줄.some((t: string) => t.includes('진도 집계 전'))   // 0% 가 아니다
+})
+
+T('단원 이름을 읽을 수 있게 다듬는다', () =>
+  tidyUnit('1. 소인수 분해(소수와 합성수~최소공배수의 활용)') === '소인수 분해'
+  && tidyUnit('1. 삼각형의 성질~2. 사각형의 성질') === '삼각형의 성질~사각형의 성질'
+  && tidyUnit('2. 정비례와 반비례 + 1. 좌표와 그래프') === '정비례와 반비례, 좌표와 그래프')
+
+T('같은 단원이 여러 줄로 쌓이지 않는다', () => {
+  const 레벨줄 = recordLines(기록).filter((t: string) => t.includes('레벨'))
+  return 레벨줄.length === 1                                   // 삼각형 두 줄이 한 줄로
+    && 레벨줄[0].includes('레벨 3.5 도달')                      // 더 높은 쪽
+    && !recordLines(기록).some((t: string) => t.includes('오답학습지'))  // 재도전은 단원이 아니다
+})
+
+T('끝낸 교재를 두 번 적지 않는다', () => {
+  const t = recordLines(기록).find((x: string) => x.startsWith('끝낸 교재')) ?? ''
+  return t.includes('개념리피트') && t.split('개념리피트').length === 2
+})
+
+T('기록으로 쓰는 글은 선생님을 주인공으로 쓰지 말라고 한다', () => {
+  const 글 = dataPrompt({ studentName: 'ㄱ', studentGrade: '중2', months: 2, notices: [], records: 기록 })
+  return 글.includes('선생님이 쓴 글이 아니라')
+    && 글.includes('선생님을 주인공으로 쓰지 마세요')
+    && 글.includes('기록에 있는 사실만')
+    && 글.includes('지도하겠습니다')                 // 쓰지 말라고 못박는다
+    && 글.includes('~로 보입니다')                   // 짐작도 금지
+    && 글.includes('코어테스트(올해 누적)')           // 기록이 실제로 들어간다
+})
+
+T('리포트 자료에서 재료를 뽑는 곳이 한 곳이다', () => {
+  const 재료 = commentSourceOf({
+    student: { name: 'ㄱ', grade: '중2' }, lessons: { total: 23, onTime: 21, late: 1, absent: 1, rate: 96 },
+    homework: { achievement: 99, score: 81 }, notices: [],
+    unitLevels: [{ name: '1. 삼각형의 성질', level: 3, before: 0 }, { name: '2. 원', level: 2, before: 2 }],
+    worksheetSummary: { total: 6, passed: 6 }, coreSummary: { count: 6, avg: 77 },
+    books: [{ type: '유형서', name: '쎈B', pct: 75 }], booksDone: [{ name: '개념리피트' }],
+  }, 2)
+  return 재료.records.levelUps.length === 1                    // 안 오른 단원은 안 넣는다
+    && 재료.records.books[0].name === '유형서 쎈B'
+    && 재료.records.booksDone[0] === '개념리피트'
+    && promptFor(재료)?.source === 'data'
+})
+
+// ★ 발송·미리보기·일괄 세 곳이 같은 함수를 쓰고, **무엇으로 쓴 글인지** 남겨야 한다.
+T('세 곳이 같은 함수로 고르고, 무엇으로 썼는지 남긴다', () => {
+  const a = src('app/api/monthly-report/route.ts')
+  const b = src('app/api/monthly-report/comments/route.ts')
+  return a.includes('commentSourceOf(data, months)') && a.includes('promptFor(')
+    && a.includes("data.commentFrom = 고른것.source")
+    && b.includes('commentSourceOf(data, months)') && b.includes('promptFor(')
+    && b.includes('source: 고른것.source')
+})
+
+T('화면에서 고친 글도 무엇으로 쓴 것인지 함께 간다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  const api = src('app/api/monthly-report/route.ts')
+  return ui.includes('commentFrom: Object.fromEntries(')
+    && api.includes("const from = (b?.commentFrom ?? {})[id]")
+    && api.includes("if (from === 'data' || from === 'notes') data.commentFrom = from")
+})
+
+// ★ 선생님이 쓴 글이 아닌데 「수업 태도」로 보이면 안 된다 (원장님이 고른 쪽).
+T('기록으로 쓴 글은 리포트 칸 이름이 다르다', () => {
+  const c = src('components/report/MonthlyReport.tsx')
+  return c.includes("const 기록으로 = (d as any)?.commentFrom === 'data'")
+    && c.includes("{기록으로 ? '이번 달 학습 요약' : '수업 태도'}")
+})
+
+T('일괄 화면이 기록으로 쓴 학생을 표시해 준다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  return ui.includes('학습 기록으로 씀') && ui.includes("d.source === 'data'")
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)

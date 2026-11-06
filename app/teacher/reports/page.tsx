@@ -593,6 +593,10 @@ export default function TeacherReportsPage() {
           comment: Object.fromEntries((bDrafts ?? [])
             .filter((d: any) => (d?.comment ?? '').trim())
             .map((d: any) => [d.studentId, d.comment])),
+          // ★ 무엇으로 쓴 글인지도 같이 — 학습 기록으로 쓴 것은 리포트 칸 이름이 달라진다
+          commentFrom: Object.fromEntries((bDrafts ?? [])
+            .filter((d: any) => (d?.comment ?? '').trim() && d?.source)
+            .map((d: any) => [d.studentId, d.source])),
         }),
       })
       const j = await r.json()
@@ -981,7 +985,9 @@ export default function TeacherReportsPage() {
                        style={{ background: 'white', border: '1px solid #FDE68A' }}>
                     <p className="text-[11px] font-bold" style={{ color: '#92400E' }}>
                       한 줄 평 {bDrafts.filter((d: any) => (d?.comment ?? '').trim()).length}/{bDrafts.length}명
-                      <span className="font-normal"> — 고쳐 쓰시면 그대로 나갑니다. 비워 두면 그 학생은 「한 줄 평 없음」으로 나가요.</span>
+                      <span className="font-normal"> — 고쳐 쓰시면 그대로 나갑니다. 비워 두면 그 학생은 「한 줄 평 없음」으로 나가요.
+                        알림장을 안 쓰신 학생은 <b>학습 기록(출석·과제·평가·코어테스트·학습지)</b>으로 정리해 뒀어요 —
+                        그 학생 리포트에서는 칸 이름이 「이번 달 학습 요약」으로 나갑니다.</span>
                     </p>
                     {bDrafts.map((d: any, i: number) => (
                       <div key={d.studentId ?? i}>
@@ -989,6 +995,9 @@ export default function TeacherReportsPage() {
                           <b style={{ color: '#92400E' }}>{d.name}</b>
                           {d.grade ? ` ${d.grade}` : ''}{d.teacher ? ` · ${d.teacher}` : ''}
                           {typeof d.notices === 'number' ? ` · 알림장 ${d.notices}건` : ''}
+                          {d.source === 'data' && (
+                            <span className="font-bold" style={{ color: '#B45309' }}> · 학습 기록으로 씀</span>
+                          )}
                           {d.note && <span style={{ color: '#B45309' }}> · {d.note}</span>}
                           {d.error && <span style={{ color: '#B91C1C' }}> · {d.error}</span>}
                           {d.tone?.length > 0 && <span style={{ color: '#B91C1C' }}> · 말투 확인: {d.tone.join(', ')}</span>}

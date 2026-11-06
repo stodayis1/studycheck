@@ -18,7 +18,7 @@ import { buildMonthlyMessage, resolveMonthlyTemplate } from '@/lib/monthlyReport
 import { aligoConfig, sendAlimtalk, AligoError } from '@/lib/aligo'
 import Anthropic from '@anthropic-ai/sdk'
 import { AI_TEXT_MODEL, NO_THINKING, textOf } from '@/lib/aiModels'
-import { commentPrompt, hasSomethingToSummarize, toneProblems } from '@/lib/monthlyComment'
+import { commentSourceOf, promptFor, retryHint, toneProblems } from '@/lib/monthlyComment'
 import { buildTeacherSms, type SentReport } from '@/lib/monthlyTeacherSms'
 import { sendSmsViaOps } from '@/lib/opsSms'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
@@ -42,21 +42,16 @@ function db() {
  */
 async function fillComment(data: any, months: 1 | 2) {
   if ((data?.comment ?? '').trim()) return
-  const 재료 = {
-    studentName: data.student.name, studentGrade: data.student.grade,
-    months, notices: data.notices ?? [],
-    numbers: {
-      sessions: data.lessons.total, onTime: data.lessons.onTime,
-      late: data.lessons.late, absent: data.lessons.absent,
-      hwRate: data.homework.achievement, hwScore: data.homework.score,
-    },
-  }
-  if (!hasSomethingToSummarize(재료)) return
+  // ★ 알림장이 없으면 **학습 기록으로** 쓴다 (원장님 2026-11-06
+  //   「빈곳이 있는 상태로 보내는건 좀 아닌듯」). 둘 다 없으면 비워 둔다 — 지어내지 않는다.
+  const 재료 = commentSourceOf(data, months)
+  const 고른것 = promptFor(재료 as any)
+  if (!고른것) return
   try {
     const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const 한번 = async (덧말?: string) => textOf(await ai.messages.create({
       model: AI_TEXT_MODEL, thinking: NO_THINKING, max_tokens: 1500,
-      messages: [{ role: 'user', content: commentPrompt(재료) + (덧말 ?? '') }],
+      messages: [{ role: 'user', content: 고른것.prompt + (덧말 ?? '') }],
     }))
 
     let 요약 = await 한번()
@@ -64,12 +59,15 @@ async function fillComment(data: any, months: 1 | 2) {
     // ★ 말투가 걸리면 **무엇이 걸렸는지 짚어** 한 번 더 시킨다 (원장님 2026-11-06
     //   「선생님께서 격려해주셨다」 같은 제3자 말투가 나왔다). 0.2원짜리라 한 번은 더 해 볼 만하다.
     if (문제.length) {
-      const 다시 = await 한번(`\n\n방금 쓴 글에 이런 문제가 있었습니다: ${문제.join(', ')}.`
-        + ` 그 표현을 빼고 다시 써 주세요. 선생님이 쓰신 글을 줄이는 것이지 새로 평가하는 글이 아닙니다.`)
+      const 다시 = await 한번(retryHint(문제, 고른것.source))
       if (다시 && toneProblems(다시).length < 문제.length) { 요약 = 다시; 문제 = toneProblems(다시) }
     }
     if (문제.length) console.error('한 줄 평 말투 경고:', data.student?.name, 문제.join(', '))
-    if (요약) data.comment = 요약
+    if (요약) {
+      data.comment = 요약
+      // 어디서 온 글인지 남긴다 — 학습 기록으로 쓴 것은 리포트 칸 이름이 달라진다
+      data.commentFrom = 고른것.source
+    }
   } catch (e: any) {
     console.error('한 줄 평 요약 실패:', e?.message ?? e)
   }
@@ -177,7 +175,13 @@ export async function POST(req: NextRequest) {
     if (!data) { out.push({ studentId: id, name: '?', url: null, error: '학생을 찾지 못했어요.' }); continue }
     // 선생님이 적어 둔 한 줄 평이 있으면 같이 박는다.
     const c = (b?.comment ?? {})[id]
-    if (c) data.comment = String(c)
+    if (c) {
+      data.comment = String(c)
+      // ★ 일괄 화면에서 고친 글 — 학습 기록으로 만든 것이면 그 사실도 같이 온다
+      //   (리포트 칸 이름이 「이번 달 학습 요약」으로 바뀐다)
+      const from = (b?.commentFrom ?? {})[id]
+      if (from === 'data' || from === 'notes') data.commentFrom = from
+    }
 
     // 없으면 **알림장을 요약해** 채운다. 늘어놓지 않는다.
     if (autoComment) await fillComment(data, months)
