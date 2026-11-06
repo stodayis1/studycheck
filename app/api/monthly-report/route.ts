@@ -18,7 +18,7 @@ import { buildMonthlyMessage, resolveMonthlyTemplate } from '@/lib/monthlyReport
 import { aligoConfig, sendAlimtalk, AligoError } from '@/lib/aligo'
 import Anthropic from '@anthropic-ai/sdk'
 import { AI_TEXT_MODEL, NO_THINKING, textOf } from '@/lib/aiModels'
-import { commentPrompt, hasSomethingToSummarize } from '@/lib/monthlyComment'
+import { commentPrompt, hasSomethingToSummarize, toneProblems } from '@/lib/monthlyComment'
 import { buildTeacherSms, type SentReport } from '@/lib/monthlyTeacherSms'
 import { sendSmsViaOps } from '@/lib/opsSms'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
@@ -54,11 +54,21 @@ async function fillComment(data: any, months: 1 | 2) {
   if (!hasSomethingToSummarize(재료)) return
   try {
     const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const m = await ai.messages.create({
+    const 한번 = async (덧말?: string) => textOf(await ai.messages.create({
       model: AI_TEXT_MODEL, thinking: NO_THINKING, max_tokens: 1500,
-      messages: [{ role: 'user', content: commentPrompt(재료) }],
-    })
-    const 요약 = textOf(m)
+      messages: [{ role: 'user', content: commentPrompt(재료) + (덧말 ?? '') }],
+    }))
+
+    let 요약 = await 한번()
+    let 문제 = toneProblems(요약)
+    // ★ 말투가 걸리면 **무엇이 걸렸는지 짚어** 한 번 더 시킨다 (원장님 2026-11-06
+    //   「선생님께서 격려해주셨다」 같은 제3자 말투가 나왔다). 0.2원짜리라 한 번은 더 해 볼 만하다.
+    if (문제.length) {
+      const 다시 = await 한번(`\n\n방금 쓴 글에 이런 문제가 있었습니다: ${문제.join(', ')}.`
+        + ` 그 표현을 빼고 다시 써 주세요. 선생님이 쓰신 글을 줄이는 것이지 새로 평가하는 글이 아닙니다.`)
+      if (다시 && toneProblems(다시).length < 문제.length) { 요약 = 다시; 문제 = toneProblems(다시) }
+    }
+    if (문제.length) console.error('한 줄 평 말투 경고:', data.student?.name, 문제.join(', '))
     if (요약) data.comment = 요약
   } catch (e: any) {
     console.error('한 줄 평 요약 실패:', e?.message ?? e)

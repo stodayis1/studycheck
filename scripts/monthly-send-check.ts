@@ -23,7 +23,8 @@ const { buildMonthlyMessage, MONTHLY_TEMPLATE, MONTHLY_BUTTON_NAME, MONTHLY_BODY
   await import(pathToFileURL(target).href)
 const { buildTeacherSms, PER_SMS } = await import(pathToFileURL(path.resolve('lib/monthlyTeacherSms.ts')).href)
 const { span, buildMonthlyReport } = await import(pathToFileURL(path.resolve('lib/monthlyReport.ts')).href)
-const { commentPrompt, hasSomethingToSummarize } = await import(pathToFileURL(path.resolve('lib/monthlyComment.ts')).href)
+const { commentPrompt, hasSomethingToSummarize, toneProblems, BAD_TONE } =
+  await import(pathToFileURL(path.resolve('lib/monthlyComment.ts')).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -354,10 +355,10 @@ T('요약 글이 날짜 나열이 아니라 **흐름**으로 묶으라고 한다
               { date: '2026-10-21', content: '활용 단원에서 풀이 방향을 못 잡았습니다.' }],
     numbers: { sessions: 24, hwRate: 88 },
   })
-  return 글.includes('알림장 2건을 먼저 읽고')
+  return 글.includes('선생님 알림장 2건:')
     && 글.includes('날짜를 하나하나 나열하지 말고')
     && 글.includes('두 달')
-    && 글.includes('이모지와 마크다운은 쓰지')
+    && 글.includes('이모지\u00b7마크다운')
 })
 
 T('글이 길면 두 칸으로 쪼개지 않고 한 칸을 넓게 쓴다', () => {
@@ -374,8 +375,7 @@ T('AI 한 줄 평이 알림장을 읽고 요약한다', () => {
     notices: [{ date: '2026-10-05', content: '오늘은 풀이 과정을 또박또박 적었습니다.' }],
   })
   return ui.includes('notices: ((mNew as any)?.notices ?? [])')   // 화면이 알림장을 넘긴다
-    && 글.includes('먼저 읽고')
-    && 글.includes('숫자보다 선생님 말씀이 중심입니다')
+    && 글.includes('선생님이 ')                                   // 누가 쓴 글인지 못박는다
     && 글.includes('오늘은 풀이 과정을 또박또박 적었습니다.')      // 알림장이 실제로 들어간다
 })
 
@@ -400,6 +400,94 @@ T('결과를 보냄·건너뜀·실패로 나눠 보여 준다', () => {
   return s.includes('const 보냄 = bResult.filter((x) => x.sent)')
     && s.includes('const 건너뜀 = bResult.filter((x) => x.skipped)')
     && s.includes('const 실패 = bResult.filter((x) => x.error)')
+})
+
+// ── 말투 (원장님 2026-11-06) ────────────────────────────────────────────
+// ★ 「선생님께서 격려해주셨다」 — 선생님을 **남처럼** 쓴 글이 실제로 나갔다.
+//   선생님 코멘트는 **선생님이 쓰신 글을 줄이는 것**이다. 제3자 관찰문이 되면 안 된다.
+T('선생님을 남처럼 쓴 글을 잡아낸다', () => {
+  const 걸린다 = [
+    '민수가 수학을 잘할 수 있는 학생이어서 선생님께서 격려해 주셨습니다.',
+    '선생님의 지도로 계산 실수가 줄었습니다.',
+    '앞으로도 더 성장할 수 있도록 지도하겠습니다.',
+    '가정에서도 응원해 주시면 큰 힘이 될 것입니다.',
+    '성실한 태도가 관찰되었습니다.',
+  ]
+  return 걸린다.every((t) => toneProblems(t).length > 0)
+})
+
+T('멀쩡한 요약은 걸지 않는다 (괜한 다시 부르기 방지)', () => {
+  const 좋은글 = '9월에는 일차방정식 계산에서 실수가 잦았습니다. 10월에 들어서는 '
+    + '풀이 과정을 또박또박 적기 시작해 같은 실수가 줄었습니다. '
+    + '지금은 활용 문제에서 식을 세우는 연습을 하고 있습니다.'
+  return toneProblems(좋은글).length === 0 && BAD_TONE.length >= 8
+})
+
+T('지시문이 3인칭과 상투 마무리를 못박아 막는다', () => {
+  const 글 = commentPrompt({
+    studentName: '홍길동', months: 1,
+    notices: [{ date: '2026-10-05', content: '풀이 과정을 또박또박 적었습니다.' }],
+  })
+  return 글.includes('선생님께서 격려해 주셨다')          // 쓰면 안 되는 예를 보여 준다
+    && 글.includes('3인칭 표현은 쓰지 않습니다')
+    && 글.includes('지도하겠습니다')
+    && 글.includes('없는 말을 보태지 마세요')
+})
+
+T('말투가 걸리면 서버가 한 번 더 시킨다', () => {
+  for (const f of ['app/api/monthly-report/route.ts', 'app/api/monthly-report/comments/route.ts']) {
+    const s = src(f)
+    const ok = s.includes('toneProblems')
+      && s.includes('방금 쓴 글에 이런 문제가 있었습니다')
+      && s.includes('toneProblems(다시).length < 문제.length')   // 나아질 때만 갈아끼운다
+    if (!ok) return false
+  }
+  return true
+})
+
+// ── 한 화면에서 다 같이 (원장님 2026-11-06) ─────────────────────────────
+// 「한명한명 모두 AI생성해야 볼수 있는건가? … 한 화면에서 요약정리하게 보여주면
+//   해당학생의 월간보고서에 한꺼번에 씌워서 일괄발송되게」
+T('한꺼번에 만들어 보는 길이 있다 (원장님만, 보내지는 않는다)', () => {
+  const s = src('app/api/monthly-report/comments/route.ts')
+  return s.includes("denyIfNotStaff(req, { adminOnly: true })")
+    && !s.includes('sendAlimtalk') && !s.includes('report_links')   // 링크도 카톡도 없다
+    && s.includes('hasSomethingToSummarize')                        // 알림장 없으면 안 부른다
+})
+
+T('한 명 실패해도 나머지 한 줄 평은 계속 만든다', () => {
+  const s = src('app/api/monthly-report/comments/route.ts')
+  return s.includes('for (const id of ids)')
+    && s.includes('} catch (e: any) {')
+    && s.includes("out.push({ studentId: id, name: '?', error:")
+})
+
+T('화면이 만들기와 보내기를 두 단추로 나눈다', () => {
+  const s = src('app/teacher/reports/page.tsx')
+  return s.includes('makeBulkDrafts')
+    && s.includes('한꺼번에 만들어 보기')
+    && s.includes('명에게 만들고 보내기')
+    && s.includes('만들기만 하고 보내지는 않아요')      // 누르기 전에 분명히 알린다
+})
+
+T('화면에서 고친 한 줄 평이 그대로 발송에 실린다', () => {
+  const s = src('app/teacher/reports/page.tsx')
+  return s.includes('comment: Object.fromEntries((bDrafts ?? [])')
+    && s.includes("filter((d: any) => (d?.comment ?? '').trim())")   // 비운 칸은 서버가 채운다
+    && s.includes('[d.studentId, d.comment]')
+})
+
+T('학년을 바꾸면 만들어 둔 한 줄 평을 버린다', () => {
+  const s = src('app/teacher/reports/page.tsx')
+  // 엉뚱한 학생 글이 남아 있으면 **다른 학부모께 그 글이 간다.**
+  return s.includes('onClick={() => { setBDrafts(null); setBGrades(')
+})
+
+T('발송 API 가 학생별 한 줄 평을 받아 쓰고, 받은 것은 AI 로 덮지 않는다', () => {
+  const s = src('app/api/monthly-report/route.ts')
+  return s.includes('const c = (b?.comment ?? {})[id]')
+    && s.includes("if (c) data.comment = String(c)")
+    && s.includes("if ((data?.comment ?? '').trim()) return")      // 이미 있으면 AI 를 안 부른다
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
