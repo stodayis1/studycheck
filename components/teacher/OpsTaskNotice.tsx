@@ -65,9 +65,14 @@ export function OpsTaskNotice() {
           <a key={n.id} href={OPS_HOME} target="_blank" rel="noreferrer" className="block px-4 py-2.5 hover:bg-[#EFF6FF]">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold" style={{ color: '#1D4ED8' }}>전달사항</p>
-              <span className="text-[10px] font-semibold shrink-0" style={{ color: '#6B8FD6' }}>수학OPS 「오늘 할 일」에서 확인 ›</span>
+              {/* ★ 「확인」을 누르면 사라진다는 것을 적어 둔다 (원장님 2026-11-06) —
+                  확인 여부를 알 수 있고, 다음 전달사항과 섞이지 않는다. */}
+              <span className="text-[10px] font-semibold shrink-0" style={{ color: '#6B8FD6' }}>확인하면 사라져요 ›</span>
             </div>
             <p className="text-xs mt-0.5 whitespace-pre-wrap" style={{ color: '#1E3A8A' }}>{n.content}</p>
+            <p className="text-[10px] mt-1" style={{ color: '#6B8FD6' }}>
+              눌러서 수학OPS 「오늘 할 일」에서 <b>확인</b>을 누르면 이 줄이 사라져요.
+            </p>
           </a>
         ))}
 

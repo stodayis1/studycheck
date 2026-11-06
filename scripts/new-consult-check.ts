@@ -114,6 +114,31 @@ T('날마다 아침에 돈다 (vercel.json)', () => {
 
 T('보내기 전에 눈으로 볼 수 있다 (dry)', () => cron().includes("get('dry') === '1'"))
 
+// ── 「누르면 사라진다」를 알려 준다 (원장님 2026-11-06) ──────────────────
+// 「확인하시면 전달사항 클릭하면 사라진다는 내용도 써줘. 그래야 확인했는지 안했는지 알고,
+//   그게 사라져야 다음 전달사항이랑 안섞이지」
+// ★ 선생님이 안 누르면 그 줄이 남아 다음 전달사항과 섞이고, 원장님은 확인 여부를 알 수 없다.
+T('알림 글이 **누르면 사라진다**고 알려 준다', () => {
+  const 글 = noteText({
+    name: '홍길동', grade: '중2', school: '신원중',
+    stage: STAGES[0], firstLesson: '2026-10-26', today: '2026-11-02',
+  })
+  return 글.includes('확인')
+    && /사라집니다|사라져요/.test(글)
+    && 글.includes('다음 전달사항')          // 왜 눌러야 하는지까지
+})
+
+T('대시보드 전달사항 칸에도 적혀 있다', () => {
+  const c = src('components/teacher/OpsTaskNotice.tsx')
+  return c.includes('확인하면 사라져요')
+    && c.includes('이 줄이 사라져요')
+    && c.includes('{n.content}')             // 글 아래에 붙는다
+})
+
+T('매뉴얼에도 적혀 있다', () =>
+  src('app/teacher/manual/page.tsx').includes('「확인」하면 그 전달사항은 사라집니다'))
+
+
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
 process.exit(pass === total ? 0 : 1)
