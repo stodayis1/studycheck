@@ -5,6 +5,9 @@
 잡는 것: 말(say)에 영문자·숫자·기호, { } 짝, 모르는 표시, 자세(A~E) 아님, cue 가 말에 없음,
          수식(tex)이 안 그려짐, 말풍선에 화면에서 깨지는 글자, 노트 줄이 너무 넓음(자동으로 줄어듦 → 경고)
 --sheet: 노트에 쓰일 줄을 단계별로 쌓은 그림 (<id>.png) — 영상 마지막 노트와 같은 모양
+         도형 그림판(board)이 있으면 <id>_그림판.png 도 — 단계마다 그 단계 표시(번호를 붙여)와 남아 있는 표시를 그린다.
+         표시 자리가 꼭짓점·선에 정확히 붙었는지 이 그림으로 확인한다. 좌표는 board_grid.py 로 읽는다.
+--cuts: 재료 폴더(그림이 있는 곳). 없으면 대본 폴더 docs/대본/<과정>/풀이 → 영상 폴더 <과정>/_재료/풀이 로 짐작
 """
 import argparse, glob, io, json, os, re, sys
 from PIL import Image, ImageDraw
@@ -13,14 +16,64 @@ from lesson_video import plain, font, has_glyph, penfont, parse_say
 PENF = penfont(40)
 import suji_pose
 from proof_video import render_line, COLORS, NOTE, QUIET
+import board as boardlib
+VIDEOS = 'C:/Users/USER/Videos/수지쌤 강의영상'
 
 GOTHIC = font(32, True)
 MAXW = (NOTE[2] - NOTE[0] - 8) - 130 - 40
 
 
-def check(path, sheet_dir=None):
+def cuts_dir(path, cuts):
+    if cuts: return cuts
+    m = re.search(r'/대본/([^/]+)/풀이/', os.path.abspath(path).replace(os.sep, '/'))
+    return os.path.join(VIDEOS, m.group(1), '_재료', '풀이') if m else os.path.dirname(os.path.abspath(path))
+
+
+def board_of(P, path, cuts):
+    fp = P['board']['image']
+    if not os.path.isabs(fp): fp = os.path.join(cuts_dir(path, cuts), fp)
+    return boardlib.Board(Image.open(fp), P['board'].get('crop'), (P['board'].get('width', 600), 560))
+
+
+def board_sheet(P, B, out):
+    """단계마다 그림판 한 칸: 앞 단계에서 남은 표시(연하게) + 그 단계 표시(번호)"""
+    cells = []; kept = []
+    for i, st in enumerate(P['steps'], 1):
+        ms = st.get('marks', [])
+        if not ms and not kept: continue
+        L = B.img.convert('RGBA')
+        for m in kept:
+            lay = Image.new('RGBA', L.size, (0, 0, 0, 0)); boardlib.draw_mark(lay, B, m, 1.0)
+            lay.putalpha(lay.getchannel('A').point(lambda v: v * 45 // 100)); L.alpha_composite(lay)
+        d = ImageDraw.Draw(L)
+        for j, m in enumerate(ms, 1):
+            lay = Image.new('RGBA', L.size, (0, 0, 0, 0)); tip = boardlib.draw_mark(lay, B, m, 1.0); L.alpha_composite(lay)
+            if tip: d.text((tip[0] + 8, tip[1] - 30), str(j), font=font(24, True), fill=(0, 0, 0))
+        head = Image.new('RGB', (L.width, 34 + 26 * len(ms)), (253, 252, 247)); hd = ImageDraw.Draw(head)
+        hd.text((6, 4), f"단계 {i} · {st.get('bubble')}", font=font(22, True), fill=(150, 60, 29))
+        for j, m in enumerate(ms, 1):
+            hd.text((10, 32 + 26 * (j - 1)), f"{j}. {m.get('type')} 「{m.get('cue', '')}」 {m.get('label', '')}", font=font(18), fill=(60, 60, 60))
+        cell = Image.new('RGB', (L.width, head.height + L.height), (255, 255, 255)); cell.paste(head, (0, 0)); cell.paste(L.convert('RGB'), (0, head.height))
+        cells.append(cell)
+        kept += [m for m in ms if m.get('keep', m.get('type') == 'aux')]
+    if not cells: return
+    cols = 2; cw = max(c.width for c in cells) + 20
+    rows_h = [max(c.height for c in cells[r:r + cols]) + 20 for r in range(0, len(cells), cols)]
+    im = Image.new('RGB', (cw * cols, sum(rows_h)), (230, 230, 230)); y = 0
+    for r in range(0, len(cells), cols):
+        for c, cell in enumerate(cells[r:r + cols]): im.paste(cell, (c * cw + 10, y + 10))
+        y += rows_h[r // cols]
+    im.save(out)
+
+
+def check(path, sheet_dir=None, cuts=None):
     errs, warns = [], []
     P = json.load(open(path, encoding='utf-8'))
+    B = None
+    if P.get('board'):
+        try: B = board_of(P, path, cuts)
+        except Exception as e: errs.append(f'board 그림을 못 엶 — {e}')
+    elif any(st.get('marks') for st in P.get('steps', [])): errs.append('marks 가 있는데 board 가 없음')
     for k in ('id', 'title', 'concept_no', 'chapter', 'sub_chapter', 'book_page', 'steps'):
         if k not in P: errs.append(f'항목 없음: {k}')
     total = 0; rows = []
@@ -48,6 +101,10 @@ def check(path, sheet_dir=None):
         if miss: errs.append(f'{tag}: 말풍선에 □로 깨지는 글자 {"".join(sorted(miss))}')
         if not st.get('bubble'): errs.append(f'{tag}: 말풍선 비었음')
         norm = lambda s: re.sub(r'[\s,]', '', s)
+        for j, m in enumerate(st.get('marks', []), 1):
+            mt = f'{tag} 표시{j}'
+            if m.get('cue') and norm(m['cue']) not in norm(p): errs.append(f'{mt}: cue 「{m["cue"]}」가 말에 없음')
+            errs += [f'{mt}: {x}' for x in boardlib.check_mark(m, B)]
         for j, w in enumerate(st.get('write', []), 1):
             wt = f'{tag} 줄{j}'
             if not w.get('quiet') and norm(w.get('cue', '')) not in norm(p): errs.append(f'{wt}: cue 「{w.get("cue")}」가 말에 없음')
@@ -59,8 +116,9 @@ def check(path, sheet_dir=None):
                 img = render_line(w['tex'], COLORS[w.get('color', 'ink')], w.get('size', 60))
             except Exception as e:
                 errs.append(f'{wt}: 수식이 안 그려짐 — {str(e).splitlines()[0][:80]}'); continue
-            if img.width > MAXW - 70 * w.get('indent', 0):
-                warns.append(f'{wt}: 줄이 넓어 {int(100 * (MAXW - 70 * w.get("indent", 0)) / img.width)}% 로 줄어듦 — 두 줄로 나누는 게 좋음')
+            mw = MAXW - ((B.size[0] + 40) if B else 0) - 70 * w.get('indent', 0)      # 그림판이 있으면 그만큼 좁다
+            if img.width > mw:
+                warns.append(f'{wt}: 줄이 넓어 {int(100 * mw / img.width)}% 로 줄어듦 — 두 줄로 나누는 게 좋음')
             rows.append((i, w, img))
     if not (500 <= total <= 2000): warns.append(f'말 전체 {total}자 (보통 800~1600자)')
     if sheet_dir and rows:
@@ -78,16 +136,19 @@ def check(path, sheet_dir=None):
             if w.get('underline'): d.line([(x, y + img.height + 10), (x + img.width, y + img.height + 10)], fill=(215, 54, 44), width=5)
             y += img.height + 26
         im.save(os.path.join(sheet_dir, P['id'] + '.png'))
+    if sheet_dir and B is not None:
+        os.makedirs(sheet_dir, exist_ok=True); board_sheet(P, B, os.path.join(sheet_dir, P['id'] + '_그림판.png'))
     return errs, warns, total
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument('target'); ap.add_argument('--sheet')
+    ap = argparse.ArgumentParser(); ap.add_argument('target', nargs='+'); ap.add_argument('--sheet'); ap.add_argument('--cuts')
     a = ap.parse_args()
-    files = sorted(glob.glob(os.path.join(a.target, '*.json'))) if os.path.isdir(a.target) else [a.target]
+    files = []
+    for t in a.target: files += [f for f in sorted(glob.glob(os.path.join(t, '*.json'))) if not os.path.basename(f).startswith('_')] if os.path.isdir(t) else [t]
     bad = 0
     for f in files:
-        e, w, n = check(f, a.sheet)
+        e, w, n = check(f, a.sheet, a.cuts)
         print(f"[{'통과' if not e else '고칠 것'}] {os.path.basename(f)}  ({n}자)")
         for x in e: print('   ✗', x)
         for x in w: print('   ·', x)

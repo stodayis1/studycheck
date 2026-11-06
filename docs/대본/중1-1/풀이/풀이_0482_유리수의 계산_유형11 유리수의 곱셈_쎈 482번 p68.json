@@ -1,0 +1,67 @@
+{
+ "id": "풀이_0482",
+ "kind": "풀이",
+ "label": "쎈 482번",
+ "title": "유리수의 곱셈",
+ "type_code": "중1-1-04-11",
+ "local_no": "0482",
+ "concept_no": 4,
+ "chapter": "정수와 유리수",
+ "sub_chapter": "유리수의 계산",
+ "book_page": 68,
+ "problem": {
+  "image": "0482.png"
+ },
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 482번!",
+   "say": "자, 이 문제 시험에 진짜 잘 나와. 같이 보자. // 다섯 개 곱셈 중에서 계산 결과가 나머지 넷과 다른 하나를 찾는 문제야.",
+   "write": []
+  },
+  {
+   "pose": "C",
+   "bubble": "먼저 계산해 봐",
+   "say": "손으로 먼저 풀어 보고 와. 기다릴게. // 다섯 개 다 계산해도 되지만, 부호부터 보면 훨씬 빨라.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "부호부터 정하기!",
+   "say": "자, 곱셈에서는 순서가 있어. {강조 부호를 먼저 정하고, 그다음 절댓값끼리 곱하면 돼.} // 음수가 홀수 개면 마이너스, 짝수 개면 플러스야. // 다섯 개 모두 음수가 한 개 아니면 세 개라서 부호는 전부 마이너스죠. 그러니까 절댓값만 비교하면 되는 거다.",
+   "write": [
+    {"cue": "음수가 홀수 개면", "tex": "음수가 홀수 개 $\\rightarrow$ $-$", "color": "blue"},
+    {"cue": "짝수 개면 플러스야", "tex": "음수가 짝수 개 $\\rightarrow$ $+$", "color": "blue"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "약분하며 곱하기",
+   "say": "그럼 하나씩 약분하면서 계산해 볼게. [[쓰기]] 일번, 이번, 삼번은 모두 마이너스 삼분의 이가 나오죠.",
+   "write": [
+    {"quiet": true, "tex": "$①\\ \\left(-\\frac{3}{5}\\right)\\times\\left(+\\frac{10}{9}\\right)=-\\frac{2}{3}$"},
+    {"quiet": true, "tex": "$②\\ \\left(+\\frac{5}{7}\\right)\\times\\left(-\\frac{14}{15}\\right)=-\\frac{2}{3}$"},
+    {"quiet": true, "tex": "$③\\ \\left(-\\frac{2}{9}\\right)\\times(+3)=-\\frac{2}{3}$"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "④만 -6!",
+   "say": "남은 두 개도 마저 계산해 볼게. [[쓰기]] {강조 오번도 마이너스 삼분의 이인데, 사번만 마이너스 육이 나와.} // 그래서 답은 사번이 되는 거다.",
+   "write": [
+    {"quiet": true, "tex": "$④\\ (+15)\\times\\left(-\\frac{3}{5}\\right)\\times\\left(+\\frac{2}{3}\\right)=-6$"},
+    {"quiet": true, "tex": "$⑤\\ \\left(-\\frac{5}{14}\\right)\\times\\left(-\\frac{7}{10}\\right)\\times\\left(-\\frac{8}{3}\\right)=-\\frac{2}{3}$"},
+    {"cue": "답은 사번이", "tex": "$\\therefore\\ ④$", "color": "red", "box": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "부호 → 절댓값",
+   "say": "자, 이 유형은 정리하면 이거야. // {강조 음수의 개수로 부호를 먼저 정하고, 약분하면서 절댓값끼리 곱하는 거야.} // 오번처럼 음수가 세 개면 마이너스라는 것, 별표 빡 쳐 놔. // 자, 이 유형은 이제 끝. 비슷한 문제로 한 번 더 풀어 봐.",
+   "write": [
+    {"cue": "음수의 개수로 부호를", "tex": "음수의 개수로 부호 $\\rightarrow$ 약분해서 곱하기", "color": "red", "underline": true}
+   ]
+  }
+ ],
+ "quiz": {"answer": "④", "wrong": ["①", "③", "⑤"]}
+}

@@ -1,0 +1,66 @@
+{
+ "id": "풀이_0653",
+ "kind": "풀이",
+ "label": "쎈 653번",
+ "title": "곱셈 기호와 나눗셈 기호의 생략",
+ "type_code": "중1-1-05-01",
+ "local_no": "0653",
+ "concept_no": 5,
+ "chapter": "방정식",
+ "sub_chapter": "문자의 사용과 식",
+ "book_page": 88,
+ "problem": {"image": "0653.png"},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 653번!",
+   "say": "자, 이제 문자와 식으로 넘어왔어. 첫 문제부터 같이 보자. // 곱셈 기호와 나눗셈 기호를 빼고 쓴 것 중에서 옳지 않은 것을 고르는 문제야.",
+   "write": []
+  },
+  {
+   "pose": "C",
+   "bubble": "직접 고쳐 써 봐",
+   "say": "보기 다섯 개를 직접 고쳐 써 보고 다시 틀어. // 나눗셈이 들어 있는 보기를 특히 잘 봐.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "기호 생략 규칙",
+   "say": "자, 규칙부터 볼게. // {강조 곱셈 기호는 빼고 쓰고, 수는 문자 앞에, 같은 문자의 곱은 거듭제곱으로 써.} // {강조 나눗셈은 역수의 곱셈으로 바꾸거나 분수 꼴로 쓰면 돼.}",
+   "write": [
+    {"cue": "곱셈 기호는 빼고", "tex": "$a\\times b=ab,\\ \\ a\\times a=a^2$", "color": "blue"},
+    {"cue": "나눗셈은 역수의 곱셈으로", "tex": "$a\\div b=a\\times\\frac{1}{b}=\\frac{a}{b}$", "color": "blue"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "하나씩 확인",
+   "say": "자, 보기를 하나씩 고쳐 써 볼게. [[쓰기]] 일번, 이번, 삼번, 오번은 모두 규칙대로 맞게 썼어. // 오번은 마이너스 일로 나누니까 앞에 마이너스가 붙는 것까지 잘 봐야 돼.",
+   "write": [
+    {"quiet": true, "tex": "$①\\ a\\times\\frac{1}{3}\\times b=\\frac{ab}{3}$  $\\bigcirc$"},
+    {"quiet": true, "tex": "$②\\ 4\\times(x+y)\\times\\frac{1}{5}=\\frac{4(x+y)}{5}$  $\\bigcirc$"},
+    {"quiet": true, "tex": "$③\\ m^4\\times\\frac{1}{3}=\\frac{m^4}{3}$  $\\bigcirc$"},
+    {"quiet": true, "tex": "$⑤\\ a^3\\times\\frac{1}{b}\\times\\frac{1}{-1}=-\\frac{a^3}{b}$  $\\bigcirc$"}
+   ]
+  },
+  {
+   "pose": "A",
+   "bubble": "④는 r까지 나눠!",
+   "say": "{강조 별표 빡 쳐 놔, 사번이 함정이야.} // 나누기 사분의 삼 알은 사분의 삼 알 전체로 나누는 거야. // 그러니까 역수를 곱하면 {강조 알도 분모로 내려가야 되는 거다.} [[쓰기]] 그래서 옳지 않은 것은 사번이야.",
+   "write": [
+    {"cue": "역수를 곱하면", "tex": "$④\\ p\\times q\\div\\frac{3}{4}r=p\\times q\\times\\frac{4}{3r}$", "color": "blue"},
+    {"quiet": true, "tex": "$=\\frac{4pq}{3r}\\neq\\frac{4pqr}{3}$", "indent": 1},
+    {"cue": "옳지 않은 것은 사번", "tex": "$\\therefore\\ ④$", "color": "red", "box": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "나눗셈은 역수 곱하기",
+   "say": "자, 이 유형 정리할게. // {강조 나눗셈이 섞여 있으면 먼저 역수의 곱셈으로 바꾸고, 그다음에 곱셈 기호를 빼면 돼.} // 문자가 붙은 수로 나눌 때는 그 문자까지 통째로 분모로 간다는 거, 잊지 마. // 규칙만 지키면 실수할 일 없어. 오늘도 수고했어.",
+   "write": [
+    {"cue": "역수의 곱셈으로 바꾸고", "tex": "$\\div$ 는 역수의 $\\times$ 로 바꾼 뒤 기호 생략!", "color": "red", "underline": true}
+   ]
+  }
+ ],
+ "quiz": {"answer": "④", "wrong": ["①", "③", "⑤"]}
+}

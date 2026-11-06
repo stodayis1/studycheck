@@ -36,12 +36,15 @@ def main():
         cn = G.get('concept_no')
         chap = [f"{ts(s['start'])} {s['bubble']}" for s in G['steps']]
         chap[0] = f"0:00 {G['steps'][0]['bubble']}"
+        # 중학교는 쎈 B단계 대표유형 (label 「쎈 60번」, concept_no 는 개념 번호가 아니라 소단원 번호)
+        ssen = G['label'].startswith('쎈')
         desc = '\n'.join([
+            f"{grade} {G['chapter']} › {G['sub_chapter']} — 쎈 대표유형 「{G['title']}」 {G['label'][2:]} 풀이." if ssen else
             f"{grade} {G['chapter']} › {G['sub_chapter']} — 개념+유형 {G['label']} 「{G['title']}」 풀이.",
             '영상을 멈추고 먼저 풀어 본 다음, 풀이와 맞춰 보세요.',
             '',
-            f"▶ 먼저 볼 개념 강의: {cn:02d}. {CONCEPT_TITLE.get(cn, '')}" if cn else '',
-            f"▶ 교재: 개념+유형 개념편 {grade} {G['book_page']}쪽",
+            f"▶ 먼저 볼 개념 강의: {cn:02d}. {CONCEPT_TITLE.get(cn, '')}" if cn and not ssen else '',
+            f"▶ 교재: 쎈 {grade} {G['book_page']}쪽" if ssen else f"▶ 교재: 개념+유형 개념편 {grade} {G['book_page']}쪽",
             '',
             '[목차]', *chap,
             '',

@@ -13,6 +13,8 @@
                 "short": true (false 면 --version short 에서 뺀다) } ] }
 풀이 영상(필수예제)도 같은 도구로 만든다 — 대본에 "kind": "풀이", "label": "필수예제 01",
   "problem": {"image": "문제 그림 경로", "crop": [..] (선택)} 을 넣으면 문제를 노트 위에 고정해 두고 그 아래 노트에 풀이를 쓴다.
+도형 문제는 "board": {"image": "문제 그림", "crop": [..]} 로 그림을 노트 오른쪽에 크게 띄우고, 단계마다 "marks" 로
+  말에 맞춰 꼭짓점·모서리·각을 짚고 보조선을 긋는다 — 형식은 board.py 맨 위 설명 (원장님 2026-11-06).
 수지 자세(suji_pose.py): A~I 또는 이름 — 입 그림 두 장이 있는 자세는 입이 움직이고, 없으면 몸이 들썩인다.
   예전 설명: A 가리키기(입 움직임) · B 이것만 기억 · C 갸웃 · D 지시봉 · E 화이팅 — A 말고는 말소리에 맞춰 몸이 살짝 들썩인다.
 """
@@ -24,6 +26,7 @@ from matplotlib import font_manager as fm, pyplot as plt, rcParams
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import suji_pose
+import board as boardlib
 from lesson_video import (synth_scene, cue_time, plain, sound, pcm, mouth_track, pencil, font, penfont, wrap,
                           W, H, FPS, BG, INK, SOFT, BRICK, CARD, LINE, PEN, HERE)
 
@@ -97,6 +100,7 @@ def paper():
 
 PROB = None                                   # 풀이 영상: 노트 위에 고정한 문제 그림 (main 에서 채움)
 FIG = None                                    # 증명 그림: 오른쪽 말풍선 아래에 고정 (main 에서 채움)
+BOARD = None                                  # 도형 그림판 (board.py, main 에서 채움)
 
 
 def right_panel(im, P, step):
@@ -106,7 +110,7 @@ def right_panel(im, P, step):
     tw = d.textlength(head, font=font(40, True))
     d.text((44 + tw + 22, 46), f"{P.get('grade', '공통수학2')} · {P['sub_chapter']}", font=font(22), fill=SOFT)
     R0, RW = 1484, 410
-    bf = font(32, True); bl = wrap(d, step['bubble'], bf, RW - 50)[:4]
+    bf = font(32, True); bl = wrap(d, step['bubble'].replace('−', '–'), bf, RW - 50)[:4]   # 맑은 고딕엔 빼기표(U+2212)가 없어 □ 로 깨진다 → 반각 줄표 (2026-11-06)
     by0 = 120; bh = 48 * len(bl) + 38
     d.rounded_rectangle((R0, by0, R0 + RW, by0 + bh), 26, fill=CARD, outline=LINE, width=3)
     d.polygon([(R0 + 250, by0 + bh - 2), (R0 + 300, by0 + bh - 2), (R0 + 290, by0 + bh + 34)], fill=CARD)
@@ -152,7 +156,7 @@ def main():
         import re
         m = re.search(r'/대본/([^/]+)/', os.path.abspath(a.proof).replace(os.sep, '/'))
         P['grade'] = m.group(1) if m else '공통수학2'
-    global NOTE, PROB, FIG
+    global NOTE, PROB, FIG, BOARD
     if P.get('problem'):
         fp = P['problem']['image']
         if not os.path.isabs(fp): fp = os.path.join(a.cuts or os.path.dirname(os.path.abspath(a.proof)), fp)
@@ -179,13 +183,19 @@ def main():
         fg = Image.open(fp).convert('RGB')
         if P['figure'].get('crop'): fg = fg.crop(P['figure']['crop'])
         s = min(410 / fg.width, 340 / fg.height); FIG = fg.resize((int(fg.width * s), int(fg.height * s)), Image.LANCZOS)
+    BOARD = None; BXY = (0, 0)
+    if P.get('board'):                     # 도형 그림판: 노트 창 오른쪽에 고정 (줄은 그 왼쪽에 쓴다)
+        fp = P['board']['image']
+        if not os.path.isabs(fp): fp = os.path.join(a.cuts or os.path.dirname(os.path.abspath(a.proof)), fp)
+        BOARD = boardlib.Board(Image.open(fp), P['board'].get('crop'), (P['board'].get('width', 600), VH - 36))
+        BXY = (VX1 - BOARD.size[0] - 22, VY0 + 18)
     step_lines = []
     for k, st in enumerate(steps):
         if st.get('newpage') and lines: page += 1; cy = 46
         mine = []
         for wr in st.get('write', []):
             img = render_line(wr['tex'], COLORS[wr.get('color', 'ink')], wr.get('size', 60))
-            maxw = (VX1 - VX0) - 130 - 40
+            maxw = ((BXY[0] - VX0) if BOARD else (VX1 - VX0)) - 130 - 40
             if img.width > maxw:
                 img = img.resize((maxw, int(img.height * maxw / img.width)), Image.LANCZOS)
             dur = max(0.8, min(3.6, img.width / 480))
@@ -198,7 +208,7 @@ def main():
     # 1) 음성: 단계마다 읽혀 하나로 잇는다 (단계 사이 GAP 초).
     # 말 안의 [[쓰기]] 자리에서는 말을 멈추고, "quiet": true 줄들을 차례로 쓴다 (풀이 영상: 계산은 읽지 않고 보여만 준다).
     # [[쓰기]] 가 n 개면 quiet 줄 묶음(이어진 quiet 줄)도 n 개 — k 번째 묶음이 k 번째 쉼에 써진다.
-    sr = 16000; audio = []; offs = []; t = 0.0
+    sr = 16000; audio = []; offs = []; t = 0.0; marks = []
     norm = lambda s: ''.join(c for c in s if c not in ' ,')
     for k, st in enumerate(steps):
         parts = st['say'].split(QUIET)
@@ -235,6 +245,14 @@ def main():
             after = max(0.0, last - t - part_at[hit])
             ln['t0'] = t + part_at[hit] + cue_time(part_al[hit], parts[hit], wr['cue'], after)
             last = ln['t0']; q = hit
+        # 그림판 표시: 줄과 같은 방법으로 cue 자리에서 그린다. 그 단계 끝에서 지운다(keep·보조선은 끝까지)
+        for m in st.get('marks', []):
+            if m.get('cue'):
+                hit = next((j for j in range(len(parts)) if norm(sound(m['cue'])) in norm(sound(plain(parts[j])))), 0)
+                t0 = t + part_at[hit] + cue_time(part_al[hit], parts[hit], m['cue'])
+            else: t0 = t + 0.3
+            keep = m.get('keep', m.get('type') == 'aux')
+            marks.append(dict(m=m, t0=t0, dur=boardlib.mark_dur(m), end=None if keep else t + st_t + GAP))
         audio.append(np.zeros(int(GAP * sr), np.float32)); t += st_t + GAP
     total = t; n = int(math.ceil(total * FPS))
     y = np.concatenate(audio); full = os.path.join(tmp, 'all.wav')
@@ -288,7 +306,18 @@ def main():
                            '-i', '-', '-i', full, '-t', f'{n / FPS:.4f}', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
                            '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-ar', '44100', '-movflags', '+faststart', a.out],
                           stdin=subprocess.PIPE)
-    prev_key = prev_bytes = None; chrome = {}
+    prev_key = prev_bytes = None; chrome = {}; boards = {}
+    def board_img(state):                 # 그림판 + 지금 보이는 표시들 — 표시 상태로 캐시
+        if state not in boards:
+            L = BOARD.img.convert('RGBA'); tip = None
+            for i, p in state:
+                lay = Image.new('RGBA', L.size, (0, 0, 0, 0))
+                tp = boardlib.draw_mark(lay, BOARD, marks[i]['m'], p)
+                L.alpha_composite(lay)
+                if p < 1: tip = tp
+            if len(boards) > 400: boards.clear()
+            boards[state] = (L, tip)
+        return boards[state]
     for f in range(n):
         tt = f / FPS; k = step_at(tt); st = steps[k]
         done = [i for i, ln in enumerate(lines) if tt >= ln['t0'] + ln['dur'] + 0.15]
@@ -299,7 +328,9 @@ def main():
         mouth = mouths[f] if talk else 'closed'
         bob = 0 if talk else int(min(1.0, loud[f]) * 3) * 3          # 입 그림이 한 장뿐인 자세는 말할 때 3단계로 들썩
         prog = tuple((i, round(min(1, (tt - lines[i]['t0']) / lines[i]['dur']), 3)) for i in writing)
-        key = (k, cur_page, off, upto, pose, mouth, bob, prog)
+        bstate = tuple((i, round(min(1, (tt - mk['t0']) / mk['dur']), 2)) for i, mk in enumerate(marks)
+                       if mk['t0'] <= tt and (mk['end'] is None or tt < mk['end'])) if BOARD else ()
+        key = (k, cur_page, off, upto, pose, mouth, bob, prog, bstate)
         if key == prev_key:
             ff.stdin.write(prev_bytes); continue
         ck = (k, pose)
@@ -318,6 +349,12 @@ def main():
             if p < 1: tip = (VX0 + ln['x'] + wpx, VY0 + ln['y'] - off + ln['img'].height * (0.55 + 0.3 * math.sin(tt * 18)))
         mask = Image.new('L', win.size, 0); ImageDraw.Draw(mask).rounded_rectangle((0, 0, win.width - 1, win.height - 1), 14, fill=255)
         fr.paste(win, (VX0, VY0), mask)
+        if BOARD:                          # 그림판 카드 (흰 바탕) — 노트가 밀려 올라가도 그 자리
+            bimg, btip = board_img(bstate); bx, by = BXY
+            ImageDraw.Draw(fr).rounded_rectangle((bx - 12, by - 12, bx + bimg.width + 12, by + bimg.height + 12), 16,
+                                                 fill=(255, 255, 255, 255), outline=LINE + (255,), width=2)
+            fr.alpha_composite(bimg, (bx, by))
+            if btip: tip = (bx + btip[0], by + btip[1])
         sj = suji(pose, mouth, top)
         fr.alpha_composite(sj, (1484 + 205 - sj.width // 2, H - sj.height + 6 - bob))
         if tip:

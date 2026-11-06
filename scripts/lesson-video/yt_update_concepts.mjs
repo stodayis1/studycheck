@@ -54,8 +54,11 @@ for (const it of vids) {
   const course = (title.match(/^\[([^\]]+)\]/) || [])[1], cur = (it.snippet.title.match(/^\[([^\]]+)\]/) || [])[1]
   if (cur && course !== cur) continue
   const desc = t.split('설명:\n')[1].trim().replace(/</g, '＜').replace(/>/g, '＞')
+  const v = (await api(`youtube/v3/videos?part=snippet,status,fileDetails&id=${id}`)).items[0]
+  // 파일 이름 그대로 올라간 영상은 번호만 같은 다른 학년 영상일 수 있다 — 원본 크기가 이 폴더 mp4 와 같을 때만 고친다 (2026-11-03 중2-1: 다른 학년 20편이 같이 걸림)
+  const mp4 = files.find((f) => f.startsWith(pre) && f.endsWith('.mp4'))
+  if (!cur && (!mp4 || +v.fileDetails?.fileSize !== fs.statSync(path.join(dir, mp4)).size)) { console.log(no, id, '건너뜀 (원본 크기가 폴더 mp4 와 다름)'); continue }
   if (dry) { console.log('dry', no, id, title); continue }
-  const v = (await api(`youtube/v3/videos?part=snippet,status&id=${id}`)).items[0]
   await api('youtube/v3/videos?part=snippet,status', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
     id, snippet: { title, description: desc, categoryId: v.snippet.categoryId, defaultLanguage: 'ko', tags: ['수학의지혜', '수지쌤', (title.match(/^\[(중\d)/) || [])[1] ? title.match(/^\[(중\d)/)[1] + '수학' : '고1수학'] },
     status: { privacyStatus: 'unlisted', selfDeclaredMadeForKids: v.status.madeForKids ?? false, embeddable: true } }) })
