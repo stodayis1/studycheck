@@ -20,7 +20,7 @@ import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/workshee
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers, levelForInsert, DEFAULT_LEVEL } =
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers, levelForInsert, DEFAULT_LEVEL, isDiagnostic, parseDiagnosticTitle } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -810,6 +810,90 @@ T('매쓰홀릭 화면이 레벨 칸을 비우지 않고 넣는다', () => {
   return 넣는줄.length > 0 && 넣는줄.every((l) => /levelForInsert|레벨/.test(l)) && src.includes('levelForInsert(')
 })
 
+
+// ── 2026-11-06 ① 「숫자+레벨」도 레벨이다 (원장님 「숫자+레벨도 레벨이야 규칙에 추가해」) ──
+//   그 전에는 「6학년 2학기 4단원 2.5레벨」이 레벨 없음으로 읽혀 통째로 막혔다(하루 91건 중 3건).
+T('「2.5레벨」·「3.5 레벨」도 레벨로 읽는다', () =>
+  parseWorksheetTitle('6학년 2학기 4단원 2.5레벨').level === 2.5
+  && parseWorksheetTitle('5학년 2학기 4단원 3.5 레벨').level === 3.5
+  && parseWorksheetTitle('3학년 2학기 4단원 2.5레벨').level === 2.5
+  && parseWorksheetTitle('초6-2 4단원 Lv.3').level === 3)
+
+// ★ 「레벨학습지」라는 낱말은 레벨이 아니다. 「초6-2 레벨학습지」의 「2 레벨」이 걸리면
+//   레벨 2 로 조용히 들어간다 — 레벨 현황판이 엉뚱한 칸에 쌓인다.
+//   ★ 「6-2」처럼 초·중·고가 안 붙은 제목이 실제로 많다(「(5-2)」·「6-1 1단원 …」).
+//     그런 제목은 학년을 떼어내지 못해 「2 레벨학습지」가 그대로 남는다 — 막이가 없으면
+//     레벨 2 로 읽힌다. 그래서 **학년이 안 붙은 꼴로** 시험한다.
+T('「레벨학습지」는 레벨로 읽지 않는다', () =>
+  parseWorksheetTitle('6-2 레벨학습지 4단원').level === null
+  && parseWorksheetTitle('초6-2 레벨학습지 4단원').level === null
+  && parseWorksheetTitle('* 레벨학습지 (5-2) 4단원 Lv 2 *').level === 2
+  && parseWorksheetTitle('* 레벨학습지 (5-2) 4단원 Lv 2.5 *').level === 2.5)
+
+T('숫자+레벨이면 「레벨이 없어요」로 막지 않는다', () =>
+  needsLevel({ title: '6학년 2학기 4단원 2.5레벨', kind: '학습지' }, BOOKS) === true
+  && parseWorksheetTitle('6학년 2학기 4단원 2.5레벨').level != null)
+
+// ── 2026-11-06 ② 주간·주말평가 → 평가관리의 진단평가 ─────────────────────────
+//   원장님 「주간평가는 평가로 들어가야해. 진단평가에 넣으면 됨. 제목에 맞춰 단원에 맞게」
+T('주간·주말·진단평가는 진단평가로 간다 (레벨이 없을 때)', () =>
+  isDiagnostic({ title: '11월 주간평가(1) - 기본도형[1단계]', kind: '진단평가', level: null }) === true
+  && isDiagnostic({ title: '11월 주말평가(1) - 기본도형[2단계]', kind: '진단평가', level: null }) === true
+  && isDiagnostic({ title: '11월 첫째주 선행 주간평가', kind: '진단평가', level: null }) === true)
+
+// ★ 같은 「주간평가」라는 말이 학습지 메뉴에서도 쓰인다. 레벨로 갈라야 한다 —
+//   안 가르면 레벨학습지가 통째로 평가관리로 새어 나간다(2026-11-06 하루에 5건).
+T('레벨이 적힌 주간평가는 레벨학습지다 (평가로 새지 않는다)', () =>
+  isDiagnostic({ title: '중1-2 1. 기본도형 ~ 3. 입체도형_Lv3.5', kind: '주간평가', level: 3.5 }) === false
+  && isDiagnostic({ title: '[주간평가] 중1-1 2. 문자와 식_Lv4', kind: '학습지', level: 4 }) === false
+  && worksheetTypeOf({ title: '[주간평가] 중1-1 2. 문자와 식_Lv4', kind: '학습지' }, BOOKS) === 'main')
+
+// ★ 월간평가는 코어테스트다(2026-11-02). 진단평가가 그것을 가로채면 평가관리에서
+//   어느 시험 점수인지 다시 알 수 없다.
+T('월간평가·TOMA 는 진단평가가 가로채지 않는다', () =>
+  isDiagnostic({ title: '11월 월간평가', kind: '월간평가', level: null }) === false
+  && isDiagnostic({ title: 'TOMA 본고사', kind: '월간평가', level: null }) === false
+  && coreTestRound({ title: '11월 월간평가', kind: '월간평가' }) === '월간평가')
+
+// ★★ 「단원평가」는 **초등 학교시험** 칸이다. 거기로 보내면 학교 점수에 학원 학습지
+//    점수가 섞인다. 매쓰홀릭 초등 레벨학습지 제목에 그 말이 흔히 들어 있다.
+T('「단원평가」는 진단평가로 보내지 않는다 (초등 학교시험 칸이다)', () =>
+  isDiagnostic({ title: '4학년 2학기 4단원 단원평가 Lv3', kind: '단원학습 학습지', level: 3 }) === false
+  && isDiagnostic({ title: '4학년 2학기 4단원 단원평가', kind: '단원학습 학습지', level: null }) === false)
+
+T('진단평가 제목에서 단원과 단계를 떼낸다', () => {
+  const a = parseDiagnosticTitle('11월 주간평가(1) - 기본도형[1단계]')
+  const b = parseDiagnosticTitle('11월 주간평가(1)-도형의 닮음[2단계]')
+  const c = parseDiagnosticTitle('11월 주간평가(1) - 원의 성질 [2단계]')
+  const d = parseDiagnosticTitle('11월 주말평가(1) - 기본도형[2단계]')
+  const e = parseDiagnosticTitle('11월 첫째주 선행 주간평가')
+  return a.unitName === '기본도형' && a.level === 1
+    && b.unitName === '도형의 닮음' && b.level === 2
+    && c.unitName === '원의 성질' && c.level === 2
+    && d.unitName === '기본도형' && d.level === 2
+    && e.level === null && !/평가|월/.test(e.unitName ?? '')
+})
+
+// ★ 진단평가는 레벨이 없어도 막지 않는다 — 단계는 레벨 칸이 아니다.
+T('진단평가는 「레벨이 없어요」로 막지 않는다', () =>
+  needsLevel({ title: '11월 주간평가(1) - 기본도형[1단계]', kind: '진단평가' }, BOOKS) === false
+  && isEnoughOne({ title: '11월 주간평가(1) - 기본도형 2회차', kind: '진단평가', level: null }, BOOKS) === false)
+
+// ★★ 화면이 **실제로** 그렇게 넣는지 본다 — 함수만 고치고 넣는 자리를 안 고치면
+//    에러 없이 규칙이 없는 것과 똑같다 (matholic-import 스킬 ①만 고치는 실수).
+T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  // ★ 「있나」만 보면 안 된다 — `if (false && isDiagnostic(row))` 로 꺼 두어도 통과한다.
+  //   갈림길이 **그 판정만 보고** 갈리는지 꼴까지 본다.
+  return /\n\s*if \(isDiagnostic\(row\)\) \{/.test(src)
+    && src.includes('parseDiagnosticTitle(row.title)')
+    && /exam_type: '진단평가'/.test(src)
+    && /unit_name: p\.exam\?\.unitName/.test(src)
+    && /level: p\.exam\?\.level/.test(src)
+    && src.includes("p.mode === 'exam'")
+    && src.includes('count.exam')
+})
+
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
-process.exit(pass === total ? 0 : 1)
+process.exitCode = pass === total ? 0 : 1

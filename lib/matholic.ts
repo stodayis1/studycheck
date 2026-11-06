@@ -89,7 +89,22 @@ const FRACTION_CELL = /^(\d{1,3})\s*\/\s*(\d{1,3})$/
  * ★ `\bLv` 로 쓰면 안 된다. 밑줄도 낱말 글자라 「_Lv5」 앞에는 **낱말 경계가 없어서**
  *   안 걸린다. 실제로 쎈 학습지 제목(…나눗셈_Lv5)이 통째로 레벨 없음으로 읽혔다.
  */
-const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
+/**
+ * 제목에 적힌 레벨. 두 가지 꼴을 다 받는다.
+ *   ① 「Lv.3」·「_Lv3.5」·「Lv 2」
+ *   ② 「2.5레벨」·「3.5 레벨」 ← 원장님 2026-11-06 「숫자+레벨도 레벨이야 규칙에 추가해」
+ *
+ * ★ ②에 `(?!\s*학습지)` 를 붙인 까닭 — 「초6-2 레벨학습지」의 「2 레벨」이 레벨 2 로
+ *   걸려 버린다. 「레벨학습지」라는 낱말 자체는 레벨이 아니다.
+ * ★ 두 꼴 중 어느 쪽이 걸렸는지 모르므로 숫자는 **`levelOf` 로만** 꺼낸다.
+ *   `Number(m[1])` 로 쓰면 ②가 걸렸을 때 NaN 이 되고, 레벨이 조용히 사라진다.
+ */
+const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)|([0-9]+(?:\.[0-9]+)?)\s*레벨(?!\s*학습지)/i
+const levelOf = (m: RegExpExecArray | null): number | null => {
+  if (!m) return null
+  const n = Number(m[1] ?? m[2])
+  return Number.isFinite(n) ? n : null
+}
 /**
  * ★★ 학습지 제목에서 **종류를 가르는 규칙** — 원장님이 2026-10-31 에 정하셨다.
  *     아직 **코드로 안 옮겼다**(종류를 담을 `kind` 칸이 없다). 다음 주 템플릿 작업에서 한다.
@@ -103,7 +118,10 @@ const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
  *
  * ── 담기는 칸 (분류) ────────────────────────────────────────────────────────
  *   TOMA · 코어테스트 · **월간평가**            → 평가관리 (회차: 예비 1회·예비 2회·본고사·월간평가)
- *   진단평가 · 주간평가 · 단원평가              → 평가 (단원평가는 **진단평가**로)
+ *   진단평가 · 주간평가 · 주말평가              → 평가관리의 **진단평가** (`isDiagnostic`)
+ *                                              ★ 레벨이 적혀 있으면 레벨학습지다
+ *                                              ★ **단원평가는 여기 아니다** — 초등 학교시험 칸이라
+ *                                                보내면 학교 점수에 학원 점수가 섞인다
  *   교재 · 교과서 · **교재 이름 자체**          → 쌍둥이 학습지
  *   데일리 · Daily Test                       → 학습일지의 데일리테스트 칸 (학습지가 아니다)
  *   **그 밖에 전부**                          → **레벨학습지**
@@ -181,6 +199,19 @@ const LEVEL = /(?:^|[^A-Za-z])Lv\.?\s*([0-9]+(?:\.[0-9]+)?)/i
  *
  *   ★ 2026-11-02 확인: 지금 들어 있는 학습지 4,754건 중 단원 칸에 교재 이름이 적힌 것은
  *     **0건**이다. 지난 기록을 고칠 일은 없고, 이제부터 들어오는 것만 달라진다.
+ *
+ * ── 2026-11-06 에 바뀐 것 (원장님) ────────────────────────────────────────────
+ *   ⑤ **숫자+레벨도 레벨이다** 「숫자+레벨도 레벨이야 규칙에 추가해」.
+ *      「6학년 2학기 4단원 **2.5레벨**」·「5학년 2학기 4단원 **3.5 레벨**」이 그 전에는
+ *      레벨 없음으로 읽혀 통째로 막혔다(2026-11-06 하루분 91건 중 3건).
+ *      → `LEVEL` 에 `([0-9.]+)\s*레벨` 를 더했다. 숫자는 **`levelOf`** 로 꺼낸다.
+ *      ★ 「레벨학습지」라는 낱말은 레벨이 아니다 — `(?!\s*학습지)` 로 막아 두었다.
+ *   ⑥ **주간·주말평가는 평가관리의 진단평가로** 「주간평가는 평가로 들어가야해.
+ *      진단평가에 넣으면 됨. 제목에 맞춰 단원에 맞게 넣어주고」.
+ *      → `isDiagnostic` · `parseDiagnosticTitle`. `unit_name` 에 단원, `level` 에 단계.
+ *      ★ **레벨이 있으면 레벨학습지**다 — 「[주간평가] 중1-2 … _Lv3.5」는 학습지 메뉴에서
+ *        낸 레벨학습지다. 레벨로 가르지 않으면 그쪽이 통째로 평가로 새어 나간다.
+ *      ★ **단원평가는 보내지 않는다** (초등 학교시험 칸). 위 분류 표에 적어 두었다.
  *
  * ★ 선생님께 **새로 가르칠 말은 없다.** 고쳐야 할 것은 표기뿐이다 — 별표로 감싸기
  *   (`* 레벨학습지 (3-2) 3단원 *`), 꺾쇠(`< 중 ( 1-1 ) 1단원 >`), 들쭉날쭉한 띄어쓰기
@@ -337,7 +368,7 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
 
     rows.push({
       line: cell.line, student, date, kind, course, title,
-      level: lv ? Number(lv[1]) : null,
+      level: levelOf(lv),
       right, total, score,
       raw: [s, ...body, `${score}점`].join(' · '),
     })
@@ -483,7 +514,7 @@ export function isEnoughOne(row: { title?: string | null; kind?: string | null; 
   //     (학습일지로 간다) · 코어테스트(평가관리로 간다)는 레벨이 없어도 이너프원이 아니다.
   //     이 판정이 화면에서 **맨 먼저** 돌기 때문에, 여기서 걸리면 그 줄은 통째로 사라진다.
   if (row.level == null && /\d+\s*회차/.test(t)
-    && !isWrongNote(row) && !isDailyTest(row) && !coreTestRound(row)
+    && !isWrongNote(row) && !isDailyTest(row) && !coreTestRound(row) && !isDiagnostic(row)
     && !isTextbookLinked(row, books)) return true
   return false
 }
@@ -515,6 +546,70 @@ export function coreTestRound(row: { title?: string | null; kind?: string | null
   if (/예비\s*2/.test(t)) return '예비 2회'
   if (/예비\s*1/.test(t)) return '예비 1회'
   return '본고사'
+}
+
+/**
+ * **진단평가**인가 — 맞으면 학습지가 아니라 **평가관리의 진단평가**로 간다.
+ *
+ * 원장님 2026-11-06 「주간평가는 평가로 들어가야해. 진단평가에 넣으면 됨.
+ * 제목에 맞춰 단원에 맞게 넣어주고」.
+ *
+ * ★ **레벨이 적혀 있으면 평가가 아니라 레벨학습지다.** 같은 「주간평가」라는 말이
+ *   두 군데서 쓰이기 때문이다 —
+ *     · 진단평가 메뉴: 「11월 주간평가(1) - 기본도형[1단계]」 (레벨 없음, 단계로 적는다)
+ *     · 학습지 메뉴:  「[주간평가] 중1-2 1. 기본도형 ~ 3. 입체도형_Lv3.5」 (레벨 있음)
+ *   레벨로 가르지 않으면 뒤쪽 학습지가 통째로 평가관리로 새어 나간다
+ *   (2026-11-06 실측: 같은 날 앞 8건·뒤 5건이 섞여 있었다).
+ *   원장님 규칙 「학습지 제목에 레벨이 쓰여있으면 무조건 레벨학습지」와도 같은 방향이다.
+ *
+ * ★ **「단원평가」는 여기 넣지 않는다.** 스터디체크에서 단원평가는 **초등 학교시험**이고
+ *   (평가관리 학교시험 탭 · 단원평가 현황판) 선생님이 학교 점수를 손으로 적는 칸이다.
+ *   그런데 매쓰홀릭 초등 레벨학습지 제목에 「4학년 2학기 4단원 단원평가 Lv3」처럼
+ *   그 말이 흔히 들어 있다. 여기로 보내면 **학교 점수 칸에 학원 학습지 점수가 쌓인다.**
+ *   원장님께 2026-11-06 에 그대로 알려 드리고 레벨학습지로 두기로 했다.
+ *
+ * ★ `coreTestRound` 를 **먼저** 본다 — 월간평가는 코어테스트로 간다(2026-11-02).
+ */
+export function isDiagnostic(row: { title?: string | null; kind?: string | null; level?: number | null }): boolean {
+  const t = `${row.title ?? ''} ${row.kind ?? ''}`
+  if (!/진단\s*평가|주간\s*평가|주말\s*평가/.test(t)) return false
+  if (coreTestRound(row)) return false
+  return row.level == null
+}
+
+/** 진단평가 제목에서 떼어낸 것 — 평가관리의 `unit_name` 과 `level` 칸에 그대로 들어간다. */
+export interface DiagnosticParts {
+  /** '기본도형' · '도형의 닮음' — 못 찾으면 null (제목은 memo 에 그대로 남긴다) */
+  unitName: string | null
+  /** 「[2단계]」의 2. 없으면 제목의 레벨 표기, 그것도 없으면 null */
+  level: number | null
+}
+
+/**
+ * 「11월 주간평가(1) - 기본도형[1단계]」 → 단원 '기본도형' · 단계 1.
+ *
+ * 평가관리의 진단평가는 선생님들이 `unit_name` 에 단원 이름만 적고 `level` 에 단계를 적는다
+ * (실측 2026-11-06: 「1. 기본도형~2. 작도와 합동」 level 2 꼴). 제목을 통째로 넣으면
+ * 「11월 주간평가(1)」이 단원 이름이 되고, 평가관리에서 같은 단원끼리 모이지 않는다.
+ *
+ * 덜어내는 것: 「[…]」 머리표·「11월」·「첫째주」·「주간평가(1)」·레벨 표기.
+ * 남은 것이 단원이다. 아무것도 안 남으면 null — **지어내지 않는다.**
+ */
+export function parseDiagnosticTitle(title: string): DiagnosticParts {
+  let t = String(title ?? '').trim()
+  const 단계 = /\[\s*([0-9]+(?:\.[0-9]+)?)\s*단계\s*\]/.exec(t)
+  const level = 단계 ? Number(단계[1]) : levelOf(LEVEL.exec(t))
+  t = t
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/[0-9]+\s*월/g, ' ')
+    .replace(/(첫|둘|두|셋|세|넷|네|다섯)\s*째\s*주/g, ' ')
+    .replace(/(진단|주간|주말)\s*평가\s*(\([0-9]+\))?/g, ' ')
+    .replace(LEVEL, ' ')
+    .replace(/[-–~·,\s]+$/g, '')
+    .replace(/^[-–~·,\s]+/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return { unitName: t || null, level }
 }
 
 /** 제목에서 떼어낸 것들. 학습지를 새로 만들 때 이 값들이 그대로 칸에 들어간다. */
@@ -558,7 +653,7 @@ export function parseWorksheetTitle(title: string): TitleParts {
   if (g) t = (t.slice(0, g.index) + ' ' + t.slice(g.index + g[0].length)).trim()
 
   const lv = LEVEL.exec(t)
-  const level = lv ? Number(lv[1]) : null
+  const level = levelOf(lv)
   if (lv) t = (t.slice(0, lv.index) + ' ' + t.slice(lv.index + lv[0].length)).trim()
 
   const rd = /[-_\s]\s*([0-9]+)\s*차/.exec(t)
