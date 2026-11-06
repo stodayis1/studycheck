@@ -504,7 +504,9 @@ export default function TeacherReportsPage() {
       const r = await apiFetch(`/api/monthly-report?studentId=${studentId}&year=${year}&month=${month}&months=${mMonths}`)
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? '불러오지 못했어요.')
-      setMNew({ ...j.data, comment: talk || null })
+      setMNew({ ...j.data, comment: talk || j.data?.comment || null })
+      // ★ 서버가 요약해 채워 준 한 줄 평을 **글상자에도** 올린다 — 선생님이 고쳐 쓰실 수 있게.
+      if (!talk && !mComment && (j.data?.comment ?? '').trim()) setMComment(j.data.comment)
     } catch (e: any) { alert(e.message); setMNew(null) }
     setMNewBusy(false)
   }
@@ -537,6 +539,10 @@ export default function TeacherReportsPage() {
   // 보낸 뒤 담당 선생님(키움쌤·채움쌤)께도 문자로 알릴지 (원장님 2026-11-05)
   const [bTellTeachers, setBTellTeachers] = useState(true)
   const [bAutoComment, setBAutoComment] = useState(true)
+  // 한 화면에서 **다 같이 보고 고치는** 한 줄 평 (원장님 2026-11-06
+  //   「한명한명 모두 AI생성해야 볼수 있는건가? … 한 화면에서 요약정리하게 보여주면」)
+  const [bDrafts, setBDrafts] = useState<any[] | null>(null)
+  const [bDraftBusy, setBDraftBusy] = useState(false)
   const [bTeacherSms, setBTeacherSms] = useState<any[] | null>(null)
   /** 고른 기간 이름 — 「2026년 10월」 / 「2026년 9~10월」 (해를 넘기면 「2026년 12월~2027년 1월」) */
   function 기간말() {
@@ -548,6 +554,24 @@ export default function TeacherReportsPage() {
   }
   const [bBusy, setBBusy] = useState(false)
   const [bResult, setBResult] = useState<any[] | null>(null)
+
+  /** 고른 학년 학생들의 한 줄 평을 **한꺼번에** 만들어 화면에 펼친다. 아직 안 보낸다. */
+  async function makeBulkDrafts() {
+    if (!bTargets.length) return
+    if (!confirm(`${bTargets.length}명의 한 줄 평을 한꺼번에 만듭니다 (학생당 0.2원).\n`
+      + '만들기만 하고 보내지는 않아요. 보고 고치신 뒤에 보내시면 됩니다.\n계속할까요?')) return
+    setBDraftBusy(true)
+    try {
+      const r = await apiFetch('/api/monthly-report/comments', {
+        method: 'POST',
+        body: JSON.stringify({ studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth, months: mMonths }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? '만들지 못했어요.')
+      setBDrafts(j.items ?? [])
+    } catch (e: any) { alert(e.message) }
+    setBDraftBusy(false)
+  }
 
   async function sendMonthlyBulk() {
     if (!bTargets.length) return
@@ -565,6 +589,10 @@ export default function TeacherReportsPage() {
         body: JSON.stringify({
           studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth, months: mMonths,
           send: true, resend: bResend, tellTeachers: bTellTeachers, autoComment: bAutoComment,
+          // ★ 화면에서 고친 한 줄 평을 **그대로** 씌운다. 비운 학생은 서버가 알아서 채운다.
+          comment: Object.fromEntries((bDrafts ?? [])
+            .filter((d: any) => (d?.comment ?? '').trim())
+            .map((d: any) => [d.studentId, d.comment])),
         }),
       })
       const j = await r.json()
@@ -910,7 +938,7 @@ export default function TeacherReportsPage() {
                     const n = myStudentsForMonthly.filter((s) => (s.grade ?? '').trim() === g).length
                     return (
                       <button key={g}
-                        onClick={() => setBGrades((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])}
+                        onClick={() => { setBDrafts(null); setBGrades((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]) }}
                         className="px-3 py-1.5 rounded-full text-xs font-semibold"
                         style={bGrades.includes(g) ? { background: '#92400E', color: 'white' } : { background: 'white', color: '#92400E', border: '1px solid #FDE68A' }}>
                         {g} {n}명
@@ -940,10 +968,45 @@ export default function TeacherReportsPage() {
                     보낸 뒤 <b>담당 선생님께 문자로 알리기</b> (키움쌤·채움쌤 모두)
                   </span>
                 </label>
+                {/* 한 줄 평을 **다 같이** 만들어 한 화면에서 고친다 (원장님 2026-11-06).
+                    한 명씩 열어 「AI 자동생성」을 누르면 학년 하나에 서른 번이다. */}
+                <button onClick={makeBulkDrafts} disabled={!bTargets.length || bDraftBusy}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold mb-2 disabled:opacity-40"
+                  style={{ background: 'white', color: '#92400E', border: '1.5px solid #FDE68A' }}>
+                  {bDraftBusy ? '만드는 중…' : `① 한 줄 평 ${bTargets.length}명 한꺼번에 만들어 보기`}
+                </button>
+
+                {bDrafts && (
+                  <div className="mb-2.5 rounded-xl p-2.5 space-y-2 max-h-[420px] overflow-y-auto"
+                       style={{ background: 'white', border: '1px solid #FDE68A' }}>
+                    <p className="text-[11px] font-bold" style={{ color: '#92400E' }}>
+                      한 줄 평 {bDrafts.filter((d: any) => (d?.comment ?? '').trim()).length}/{bDrafts.length}명
+                      <span className="font-normal"> — 고쳐 쓰시면 그대로 나갑니다. 비워 두면 그 학생은 「한 줄 평 없음」으로 나가요.</span>
+                    </p>
+                    {bDrafts.map((d: any, i: number) => (
+                      <div key={d.studentId ?? i}>
+                        <p className="text-[11px] mb-0.5" style={{ color: '#A16207' }}>
+                          <b style={{ color: '#92400E' }}>{d.name}</b>
+                          {d.grade ? ` ${d.grade}` : ''}{d.teacher ? ` · ${d.teacher}` : ''}
+                          {typeof d.notices === 'number' ? ` · 알림장 ${d.notices}건` : ''}
+                          {d.note && <span style={{ color: '#B45309' }}> · {d.note}</span>}
+                          {d.error && <span style={{ color: '#B91C1C' }}> · {d.error}</span>}
+                          {d.tone?.length > 0 && <span style={{ color: '#B91C1C' }}> · 말투 확인: {d.tone.join(', ')}</span>}
+                        </p>
+                        <textarea value={d.comment ?? ''} rows={3}
+                          onChange={(e) => setBDrafts((prev) => (prev ?? []).map((x: any, n: number) =>
+                            n === i ? { ...x, comment: e.target.value } : x))}
+                          className="w-full text-[11.5px] rounded-lg px-2.5 py-2 outline-none resize-y"
+                          style={{ background: '#FFFBEB', border: '1px solid #FDE68A', lineHeight: 1.7 }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <button onClick={sendMonthlyBulk} disabled={!bTargets.length || bBusy}
                   className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
                   style={{ background: '#92400E' }}>
-                  {bBusy ? '만들고 보내는 중…' : `${bTargets.length}명에게 만들고 보내기`}
+                  {bBusy ? '만들고 보내는 중…' : `② ${bTargets.length}명에게 만들고 보내기`}
                 </button>
                 {bResult && (() => {
                   const 보냄 = bResult.filter((x) => x.sent)
@@ -1077,12 +1140,14 @@ export default function TeacherReportsPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-gray-400 mb-2">
-                      위 「선생님 한 줄 평」이 리포트의 「담당 선생님 코멘트」 칸에 그대로 들어갑니다.
-                      <button onClick={() => mStudent && loadNewMonthly(mStudent.id, mYear, mMonth, mComment)}
-                        className="ml-1.5 underline" style={{ color: '#712B13' }}>한 줄 평 반영하기</button>
+                      위 「선생님 한 줄 평」이 아래 「담당 선생님 코멘트」 칸에 <b>고치는 대로 바로</b> 들어갑니다.
+                      비워 두시면 알림장을 요약해 채운 글이 그대로 나갑니다.
                     </p>
                     <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: '#e5e7eb' }}>
-                      {mNew ? <MonthlyReportView d={mNew} />
+                      {/* ★ 글상자를 고치면 **바로** 보인다 — 예전에는 따로 「반영하기」를 눌러야
+                          바뀌어서, AI 로 만든 한 줄 평이 보고서에 안 들어간 것처럼 보였다
+                          (원장님 2026-11-05). */}
+                      {mNew ? <MonthlyReportView d={{ ...mNew, comment: (mComment ?? '').trim() || mNew.comment }} />
                         : <p className="py-16 text-center text-sm text-gray-400">{mNewBusy ? '불러오는 중…' : '「불러오기」를 눌러 주세요.'}</p>}
                     </div>
                   </div>

@@ -18,7 +18,7 @@ import { buildMonthlyMessage, resolveMonthlyTemplate } from '@/lib/monthlyReport
 import { aligoConfig, sendAlimtalk, AligoError } from '@/lib/aligo'
 import Anthropic from '@anthropic-ai/sdk'
 import { AI_TEXT_MODEL, NO_THINKING, textOf } from '@/lib/aiModels'
-import { commentPrompt, hasSomethingToSummarize } from '@/lib/monthlyComment'
+import { commentPrompt, hasSomethingToSummarize, toneProblems } from '@/lib/monthlyComment'
 import { buildTeacherSms, type SentReport } from '@/lib/monthlyTeacherSms'
 import { sendSmsViaOps } from '@/lib/opsSms'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
@@ -30,6 +30,49 @@ function db() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false },
   })
+}
+
+/**
+ * 한 줄 평이 비어 있으면 **알림장을 요약해 채운다** (원장님 2026-11-05).
+ *
+ * ★ 미리보기(GET)와 발송(POST)이 **이 함수 하나**를 같이 쓴다 — 따로 두면
+ *   「미리보기엔 없었는데 나간 건 있었다」가 된다.
+ * ★ 알림장이 한 건도 없으면 부르지 않는다(돈만 든다).
+ * ★ 실패해도 **그냥 지나간다.** 그 칸만 비는 편이 리포트가 안 나오는 것보다 낫다.
+ */
+async function fillComment(data: any, months: 1 | 2) {
+  if ((data?.comment ?? '').trim()) return
+  const 재료 = {
+    studentName: data.student.name, studentGrade: data.student.grade,
+    months, notices: data.notices ?? [],
+    numbers: {
+      sessions: data.lessons.total, onTime: data.lessons.onTime,
+      late: data.lessons.late, absent: data.lessons.absent,
+      hwRate: data.homework.achievement, hwScore: data.homework.score,
+    },
+  }
+  if (!hasSomethingToSummarize(재료)) return
+  try {
+    const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const 한번 = async (덧말?: string) => textOf(await ai.messages.create({
+      model: AI_TEXT_MODEL, thinking: NO_THINKING, max_tokens: 1500,
+      messages: [{ role: 'user', content: commentPrompt(재료) + (덧말 ?? '') }],
+    }))
+
+    let 요약 = await 한번()
+    let 문제 = toneProblems(요약)
+    // ★ 말투가 걸리면 **무엇이 걸렸는지 짚어** 한 번 더 시킨다 (원장님 2026-11-06
+    //   「선생님께서 격려해주셨다」 같은 제3자 말투가 나왔다). 0.2원짜리라 한 번은 더 해 볼 만하다.
+    if (문제.length) {
+      const 다시 = await 한번(`\n\n방금 쓴 글에 이런 문제가 있었습니다: ${문제.join(', ')}.`
+        + ` 그 표현을 빼고 다시 써 주세요. 선생님이 쓰신 글을 줄이는 것이지 새로 평가하는 글이 아닙니다.`)
+      if (다시 && toneProblems(다시).length < 문제.length) { 요약 = 다시; 문제 = toneProblems(다시) }
+    }
+    if (문제.length) console.error('한 줄 평 말투 경고:', data.student?.name, 문제.join(', '))
+    if (요약) data.comment = 요약
+  } catch (e: any) {
+    console.error('한 줄 평 요약 실패:', e?.message ?? e)
+  }
 }
 
 /** 미리보기 — 아직 아무것도 남기지 않는다. */
@@ -45,6 +88,9 @@ export async function GET(req: NextRequest) {
   }
   const data = await buildMonthlyReport(db(), studentId, year, month, months)
   if (!data) return NextResponse.json({ error: '학생을 찾지 못했어요.' }, { status: 404 })
+  // ★ 미리보기도 **나갈 것과 똑같이** 채워서 보여 준다 (원장님 2026-11-05
+  //   「AI생성은 되는데 이게 보고서에는 왜 반영이 안되는거지?」).
+  if (q.get('autoComment') !== '0') await fillComment(data, months)
   return NextResponse.json({ data })
 }
 
@@ -134,31 +180,7 @@ export async function POST(req: NextRequest) {
     if (c) data.comment = String(c)
 
     // 없으면 **알림장을 요약해** 채운다. 늘어놓지 않는다.
-    // ★ 요약에 실패해도 리포트는 그대로 만든다 — 그 칸만 비는 것이 나간 것이 없는 것보다 낫다.
-    if (autoComment && !(data.comment ?? '').trim()) {
-      const 재료 = {
-        studentName: data.student.name, studentGrade: data.student.grade,
-        months, notices: data.notices ?? [],
-        numbers: {
-          sessions: data.lessons.total, onTime: data.lessons.onTime,
-          late: data.lessons.late, absent: data.lessons.absent,
-          hwRate: data.homework.achievement, hwScore: data.homework.score,
-        },
-      }
-      if (hasSomethingToSummarize(재료)) {
-        try {
-          const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-          const m = await ai.messages.create({
-            model: AI_TEXT_MODEL, thinking: NO_THINKING, max_tokens: 1500,
-            messages: [{ role: 'user', content: commentPrompt(재료) }],
-          })
-          const 요약 = textOf(m)
-          if (요약) data.comment = 요약
-        } catch (e: any) {
-          console.error('한 줄 평 요약 실패:', e?.message ?? e)
-        }
-      }
-    }
+    if (autoComment) await fillComment(data, months)
 
     const token = randomBytes(16).toString('hex')
     const { error } = await supabase.from('report_links').insert({
