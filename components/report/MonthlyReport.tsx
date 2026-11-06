@@ -234,6 +234,8 @@ export function MonthlyReportView({ d }: { d: Data }) {
   const 한줄평 = (d.comment ?? '').trim()
   //   글이 길면 두 칸으로 나누지 않고 **한 칸을 넓게** 쓴다 — 두 달치는 길다
   const 긴코멘트 = 한줄평.length > 160
+  // 학습 기록으로 쓴 한 줄 평인가 (옛 스냅샷엔 없다 → 아니라고 본다)
+  const 기록으로 = (d as any)?.commentFrom === 'data'
   const core = (d.coreTests ?? []).filter((c: any) => typeof c?.pct === 'number')
   // 그래프에 뜬 달의 시험 범위 (원장님 2026-11-05). 옛 스냅샷에는 없다 — 그러면 안 띄운다.
   const ranges: any[] = Array.isArray((d as any).coreRanges)
@@ -490,7 +492,11 @@ export function MonthlyReportView({ d }: { d: Data }) {
           <Sec no={nx()} title="담당 선생님 코멘트">
             <div className={`cols${긴코멘트 ? ' wide' : ''}`}>
               <div className="box">
-                <div className="t">수업 태도<span>{L.absent ? '보강 필요' : '성실'}</span></div>
+                {/* ★ 알림장이 없어 **학습 기록으로** 정리한 글이면 칸 이름이 다르다
+                    (원장님 2026-11-06). 선생님이 쓰신 글이 아닌데 「수업 태도」로 보이면 안 된다.
+                    옛 스냅샷에는 commentFrom 이 없다 — 없으면 그대로 「수업 태도」. */}
+                <div className="t">{기록으로 ? '이번 달 학습 요약' : '수업 태도'}
+                  <span>{L.absent ? '보강 필요' : '성실'}</span></div>
                 {한줄평
                   ? <p>{한줄평}</p>
                   : <p>{두달 ? '그동안' : '이번 달'} 선생님이 남긴 한 줄 평이 없습니다.</p>}

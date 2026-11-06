@@ -17,7 +17,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { denyIfNotStaff } from '@/lib/apiAuth'
 import { buildMonthlyReport } from '@/lib/monthlyReport'
 import { AI_TEXT_MODEL, NO_THINKING, textOf } from '@/lib/aiModels'
-import { commentPrompt, hasSomethingToSummarize, toneProblems } from '@/lib/monthlyComment'
+import { commentSourceOf, promptFor, retryHint, toneProblems } from '@/lib/monthlyComment'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -48,36 +48,33 @@ export async function POST(req: NextRequest) {
       if (!data) { out.push({ studentId: id, name: '?', error: '학생을 찾지 못했어요.' }); continue }
 
       const 알림장수 = (data.notices ?? []).filter((n: any) => String(n?.content ?? '').trim()).length
-      const 재료 = {
-        studentName: data.student.name, studentGrade: data.student.grade,
-        months, notices: data.notices ?? [],
-        numbers: {
-          sessions: data.lessons.total, onTime: data.lessons.onTime,
-          late: data.lessons.late, absent: data.lessons.absent,
-          hwRate: data.homework.achievement, hwScore: data.homework.score,
-        },
-      }
+      const 재료 = commentSourceOf(data, months)
       const 공통 = {
         studentId: id, name: data.student.name, grade: data.student.grade,
         teacher: data.student.teacher, notices: 알림장수,
       }
-      if (!hasSomethingToSummarize(재료)) {
-        out.push({ ...공통, comment: '', note: '알림장이 없어 못 만들었어요. 직접 적어 주세요.' })
+      // ★ 알림장이 없으면 **학습 기록으로** 쓴다 (원장님 2026-11-06). 둘 다 없을 때만 빈칸.
+      const 고른것 = promptFor(재료 as any)
+      if (!고른것) {
+        out.push({ ...공통, comment: '', source: null,
+          note: '알림장도 학습 기록도 없어요(수업이 없었나 봐요). 직접 적어 주세요.' })
         continue
       }
 
       const 한번 = async (덧말?: string) => textOf(await ai.messages.create({
         model: AI_TEXT_MODEL, thinking: NO_THINKING, max_tokens: 1500,
-        messages: [{ role: 'user', content: commentPrompt(재료) + (덧말 ?? '') }],
+        messages: [{ role: 'user', content: 고른것.prompt + (덧말 ?? '') }],
       }))
       let comment = await 한번()
       let 문제 = toneProblems(comment)
       if (문제.length) {
-        const 다시 = await 한번(`\n\n방금 쓴 글에 이런 문제가 있었습니다: ${문제.join(', ')}.`
-          + ` 그 표현을 빼고 다시 써 주세요. 선생님이 쓰신 글을 줄이는 것이지 새로 평가하는 글이 아닙니다.`)
+        const 다시 = await 한번(retryHint(문제, 고른것.source))
         if (다시 && toneProblems(다시).length < 문제.length) { comment = 다시; 문제 = toneProblems(다시) }
       }
-      out.push({ ...공통, comment, tone: 문제 })
+      out.push({
+        ...공통, comment, tone: 문제, source: 고른것.source,
+        note: 고른것.source === 'data' ? '알림장이 없어 **학습 기록**으로 썼어요. 읽어 보고 고쳐 주세요.' : undefined,
+      })
     } catch (e: any) {
       out.push({ studentId: id, name: '?', error: e?.message ?? '만들지 못했어요.' })
     }
