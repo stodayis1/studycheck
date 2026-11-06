@@ -607,6 +607,51 @@ T('일괄 화면이 기록으로 쓴 학생을 표시해 준다', () => {
   return ui.includes('학습 기록으로 씀') && ui.includes("d.source === 'data'")
 })
 
+// ── 보낼 사람 고르기 (원장님 2026-11-06) ───────────────────────────────
+// 「각 사람 이름 앞에 보낼 사람 체크, 또는 체크풀기 하게 해줘라. … 보내필요 없는 학생도
+//   같이 떠버리는데 그 학생은 나갈 필요가 없잖아」
+// ★ 여기서 틀리면 **안 보내려던 학부모께 나간다.** 되돌릴 수 없다.
+T('학생마다 체크칸이 있고 전체 체크·해제도 된다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  return ui.includes("<input type=\"checkbox\" checked={d.send !== false}")
+    && ui.includes('체크바꾸기(i, e.target.checked)')
+    && ui.includes('전체 체크') && ui.includes('전체 해제')
+    && ui.includes('보낼 사람 {bPicked.length}/{bDrafts.length}명')
+})
+
+T('체크를 푼 학생은 **아예 안 넘어간다** (링크도 안 만든다)', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  // 발송(sendMonthlyBulk)만 본다 — 초안 만들기는 고른 학년 전부가 맞다
+  const 발송 = /async function sendMonthlyBulk[\s\S]*?\n  \}/.exec(ui)?.[0] ?? ''
+  return 발송.includes('studentIds: bPicked.map((s) => s.id)')
+    && !발송.includes('studentIds: bTargets.map((s) => s.id)')
+    && ui.includes("d?.studentId === s.id && d?.send !== false")
+})
+
+T('체크를 푼 학생의 글도 안 넘어간다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  const 글 = (ui.match(/comment(From)?: Object\.fromEntries[\s\S]{0,200}/g) ?? [])
+  return 글.length === 2 && 글.every((t: string) => t.includes("d?.send !== false"))
+})
+
+T('묻는 창과 단추가 고른 수를 말한다', () => {
+  const ui = src('app/teacher/reports/page.tsx')
+  return ui.includes('`${bPicked.length}명의 ${기간말()} 리포트를 만들어')
+    && ui.includes('`② ${bPicked.length}명에게 만들고 보내기`')
+    && ui.includes('체크를 푸신 ${체크푼사람}명은 보내지 않습니다')
+    && ui.includes('disabled={!bPicked.length || bBusy}')
+})
+
+// ★ 초안을 안 펼쳤으면 예전처럼 고른 학년 전부 — 체크 기능이 길을 막으면 안 된다
+T('초안을 안 펼쳤으면 고른 학년 전부 간다', () => {
+  // 줄바꿈이 CRLF 라 여러 줄을 한 글자씩 맞추지 않는다 (2026-11-06 에 그래서 헛걸렸다)
+  const ui = src('app/teacher/reports/page.tsx').replace(/\r/g, '')
+  return /const bPicked = bDrafts\s*\n\s*\? bTargets\.filter[\s\S]{0,160}\n\s*: bTargets/.test(ui)
+})
+
+T('화면에 마크다운 별표를 글자로 흘리지 않는다', () =>
+  !src('app/api/monthly-report/comments/route.ts').includes("'알림장이 없어 **학습 기록**"))
+
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
 process.exit(pass === total ? 0 : 1)

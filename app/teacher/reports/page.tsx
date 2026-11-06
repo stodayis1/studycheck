@@ -574,10 +574,11 @@ export default function TeacherReportsPage() {
   }
 
   async function sendMonthlyBulk() {
-    if (!bTargets.length) return
+    if (!bPicked.length) return
     // ★ 진짜로 학부모님께 나간다. 숫자를 보여 주고 한 번 묻는다.
     if (!confirm(
-      `${bTargets.length}명의 ${기간말()} 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
+      `${bPicked.length}명의 ${기간말()} 리포트를 만들어 **학부모님께 카톡으로 보냅니다.**\n`
+      + (체크푼사람 ? `체크를 푸신 ${체크푼사람}명은 보내지 않습니다.\n` : '')
       + (bResend ? '이미 보낸 분께도 다시 보냅니다.\n' : '이번 달에 이미 보낸 분은 건너뜁니다.\n')
       + (bAutoComment ? '한 줄 평이 없는 학생은 알림장을 요약해 채웁니다.\n' : '')
       + (bTellTeachers ? '보낸 뒤 담당 선생님께 문자로 알립니다.\n' : '')
@@ -587,15 +588,16 @@ export default function TeacherReportsPage() {
       const r = await apiFetch('/api/monthly-report', {
         method: 'POST',
         body: JSON.stringify({
-          studentIds: bTargets.map((s) => s.id), year: mYear, month: mMonth, months: mMonths,
+          // ★ 체크를 푼 학생은 **아예 안 넘긴다** (링크도 안 만든다)
+          studentIds: bPicked.map((s) => s.id), year: mYear, month: mMonth, months: mMonths,
           send: true, resend: bResend, tellTeachers: bTellTeachers, autoComment: bAutoComment,
           // ★ 화면에서 고친 한 줄 평을 **그대로** 씌운다. 비운 학생은 서버가 알아서 채운다.
           comment: Object.fromEntries((bDrafts ?? [])
-            .filter((d: any) => (d?.comment ?? '').trim())
+            .filter((d: any) => d?.send !== false && (d?.comment ?? '').trim())
             .map((d: any) => [d.studentId, d.comment])),
           // ★ 무엇으로 쓴 글인지도 같이 — 학습 기록으로 쓴 것은 리포트 칸 이름이 달라진다
           commentFrom: Object.fromEntries((bDrafts ?? [])
-            .filter((d: any) => (d?.comment ?? '').trim() && d?.source)
+            .filter((d: any) => d?.send !== false && (d?.comment ?? '').trim() && d?.source)
             .map((d: any) => [d.studentId, d.source])),
         }),
       })
@@ -901,6 +903,22 @@ export default function TeacherReportsPage() {
   /** 고른 학년의 재원 학생 (지금 보이는 범위 안에서) */
   const B_GRADE_SORT = ['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3']
   const bTargets = myStudentsForMonthly.filter((s) => bGrades.includes((s.grade ?? '').trim()))
+
+  /**
+   * 실제로 **보낼 학생들**. (원장님 2026-11-06
+   *   「각 사람 이름 앞에 보낼 사람 체크, 또는 체크풀기 하게 해줘라.
+   *    1-2명 정도 … 보내필요 없는 학생도 같이 떠버리는데 그 학생은 나갈 필요가 없잖아」)
+   * ★ 초안을 안 펼친 상태면 고른 학년 전부다 (예전 그대로).
+   */
+  const bPicked = bDrafts
+    ? bTargets.filter((s) => bDrafts.some((d: any) => d?.studentId === s.id && d?.send !== false))
+    : bTargets
+  const 체크푼사람 = bDrafts ? bDrafts.filter((d: any) => d?.send === false).length : 0
+  const 체크바꾸기 = (i: number, on: boolean) =>
+    setBDrafts((prev) => (prev ?? []).map((x: any, n: number) => (n === i ? { ...x, send: on } : x)))
+  const 모두체크 = (on: boolean) =>
+    setBDrafts((prev) => (prev ?? []).map((x: any) => ({ ...x, send: on })))
+
   const bGradeList = [...new Set(myStudentsForMonthly.map((s) => (s.grade ?? '').trim()).filter(Boolean))]
     .sort((a, b) => B_GRADE_SORT.indexOf(a) - B_GRADE_SORT.indexOf(b))
 
@@ -983,6 +1001,18 @@ export default function TeacherReportsPage() {
                 {bDrafts && (
                   <div className="mb-2.5 rounded-xl p-2.5 space-y-2 max-h-[420px] overflow-y-auto"
                        style={{ background: 'white', border: '1px solid #FDE68A' }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-bold" style={{ color: '#92400E' }}>
+                        보낼 사람 {bPicked.length}/{bDrafts.length}명
+                        {체크푼사람 > 0 && <span style={{ color: '#B45309' }}> · 체크 푼 {체크푼사람}명은 안 나갑니다</span>}
+                      </p>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => 모두체크(true)} className="text-[10px] font-bold rounded-lg px-2 py-1"
+                          style={{ background: '#FEF3C7', color: '#92400E' }}>전체 체크</button>
+                        <button onClick={() => 모두체크(false)} className="text-[10px] font-bold rounded-lg px-2 py-1"
+                          style={{ background: '#FEF3C7', color: '#92400E' }}>전체 해제</button>
+                      </div>
+                    </div>
                     <p className="text-[11px] font-bold" style={{ color: '#92400E' }}>
                       한 줄 평 {bDrafts.filter((d: any) => (d?.comment ?? '').trim()).length}/{bDrafts.length}명
                       <span className="font-normal"> — 고쳐 쓰시면 그대로 나갑니다. 비워 두면 그 학생은 「한 줄 평 없음」으로 나가요.
@@ -990,8 +1020,14 @@ export default function TeacherReportsPage() {
                         그 학생 리포트에서는 칸 이름이 「이번 달 학습 요약」으로 나갑니다.</span>
                     </p>
                     {bDrafts.map((d: any, i: number) => (
-                      <div key={d.studentId ?? i}>
-                        <p className="text-[11px] mb-0.5" style={{ color: '#A16207' }}>
+                      <div key={d.studentId ?? i} style={{ opacity: d.send === false ? 0.45 : 1 }}>
+                        <label className="text-[11px] mb-0.5 flex items-start gap-1.5 cursor-pointer"
+                          style={{ color: '#A16207' }}>
+                          {/* ★ 보낼 사람 고르기 — 체크를 풀면 그 학생은 링크도 안 만든다 */}
+                          <input type="checkbox" checked={d.send !== false}
+                            onChange={(e) => 체크바꾸기(i, e.target.checked)}
+                            className="mt-0.5 shrink-0" style={{ accentColor: '#92400E', width: 14, height: 14 }} />
+                          <span>
                           <b style={{ color: '#92400E' }}>{d.name}</b>
                           {d.grade ? ` ${d.grade}` : ''}{d.teacher ? ` · ${d.teacher}` : ''}
                           {typeof d.notices === 'number' ? ` · 알림장 ${d.notices}건` : ''}
@@ -1001,8 +1037,10 @@ export default function TeacherReportsPage() {
                           {d.note && <span style={{ color: '#B45309' }}> · {d.note}</span>}
                           {d.error && <span style={{ color: '#B91C1C' }}> · {d.error}</span>}
                           {d.tone?.length > 0 && <span style={{ color: '#B91C1C' }}> · 말투 확인: {d.tone.join(', ')}</span>}
-                        </p>
-                        <textarea value={d.comment ?? ''} rows={3}
+                          {d.send === false && <span className="font-bold" style={{ color: '#B45309' }}> · 안 보냅니다</span>}
+                          </span>
+                        </label>
+                        <textarea value={d.comment ?? ''} rows={3} disabled={d.send === false}
                           onChange={(e) => setBDrafts((prev) => (prev ?? []).map((x: any, n: number) =>
                             n === i ? { ...x, comment: e.target.value } : x))}
                           className="w-full text-[11.5px] rounded-lg px-2.5 py-2 outline-none resize-y"
@@ -1012,10 +1050,10 @@ export default function TeacherReportsPage() {
                   </div>
                 )}
 
-                <button onClick={sendMonthlyBulk} disabled={!bTargets.length || bBusy}
+                <button onClick={sendMonthlyBulk} disabled={!bPicked.length || bBusy}
                   className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
                   style={{ background: '#92400E' }}>
-                  {bBusy ? '만들고 보내는 중…' : `② ${bTargets.length}명에게 만들고 보내기`}
+                  {bBusy ? '만들고 보내는 중…' : `② ${bPicked.length}명에게 만들고 보내기`}
                 </button>
                 {bResult && (() => {
                   const 보냄 = bResult.filter((x) => x.sent)
