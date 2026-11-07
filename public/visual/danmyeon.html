@@ -61,12 +61,14 @@ h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
 .slide { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) 3.4em; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .slide input { width: 100%; accent-color: var(--accent); }
 .slide output { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); }
-.pform { display: grid; gap: 6px; }
-.prow { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 4px 6px; align-items: center; font-size: 14px; }
-.prow b { color: var(--bad); font-family: var(--font-display); font-size: 16px; }
-.prow select { font: inherit; font-size: 14px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
-.prow .ratio { grid-column: 2; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.prow .ratio input { font: inherit; width: 3.2em; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; text-align: center; color: var(--ink); }
+.plist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.plist li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+.plist li.sel { background: #fff4e0; }
+.plist li b { color: var(--bad); font-family: var(--font-display); font-size: 16px; min-width: 1.2em; }
+.plist li.sel b { color: #d97706; }
+.plist li span { flex: 1; min-width: 0; }
+.plist li button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
+.plist li.empty { color: var(--muted); font-size: 13px; cursor: default; }
 .msg { margin: 0; font-size: 13px; color: var(--warn); min-height: 1.2em; }
 .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 
@@ -130,14 +132,13 @@ canvas#c:active { cursor: grabbing; }
       <div class="tool" id="ptsPanel">
         <span class="lbl">대표 단면 (누르면 그 세 점으로 잘라요)</span>
         <div class="btns" id="presetsPts"></div>
-        <span class="lbl">모서리를 눌러 점을 찍어요 — 점이 붙는 곳</span>
+        <span class="lbl">3D에서 모서리나 면을 눌러 점을 찍고, 빨간 점을 끌어 옮겨요 — 점이 붙는 곳</span>
         <div class="btns" role="group" aria-label="점이 붙는 곳">
           <button class="chip" data-snap="half" aria-pressed="true">꼭짓점·중점</button>
-          <button class="chip" data-snap="third" aria-pressed="false">삼등분점까지</button>
+          <button class="chip" data-snap="third" aria-pressed="false">등분점(½·⅓·¼)</button>
           <button class="chip" data-snap="free" aria-pressed="false">아무 곳</button>
         </div>
-        <span class="lbl">점 직접 정하기 — 꼭짓점, 모서리 위(비율로), 면의 한가운데</span>
-        <div class="pform" id="pform"></div>
+        <ul class="plist" id="plist"></ul>
         <div class="btns"><button class="btn" id="clearPts">점 모두 지우기</button></div>
         <p class="msg" id="ptsMsg" aria-live="polite"></p>
       </div>
@@ -493,7 +494,7 @@ if (typeof module !== 'undefined') module.exports = CORE;
   };
   const LETTERS = ['P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'];
 
-  const st = { kind: 'cube', mode: 'pts', snap: 'half', picks: [], tilt: [30, 0, 0], cut: false, keepBelow: true, showPlane: true, quiz: null };
+  const st = { kind: 'cube', mode: 'pts', snap: 'half', picks: [], sel: -1, tilt: [30, 0, 0], cut: false, keepBelow: true, showPlane: true, quiz: null };
   let S = SOLIDS.cube();
 
   // ---------- 3D ----------
@@ -516,7 +517,8 @@ if (typeof module !== 'undefined') module.exports = CORE;
   const secMat = new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const secLineMat = new THREE.LineBasicMaterial({ color: 0xc2410c });
   const planeMat = new THREE.MeshBasicMaterial({ color: 0x2563eb, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false });
-  const pickMat = new THREE.MeshBasicMaterial({ color: 0xe11d48 });
+  const pickMat = new THREE.MeshBasicMaterial({ color: 0xe11d48, depthTest: false });
+  const selMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, depthTest: false }); // 고른 점(끌어 옮길 점)
   const dotMat = new THREE.MeshBasicMaterial({ color: 0xc2410c });
 
   let solidGroup = new THREE.Group(), dyn = new THREE.Group();
@@ -575,12 +577,6 @@ if (typeof module !== 'undefined') module.exports = CORE;
     if (edge[0] > edge[1]) { edge = [edge[1], edge[0]]; t = 1 - t; } // 모서리는 늘 앞 글자 → 뒤 글자 방향으로
     return { edge, t, pos: lerp(S.verts[edge[0]], S.verts[edge[1]], t) };
   }
-  // t 를 가장 간단한 m : n 으로 (20 까지) — 1/3 → 1 : 2, 0.35 → 7 : 13
-  function ratioOf(t) {
-    let best = [1, 1, Infinity];
-    for (let m = 1; m <= 20; m++) for (let n = 1; n <= 20; n++) { const e = Math.abs(m / (m + n) - t); if (e < best[2] - 1e-12) best = [m, n, e]; }
-    return best.slice(0, 2);
-  }
   function pickFromSpec(spec) {
     if (typeof spec === 'string') { const i = S.labels.indexOf(spec); return { vertex: i, pos: S.verts[i] }; }
     const a = S.labels.indexOf(spec[0]), b = S.labels.indexOf(spec[1]);
@@ -613,7 +609,7 @@ if (typeof module !== 'undefined') module.exports = CORE;
 
     // 찍은 점
     if (st.mode === 'pts') st.picks.forEach((p, i) => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 12), pickMat); m.position.copy(V3(p.pos)); dyn.add(m);
+      const m = new THREE.Mesh(new THREE.SphereGeometry(i === st.sel ? 0.11 : 0.08, 16, 12), i === st.sel ? selMat : pickMat); m.position.copy(V3(p.pos)); m.renderOrder = 5; dyn.add(m);
       if (p.vertex == null) { const sp = sprite(LETTERS[i], '#e11d48', 0.4); sp.position.copy(V3(p.pos)).add(new THREE.Vector3(0, 0.25, 0)); dyn.add(sp); }
     });
 
@@ -689,14 +685,26 @@ if (typeof module !== 'undefined') module.exports = CORE;
   const setZoom = z => { zoom = Math.max(0.5, Math.min(3, z)); draw(); };
   const ptrs = new Map(); let pinch = 0, downAt = null, moved = 0;
   const pinchDist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  let dragPick = -1, dragRaf = 0;
   canvas.addEventListener('pointerdown', e => {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
-    if (tween) cancelAnimationFrame(tween); if (ptrs.size === 2) pinch = pinchDist();
+    if (tween) cancelAnimationFrame(tween); if (ptrs.size === 2) { pinch = pinchDist(); dragPick = -1; }
     downAt = { x: e.clientX, y: e.clientY }; moved = 0;
+    // 빨간 점을 잡으면 그 점을 끌어 옮긴다 (돌리기 대신)
+    if (ptrs.size === 1 && canEditPts()) { dragPick = hitPick(e.clientX, e.clientY); if (dragPick >= 0) { st.sel = dragPick; canvas.style.cursor = 'move'; } }
   });
   canvas.addEventListener('pointermove', e => {
     const p = ptrs.get(e.pointerId); if (!p) return;
     moved += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
+    if (dragPick >= 0 && ptrs.size === 1) {
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const loc = locate(e.clientX, e.clientY);
+      if (loc && !st.picks.some((q, j) => j !== dragPick && len(sub(q.pos, loc.pos)) < 1e-6) && len(sub(loc.pos, st.picks[dragPick].pos)) > 1e-9) {
+        st.picks[dragPick] = loc; markPreset(null);
+        if (!dragRaf) dragRaf = requestAnimationFrame(() => { dragRaf = 0; update(); });
+      }
+      return;
+    }
     if (ptrs.size === 1) {
       theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
       viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
@@ -705,11 +713,12 @@ if (typeof module !== 'undefined') module.exports = CORE;
     if (ptrs.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
   });
   canvas.addEventListener('pointerup', e => {
-    const wasTap = ptrs.size === 1 && moved < 6;
-    ptrs.delete(e.pointerId); pinch = 0;
+    const wasTap = ptrs.size === 1 && moved < 6, wasDrag = dragPick >= 0;
+    ptrs.delete(e.pointerId); pinch = 0; dragPick = -1; canvas.style.cursor = '';
+    if (wasDrag) { update(); return; }
     if (wasTap) tapAt(e.clientX, e.clientY);
   });
-  canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = 0; });
+  canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = 0; dragPick = -1; canvas.style.cursor = ''; });
   canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
   canvas.addEventListener('keydown', e => {
     const d = 0.12, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
@@ -718,33 +727,72 @@ if (typeof module !== 'undefined') module.exports = CORE;
   document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
   document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
 
-  // 모서리를 눌러 점 찍기 — 화면에서 누른 곳과 가장 가까운 모서리(22px 안)를 잡는다. 손가락으로도 잡히게
+  // ---------- 점 찍기·옮기기 ----------
+  // 누른 곳 → 입체 위의 점. 모서리 가까이(18px 안)면 모서리 위, 아니면 누른 면 위. 「점이 붙는 곳」에 맞춰 붙인다
+  const canEditPts = () => st.mode === 'pts' && !S.round && !st.quiz;
   function toScreen(v, r) { const p = V3(v).project(cam); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height]; }
-  function tapAt(x, y) {
-    if (st.mode !== 'pts' || S.round || st.quiz) return;
+  function rayAt(px, py, r) { const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(px / r.width * 2 - 1, -(py / r.height) * 2 + 1), cam); return ray; }
+  const EDGE_GRID = { half: [0, 0.5, 1], third: [0, 1 / 4, 1 / 3, 0.5, 2 / 3, 3 / 4, 1] };
+  function locate(x, y) {
     const r = canvas.getBoundingClientRect(), px = x - r.left, py = y - r.top;
+    const ray = rayAt(px, py, r);
+    const hit = ray.intersectObject(solidGroup.children[0], false)[0];
+    // 입체가 비쳐 보여서 뒤쪽 모서리도 가까이 그려진다 → 앞에 보이는 면보다 뒤에 있는 모서리는 거의 정확히(8px) 눌렀을 때만 잡는다
     let best = null;
     S.edges.forEach(([a, b]) => {
       const A = toScreen(S.verts[a], r), B = toScreen(S.verts[b], r), dx = B[0] - A[0], dy = B[1] - A[1], l2 = dx * dx + dy * dy || 1;
       const t = Math.max(0, Math.min(1, ((px - A[0]) * dx + (py - A[1]) * dy) / l2));
       const dist = Math.hypot(A[0] + dx * t - px, A[1] + dy * t - py);
-      if (dist < 22 && (!best || dist < best.dist)) best = { a, b, t, dist };
+      const depth = cam.position.distanceTo(V3(lerp(S.verts[a], S.verts[b], t)));
+      const behind = hit && depth > hit.distance + 0.12;
+      const score = behind ? (dist < 8 ? dist + 100 : Infinity) : (dist < 18 ? dist : Infinity);
+      if (score < Infinity && (!best || score < best.score)) best = { a, b, score };
     });
-    if (!best) return;
-    const { a, b } = best;
-    // 화면에서 잰 t 를 실제 모서리 위 t 로 (원근 때문에 조금 다르다): 누른 곳을 지나는 광선과 가장 가까운 모서리 위 점
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(px / r.width * 2 - 1, -(py / r.height) * 2 + 1), cam);
-    const A3 = V3(S.verts[a]), B3 = V3(S.verts[b]), onSeg = new THREE.Vector3();
-    ray.ray.distanceSqToSegment(A3, B3, null, onSeg);
-    let t = Math.max(0, Math.min(1, onSeg.sub(A3).dot(B3.clone().sub(A3)) / B3.distanceToSquared(A3)));
-    const grid = st.snap === 'half' ? [0, 0.5, 1] : st.snap === 'third' ? [0, 1 / 3, 0.5, 2 / 3, 1] : null;
-    t = grid ? grid.reduce((best, g) => Math.abs(g - t) < Math.abs(best - t) ? g : best, 0) : Math.round(t * 20) / 20;
-    const p = makePick([a, b], t);
-    const msg = document.getElementById('ptsMsg');
-    if (st.picks.some(q => len(sub(q.pos, p.pos)) < 1e-6)) { msg.textContent = '이미 찍은 점이에요.'; return; }
-    if (st.picks.length >= 3) { msg.textContent = '점은 세 개까지예요. 「점 모두 지우기」를 누르고 다시 찍어요.'; return; }
-    st.picks.push(p); markPreset(null); update();
+    if (best) {
+      // 화면에서 잰 비율은 원근 때문에 조금 다르다 → 광선과 모서리의 가장 가까운 점으로
+      const A3 = V3(S.verts[best.a]), B3 = V3(S.verts[best.b]), onSeg = new THREE.Vector3();
+      ray.ray.distanceSqToSegment(A3, B3, null, onSeg);
+      let t = Math.max(0, Math.min(1, onSeg.sub(A3).dot(B3.clone().sub(A3)) / B3.distanceToSquared(A3)));
+      const grid = EDGE_GRID[st.snap];
+      t = grid ? grid.reduce((g0, g) => Math.abs(g - t) < Math.abs(g0 - t) ? g : g0, 0) : Math.round(t * 20) / 20;
+      return makePick([best.a, best.b], t);
+    }
+    if (!hit) return null;
+    const h = [hit.point.x, hit.point.y, hit.point.z];
+    let fi = -1, fd = Infinity;
+    S.faces.forEach((f, k) => { const d = Math.abs(dot(f.n, sub(h, f.c))); if (d < fd) { fd = d; fi = k; } });
+    return facePick(fi, h);
+  }
+  // 면 위의 점: 꼭짓점·중점 → 면의 한가운데, 등분점 → 면을 잘게 나눈 격자점, 아무 곳 → 누른 자리 그대로
+  function facePick(fi, h) {
+    const f = S.faces[fi];
+    if (st.snap === 'free') return { face: fi, pos: h };
+    let cands = [f.c];
+    if (st.snap === 'third') {
+      const V = f.idx.map(i => S.verts[i]), ks = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 3 / 4];
+      if (V.length === 4) ks.forEach(u => ks.forEach(v => cands.push(lerp(lerp(V[0], V[1], u), lerp(V[3], V[2], u), v))));
+      else if (V.length === 3) for (let a = 1; a <= 4; a++) for (let b = 1; a + b <= 5; b++) { const c = 6 - a - b; cands.push(add(add(mul(V[0], a / 6), mul(V[1], b / 6)), mul(V[2], c / 6))); }
+    }
+    const pos = cands.reduce((p0, p) => len(sub(p, h)) < len(sub(p0, h)) ? p : p0);
+    return { face: fi, pos };
+  }
+  function hitPick(x, y) {
+    const r = canvas.getBoundingClientRect(), px = x - r.left, py = y - r.top;
+    let k = -1, bd = 18;
+    st.picks.forEach((p, i) => { const s = toScreen(p.pos, r), d = Math.hypot(s[0] - px, s[1] - py); if (d < bd) { bd = d; k = i; } });
+    return k;
+  }
+  let pickMsg = '';
+  function tapAt(x, y) {
+    if (!canEditPts()) return;
+    const on = hitPick(x, y);
+    if (on >= 0) { st.sel = on; update(); return; } // 찍어 둔 점을 누르면 고르기
+    const p = locate(x, y);
+    if (!p) return;
+    if (st.picks.some(q => len(sub(q.pos, p.pos)) < 1e-6)) { pickMsg = '이미 찍은 점이에요.'; update(); return; }
+    if (st.picks.length < 3) { st.picks.push(p); st.sel = st.picks.length - 1; }
+    else { const k = st.sel >= 0 ? st.sel : 2; st.picks[k] = p; st.sel = k; pickMsg = `${LETTERS[k]} 점을 옮겼어요. 다른 점을 옮기려면 그 점을 먼저 눌러요.`; }
+    markPreset(null); update();
   }
 
   // ---------- 단면 2D 그림과 이유 ----------
@@ -873,11 +921,11 @@ if (typeof module !== 'undefined') module.exports = CORE;
       can.appendChild(b);
     });
   }
-  function loadPtsPreset(name, specs) { endQuiz(); st.picks = specs.map(pickFromSpec); markPreset(name); update(); }
+  function loadPtsPreset(name, specs) { endQuiz(); st.picks = specs.map(pickFromSpec); st.sel = -1; markPreset(name); update(); }
 
   function setSolid(k) {
     endQuiz();
-    st.kind = k; S = SOLIDS[k](); st.picks = [];
+    st.kind = k; S = SOLIDS[k](); st.picks = []; st.sel = -1;
     document.querySelectorAll('#solids .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
     document.getElementById('solidSize').textContent = S.size;
     document.getElementById('canCard').hidden = k !== 'cube';
@@ -899,7 +947,7 @@ if (typeof module !== 'undefined') module.exports = CORE;
   document.querySelectorAll('[data-snap]').forEach(b => b.addEventListener('click', () => {
     st.snap = b.dataset.snap; document.querySelectorAll('[data-snap]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   }));
-  document.getElementById('clearPts').addEventListener('click', () => { endQuiz(); st.picks = []; markPreset(null); update(); });
+  document.getElementById('clearPts').addEventListener('click', () => { endQuiz(); st.picks = []; st.sel = -1; markPreset(null); update(); });
 
   const alphaIn = document.getElementById('alpha'), phiIn = document.getElementById('phi'), offIn = document.getElementById('offset');
   function syncTilt() {
@@ -915,64 +963,44 @@ if (typeof module !== 'undefined') module.exports = CORE;
   document.getElementById('planeToggle').addEventListener('change', e => { st.showPlane = e.target.checked; rebuildCut(); });
   document.getElementById('flipSide').addEventListener('click', () => { st.keepBelow = !st.keepBelow; if (!st.cut) { st.cut = true; document.getElementById('cutToggle').checked = true; } rebuildCut(); });
 
-  // ---------- 점 직접 정하기 (3D 에서 누른 점·대표 단면도 여기에 그대로 채워진다) ----------
-  const pform = document.getElementById('pform');
-  let formMsg = '';
+  // ---------- 찍은 점 목록 (누르면 그 점을 고르고, ×로 지운다) ----------
+  // t 를 가장 간단한 m : n 으로 (20 까지) — 1/3 → 1 : 2
+  function ratioOf(t) {
+    let best = [1, 1, Infinity];
+    for (let m = 1; m <= 20; m++) for (let n = 1; n <= 20; n++) { const e = Math.abs(m / (m + n) - t); if (e < best[2] - 1e-12) best = [m, n, e]; }
+    return best.slice(0, 2);
+  }
+  function pickText(p, i) {
+    if (p.vertex != null) return `꼭짓점 ${S.labels[p.vertex]}`;
+    const L = LETTERS[i];
+    if (p.face != null) return len(sub(p.pos, S.faces[p.face].c)) < 1e-6 ? `면 ${faceName(p.face)}의 한가운데` : `면 ${faceName(p.face)} 위`;
+    const A = S.labels[p.edge[0]], B = S.labels[p.edge[1]];
+    if (Math.abs(p.t - 0.5) < 1e-9) return `모서리 ${A}${B}의 중점`;
+    const [m, n] = ratioOf(p.t);
+    return `모서리 ${A}${B} 위 · ${A}${L} : ${L}${B} = ${m} : ${n}`;
+  }
   function renderPicked() {
-    pform.innerHTML = '';
-    for (let i = 0; i < 3; i++) {
-      const p = st.picks[i], row = document.createElement('div'); row.className = 'prow';
-      const tag = document.createElement('b'); tag.textContent = p && p.vertex != null ? S.labels[p.vertex] : LETTERS[i];
-      const sel = document.createElement('select'); sel.id = 'psel' + i; sel.setAttribute('aria-label', `${i + 1}번째 점의 자리`);
-      const opt = (v, t, parent) => { const o = document.createElement('option'); o.value = v; o.textContent = t; parent.appendChild(o); };
-      opt('', '— 자리 고르기 —', sel);
-      const gV = document.createElement('optgroup'); gV.label = '꼭짓점'; S.labels.forEach((l, k) => opt('v:' + k, '꼭짓점 ' + l, gV));
-      const gE = document.createElement('optgroup'); gE.label = '모서리 위 (비율로)'; S.edges.forEach(([a, b]) => opt(`e:${a}-${b}`, `모서리 ${S.labels[a]}${S.labels[b]} 위`, gE));
-      const gF = document.createElement('optgroup'); gF.label = '면의 한가운데'; S.faces.forEach((f, k) => opt('f:' + k, `면 ${faceName(k)}의 한가운데`, gF));
-      sel.append(gV, gE, gF);
-      const ratio = document.createElement('span'); ratio.className = 'ratio';
-      const num = id => { const x = document.createElement('input'); x.type = 'number'; x.min = '1'; x.max = '99'; x.step = '1'; x.id = id; x.inputMode = 'numeric'; return x; };
-      const m = num('pm' + i), n = num('pn' + i), hint = document.createElement('span');
-      let rm = 1, rn = 1;
-      if (p && p.vertex != null) sel.value = 'v:' + p.vertex;
-      else if (p && p.face != null) sel.value = 'f:' + p.face;
-      else if (p) { sel.value = `e:${p.edge[0]}-${p.edge[1]}`; [rm, rn] = ratioOf(p.t); }
-      m.value = rm; n.value = rn;
-      const showHint = () => {
-        const v = sel.value; ratio.hidden = !v.startsWith('e:');
-        if (!ratio.hidden) { const [a, b] = v.slice(2).split('-').map(Number), L = LETTERS[i]; hint.textContent = `${S.labels[a]}${L} : ${L}${S.labels[b]} =`; }
-      };
-      ratio.append(hint, m, ':', n); showHint();
-      sel.addEventListener('change', () => { showHint(); readForm(); });
-      [m, n].forEach(x => x.addEventListener('change', readForm));
-      row.append(tag, sel, ratio); pform.appendChild(row);
+    const ul = document.getElementById('plist'); ul.innerHTML = '';
+    st.picks.forEach((p, i) => {
+      const li = document.createElement('li'); if (i === st.sel) li.className = 'sel';
+      const b = document.createElement('b'); b.textContent = p.vertex != null ? S.labels[p.vertex] : LETTERS[i];
+      const t = document.createElement('span'); t.textContent = pickText(p, i);
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', `${b.textContent} 점 지우기`);
+      x.addEventListener('click', ev => { ev.stopPropagation(); endQuiz(); st.picks.splice(i, 1); st.sel = -1; markPreset(null); update(); });
+      li.addEventListener('click', () => { st.sel = st.sel === i ? -1 : i; update(); });
+      li.append(b, t, x); ul.appendChild(li);
+    });
+    if (st.picks.length < 3) {
+      const li = document.createElement('li'); li.className = 'empty';
+      li.textContent = `점 ${3 - st.picks.length}개를 더 찍어요. 모서리 가까이 누르면 모서리 위에, 면 가운데를 누르면 면 위에 찍혀요.`;
+      ul.appendChild(li);
     }
     const msg = document.getElementById('ptsMsg');
-    if (formMsg) msg.textContent = formMsg;
-    else if (st.mode === 'pts' && st.picks.length === 3 && !currentPlane()) msg.textContent = '세 점이 한 직선 위에 있어서 평면이 하나로 정해지지 않아요.';
-    else if (st.mode === 'pts' && !st.picks.length) msg.textContent = '3D에서 모서리를 누르거나, 위 칸에서 자리를 골라 점을 정해요.';
+    if (pickMsg) msg.textContent = pickMsg;
+    else if (st.mode === 'pts' && st.picks.length === 3 && !currentPlane()) msg.textContent = '세 점이 한 직선 위에 있어서 평면이 하나로 정해지지 않아요. 한 점을 끌어 옮겨 보세요.';
+    else if (st.mode === 'pts' && st.picks.length === 3) msg.textContent = '빨간 점을 끌면 그 점이 모서리·면을 따라 움직여요.';
     else msg.textContent = '';
-    formMsg = '';
-  }
-  function readForm() {
-    endQuiz();
-    const picks = [];
-    for (let i = 0; i < 3; i++) {
-      const v = document.getElementById('psel' + i).value;
-      if (!v) continue;
-      let p;
-      if (v.startsWith('v:')) { const k = Number(v.slice(2)); p = { vertex: k, pos: S.verts[k] }; }
-      else if (v.startsWith('f:')) { const k = Number(v.slice(2)); p = { face: k, pos: S.faces[k].c }; }
-      else {
-        const [a, b] = v.slice(2).split('-').map(Number);
-        const m = Math.round(Number(document.getElementById('pm' + i).value)), n = Math.round(Number(document.getElementById('pn' + i).value));
-        if (!(m >= 1 && n >= 1)) { formMsg = '비율은 1 이상의 자연수로 적어 주세요. 꼭짓점이면 위에서 「꼭짓점」을 고르세요.'; continue; }
-        p = makePick([a, b], m / (m + n));
-      }
-      if (picks.some(q => len(sub(q.pos, p.pos)) < 1e-6)) { formMsg = '같은 점을 두 번 골랐어요.'; continue; }
-      picks.push(p);
-    }
-    st.picks = picks; markPreset(null); update();
+    pickMsg = '';
   }
 
   function update() { renderPicked(); rebuildCut(); drawSection(); }
