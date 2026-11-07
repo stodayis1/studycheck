@@ -285,22 +285,24 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
  * 문자로 한꺼번에 보내는 것은 「응답 현황」 탭(원장님).
  */
 function LinkRow({ studentId, canHave, phone }: { studentId: string; canHave: boolean; phone: string | null }) {
-  const [links, setLinks] = useState<{ student: string; parent: string } | null>(null)
+  type Links = { student: string; parent: string; newsStudent: string; newsParent: string }
+  const [links, setLinks] = useState<Links | null>(null)
   const [msg, setMsg] = useState('')
   if (!canHave) return null
-  async function get(): Promise<{ student: string; parent: string } | null> {
+  async function get(): Promise<Links | null> {
     if (links) return links
     const r = await apiFetch('/api/career/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId }) })
     const j = await r.json().catch(() => ({}))
     if (!r.ok) { setMsg(j.error ?? '링크를 만들지 못했어요.'); return null }
     setLinks(j); return j
   }
-  async function copy(k: 'student' | 'parent') {
+  const NAMES: Record<keyof Links, string> = { student: '학생 질문지', parent: '학부모 질문지', newsStudent: '학생 소식', newsParent: '학부모 소식' }
+  async function copy(k: keyof Links) {
     const l = await get(); if (!l) return
-    try { await navigator.clipboard.writeText(l[k]); setMsg(`${k === 'student' ? '학생' : '학부모'} 링크를 복사했어요.`) }
+    try { await navigator.clipboard.writeText(l[k]); setMsg(`${NAMES[k]} 링크를 복사했어요.`) }
     catch { setMsg(l[k]) }
   }
-  async function openIt(k: 'student' | 'parent') { const l = await get(); if (l) window.open(l[k], '_blank') }
+  async function openIt(k: keyof Links) { const l = await get(); if (l) window.open(l[k], '_blank') }
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
       <span className="text-gray-500">학생 번호 {phone ? <b className="text-gray-700">{phone}</b> : <span className="text-amber-600">없음 (학생관리에서 입력)</span>}</span>
@@ -309,6 +311,11 @@ function LinkRow({ studentId, canHave, phone }: { studentId: string; canHave: bo
       <button onClick={() => copy('student')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 복사</button>
       <button onClick={() => copy('parent')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학부모용 복사</button>
       <button onClick={() => openIt('student')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 열어 보기 ↗</button>
+      <span className="text-gray-300">|</span>
+      <span className="text-gray-500">로드맵 소식 링크</span>
+      <button onClick={() => copy('newsParent')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학부모용 복사</button>
+      <button onClick={() => copy('newsStudent')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 복사</button>
+      <button onClick={() => openIt('newsParent')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>소식 열어 보기 ↗</button>
       {msg && <span style={{ color: GREEN }}>{msg}</span>}
     </div>
   )
