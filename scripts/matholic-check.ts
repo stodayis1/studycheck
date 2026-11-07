@@ -807,8 +807,9 @@ T('레벨이 없으면 Lv1 로 넣는다 (비워 보내면 DB 가 거절한다)'
 
 // ★ 화면이 그 함수를 **실제로 쓰는지**까지 본다 — 함수만 고치고 넣는 자리를 안 고치면
 //   그 줄만 조용히 안 들어간다(그게 이번에 일어난 일이다).
-T('매쓰홀릭 화면이 레벨 칸을 비우지 않고 넣는다', () => {
-  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+T('매쓰홀릭이 레벨 칸을 비우지 않고 넣는다', () => {
+  // 넣는 코드는 lib/matholicApply.ts 로 옮겼다 (2026-11-07).
+  const src = fs.readFileSync(path.resolve('lib/matholicApply.ts'), 'utf8')
   const 넣는줄 = src.match(/current_level:[^,\n]+/g) ?? []
   return 넣는줄.length > 0 && 넣는줄.every((l) => /levelForInsert|레벨/.test(l)) && src.includes('levelForInsert(')
 })
@@ -909,15 +910,26 @@ T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
   // 판단은 lib/matholicPlan.ts 로 옮겼다 (2026-11-07). 판단과 저장을 **각각** 본다.
   const plan = fs.readFileSync(path.resolve('lib/matholicPlan.ts'), 'utf8')
   const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  const apply = fs.readFileSync(path.resolve('lib/matholicApply.ts'), 'utf8')
   // ★ 「있나」만 보면 안 된다 — `if (false && isDiagnostic(row))` 로 꺼 두어도 통과한다.
   //   갈림길이 **그 판정만 보고** 갈리는지 꼴까지 본다.
   return /\n\s*if \(isDiagnostic\(row\)\) \{/.test(plan)
     && plan.includes('parseDiagnosticTitle(row.title)')
-    && /exam_type: '진단평가'/.test(src)
-    && /unit_name: p\.exam\?\.unitName/.test(src)
-    && /level: p\.exam\?\.level/.test(src)
-    && src.includes("p.mode === 'exam'")
+    && /exam_type: '진단평가'/.test(apply)
+    && /unit_name: p\.exam\?\.unitName/.test(apply)
+    && /level: p\.exam\?\.level/.test(apply)
+    && apply.includes("p.mode === 'exam'")
     && src.includes('count.exam')
+})
+
+// ★ 넣는 일도 한 곳(lib/matholicApply.ts)에서 한다 — 화면이 직접 insert 하면 두 벌이 된다.
+T('화면이 넣기를 applyPlans 에 맡긴다 (화면에 insert 가 남아 있지 않다)', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  return /applyPlans\(supabase, plans,/.test(src)
+    && /from '@\/lib\/matholicApply'/.test(src)
+    && !/\.from\('exams'\)[\s\S]{0,30}\.insert/.test(src)
+    && !/\.from\('student_worksheets'\)[\s\S]{0,30}\.insert/.test(src)
+    && !/daily_test_score: p\.row\.score/.test(src)
 })
 
 // ── 2026-11-07 판단을 lib/matholicPlan.ts 한 곳으로 옮겼다 ───────────────────
@@ -937,7 +949,7 @@ T('화면이 판단을 planRow 에 맡긴다 (옛 판단이 화면에 남아 있
 T('planRow 가 줄마다 갈 곳을 정한다', () => {
   const 학생 = { id: 'S1', name: '가짜학생', grade: '고1', teacher_name: '주한' }
   const ctx = {
-    mine: [학생], rules: {}, books: BOOKS, concepts: [],
+    mine: [학생], rules: {}, books: BOOKS, concepts: [] as any[],
     wsByStudent: new Map(), sessionsOf: new Map(),
     coreByKey: new Map(), examByKey: new Map(),
   }

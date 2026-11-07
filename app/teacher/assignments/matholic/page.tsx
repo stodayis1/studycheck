@@ -39,6 +39,7 @@ import {
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate, type DiagnosticParts,
 } from '@/lib/matholic'
 import { planRow, type MatholicPlan as Plan, type Mode, type PlanContext } from '@/lib/matholicPlan'
+import { applyPlans } from '@/lib/matholicApply'
 
 // 한 줄을 어디에 넣을지 정하는 **판단**은 lib/matholicPlan.ts 에 있다 — 화면과 스크립트가
 // 같은 함수를 쓰기 위해서다 (원장님 2026-11-07 「붙여넣기 하는 그 과정자체도 불필요하지 않겠니」).
@@ -169,99 +170,9 @@ export default function MatholicImportPage() {
   async function handleSave() {
     if (!confirm(`학습일지 데일리테스트 ${count.daily}건, 코어테스트 ${count.core}건, 진단평가 ${count.exam}건, 학습지 점수 채우기 ${count.fill}건, 학습지 새로 만들기 ${count.neo}건을 넣습니다. 계속할까요?`)) return
     setSaving(true)
-    let daily = 0, core = 0, exam = 0, filled = 0, created = 0
-    const failed: string[] = []
-    for (const p of plans) {
-      const who = p.students.find((s) => s.id === p.studentId)
-      const label = `${p.row.student} ${p.row.date} ${p.row.score}점`
-      try {
-        if (p.mode === 'daily' && p.sessionId) {
-          // 학습일지의 데일리테스트 점수. 수업 기록은 **만들지 않는다** — 없으면 건너뛴다.
-          // (출결·학부모 브리핑이 수업 기록을 보고 돌기 때문에 함부로 만들면 안 된다.)
-          const { error } = await supabase.from('class_sessions')
-            .update({ daily_test_score: p.row.score }).eq('id', p.sessionId)
-          if (error) throw new Error(error.message)
-          daily++
-        } else if (p.mode === 'core' && p.studentId && p.coreRound) {
-          // 평가관리의 코어테스트. 점수는 백분율로 적는다 (화면이 그렇게 쓰고 있다 — 만점 100).
-          const { error } = await supabase.from('exams').insert({
-            student_id: p.studentId, exam_type: '코어테스트', exam_date: p.row.date,
-            title: p.coreRound, score: p.row.score, total_score: 100,
-            teacher_name: currentUser?.name ?? null,
-          })
-          if (error) throw new Error(error.message)
-          core++
-        } else if (p.mode === 'exam' && p.studentId) {
-          // 평가관리의 진단평가. 선생님들이 손으로 넣는 꼴과 **똑같이** 넣는다 —
-          //   unit_name = 단원 이름 · level = 단계 · total_score = 100 (점수는 백분율).
-          // ★ 제목을 그대로 memo 에 남긴다 — 단원을 못 읽은 줄도 어디서 온 것인지 보여야 한다.
-          const { error } = await supabase.from('exams').insert({
-            student_id: p.studentId, exam_type: '진단평가', exam_date: p.row.date,
-            unit_name: p.exam?.unitName ?? null, level: p.exam?.level ?? null,
-            score: p.row.score, total_score: 100,
-            teacher_name: currentUser?.name ?? null,
-            memo: ['매쓰홀릭', p.row.right != null ? `${p.row.right}/${p.row.total}` : '', p.row.title]
-              .filter(Boolean).join(' · '),
-          })
-          if (error) throw new Error(error.message)
-          exam++
-        } else if (p.mode === 'fill' && p.wsId) {
-          // ★ status 는 scored 까지만. passed 로 올리면 초등 70점 미만이 트리거에 막힌다.
-          const { error } = await supabase.from('student_worksheets')
-            .update({ score: p.row.score, status: 'scored', submitted_at: `${p.row.date}T12:00:00+09:00` })
-            .eq('id', p.wsId)
-          if (error) throw new Error(error.message)
-          filled++
-        } else if (p.mode === 'new' && p.studentId) {
-          // ★ 단원과 레벨을 **칸에 제대로** 넣는다. 제목을 통째로 unit_name 에 넣으면
-          //   레벨 현황판(학년 × 단원 표)과 초등 70점 규칙이 조용히 멈춘다.
-          const t = parseWorksheetTitle(p.row.title)
-          // 개념 사전에서 찾아낸 단원이 있으면 **그 이름으로** 넣는다 — 그래야 레벨 현황판에서
-          // 같은 단원끼리 모인다. 선생님이 소개념 이름으로 쓰셔도 대단원까지 함께 들어간다.
-          const u = p.unit
-          // ★ 두 칸에 **같은 값**을 넣지 않는다 (원장님 2026-10-31 「전범위 전범위로 나온다」).
-          //   전범위·복합처럼 쪼갤 것이 없는 제목은 대단원·소단원이 같은 글자가 되고,
-          //   그러면 그 뒤로 모든 화면이 「전범위 전범위」로 찍는다. 읽는 쪽도 막아 두었지만
-          //   (lib/worksheetTitle.ts) 들어가는 쪽에서 막는 것이 먼저다.
-          const unitCell = u?.chapter ?? t.unit ?? p.row.course ?? '매쓰홀릭'
-          let unitNameCell = unitNameBeside(unitCell, u?.subChapter ?? t.unitName ?? p.row.title) || null
-          let levelCell = p.row.level
-          // ★ 오답 학습지 — 제목에 「오답학습지」를 넣고 레벨은 직전 레벨학습지와 같게
-          //   (원장님 2026-11-02). 학부모 브리핑과 레벨 현황판이 이 두 칸만 읽는다.
-          if (isWrongNote(p.row)) {
-            const fixed = wrongNoteFix(unitNameCell ?? unitCell, p.row.level, p.prevLevel ?? null)
-            unitNameCell = fixed.unitName
-            levelCell = fixed.level
-          }
-          // ★ 레벨 칸은 비울 수 없다 (NOT NULL). 못 찾으면 Lv1 — 읽어 보기 화면에도
-          //   그렇게 적어 두었다. 비워 보내면 그 줄이 통째로 안 들어간다.
-          const 레벨 = levelForInsert(levelCell)
-          const { error } = await supabase.from('student_worksheets').insert({
-            student_id: p.studentId, subject: '수학',
-            // 제목에 학년이 적혀 있으면 그걸 쓰고, 없으면 학생의 학년으로 메운다.
-            // ★ 학년 칸도 **비울 수 없다**(NOT NULL, 기본값 없음). 재원생 194명 모두
-            //   학년이 있어 지금은 빌 일이 없지만, 비면 그 줄이 통째로 안 들어간다.
-            grade_level: t.gradeLevel ?? gradeFromCourse(p.row.course)?.grade ?? who?.grade ?? '미정',
-            semester: t.semester ?? gradeFromCourse(p.row.course)?.semester ?? null,
-            unit: unitCell,
-            unit_name: unitNameCell,
-            current_level: 레벨,
-            // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
-            // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
-            worksheet_type: worksheetTypeOf(p.row, books),
-            status: 'scored', score: p.row.score,
-            assigned_at: `${p.row.date}T12:00:00+09:00`,
-            submitted_at: `${p.row.date}T12:00:00+09:00`,
-            // 어디서 온 것인지 남긴다 — 되돌릴 때 이 글자로 찾는다.
-            memo: [`매쓰홀릭`,
-              parseWorksheetTitle(p.row.title).round ? `${parseWorksheetTitle(p.row.title).round}차` : '',
-              p.row.right != null ? `${p.row.right}/${p.row.total}` : ''].filter(Boolean).join(' '),
-          })
-          if (error) throw new Error(error.message)
-          created++
-        }
-      } catch (e: any) { failed.push(`${label} — ${e?.message ?? '실패'}`) }
-    }
+    // 넣는 일은 lib/matholicApply.ts 한 곳에서 한다 — 스크립트도 같은 함수를 쓴다.
+    const { daily, core, exam, filled, created, failed } =
+      await applyPlans(supabase, plans, { teacherName: currentUser?.name ?? null, books })
     setSaving(false)
     setDone({ daily, core, exam, filled, created, skipped: count.skip, failed })
     setPlans((prev) => prev.map((p) =>
