@@ -106,6 +106,12 @@ const levelOf = (m: RegExpExecArray | null): number | null => {
   return Number.isFinite(n) ? n : null
 }
 /**
+ * 「고1 A 주말복습 TEST 1107(lv2.5)」 — **주중에 한 범위를 토요일에 보는 시험.**
+ * 원장님 2026-11-07 「주말복습 테스트는 평가관리.진단평가로 가야해」.
+ * ★ 「TEST·테스트·시험·평가」가 같이 적힌 것만 본다 — 「주말복습 학습지」는 학습지 그대로다.
+ */
+const WEEKEND_REVIEW = /주말\s*복습\s*(?:TEST|테스트|시험|평가)/i
+/**
  * ★★ 학습지 제목에서 **종류를 가르는 규칙** — 원장님이 2026-10-31 에 정하셨다.
  *     아직 **코드로 안 옮겼다**(종류를 담을 `kind` 칸이 없다). 다음 주 템플릿 작업에서 한다.
  *
@@ -569,11 +575,20 @@ export function coreTestRound(row: { title?: string | null; kind?: string | null
  *   원장님께 2026-11-06 에 그대로 알려 드리고 레벨학습지로 두기로 했다.
  *
  * ★ `coreTestRound` 를 **먼저** 본다 — 월간평가는 코어테스트로 간다(2026-11-02).
+ *
+ * ★ **「주말복습 TEST」는 레벨이 적혀 있어도 평가다** (원장님 2026-11-07 「주말복습 테스트는
+ *   평가관리.진단평가로 가야해. 주중에 했던 범위를 테스트 하는 거거든」).
+ *   위 레벨 규칙의 **유일한 예외**다 — 매쓰홀릭에서 레벨별로 나가기 때문에 제목에 (lv2.5)가
+ *   붙어 오지만, 성격은 학습지가 아니라 그 주에 한 범위를 보는 시험이다.
+ *   「TEST·테스트·시험·평가」가 같이 적힌 것만 본다 — 「주말복습 학습지」는 학습지 그대로 둔다.
+ *   그리고 **제목만** 본다(종류 칸은 안 본다) — 매쓰홀릭은 「주말과제」까지 종류를 「주말복습」으로
+ *   바꿔 주기 때문에, 종류를 보면 과제가 시험으로 밀린다.
  */
 export function isDiagnostic(row: { title?: string | null; kind?: string | null; level?: number | null }): boolean {
+  if (coreTestRound(row)) return false
+  if (WEEKEND_REVIEW.test(String(row.title ?? ''))) return true
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
   if (!/진단\s*평가|주간\s*평가|주말\s*평가/.test(t)) return false
-  if (coreTestRound(row)) return false
   return row.level == null
 }
 
@@ -599,6 +614,11 @@ export function parseDiagnosticTitle(title: string): DiagnosticParts {
   let t = String(title ?? '').trim()
   const 단계 = /\[\s*([0-9]+(?:\.[0-9]+)?)\s*단계\s*\]/.exec(t)
   const level = 단계 ? Number(단계[1]) : levelOf(LEVEL.exec(t))
+  // ★ 주말복습 테스트는 **단원이 제목에 없다** — 주중에 한 범위를 보는 시험이라
+  //   제목에는 학년·반(A·B·S)·날짜(1107)·레벨만 적힌다. 그것들을 단원 이름으로 넣으면
+  //   평가관리에서 한 줄씩 따로 흩어진다. 그래서 「주말복습」 하나로 모은다.
+  //   원래 제목은 화면이 memo 에 그대로 남긴다 (원장님 2026-11-07).
+  if (WEEKEND_REVIEW.test(t)) return { unitName: '주말복습', level }
   t = t
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/[0-9]+\s*월/g, ' ')
