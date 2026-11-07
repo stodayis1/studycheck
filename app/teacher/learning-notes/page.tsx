@@ -11,7 +11,7 @@ import { cx, fetchAllRows, formatDailyTestUnitLabel, formatWorksheetScope, textb
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
-import { unitParen, unitLabel, levelText } from '@/lib/worksheetTitle'
+import { unitParen, unitLabel, levelText, wsRowsToText, wsRowsFromText } from '@/lib/worksheetTitle'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
@@ -263,8 +263,16 @@ export default function TeacherLearningNotesPage() {
   // (예전엔 100으로 시작해서, 안 건드리고 저장하면 전부 100%·100점으로 쌓였다 - 2026-09 확인)
   const [noteAchievement, setNoteAchievement] = useState<number | null>(null)
   const [noteScorePct, setNoteScorePct] = useState<number | null>(null)
-  const [noteWorksheetUnit, setNoteWorksheetUnit] = useState('')  // 채점한 학습지 단원 (지난 과제)
-  const [noteWorksheetLevel, setNoteWorksheetLevel] = useState('') // 채점한 학습지 레벨
+  /**
+   * 채점한 학습지 단원·레벨 — **학습지 수만큼** 줄을 둔다
+   * (원장님 2026-11-07 「학습지 두개의 정보가 들어갔는데 막상 하단에는 칸이 하나뿐이 없어서
+   *  학습지 정보 한개만 반영되네. 학습지 갯수대로 생성될수있도록」).
+   * DB 는 그대로 두 칸(worksheet_unit · worksheet_level)이고, 줄을 ` · ` 로 이어 담는다.
+   * 주간 보고서·브리핑·OPS 가 그 두 칸을 **글자 그대로** 쓰기 때문에 칸을 늘리지 않았다.
+   */
+  const [noteWsRows, setNoteWsRows] = useState<{ unit: string; level: string }[]>([{ unit: '', level: '' }])
+  /** 선생님이 그 칸을 손댔는가 — 손댄 뒤에는 자동으로 채우지 않는다 */
+  const wsRowsTouched = useRef(false)
   const [noteExtraClass, setNoteExtraClass] = useState(false)
   const [noteExtraTime, setNoteExtraTime] = useState('')
   const [noteMemo, setNoteMemo] = useState('')
@@ -1034,6 +1042,28 @@ export default function TeacherLearningNotesPage() {
   //   수업일자가 하루씩 밀려 학부모 브리핑도 엉뚱한 날로 나간다. 한국 날짜로 고정한다.
   const todayStr = new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]
 
+  /**
+   * 그날 채점된 학습지가 여러 개면 **그 수만큼 칸을 미리 채운다**
+   * (원장님 2026-11-07 「학습지 갯수대로 생성될수있도록」).
+   * ★ 적힌 값이 없고 선생님이 아직 손대지 않았을 때만. 학습지는 창을 연 뒤에 읽혀 오므로
+   *   여는 자리가 아니라 **여기서** 채운다.
+   */
+  useEffect(() => {
+    if (!showNoteModal || !noteStudent || wsRowsTouched.current) return
+    const day = noteDate || todayStr
+    const todays = worksheets.filter((w) => w.student_id === noteStudent.id && w.score != null
+      && String(w.submitted_at ?? '').slice(0, 10) === day)
+    if (todays.length === 0) return
+    setNoteWsRows((prev) => {
+      if (prev.some((r) => r.unit.trim() || r.level.trim())) return prev
+      return todays.map((w) => ({
+        unit: unitLabel(w.unit, w.unit_name),
+        level: w.current_level != null ? `Lv${levelText(w.current_level)}` : '',
+      }))
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showNoteModal, noteStudent, noteDate, worksheets])
+
   // 오늘이 공휴일이면 시간표를 비운다. 학원이 쉬는 날인데 평소 요일 시간표가 그대로 뜨면
   // 선생님이 오늘 수업이 있는 줄 알고 학습일지를 쓰게 된다 (2026-10-09 한글날에 실제로 그랬다).
   // 다만 공휴일에도 보강 등으로 수업하는 날이 있어, 버튼 한 번으로 볼 수 있게 열어둔다.
@@ -1311,8 +1341,8 @@ export default function TeacherLearningNotesPage() {
     // achievement_pct 컬럼 생기기 전 기존 기록은 boolean만 남아있어서, 그 경우엔 근사치로 복원
     setNoteAchievement(note?.achievement_pct ?? (note ? (note.workbook_done ? 100 : note.worksheet_submitted ? 70 : 0) : null))
     setNoteScorePct(note?.worksheet_score ?? null) // 새 일지·값 없는 일지는 미선택으로 시작 (직접 골라야 저장)
-    setNoteWorksheetUnit(note?.worksheet_unit ?? '')
-    setNoteWorksheetLevel(note?.worksheet_level ?? '')
+    setNoteWsRows(wsRowsFromText(note?.worksheet_unit, note?.worksheet_level))
+    wsRowsTouched.current = false
     setNoteExtraClass(note?.extra_class ?? false)
     setNoteExtraTime(note?.extra_time ?? '')
     setNoteMemo(note?.memo ?? '')
@@ -1877,8 +1907,9 @@ ${e?.message ?? '연결 실패'}
       textbook_submitted: noRecord ? false : noteAchievement > 0,
       workbook_done: noRecord ? false : noteAchievement === 100,
       achievement_pct: noRecord ? null : noteAchievement,
-      worksheet_unit: noRecord ? null : (noteWorksheetUnit.trim() || null),
-      worksheet_level: noRecord ? null : (noteWorksheetLevel.trim() || null),
+      // 여러 줄은 ` · ` 로 이어 담는다 (칸은 그대로 둔 채 수만 늘린 것이다)
+      worksheet_unit: noRecord ? null : (wsRowsToText(noteWsRows).unit || null),
+      worksheet_level: noRecord ? null : (wsRowsToText(noteWsRows).level || null),
       memo: memoText,
     }
   }
@@ -4395,8 +4426,17 @@ ${e?.message ?? '연결 실패'}
                             const 레벨 = w.current_level != null ? `Lv${levelText(w.current_level)}` : ''
                             return (
                               <button key={w.id} type="button"
-                                onClick={() => { setNoteWorksheetUnit(단원); setNoteWorksheetLevel(레벨) }}
-                                title="누르면 아래 단원·레벨 칸에 넣어요"
+                                onClick={() => {
+                                  // ★ **덮어쓰지 않고 한 줄 더한다** (원장님 2026-11-07
+                                  //   「학습지 갯수대로 생성될수있도록」). 같은 것을 또 누르면 안 더한다.
+                                  wsRowsTouched.current = true
+                                  setNoteWsRows((prev) => {
+                                    if (prev.some((r) => r.unit === 단원 && r.level === 레벨)) return prev
+                                    const 빈줄 = prev.filter((r) => r.unit.trim() || r.level.trim())
+                                    return [...빈줄, { unit: 단원, level: 레벨 }]
+                                  })
+                                }}
+                                title="누르면 아래 칸에 한 줄 더해요"
                                 className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-white"
                                 style={{ border: '1px solid #9FE1CB', color: '#27500A' }}>
                                 {단원 || '학습지'} {레벨} · <b>{w.score}점</b>
@@ -4411,17 +4451,46 @@ ${e?.message ?? '연결 실패'}
                     )
                   })()}
 
-                  {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함) */}
-                  <div className="flex gap-2 mt-2">
-                    <input type="text" value={noteWorksheetUnit} onChange={(e) => setNoteWorksheetUnit(e.target.value)}
-                      disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM}
-                      placeholder="단원 (예: 3단원 분수의 덧셈)"
-                      className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
-                    <input type="text" value={noteWorksheetLevel} onChange={(e) => setNoteWorksheetLevel(e.target.value)}
-                      disabled={noteAttendance === '결석' || noteAttendance === ATT_EXAM}
-                      placeholder="레벨 (예: 2레벨)"
-                      className="w-28 shrink-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
-                  </div>
+                  {/* 이 점수가 어느 학습지인지 (리포트/카톡 발송 시 "몇단원 몇레벨"로 표기하기 위함).
+                      ★ 하루에 학습지를 둘 이상 푼 날이 있다 — 칸을 **학습지 수만큼** 둔다
+                        (원장님 2026-11-07). 위 초록 칩을 누르면 한 줄씩 더해진다. */}
+                  {(() => {
+                    const 막힘 = noteAttendance === '결석' || noteAttendance === ATT_EXAM
+                    const 고치기 = (i: number, patch: Partial<{ unit: string; level: string }>) => {
+                      wsRowsTouched.current = true
+                      setNoteWsRows((prev) => prev.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+                    }
+                    return (
+                      <div className="mt-2 space-y-1.5">
+                        {noteWsRows.map((row, i) => (
+                          <div key={i} className="flex gap-2 items-center">
+                            <input type="text" value={row.unit} onChange={(e) => 고치기(i, { unit: e.target.value })}
+                              disabled={막힘}
+                              placeholder={i === 0 ? '단원 (예: 3단원 분수의 덧셈)' : '단원 (학습지 2번째)'}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
+                            <input type="text" value={row.level} onChange={(e) => 고치기(i, { level: e.target.value })}
+                              disabled={막힘}
+                              placeholder="레벨 (예: 2레벨)"
+                              className="w-24 shrink-0 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#9FE1CB]" />
+                            <button type="button" disabled={막힘}
+                              onClick={() => {
+                                wsRowsTouched.current = true
+                                setNoteWsRows((prev) => (prev.length <= 1 ? [{ unit: '', level: '' }] : prev.filter((_, k) => k !== i)))
+                              }}
+                              title="이 줄 지우기"
+                              className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30">
+                              <i className="ti ti-x text-sm" />
+                            </button>
+                          </div>
+                        ))}
+                        <button type="button" disabled={막힘}
+                          onClick={() => { wsRowsTouched.current = true; setNoteWsRows((prev) => [...prev, { unit: '', level: '' }]) }}
+                          className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+                          + 학습지 칸 추가
+                        </button>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* 추가수업 */}

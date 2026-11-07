@@ -16,7 +16,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/worksheetTitle.ts'
+import { unitNameBeside, unitLabel, unitParen, levelText, wsRowsToText, wsRowsFromText } from '../lib/worksheetTitle.ts'
 // ★ planRow 는 **늘 진짜 lib/matholic.ts** 를 쓴다(망가뜨린 사본을 넘겨도 영향 없음) —
 //   여기서는 「갈림길이 제자리에 있나」만 본다. 규칙 자체는 위 검사들이 직접 본다.
 import { planRow } from '../lib/matholicPlan.ts'
@@ -920,6 +920,54 @@ T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
     && /level: p\.exam\?\.level/.test(apply)
     && apply.includes("p.mode === 'exam'")
     && src.includes('count.exam')
+})
+
+// ── 2026-11-07 학습일지의 「채점한 학습지」 칸을 **학습지 수만큼** ──────────────
+//   원장님 「학습지 두개의 정보가 들어갔는데 막상 하단에는 칸이 하나뿐이 없어서
+//   학습지 정보 한개만 반영되네. 학습지 갯수대로 생성될수있도록」
+//   ★ DB 칸은 그대로 둘(worksheet_unit·worksheet_level)이고 ` · ` 로 이어 담는다.
+//     주간 보고서·브리핑·OPS 가 그 두 칸을 글자 그대로 쓰기 때문이다.
+T('학습일지 학습지 줄 — 여러 줄을 담고 그대로 되읽는다', () => {
+  const rows = [
+    { unit: '[개념플러스유형] 공통수학2 개념편 (2022개정) P.223 ~ P.230', level: 'Lv1' },
+    { unit: '오답학습지 (2026.11.07) 오답유사 과제', level: 'Lv2.5' },
+  ]
+  const t = wsRowsToText(rows)
+  const back = wsRowsFromText(t.unit, t.level)
+  return t.unit.includes(' · ') && t.level === 'Lv1 · Lv2.5'
+    && back.length === 2
+    && back[0].unit === rows[0].unit && back[0].level === 'Lv1'
+    && back[1].unit === rows[1].unit && back[1].level === 'Lv2.5'
+})
+
+// ★ 레벨이 없는 줄이 섞이면 **자리가 밀린다** — 「Lv2」만 남기면 되읽을 때 그 레벨이
+//   앞 줄(다른 학습지)에 붙는다. 2026-11-07 망가뜨려 시험에서 이 구멍이 드러났다.
+T('학습일지 학습지 줄 — 레벨이 비어도 자리가 밀리지 않는다', () => {
+  const rows = [{ unit: '쌍둥이 교재 P.223~230', level: '' }, { unit: '오답학습지', level: 'Lv2.5' }]
+  const t = wsRowsToText(rows)
+  const back = wsRowsFromText(t.unit, t.level)
+  return back.length === 2
+    && back[0].unit === '쌍둥이 교재 P.223~230' && back[0].level === ''
+    && back[1].unit === '오답학습지' && back[1].level === 'Lv2.5'
+})
+
+T('학습일지 학습지 줄 — 한 줄·빈 줄도 그대로', () => {
+  const one = wsRowsToText([{ unit: '3단원 분수의 덧셈', level: '2레벨' }])
+  const none = wsRowsToText([{ unit: '', level: '' }])
+  return one.unit === '3단원 분수의 덧셈' && one.level === '2레벨'
+    && none.unit === '' && none.level === ''
+    && wsRowsFromText(null, null).length === 1                 // 빈 일지는 칸 하나로 연다
+    && wsRowsFromText('3단원', '')[0].unit === '3단원'          // 옛 기록(레벨 없음)도 읽힌다
+    && wsRowsFromText('3단원', '')[0].level === ''
+})
+
+T('학습일지 화면이 그 두 함수를 쓴다 (칸을 늘린 자리)', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/learning-notes/page.tsx'), 'utf8')
+  return /wsRowsFromText\(note\?\.worksheet_unit/.test(src)
+    && /wsRowsToText\(noteWsRows\)\.unit/.test(src)
+    && /wsRowsToText\(noteWsRows\)\.level/.test(src)
+    && /noteWsRows\.map\(/.test(src)              // 줄 수만큼 그린다
+    && src.includes('+ 학습지 칸 추가')
 })
 
 // ── 2026-11-07 **다 푼 학습지를 덮어쓰지 않는다** ────────────────────────────

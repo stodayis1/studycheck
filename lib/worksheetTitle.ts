@@ -63,3 +63,41 @@ export function levelText(v?: string | number | null): string {
   if (!t) return ''
   return t.endsWith('.0') ? t.slice(0, -2) : t
 }
+
+/**
+ * 학습일지의 「채점한 학습지」 줄 ↔ DB 두 칸(worksheet_unit · worksheet_level).
+ *
+ * 원장님 2026-11-07 「학습지 두개의 정보가 들어갔는데 막상 하단에는 칸이 하나뿐이 없어서
+ * 학습지 정보 한개만 반영되네. 학습지 갯수대로 생성될수있도록」.
+ *
+ * ★ 칸을 늘리지 않고 **줄을 ` · ` 로 이어** 담는다 — 주간 보고서(`과제 성취 ○○`)·학부모
+ *   브리핑·OPS 가 그 두 칸을 글자 그대로 쓰기 때문에, 칸을 바꾸면 그쪽이 조용히 어긋난다.
+ * ★ 레벨은 **줄 자리를 맞춰** 잇는다. 단원 둘에 레벨 하나면 어느 쪽 레벨인지 알 수 없다.
+ */
+export const WS_SEP = ' · '
+
+export interface WsRow { unit: string; level: string }
+
+export function wsRowsToText(rows: WsRow[]): { unit: string; level: string } {
+  const kept = (rows ?? []).filter((r) => (r?.unit ?? '').trim() || (r?.level ?? '').trim())
+  // ★ 빈 칸도 **자리를 지켜** 잇는다. 레벨이 없는 줄을 빼 버리면(「Lv2」만 남기면)
+  //   되읽을 때 그 레벨이 **앞 줄에 붙는다** — 다른 학습지의 레벨이 된다.
+  //   그래서 trim 도 하지 않는다. ' · Lv2' 의 앞 빈 자리가 「첫 줄은 레벨 없음」이다.
+  const 이어서 = (xs: string[]) => {
+    const joined = xs.join(WS_SEP)
+    return joined.split(WS_SEP).some((x) => x.trim()) ? joined : ''
+  }
+  return {
+    unit: 이어서(kept.map((r) => (r.unit ?? '').trim())),
+    level: 이어서(kept.map((r) => (r.level ?? '').trim())),
+  }
+}
+
+export function wsRowsFromText(unit?: string | null, level?: string | null): WsRow[] {
+  const u = String(unit ?? '').split(WS_SEP).map((s) => s.trim())
+  const l = String(level ?? '').split(WS_SEP).map((s) => s.trim())
+  const n = Math.max(u.length, l.length)
+  const rows = Array.from({ length: n }, (_, i) => ({ unit: u[i] ?? '', level: l[i] ?? '' }))
+    .filter((r) => r.unit || r.level)
+  return rows.length ? rows : [{ unit: '', level: '' }]
+}
