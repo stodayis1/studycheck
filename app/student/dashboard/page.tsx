@@ -461,7 +461,7 @@ export default function StudentDashboardPage() {
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
 
-        <CareerBanner grade={student.grade} href="/student/career" />
+        <CareerBanner studentId={student.id} grade={student.grade} href="/student/career" />
 
         {/* 풀 학습지가 있으면 맨 위에 — 로그인하자마자 보이게 (할일목록으로 보낸다) */}
         {todoSheets > 0 && (
