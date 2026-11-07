@@ -85,7 +85,8 @@ description: StudyCheck 앱 코드를 바꾸는 작업을 끝내기 전에 반�
       (`app/api/push/subscribe`, `app/api/proof-submit` 방식: `auth.getUser(token)` → `students.session_uid`/`parent_session_uid`).
 - [ ] cron은 `CRON_SECRET` Bearer 검사(`lib/cronBriefing.ts` `runBriefingCron` 참고). 쿼리스트링 붙은 cron 경로는 피한다
       (2026-10-13 발송 누락 때 의심 원인이라 쿼리 없는 경로로 나눴다).
-- [ ] 일부러 열어둔 것은 `api/grade/[code]`, `api/grade/[code]/photo`(QR 자가채점), `api/push/unsubscribe`뿐이다.
+- [ ] 일부러 열어둔 것은 `api/grade/[code]`, `api/grade/[code]/photo`(QR 자가채점), `api/push/unsubscribe`,
+      `api/career/link/[token]`(진로 설문 문자 링크 — 원장님 2026-11-07 「로그인 안 하시니 문자로」, 12자 무작위 토큰)뿐이다.
       학생·학부모 토큰으로 본인을 확인하는 것(`proof-submit`, `career`)은 가드 훑기에 걸리지 않거나 걸려도 정상이다.
       **새로 여는 것은 원장님 확인 없이 하지 않는다.**
 - [ ] 다 만든 뒤 가드 빠진 라우트를 훑는다(CI 검사가 아직 없다 — `docs/보안.md` 12번):
@@ -791,3 +792,4 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-07 worktree 의 연결 node_modules 는 --webpack 으로, 선생님 테스트 계정 없음 → 정책은 SQL 로 흉내 내 시험
 - 2026-11-07 **고등학교 시험일정은 세 학년을 한꺼번에 넣지만, 2학기 기말은 고3이 다르다.** 고3은 수능 뒤라 11월에 일찍 끝내거나(신원고 11/24·봉일천고 11/23·고양국제고 11/23) **아예 없다**(고양일고·백양고·고양동산고 — 12월 시험이 「2차 정기시험(1,2학년)」). 1·2학년 날짜를 고3에 그대로 두면 **없는 시험의 대비가 잡힌다** — 없으면 줄을 지우고, 지우기 전에 그 학년 배정(student_exam_prep)이 0건인지 센다
 - 2026-11-07 새 기능엔 테스트 학생(원장=윤수지, 강사=테스트) 경로·미리보기·진행 안내를 같이 만든다. 비슷한 기존 화면 꼴을 따른다
+- 2026-11-07 진로 설문 문자 링크 api/career/link/[token] 을 일부러 열어 둔 길 목록에 추가

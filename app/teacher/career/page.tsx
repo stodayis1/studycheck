@@ -46,7 +46,7 @@ export default function TeacherCareerPage() {
   async function load() {
     const [st, co, sv, ac] = await Promise.all([
       fetchAllRows<Student>(() => supabase.from('students')
-        .select('id, name, school, grade, teacher_name, clinic_teacher_name, is_test, on_leave')
+        .select('id, name, school, grade, teacher_name, clinic_teacher_name, is_test, on_leave, parent_phone, student_phone')
         .eq('is_active', true).order('name').order('id')),
       fetchAllRows<Consent>(() => supabase.from('career_consents').select('*').order('agreed_at').order('id')),
       fetchAllRows<Survey>(() => supabase.from('career_surveys').select('*').order('updated_at').order('id')),

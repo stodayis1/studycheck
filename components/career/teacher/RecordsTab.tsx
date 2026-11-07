@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 import { ACTIVITY_KINDS, ACTIVITY_STATUS, FORMS, QUESTIONS, CONSENT_VERSION, formForGrade } from '@/lib/careerSurvey'
 import { isTestStudentId } from '@/lib/testStudents'
 import { GREEN, MINT, LINE, Badge, Card, type Student, type Consent, type Survey, type Activity } from './shared'
@@ -142,6 +143,8 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                   {formForGrade(sel.grade) && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: MINT, color: GREEN }}>{FORMS[formForGrade(sel.grade)!].label}</span>}
                   {isTestStudentId(sel.id) && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#FFF7ED', color: '#9A3412' }}>🧪 테스트 학생</span>}
                 </div>
+                <LinkRow studentId={sel.id} canHave={!!formForGrade(sel.grade) || isTestStudentId(sel.id)}
+                  phone={sel.student_phone ?? null} />
                 <h3 className="mt-4 text-sm font-bold text-gray-700">개인정보 동의 (진로·활동 기록용)</h3>
                 <div className="mt-2 grid sm:grid-cols-2 gap-2">
                   {(['student', 'parent'] as const).map((role) => {
@@ -273,6 +276,40 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * 이 학생의 설문 링크 — 학생용·학부모용. 누르면 복사(카톡으로 직접 보내거나 열어 볼 때).
+ * 문자로 한꺼번에 보내는 것은 「응답 현황」 탭(원장님).
+ */
+function LinkRow({ studentId, canHave, phone }: { studentId: string; canHave: boolean; phone: string | null }) {
+  const [links, setLinks] = useState<{ student: string; parent: string } | null>(null)
+  const [msg, setMsg] = useState('')
+  if (!canHave) return null
+  async function get(): Promise<{ student: string; parent: string } | null> {
+    if (links) return links
+    const r = await apiFetch('/api/career/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { setMsg(j.error ?? '링크를 만들지 못했어요.'); return null }
+    setLinks(j); return j
+  }
+  async function copy(k: 'student' | 'parent') {
+    const l = await get(); if (!l) return
+    try { await navigator.clipboard.writeText(l[k]); setMsg(`${k === 'student' ? '학생' : '학부모'} 링크를 복사했어요.`) }
+    catch { setMsg(l[k]) }
+  }
+  async function openIt(k: 'student' | 'parent') { const l = await get(); if (l) window.open(l[k], '_blank') }
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-gray-500">학생 번호 {phone ? <b className="text-gray-700">{phone}</b> : <span className="text-amber-600">없음 (학생관리에서 입력)</span>}</span>
+      <span className="text-gray-300">|</span>
+      <span className="text-gray-500">진로 설문 링크</span>
+      <button onClick={() => copy('student')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 복사</button>
+      <button onClick={() => copy('parent')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학부모용 복사</button>
+      <button onClick={() => openIt('student')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 열어 보기 ↗</button>
+      {msg && <span style={{ color: GREEN }}>{msg}</span>}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 // 진로 설문 — 서버 쪽 공용 (app/api/career, app/api/career/test 가 같이 쓴다)
 // ★ 서버(service_role)에서만 import 한다. 브라우저 코드에서 부르지 말 것.
 
+import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { CONSENT_VERSION, FORMS, cleanAnswers, formForGrade, surveyKeyOf, type FormId } from '@/lib/careerSurvey'
 import { isTestStudentId } from '@/lib/testStudents'
@@ -30,8 +31,8 @@ export async function activeConsent(db: Db, studentId: string, role: string) {
 }
 
 /** 화면이 처음 열릴 때 필요한 것 한 묶음 */
-export async function loadState(db: Db, student: { id: string; name: string; grade: string | null }, role: 'student' | 'parent') {
-  const forms = formsFor(student)
+export async function loadState(db: Db, student: { id: string; name: string; grade: string | null }, role: 'student' | 'parent', only?: FormId[]) {
+  const forms = only ?? formsFor(student)
   const consent = await activeConsent(db, student.id, role)
   const answers: Record<string, { answers: any; updated_at: string } | null> = {}
   for (const f of forms) {
@@ -51,9 +52,10 @@ export async function loadState(db: Db, student: { id: string; name: string; gra
  */
 export async function submitSurvey(
   db: Db, student: { id: string; grade: string | null }, role: 'student' | 'parent', b: any, userAgent: string,
+  allowed?: FormId[],
 ): Promise<{ status: number; error: string } | null> {
   const form = String(b?.form ?? '') as FormId
-  if (!FORMS[form] || !formsFor(student).includes(form))
+  if (!FORMS[form] || !(allowed ?? formsFor(student)).includes(form))
     return { status: 400, error: '이 학생이 할 수 있는 설문이 아니에요.' }
 
   let consent = await activeConsent(db, student.id, role)
@@ -89,4 +91,42 @@ export async function revokeConsent(db: Db, studentId: string, role: string) {
     .eq('student_id', studentId).eq('signer_role', role).is('revoked_at', null)
   if (error) console.error('career revoke', error)
   return !error
+}
+
+// ── 문자 링크 (원장님 2026-11-07 「스터디체크 로그인을 안 하시니 문자로, 설명회 설문처럼」) ──────────
+
+
+export const SITE = 'https://studycheck-five.vercel.app'
+const ALNUM = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'   // 헷갈리는 0·O·1·l·I 빼고
+export function newToken(n = 12) {
+  const b = randomBytes(n)
+  return Array.from(b, (x) => ALNUM[x % ALNUM.length]).join('')
+}
+export const isToken = (t: string) => /^[A-Za-z0-9]{12}$/.test(t)
+export const linkUrl = (token: string) => `${SITE}/c/${token}`
+
+/** 학생·응답자·이번 차수마다 링크 하나. 있으면 그대로, 없으면 만든다 */
+export async function ensureLink(db: Db, studentId: string, respondent: 'student' | 'parent', form: FormId) {
+  const survey_key = surveyKeyOf(form)
+  const { data: old } = await db.from('career_links').select('token, form')
+    .eq('student_id', studentId).eq('respondent', respondent).eq('survey_key', survey_key).maybeSingle()
+  if (old) return old.token as string
+  for (let i = 0; i < 3; i++) {
+    const token = newToken()
+    const { error } = await db.from('career_links').insert({ token, student_id: studentId, respondent, form, survey_key })
+    if (!error) return token
+    // 같은 학생 링크가 그새 생겼으면 그것을 쓴다
+    const { data: again } = await db.from('career_links').select('token')
+      .eq('student_id', studentId).eq('respondent', respondent).eq('survey_key', survey_key).maybeSingle()
+    if (again) return again.token as string
+  }
+  throw new Error('링크를 만들지 못했어요.')
+}
+
+/** 이 학생에게 문자로 보낼 설문 종류 — 대상 학년이면 그것, 테스트 학생이면 고른 것(없으면 예비고2) */
+export function formForSend(student: { id: string; grade: string | null }, testForm?: string): FormId | null {
+  const f = formForGrade(student.grade)
+  if (f) return f
+  if (isTestStudentId(student.id)) return testForm === 'pre1' ? 'pre1' : 'pre2'
+  return null
 }
