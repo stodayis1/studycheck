@@ -922,6 +922,26 @@ T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
     && src.includes('count.exam')
 })
 
+// ── 2026-11-07 **다 푼 학습지를 덮어쓰지 않는다** ────────────────────────────
+//   오늘 실제로 걸렸다 — 「공통수학2 유리함수2 복습 (lv2.5) 40점」이 9일 전 다 푼
+//   「합성함수 복습 (lv2.5) 76점(passed)」에 붙을 뻔했다. 레벨이 같고 「복습」이 겹치고
+//   날짜가 가까워 점수가 높게 나왔다. 넣었으면 76점이 40점으로 **사라진다.**
+T('이미 점수가 적힌 지난 학습지는 점수 채우기 후보가 아니다', () => {
+  const row = { line: 1, student: '가짜학생', date: '2026-11-07', kind: '단원학습 학습지',
+    course: '공통수학2 (2022 개정)', title: '공통수학2 유리함수2 복습 (lv2.5)',
+    level: 2.5, right: 10, total: 25, score: 40, raw: '' }
+  const 다푼것 = { id: 'W1', student_id: 'S1', grade_level: '고1', unit: '공통수학2 (2022 개정)',
+    unit_name: '공통수학2 합성함수 복습 (lv2.5)', current_level: 2.5, worksheet_type: 'main',
+    status: 'passed', score: 76, assigned_at: '2026-10-29T12:00:00+09:00', submitted_at: '2026-10-29T12:00:00+09:00' } as any
+  const 빈것 = { ...다푼것, id: 'W2', score: null, status: 'assigned', submitted_at: null }
+  const 오늘것 = { ...다푼것, id: 'W3', score: 55, submitted_at: '2026-11-07T12:00:00+09:00' }
+  const a = rankWorksheets(row, [다푼것], null, BOOKS)
+  const b = rankWorksheets(row, [빈것], null, BOOKS)
+  const c = rankWorksheets(row, [오늘것], null, BOOKS)
+  // 지난 것은 아예 후보에서 빠지고, 빈 것과 **그날 것**은 그대로 후보다
+  return a.length === 0 && b.length > 0 && c.length > 0
+})
+
 // ★ 긁어서 넣는 스크립트도 **같은 함수**를 써야 한다 (원장님 2026-11-07 「너가 화면 보고
 //   반영해 주면 되잖아」). 스크립트가 따로 판단·저장하면 규칙이 두 벌이 된다.
 T('긁어 넣는 스크립트가 planRow·applyPlans 를 쓴다 (따로 판단하지 않는다)', () => {
