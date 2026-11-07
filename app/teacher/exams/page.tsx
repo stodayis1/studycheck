@@ -511,7 +511,9 @@ export default function TeacherExamsPage() {
   // 점수 퍼센트
   const pct = (score: number, total: number) => Math.round((score / total) * 100)
 
-  // 색상 by 점수
+  // 색상 by 점수 — ★이 화면에 하나만 있어야 한다.
+  //   한때 아래쪽(return 뒤)에 같은 이름 사본이 하나 더 있었다. 같은 범위에 이름이 겹치면
+  //   나중 선언이 이기므로 여기를 고쳐도 아무 일이 안 일어난다 (2026-11-07 지움).
   function scoreColor(score: number, total: number) {
     const p = pct(score, total)
     if (p >= 90) return '#27500A'
@@ -1632,19 +1634,4 @@ export default function TeacherExamsPage() {
       )}
     </div>
   )
-
-  function scoreColor(score: number, total: number) {
-    const p = Math.round((score / total) * 100)
-    if (p >= 90) return '#27500A'
-    if (p >= 80) return '#085041'
-    if (p >= 70) return '#633806'
-    return '#991b1b'
-  }
-  function scoreBg(score: number, total: number) {
-    const p = Math.round((score / total) * 100)
-    if (p >= 90) return '#EAF3DE'
-    if (p >= 80) return '#F0FBF7'
-    if (p >= 70) return '#FAEEDA'
-    return '#fee2e2'
-  }
 }
