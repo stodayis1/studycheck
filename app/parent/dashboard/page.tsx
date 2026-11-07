@@ -11,6 +11,7 @@ import { stripRichTokens } from '@/lib/richContent'
 import { pickDisplayAnnouncements } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { ATT_EXAM, isExamAbsence } from '@/lib/attendance'
+import CareerBanner from '@/components/career/CareerBanner'
 
 interface StudentInfo {
   id: string
@@ -336,6 +337,8 @@ export default function ParentDashboardPage() {
         )} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-28 space-y-4">
+
+        <CareerBanner grade={student.grade} href="/parent/career" />
 
         {/* 데이터 업로드 안내 - 2026년 7월부터 순차 등록 중이라 그 이전 기록은 일부 누락될 수 있음을 고지 */}
         <div className="rounded-2xl px-4 py-3 flex items-start gap-2" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>

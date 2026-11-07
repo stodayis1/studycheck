@@ -79,6 +79,7 @@ description: StudyCheck 앱 코드를 바꾸는 작업을 끝내기 전에 반�
 - [ ] cron은 `CRON_SECRET` Bearer 검사(`lib/cronBriefing.ts` `runBriefingCron` 참고). 쿼리스트링 붙은 cron 경로는 피한다
       (2026-10-13 발송 누락 때 의심 원인이라 쿼리 없는 경로로 나눴다).
 - [ ] 일부러 열어둔 것은 `api/grade/[code]`, `api/grade/[code]/photo`(QR 자가채점), `api/push/unsubscribe`뿐이다.
+      학생·학부모 토큰으로 본인을 확인하는 것(`proof-submit`, `career`)은 가드 훑기에 걸리지 않거나 걸려도 정상이다.
       **새로 여는 것은 원장님 확인 없이 하지 않는다.**
 - [ ] 다 만든 뒤 가드 빠진 라우트를 훑는다(CI 검사가 아직 없다 — `docs/보안.md` 12번):
       ```bash
@@ -166,6 +167,11 @@ git worktree remove /tmp/sc-base
 ```
 
 ## 8. 배포 전후 확인
+
+- [ ] 로컬에서 화면을 보려고 **git worktree 에 node_modules 를 연결(junction)** 했으면 Turbopack 이
+      「Symlink … points out of the filesystem root」로 죽는다. `next dev --webpack` 으로 띄운다.
+- [ ] 로그인 화면의 「선생님 테스트 로그인」 계정(test@test.com)은 **DB 에 없다**. 선생님 화면은 원장님 로그인으로 보거나,
+      DB 에서 `set local role authenticated` + `request.jwt.claims` 로 강사 신분을 흉내 내 정책을 시험한다(끝에 rollback).
 
 - [ ] `main`에 push하면 Vercel이 자동 배포한다. **DB 변경이 앱보다 먼저인지 나중인지** 순서를 정해 두고 지킨다.
 - [ ] 환경변수만 바꿨으면 push가 없으니 Vercel **Redeploy**. 새 변수는 Production and Preview 둘 다 체크.
@@ -775,3 +781,4 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-07 **`npm run dev` 는 운영 DB에 쓴다.** POST 검사 한 번이 운영 표에 들어간다 — 막히는 길(400)부터 확인하고, 되는 길은 지울 수 있게 표시해 넣고 id 로만 지운 뒤 행 수를 센다. **한글 본문은 UTF-8 파일로**(`--data-binary @…`) — Git Bash 의 `-d` 는 CP949 로 깨져 다른 키로 통과한다
 - 2026-11-07 **밖으로 나가는 주소는 미리보기(카톡 대표 그림)까지 본다.** 'use client' 화면은 metadata 를 못 내보내니 같은 자리에 `layout.tsx` 를 두고 `generateMetadata`(Next 16 — params 는 await) 로 낸다. og:image 는 **절대 주소**로, 1200x630 로, 그림은 `scripts/make-survey-og.py` 로 만들어 `public/og/` 에. 카톡은 미리보기를 기억하므로 바꾼 뒤엔 `?v=2` 를 붙여 보내게 안내한다. 행사에 오신 분께만 보내는 주소는 `robots: noindex`
 - 2026-11-07 **나이스에 시험을 안 올리는 학교가 있다.** 고양 지역 고등학교는 「정기시험」이라 부르며 학교 홈페이지에만 올린다(백양고·신원고·고양동산고·고양국제고 = 2026년 12월 기준 나이스 0건). 받아오기 탓이 아니니 학교 홈페이지(`<이름>-h.goegy.kr` 학사일정 화면, 없으면 2월 공지의 연간 학사일정 그림·PDF)에서 읽어 `source='manual'` 로 넣는다 — 자동 갱신은 `source='neis'` 만 지운다. **되돌리기는 학교·날짜를 집어서** 지운다(`source='manual'` 전체를 지우면 원장님이 넣으신 학원 일정까지 날아간다)
+- 2026-11-07 worktree 의 연결 node_modules 는 --webpack 으로, 선생님 테스트 계정 없음 → 정책은 SQL 로 흉내 내 시험
