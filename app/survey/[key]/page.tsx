@@ -30,6 +30,8 @@ export default function EventSurveyPage({ params }: { params: Promise<{ key: str
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [grade, setGrade] = useState('')
+  const [found, setFound] = useState<string[]>([])
+  const [foundEtc, setFoundEtc] = useState('')
   const [stars, setStars] = useState<Record<number, number>>({})
   const [recommend, setRecommend] = useState(0)
   const [free, setFree] = useState('')
@@ -57,6 +59,7 @@ export default function EventSurveyPage({ params }: { params: Promise<{ key: str
   async function submit() {
     if (!name.trim()) { setErr('자녀 이름을 적어 주세요.'); return }
     if (!phone.trim()) { setErr('연락처를 적어 주세요.'); return }
+    if (!found.length && !foundEtc.trim()) { setErr(`${ev!.found.ask} 하나라도 골라 주세요.`); return }
     for (let i = 0; i < ev!.topics.length; i++) {
       if (!stars[i]) { setErr(`「${ev!.topics[i].title}」 만족도를 별로 골라 주세요.`); return }
     }
@@ -72,6 +75,7 @@ export default function EventSurveyPage({ params }: { params: Promise<{ key: str
         body: JSON.stringify({
           survey_key: ev!.key,
           student_name: name, phone, grade,
+          found, found_etc: foundEtc,
           wish: free,
           stars, recommend,
           consult_new: newF, consult_now: cur,
@@ -119,6 +123,15 @@ export default function EventSurveyPage({ params }: { params: Promise<{ key: str
                 onPick={(v) => setGrade((p) => (p === v ? '' : v))} />
             </Sub>
           )}
+        </Q>
+
+        {/* 알게 된 경로 — 어느 홍보가 닿았는지 (원장님 2026-11-07).
+            고르기 + 빈 칸을 함께 둔다. 글로만 받으면 같은 뜻이 따로 세어져 집계가 안 된다. */}
+        <Q n={++n} title={ev.found.ask} hint={ev.found.hint} required>
+          <Chips options={ev.found.options} picked={found} onPick={toggle(found, setFound)} />
+          <input value={foundEtc} onChange={(e) => setFoundEtc(e.target.value)}
+            placeholder="그 밖에 — 자유롭게 적어 주세요"
+            className="w-full rounded-xl border px-3 py-2.5 text-[14px]" style={{ borderColor: LINE }} />
         </Q>
 
         {ev.topics.map((t, i) => (

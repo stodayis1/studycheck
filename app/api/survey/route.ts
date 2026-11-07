@@ -58,6 +58,11 @@ export const COURSES = [
 
 /** 행사 설문(별점 꼴) 한 건을 읽는다. 빠진 것이 있으면 사람 말로 알려 준다. */
 function readEventAnswers(ev: SurveyEvent, b: any): { error: string } | { answers: Record<string, any> } {
+  // 알게 된 경로 — 보기에서 고른 것 + 직접 적은 것. 둘 다 비면 묻는다 (어느 홍보가 닿았는지가 이 질문의 목적이다)
+  const found = pick(b?.found, ev.found.options)
+  const foundEtc = text(b?.found_etc, 60)
+  if (!found.length && !foundEtc) return { error: `${ev.found.ask} 하나라도 골라 주세요.` }
+
   const stars: Record<string, number> = {}
   for (let i = 0; i < ev.topics.length; i++) {
     const s = star(b?.stars?.[i] ?? b?.stars?.[String(i)])
@@ -72,6 +77,8 @@ function readEventAnswers(ev: SurveyEvent, b: any): { error: string } | { answer
   return {
     answers: {
       event: ev.key,
+      found,
+      found_etc: foundEtc,
       stars,
       recommend,
       consult_new: pick(b?.consult_new, ev.newFamily),
@@ -86,6 +93,8 @@ function readEventAnswers(ev: SurveyEvent, b: any): { error: string } | { answer
 function answersAsText(ev: SurveyEvent, a: Record<string, any>) {
   const lines = ev.topics.map((t, i) => `· ${t.title} ${a.stars?.[String(i)] ?? '-'}점`)
   lines.push(`· 추천 ${a.recommend ?? '-'}점`)
+  const found = [...(a.found ?? []), a.found_etc].filter(Boolean)
+  if (found.length) lines.push(`· 알게 된 경로: ${found.join(', ')}`)
   if (a.consult_new?.length) lines.push(`· 비재원생 상담: ${a.consult_new.join(', ')}`)
   if (a.consult_now?.length) lines.push(`· 재원생 상담: ${a.consult_now.join(', ')}`)
   lines.push('· 자료 유포 금지 동의 · 개인정보 동의')

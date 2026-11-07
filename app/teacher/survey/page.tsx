@@ -41,7 +41,9 @@ type Row = {
   agree_public: boolean; source: string
   /** 행사별 답 (별점·상담 체크·동의) — answers 칸이 없으면 비어 있다 */
   answers?: { stars?: Record<string, number>; recommend?: number
-    consult_new?: string[]; consult_now?: string[] } | null
+    consult_new?: string[]; consult_now?: string[]
+    /** 알게 된 경로 — 고른 것 + 직접 적은 것 */
+    found?: string[]; found_etc?: string | null } | null
 }
 
 const when = (iso: string) => {
@@ -157,6 +159,19 @@ export default function SurveyPage() {
     const n = new Map<string, number>()
     for (const r of rows) for (const c of r.courses ?? []) n.set(c, (n.get(c) ?? 0) + 1)
     return [...n.entries()].sort((a, b) => b[1] - a[1])
+  }, [rows])
+
+  // 알게 된 경로 집계 — 어느 홍보가 닿았는지. 많이 고른 것부터.
+  // ★ 직접 적어 주신 것도 같은 표에 넣는다 (한 건이라도 그대로 보여야 다음 홍보를 정할 수 있다).
+  const foundTally = useMemo(() => {
+    const n = new Map<string, number>()
+    let 적음 = 0
+    for (const r of rows) {
+      const got = [...(r.answers?.found ?? []), r.answers?.found_etc].filter(Boolean) as string[]
+      if (!got.length) { 적음++; continue }
+      for (const g of got) n.set(g, (n.get(g) ?? 0) + 1)
+    }
+    return { list: [...n.entries()].sort((a, b) => b[1] - a[1]), 없음: 적음 }
   }, [rows])
 
   // 꼭지별 별점 평균 — answers 가 있는 답만 센다.
@@ -416,6 +431,29 @@ export default function SurveyPage() {
             </div>
           )}
 
+          {/* 알게 된 경로 — 어느 홍보가 실제로 닿았는지 */}
+          {foundTally.list.length > 0 && (
+            <div className="rounded-2xl border p-4 mb-4">
+              <p className="text-sm font-bold mb-2.5" style={{ color: GREEN }}>알게 된 경로</p>
+              <div className="space-y-1.5">
+                {foundTally.list.map(([c, cnt]) => (
+                  <div key={c} className="flex items-center gap-2.5">
+                    <span className="w-36 shrink-0 text-[12.5px] truncate" title={c}>{c}</span>
+                    <div className="flex-1 h-2.5 rounded-full bg-gray-100 min-w-0">
+                      <div className="h-full rounded-full"
+                        style={{ background: BROWN, width: `${Math.round((cnt / (foundTally.list[0][1] || 1)) * 100)}%` }} />
+                    </div>
+                    <span className="w-7 shrink-0 text-right text-[12.5px] font-bold tabular-nums">{cnt}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-gray-400">
+                여러 개 고르신 분이 있어 합이 받은 답({rows.length}건)보다 클 수 있습니다.
+                {foundTally.없음 > 0 && ` 안 적힌 답 ${foundTally.없음}건 (이 질문을 넣기 전에 들어온 답).`}
+              </p>
+            </div>
+          )}
+
           {/* 개설 희망 강좌 */}
           {tally.length > 0 && (
             <div className="rounded-2xl border p-4 mb-4">
@@ -477,6 +515,11 @@ export default function SurveyPage() {
                     <L k="학교 · 지금 공부">{[r.school, r.study_now].filter(Boolean).join(' · ') || '-'}</L>
                     {r.consult && !!(r.consult_times?.length || r.consult_how?.length) && (
                       <L k="상담 희망">{[...(r.consult_times ?? []), ...(r.consult_how ?? [])].join(' · ')}</L>
+                    )}
+                    {!!(r.answers?.found?.length || r.answers?.found_etc) && (
+                      <L k="알게 된 경로">
+                        {[...(r.answers.found ?? []), r.answers.found_etc].filter(Boolean).join(' · ')}
+                      </L>
                     )}
                     {!!r.answers?.consult_new?.length && (
                       <L k="상담 (처음)">{r.answers.consult_new.join(' · ')}</L>
