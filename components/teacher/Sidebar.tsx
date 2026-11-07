@@ -30,6 +30,8 @@ const ITEM = {
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
   schools:       { href: '/teacher/schools',        label: '학교 자료집',  icon: 'ti-school' },
+  // 진로 설문·개인정보 동의·탐구보고서·세특 기록 (원장님 2026-11-07). 강사는 본인 담당 학생만 보인다.
+  career:        { href: '/teacher/career',         label: '진로·활동 기록', icon: 'ti-compass' },
   // ★ 이 화면과 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
   //   2026-10-26 에 「학습지 배부」로 갈랐다가, 배부만 하는 곳이 아니라 배정·점수·다음 단계까지
   //   하는 곳이라 2026-10-29 에 화면 제목과 같은 「학습지관리」로 되돌렸다 (원장님 지시).
@@ -74,7 +76,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
       ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
-    { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.schools] },
+    { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.career, ITEM.schools] },
     // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
     // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
     { title: '과제 · 평가', items: [ITEM.assignments, ...(영상과제 ? [ITEM.videoAssign] : []), ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
