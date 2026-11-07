@@ -17,6 +17,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { unitNameBeside, unitLabel, unitParen, levelText } from '../lib/worksheetTitle.ts'
+// ★ planRow 는 **늘 진짜 lib/matholic.ts** 를 쓴다(망가뜨린 사본을 넘겨도 영향 없음) —
+//   여기서는 「갈림길이 제자리에 있나」만 본다. 규칙 자체는 위 검사들이 직접 본다.
+import { planRow } from '../lib/matholicPlan.ts'
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
@@ -903,16 +906,52 @@ T('진단평가는 「레벨이 없어요」로 막지 않는다', () =>
 // ★★ 화면이 **실제로** 그렇게 넣는지 본다 — 함수만 고치고 넣는 자리를 안 고치면
 //    에러 없이 규칙이 없는 것과 똑같다 (matholic-import 스킬 ①만 고치는 실수).
 T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
+  // 판단은 lib/matholicPlan.ts 로 옮겼다 (2026-11-07). 판단과 저장을 **각각** 본다.
+  const plan = fs.readFileSync(path.resolve('lib/matholicPlan.ts'), 'utf8')
   const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
   // ★ 「있나」만 보면 안 된다 — `if (false && isDiagnostic(row))` 로 꺼 두어도 통과한다.
   //   갈림길이 **그 판정만 보고** 갈리는지 꼴까지 본다.
-  return /\n\s*if \(isDiagnostic\(row\)\) \{/.test(src)
-    && src.includes('parseDiagnosticTitle(row.title)')
+  return /\n\s*if \(isDiagnostic\(row\)\) \{/.test(plan)
+    && plan.includes('parseDiagnosticTitle(row.title)')
     && /exam_type: '진단평가'/.test(src)
     && /unit_name: p\.exam\?\.unitName/.test(src)
     && /level: p\.exam\?\.level/.test(src)
     && src.includes("p.mode === 'exam'")
     && src.includes('count.exam')
+})
+
+// ── 2026-11-07 판단을 lib/matholicPlan.ts 한 곳으로 옮겼다 ───────────────────
+//   원장님 「붙여넣기 하는 그 과정자체도 불필요하지 않겠니? 너가 화면 보고 반영해 주면 되잖아」
+//   → 사람이 붙여넣지 않는 길을 만들려면 판단이 화면 밖에 있어야 한다.
+//   ★ 화면이 그 함수를 **실제로 부르는지**, 그리고 옛 판단이 화면에 **남아 있지 않은지** 본다
+//     (두 벌이 되면 규칙을 한쪽만 고치고 조용히 어긋난다).
+T('화면이 판단을 planRow 에 맡긴다 (옛 판단이 화면에 남아 있지 않다)', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  return /planRow\(row, ctx\)/.test(src)
+    && /from '@\/lib\/matholicPlan'/.test(src)
+    && !src.includes("mode: 'exam', why: tag(")      // 옛 판단 덩어리가 남았나
+    && !src.includes("mode: 'core', why: tag(")
+    && !src.includes("mode: 'daily', why: tag(")
+})
+
+T('planRow 가 줄마다 갈 곳을 정한다', () => {
+  const 학생 = { id: 'S1', name: '가짜학생', grade: '고1', teacher_name: '주한' }
+  const ctx = {
+    mine: [학생], rules: {}, books: BOOKS, concepts: [],
+    wsByStudent: new Map(), sessionsOf: new Map(),
+    coreByKey: new Map(), examByKey: new Map(),
+  }
+  const 줄 = (title: string, kind: string, level: number | null) =>
+    ({ line: 1, student: '가짜학생', date: '2026-11-07', kind, course: '공통수학2 (2022 개정)',
+       title, level, right: 1, total: 2, score: 50, raw: title })
+  const a = planRow(줄('고1 A 주말복습 TEST 1107(lv2.5)', '단원학습 학습지', 2.5), ctx)
+  const b = planRow(줄('TOMA 본고사', '월간평가', null), ctx)
+  const c = planRow(줄('중등 3-2 1단원 삼각비 Lv3', '단원학습 학습지', 3), ctx)
+  const d = planRow(줄('고1 주말복습 TEST (lv3)', '학습지', 3), { ...ctx, mine: [] })
+  return a.mode === 'exam' && a.exam?.unitName === '주말복습' && a.exam?.level === 2.5
+    && b.mode === 'core' && b.coreRound === '본고사'
+    && c.mode === 'new'
+    && d.mode === 'skip'   // 스터디체크에 없는 학생
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
