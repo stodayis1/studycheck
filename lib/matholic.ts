@@ -1044,6 +1044,14 @@ export function rankWorksheets(row: MatholicRow, list: WsCandidate[], unit?: Res
   const words = titleWords(row.title)
   const out: Scored[] = []
   for (const ws of list) {
+    // ★★ **이미 점수가 적힌 지난 학습지는 후보가 아니다.** 점수를 채우는 자리가 아니라
+    //    **덮어쓰는** 자리이기 때문이다. 2026-11-07 에 실제로 걸렸다 —
+    //    「공통수학2 유리함수2 복습 (lv2.5) 40점」이 9일 전 **다 푼(passed) 합성함수 복습
+    //     76점**에 붙을 뻔했다. 레벨이 같고 「복습」이라는 낱말이 겹치고 날짜가 가까워
+    //    점수가 높게 나왔다. 넣었으면 76점이 40점으로 **사라진다.**
+    //    같은 날짜에 적힌 것은 그대로 둔다 — 그날 채점을 고쳐 다시 올리는 경우다.
+    if (ws.score != null && (ws.submitted_at ?? '').slice(0, 10) !== row.date) continue
+
     const why: string[] = []
     let points = 0
 
