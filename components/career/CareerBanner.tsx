@@ -32,7 +32,9 @@ export default function CareerBanner({ studentId, grade, href }: { studentId: st
     </Link>
   )
   return (
-    <Link href={href} className="block rounded-2xl px-4 py-3.5" style={{ background: '#085041', color: '#fff' }}>
+    // 질문지·썸네일과 같은 파스텔 — 예비고1 오렌지 · 예비고2 핑크 (원장님 2026-11-07)
+    <Link href={href} className="block rounded-2xl px-4 py-3.5"
+      style={form === 'pre1' ? { background: '#FACDA8', color: '#3A1E12' } : { background: '#F7C6D0', color: '#26161C' }}>
       <div className="text-[11px] font-bold tracking-widest opacity-80">
         수학의지혜 {st.isTest ? '' : FORMS[form].label + ' '}학생부 로드맵{st.isTest ? ' · 🧪 테스트 학생' : ''}
       </div>

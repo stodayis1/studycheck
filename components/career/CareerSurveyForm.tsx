@@ -14,13 +14,22 @@
 //   보내기가 실패하면 적은 내용을 그대로 두고 다시 누르게 한다.
 
 import { useEffect, useRef, useState } from 'react'
+import { roadmapSerif } from '@/lib/roadmapFont'
 import { CONSENT_TEXT, FORMS, SECTIONS, questionsOf, type FormId, type Question } from '@/lib/careerSurvey'
 
-const GREEN = '#085041'
-const MINT = '#F0FBF7'
-const PEACH = '#F5C4B3'
-const BROWN = '#712B13'
-const LINE = '#C7DED6'
+// ★ 색은 질문지마다 다르다 — 대표 썸네일과 같은 파스텔 (원장님 2026-11-07 「짙은 초록색 말고 파스텔 핑크·오렌지로
+//   세련되게」 「학생부 로드맵 설문지 디자인 안 바뀐 채로 그냥 오는데?」). 맨 바깥 div 에 CSS 변수로 깔고,
+//   아래 조각들은 변수만 쓴다. 썸네일 색은 scripts/make-career-og.py THEMES 와 맞춘다.
+const GREEN = 'var(--rm-ink)'    // 글씨·단추 (먹색 / 고동)
+const MINT = 'var(--rm-soft)'    // 옅은 바탕 칸
+const PEACH = 'var(--rm-head)'   // 머리 바탕 · 고른 보기
+const BROWN = 'var(--rm-sub)'    // 강조 글씨 · 필수 *
+const LINE = 'var(--rm-line)'    // 테두리
+const THEMES: Record<FormId, Record<string, string>> = {
+  pre1: { '--rm-head': '#FACDA8', '--rm-ink': '#3A1E12', '--rm-sub': '#9A4A1E', '--rm-soft': '#FDF1E7', '--rm-line': '#F0CDB2' },  // 예비고1 파스텔 오렌지
+  pre2: { '--rm-head': '#F7C6D0', '--rm-ink': '#26161C', '--rm-sub': '#8A3F55', '--rm-soft': '#FBEFF2', '--rm-line': '#EBC9D2' },  // 예비고2 파스텔 핑크
+}
+const SERIF = roadmapSerif.style.fontFamily
 
 export type Answers = Record<string, string | string[]>
 export type ConsentInfo = { signer_name: string | null; optional_agreed: boolean; agreed_at: string } | null
@@ -88,13 +97,13 @@ export default function CareerSurveyForm({
   }
 
   const shell = (children: React.ReactNode) => (
-    <div ref={root} className="min-h-screen" style={{ background: '#fff' }}>
-      <div className="px-5 pt-6 pb-5" style={{ background: GREEN, color: '#fff' }}>
+    <div ref={root} className="min-h-screen" style={{ background: '#fff', ...(THEMES[form] as React.CSSProperties) }}>
+      <div className="px-5 pt-6 pb-6" style={{ background: PEACH, color: GREEN }}>
         {onBack && (
           <button onClick={onBack} className="mb-2 text-[12px] opacity-80">← 돌아가기</button>
         )}
         <p className="text-[11px] font-bold tracking-widest opacity-80">수학의지혜 {F.label} 학생부 로드맵 질문지</p>
-        <h1 className="mt-1.5 text-[22px] font-bold leading-tight whitespace-pre-line">{F.heading}</h1>
+        <h1 className="mt-2 text-[27px] leading-[1.25] whitespace-pre-line" style={{ fontFamily: SERIF, fontWeight: 300 }}>{F.heading}</h1>
         <p className="mt-2 text-[12.5px] opacity-90">{F.lead}</p>
         <p className="mt-3 text-[11.5px] leading-relaxed opacity-75">
           {studentName} 학생{parent ? ' 학부모님' : ''} · 현 {F.fromGrade} · 약 3분
@@ -252,7 +261,7 @@ function Item({ n, q, ans, setAns }: {
                   return { ...p, [q.id]: [...arr, o] }
                 })}
                 className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold border transition-colors"
-                style={on ? { background: PEACH, color: BROWN, borderColor: PEACH } : { background: '#fff', color: '#4b5563', borderColor: LINE }}>
+                style={on ? { background: GREEN, color: '#fff', borderColor: GREEN } : { background: '#fff', color: '#4b5563', borderColor: LINE }}>
                 {o}
               </button>
             )
