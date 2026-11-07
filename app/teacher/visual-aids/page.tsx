@@ -26,6 +26,7 @@ const STAGES: Stage[] = [
       { unit: '입체도형의 성질 · 다면체와 정다면체', what: '정다면체가 다섯 가지뿐인 이유, 전개도 접기, 면·모서리·꼭짓점 세기', href: '/visual/dagakhyeong.html' },
       { unit: '다면체 · 전개도', what: '접었을 때 겹치는 점·붙는 변 찾기 (정사면체~정이십면체)', href: '/visual/jeopgi.html' },
       { unit: '입체도형의 성질 · 회전체', what: '평면도형을 회전축 둘레로 돌려 회전체 만들기, 회전축을 품은 단면·수직인 단면', href: '/visual/hoijeon.html' },
+      { unit: '입체도형의 성질 · 입체도형의 단면', what: '정육면체를 세 점으로 잘라 단면 모양 유추하기, 나올 수 없는 단면, 원기둥·원뿔·구의 단면', href: '/visual/danmyeon.html' },
       { unit: '입체도형의 겉넓이와 부피', what: '기둥·뿔·뿔대·구, 원뿔 전개도의 부채꼴', href: '/visual/geotneolbi.html' },
     ],
   },

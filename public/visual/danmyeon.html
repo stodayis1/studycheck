@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>입체도형의 단면</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+/* 왼쪽: 입체·자르는 방법 고르기 / 오른쪽: 잘리는 입체(3D). 아래: 단면의 실제 모양과 이유, 정육면체 단면 표, 문제 */
+/* 수학의지혜 색(파란 교복 + 주황 글씨)으로 밝게. 어두운 화면 모드는 두지 않는다 */
+:root {
+  --bg: #f4f9ff;
+  --surface: #ffffff;
+  --ink: #1d2b3a;
+  --muted: #5b6b7d;
+  --grid: #dceafa;
+  --grid-strong: #bcd5f2;
+  --line: #d3e1f0;
+  --accent: #2563eb;
+  --accent-soft: #e3edff;
+  --brand: #f26b1d;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #e11d48;
+  --shape: #f97316;
+  --shape-fill: rgba(249, 115, 22, 0.28);
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.brand img { height: 64px; width: auto; display: block; }
+.brand b { display: block; font-family: var(--font-display); font-size: 22px; color: var(--brand); letter-spacing: 0.02em; }
+.brand span { display: block; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 34px); margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 66ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
+.main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .chip { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chip { border-radius: 999px; background: var(--surface); }
+.btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:disabled, .chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:focus-visible, .chip:focus-visible, canvas:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tool { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.lbl { font-size: 13px; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.slide { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) 3.4em; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.slide input { width: 100%; accent-color: var(--accent); }
+.slide output { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); }
+.plist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.plist li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+.plist li.sel { background: #fff4e0; }
+.plist li b { color: var(--bad); font-family: var(--font-display); font-size: 16px; min-width: 1.2em; }
+.plist li.sel b { color: #d97706; }
+.plist li span { flex: 1; min-width: 0; }
+.plist li button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
+.plist li.empty { color: var(--muted); font-size: 13px; cursor: default; }
+.msg { margin: 0; font-size: 13px; color: var(--warn); min-height: 1.2em; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; min-width: 0; }
+#canvasBox { height: 520px; }
+@media (max-width: 860px) { #canvasBox { height: 400px; } }
+canvas#c { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas#c:active { cursor: grabbing; }
+.overlayTop { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; }
+.overlayBottom { position: absolute; left: 10px; bottom: 10px; right: 10px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.hint { margin: 0; font-size: 12px; color: var(--muted); }
+
+.secGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .secGrid { grid-template-columns: minmax(0, 1fr); } }
+#sec2d { width: 100%; max-width: 420px; justify-self: center; display: block; }
+#sec2d .poly { fill: var(--shape-fill); stroke: var(--shape); stroke-width: 2.5; stroke-linejoin: round; }
+#sec2d .mark { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+#sec2d .par { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+#sec2d .vl { fill: var(--ink); font-size: 15px; font-family: var(--font-display); }
+#sec2d .ll { fill: var(--accent); font-size: 12.5px; font-family: var(--font-body); }
+#sec2d .empty { fill: var(--muted); font-size: 14px; font-family: var(--font-body); }
+.secName { margin: 0; }
+.secName b { font-family: var(--font-display); font-size: 24px; color: var(--brand); }
+.reasons { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 14px; }
+.can { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 600px) { .can { grid-template-columns: minmax(0, 1fr); } }
+.can h3 { margin: 0 0 6px; font-size: 14px; }
+.can .ok { color: var(--ok); } .can .no { color: var(--bad); }
+.can ul { margin: 0; padding-left: 1.1em; font-size: 14px; display: grid; gap: 4px; }
+.quizOpts { display: flex; flex-wrap: wrap; gap: 6px; }
+#quizMsg { margin: 0; font-size: 14px; min-height: 1.4em; }
+#quizMsg.ok { color: var(--ok); } #quizMsg.no { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
+    <div class="eyebrow">중1-2 입체도형의 성질 · 입체도형의 단면</div>
+    <h1>입체도형의 단면</h1>
+    <p>입체도형을 평면으로 자르면 어떤 모양이 생길까요? 정육면체는 모서리를 누르거나 자리를 골라 세 점을 정해 자르고, 원기둥·원뿔·구는 평면을 기울여 잘라 봐요. 아래에 단면의 실제 모양과 그렇게 되는 이유가 나와요.</p>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-label="입체와 자르는 방법">
+      <h2>입체도형 고르기</h2>
+      <div class="btns" id="solids" role="group" aria-label="입체도형"></div>
+      <p class="sub" id="solidSize" style="margin:0"></p>
+
+      <div class="tool">
+        <span class="lbl">자르는 방법</span>
+        <div class="btns" role="group" aria-label="자르는 방법">
+          <button class="chip" data-mode="pts" aria-pressed="true">세 점으로 자르기</button>
+          <button class="chip" data-mode="tilt" aria-pressed="false">기울여 자르기</button>
+        </div>
+      </div>
+
+      <div class="tool" id="ptsPanel">
+        <span class="lbl">대표 단면 (누르면 그 세 점으로 잘라요)</span>
+        <div class="btns" id="presetsPts"></div>
+        <span class="lbl">3D에서 모서리나 면을 눌러 점을 찍고, 빨간 점을 끌어 옮겨요 — 점이 붙는 곳</span>
+        <div class="btns" role="group" aria-label="점이 붙는 곳">
+          <button class="chip" data-snap="half" aria-pressed="true">꼭짓점·중점</button>
+          <button class="chip" data-snap="third" aria-pressed="false">등분점(½·⅓·¼)</button>
+          <button class="chip" data-snap="free" aria-pressed="false">아무 곳</button>
+        </div>
+        <ul class="plist" id="plist"></ul>
+        <div class="btns"><button class="btn" id="clearPts">점 모두 지우기</button></div>
+        <p class="msg" id="ptsMsg" aria-live="polite"></p>
+      </div>
+
+      <div class="tool" id="tiltPanel" hidden>
+        <span class="lbl">대표 단면</span>
+        <div class="btns" id="presetsTilt"></div>
+        <label class="slide">기울기<input type="range" id="alpha" min="0" max="90" step="1" value="30"><output id="alphaOut">30°</output></label>
+        <label class="slide">방향<input type="range" id="phi" min="0" max="355" step="5" value="0"><output id="phiOut">0°</output></label>
+        <label class="slide">위치<input type="range" id="offset" min="-1.6" max="1.6" step="0.05" value="0"><output id="offOut">0</output></label>
+        <p class="sub" style="margin:0">기울기 0°는 밑면과 평행, 90°는 밑면과 수직이에요.</p>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="잘리는 입체 3D">
+      <div class="overlayTop" role="group" aria-label="보는 방향">
+        <button class="chip" data-view="iso" aria-pressed="true">비스듬히</button>
+        <button class="chip" data-view="front" aria-pressed="false">앞에서</button>
+        <button class="chip" data-view="top" aria-pressed="false">위에서</button>
+        <button class="chip" data-view="face" aria-pressed="false">단면 정면으로</button>
+        <button class="chip" id="zoomIn" aria-label="확대">＋</button>
+        <button class="chip" id="zoomOut" aria-label="축소">－</button>
+      </div>
+      <div id="canvasBox"><canvas id="c" tabindex="0" aria-label="잘리는 입체 3D 모형. 끌거나 화살표 키로 돌릴 수 있습니다. 세 점 모드에서는 모서리를 눌러 점을 찍습니다."></canvas></div>
+      <div class="overlayBottom">
+        <label class="check"><input type="checkbox" id="cutToggle"> 잘라서 한쪽만 보기</label>
+        <button class="btn" id="flipSide">남길 쪽 바꾸기</button>
+        <label class="check"><input type="checkbox" id="planeToggle" checked> 자르는 평면 보이기</label>
+        <p class="hint">끌어서 돌리기 · 휠·두 손가락 확대 · 모서리를 누르면 점</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" aria-label="단면">
+    <h2>단면의 실제 모양</h2>
+    <div class="secGrid">
+      <svg id="sec2d" viewBox="0 0 420 320" role="img" aria-label="단면 모양"></svg>
+      <div style="display:grid;gap:10px;align-content:start">
+        <p class="secName">단면: <b id="secName">—</b></p>
+        <ul class="reasons" id="reasons"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="canCard" aria-label="정육면체 단면으로 나올 수 있는 것과 없는 것">
+    <h2>정육면체를 한 평면으로 자르면</h2>
+    <div class="can">
+      <div>
+        <h3 class="ok">나올 수 있어요 (누르면 보여 줘요)</h3>
+        <div class="btns" id="canList"></div>
+      </div>
+      <div>
+        <h3 class="no">나올 수 없어요</h3>
+        <ul>
+          <li><b>직각삼각형 · 둔각삼각형</b> — 삼각형 단면은 꼭짓점 하나에 모인 세 모서리를 자를 때 생겨요. 세 변이 서로 수직인 세 면 위에 있어서 세 각이 모두 예각이에요.</li>
+          <li><b>정오각형</b> — 오각형 단면은 평행한 면 두 쌍을 지나서, 평행한 변이 두 쌍 생겨요. 정오각형에는 평행한 변이 없어요.</li>
+          <li><b>칠각형 이상</b> — 단면의 변은 평면이 지나는 면마다 하나씩 생겨요. 정육면체는 면이 6개뿐이라 육각형까지예요.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="문제">
+    <div class="row" style="justify-content:space-between">
+      <h2>단면 모양 맞히기</h2>
+      <button class="btn primary" id="quizBtn">문제 내기</button>
+    </div>
+    <p class="sub" style="margin:0" id="quizQ">「문제 내기」를 누르면 빨간 세 점만 보여 줘요. 이 세 점을 지나는 평면으로 자른 단면을 골라 보세요.</p>
+    <div class="quizOpts" id="quizOpts"></div>
+    <p id="quizMsg" aria-live="polite"></p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script id="core">
+// 단면 계산 — 화면 코드와 분리해 node 로 검사한다. 입체는 모두 볼록다면체(원기둥·원뿔·구는 잘게 나눈 다면체)로 다룬다.
+const CORE = (function () {
+  const EPS = 1e-7;
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = a => Math.hypot(a[0], a[1], a[2]);
+  const norm = a => { const l = len(a); return l < 1e-12 ? [0, 0, 0] : mul(a, 1 / l); };
+  const lerp = (a, b, t) => add(a, mul(sub(b, a), t));
+
+  // 면 꼭짓점 번호를 바깥에서 보아 반시계로 늘어놓는다
+  function orderFace(verts, idx, center) {
+    const c = idx.reduce((s, i) => add(s, verts[i]), [0, 0, 0]).map(v => v / idx.length);
+    let n = null;
+    for (let a = 0; a < idx.length && !n; a++) for (let b = a + 1; b < idx.length && !n; b++) for (let k = b + 1; k < idx.length && !n; k++) {
+      const m = cross(sub(verts[idx[b]], verts[idx[a]]), sub(verts[idx[k]], verts[idx[a]]));
+      if (len(m) > 1e-9) n = norm(m);
+    }
+    if (dot(n, sub(c, center)) < 0) n = mul(n, -1);
+    const u = norm(sub(verts[idx[0]], c)), w = cross(n, u);
+    const sorted = idx.slice().sort((i, j) => {
+      const p = sub(verts[i], c), q = sub(verts[j], c);
+      return Math.atan2(dot(p, w), dot(p, u)) - Math.atan2(dot(q, w), dot(q, u));
+    });
+    return { idx: sorted, n, c };
+  }
+
+  function build(kind, verts, faceSets, labels, extra) {
+    const center = verts.reduce((s, v) => add(s, v), [0, 0, 0]).map(v => v / verts.length);
+    const faces = faceSets.map(f => orderFace(verts, f, center));
+    const seen = new Set(), edges = [];
+    faces.forEach(f => f.idx.forEach((a, k) => {
+      const b = f.idx[(k + 1) % f.idx.length], key = Math.min(a, b) + '-' + Math.max(a, b);
+      if (!seen.has(key)) { seen.add(key); edges.push([Math.min(a, b), Math.max(a, b)]); }
+    }));
+    return Object.assign({ kind, verts, faces, edges, labels, round: false, center }, extra || {});
+  }
+
+  function prism(base, hh) { // base: [[x,z]...] 반시계, 위 y=hh / 아래 y=-hh
+    const n = base.length, verts = [];
+    base.forEach(([x, z]) => verts.push([x, hh, z]));
+    base.forEach(([x, z]) => verts.push([x, -hh, z]));
+    const faces = [[...Array(n).keys()], [...Array(n).keys()].map(i => i + n)];
+    for (let i = 0; i < n; i++) faces.push([i, (i + 1) % n, (i + 1) % n + n, i + n]);
+    return { verts, faces };
+  }
+  function pyramid(base, yb, apexY) {
+    const n = base.length, verts = base.map(([x, z]) => [x, yb, z]);
+    verts.push([0, apexY, 0]);
+    const faces = [[...Array(n).keys()]];
+    for (let i = 0; i < n; i++) faces.push([i, (i + 1) % n, n]);
+    return { verts, faces };
+  }
+  const ngon = (n, r, rot) => Array.from({ length: n }, (_, i) => [r * Math.cos(rot + 2 * Math.PI * i / n), r * Math.sin(rot + 2 * Math.PI * i / n)]);
+
+  const SOLIDS = {
+    cube() { // 윗면 ABCD, 아랫면 EFGH (A 아래 E) — 위치 관계 관찰대와 같은 배치. 한 모서리 2
+      const p = prism([[-1, -1], [1, -1], [1, 1], [-1, 1]], 1);
+      return build('cube', p.verts, p.faces, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], { title: '정육면체', size: '한 모서리의 길이 2' });
+    },
+    box() {
+      const p = prism([[-1.5, -1], [1.5, -1], [1.5, 1], [-1.5, 1]], 1);
+      return build('box', p.verts, p.faces, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], { title: '직육면체', size: '가로 3, 세로 2, 높이 2' });
+    },
+    tri() { // 삼각기둥: 윗면 ABC, 아랫면 DEF (A 아래 D)
+      const p = prism([[-1.4, -1], [1.4, -1], [0, 1.2]], 1);
+      return build('tri', p.verts, p.faces, ['A', 'B', 'C', 'D', 'E', 'F'], { title: '삼각기둥', size: '' });
+    },
+    tetra() { // 정사면체 A(꼭대기)-BCD, 한 모서리 2√2 (정육면체 꼭짓점 넷)
+      const verts = [[1, 1, 1], [-1, -1, 1], [1, -1, -1], [-1, 1, -1]];
+      return build('tetra', verts, [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]], ['A', 'B', 'C', 'D'], { title: '정사면체', size: '한 모서리의 길이 2√2' });
+    },
+    pyra() { // 정사각뿔 O-ABCD
+      const p = pyramid([[-1, -1], [1, -1], [1, 1], [-1, 1]], -1, 1);
+      return build('pyra', p.verts, p.faces, ['A', 'B', 'C', 'D', 'O'], { title: '사각뿔', size: '밑면 한 변 2, 높이 2' });
+    },
+    cyl() {
+      const p = prism(ngon(72, 1.2, 0), 1.2);
+      return build('cyl', p.verts, p.faces, null, { title: '원기둥', round: true, r: 1.2, hh: 1.2, size: '밑면 반지름 1.2, 높이 2.4' });
+    },
+    cone() {
+      const p = pyramid(ngon(72, 1.3, 0), -1.2, 1.2);
+      return build('cone', p.verts, p.faces, null, { title: '원뿔', round: true, r: 1.3, hh: 1.2, size: '밑면 반지름 1.3, 높이 2.4' });
+    },
+    sphere() {
+      const R = 1.4, la = 18, lo = 48, verts = [[0, R, 0]];
+      for (let i = 1; i < la; i++) for (let j = 0; j < lo; j++) {
+        const t = Math.PI * i / la, f = 2 * Math.PI * j / lo;
+        verts.push([R * Math.sin(t) * Math.cos(f), R * Math.cos(t), R * Math.sin(t) * Math.sin(f)]);
+      }
+      verts.push([0, -R, 0]);
+      const at = (i, j) => 1 + (i - 1) * lo + (j % lo), S = verts.length - 1, faces = [];
+      for (let j = 0; j < lo; j++) faces.push([0, at(1, j), at(1, j + 1)]);
+      for (let i = 1; i < la - 1; i++) for (let j = 0; j < lo; j++) faces.push([at(i, j), at(i, j + 1), at(i + 1, j + 1), at(i + 1, j)]);
+      for (let j = 0; j < lo; j++) faces.push([S, at(la - 1, j), at(la - 1, j + 1)]);
+      return build('sphere', verts, faces, null, { title: '구', round: true, R, size: '반지름 1.4' });
+    },
+  };
+
+  // 평면 n·x = d 와 입체가 만나는 단면 (볼록다각형). 점마다 어느 모서리 위인지도 남긴다
+  function section(S, n, d) {
+    const s = S.verts.map(v => dot(n, v) - d);
+    const pts = [];
+    const push = (p, info) => { if (!pts.some(q => len(sub(q.p, p)) < 1e-6)) pts.push(Object.assign({ p }, info)); };
+    S.verts.forEach((v, i) => { if (Math.abs(s[i]) < EPS) push(v, { vertex: i }); });
+    S.edges.forEach(([a, b]) => {
+      if ((s[a] > EPS && s[b] < -EPS) || (s[a] < -EPS && s[b] > EPS)) {
+        const t = s[a] / (s[a] - s[b]);
+        push(lerp(S.verts[a], S.verts[b], t), { edge: [a, b], t });
+      }
+    });
+    if (pts.length < 3) return null;
+    const c = pts.reduce((acc, q) => add(acc, q.p), [0, 0, 0]).map(v => v / pts.length);
+    let u = norm(sub(pts[0].p, c));
+    const w = cross(n, u);
+    pts.forEach(q => { const r = sub(q.p, c); q.ang = Math.atan2(dot(r, w), dot(r, u)); });
+    pts.sort((a, b) => a.ang - b.ang);
+    // 한 직선 위에 놓인 점은 빼고 꼭짓점만 남긴다 (정육면체 모서리 위를 지날 때)
+    let poly = pts.slice(), changed = true;
+    while (changed && poly.length > 3) {
+      changed = false;
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[(i + poly.length - 1) % poly.length].p, b = poly[i].p, e = poly[(i + 1) % poly.length].p;
+        if (len(cross(sub(b, a), sub(e, b))) < 1e-7 * (len(sub(b, a)) * len(sub(e, b)) + 1e-9)) { poly.splice(i, 1); changed = true; break; }
+      }
+    }
+    const area = poly.reduce((acc, q, i) => add(acc, cross(q.p, poly[(i + 1) % poly.length].p)), [0, 0, 0]);
+    if (len(area) / 2 < 1e-6) return null;
+    // 변마다 어느 면 위에 있는지
+    poly.forEach((q, i) => {
+      const r = poly[(i + 1) % poly.length];
+      q.face = S.faces.findIndex(f => Math.abs(dot(f.n, sub(q.p, f.c))) < 1e-6 && Math.abs(dot(f.n, sub(r.p, f.c))) < 1e-6);
+    });
+    // 평면이 면 하나와 겹치면(세 점이 한 면 위) 자른 것이 아니라 그 면이다
+    const onFace = S.faces.some(f => poly.every(q => Math.abs(dot(f.n, sub(q.p, f.c))) < 1e-6));
+    return { poly, c, u, w, n, d, onFace };
+  }
+
+  function planeFrom3(p, q, r) {
+    let n = cross(sub(q, p), sub(r, p));
+    if (len(n) < 1e-9) return null;
+    n = norm(n);
+    if (n[1] < -1e-9 || (Math.abs(n[1]) < 1e-9 && (n[0] < -1e-9 || (Math.abs(n[0]) < 1e-9 && n[2] < 0)))) n = mul(n, -1);
+    return { n, d: dot(n, p) };
+  }
+  function planeFromTilt(alphaDeg, phiDeg, offset) {
+    const a = alphaDeg * Math.PI / 180, f = phiDeg * Math.PI / 180;
+    return { n: [Math.sin(a) * Math.cos(f), Math.cos(a), Math.sin(a) * Math.sin(f)], d: offset };
+  }
+
+  const near = (a, b, tol) => Math.abs(a - b) < (tol || 1e-6);
+  function sides(poly) { return poly.map((q, i) => sub(poly[(i + 1) % poly.length].p, q.p)); }
+
+  function classify(S, sec) {
+    if (!sec) return { name: '단면 없음', group: 'none' };
+    const P = sec.poly, k = P.length;
+    if (S.round) return classifyRound(S, sec);
+    const E = sides(P), L = E.map(len);
+    const par = (i, j) => len(cross(E[i], E[j])) < 1e-6 * L[i] * L[j];
+    const right = i => Math.abs(dot(E[(i + k - 1) % k], E[i])) < 1e-6 * L[i] * L[(i + k - 1) % k];
+    const allEq = L.every(x => near(x, L[0]));
+    if (k === 3) {
+      const s = L.slice().sort((a, b) => a - b), q = s[2] * s[2] - s[0] * s[0] - s[1] * s[1];
+      const angle = near(q, 0, 1e-6) ? '직각' : q > 0 ? '둔각' : '예각';
+      if (allEq) return { name: '정삼각형', group: 'tri' };
+      const iso = near(L[0], L[1]) || near(L[1], L[2]) || near(L[0], L[2]);
+      if (iso) return { name: angle === '예각' ? '이등변삼각형' : angle + '이등변삼각형', group: 'tri', angle };
+      return { name: angle + '삼각형', group: 'tri', angle };
+    }
+    if (k === 4) {
+      const p02 = par(0, 2), p13 = par(1, 3);
+      if (p02 && p13) {
+        if (right(0) && allEq) return { name: '정사각형', group: 'quad' };
+        if (right(0)) return { name: '직사각형', group: 'quad' };
+        if (allEq) return { name: '마름모', group: 'quad' };
+        return { name: '평행사변형', group: 'quad' };
+      }
+      if (p02 || p13) {
+        const legs = p02 ? [L[1], L[3]] : [L[0], L[2]];
+        return { name: near(legs[0], legs[1]) ? '등변사다리꼴' : '사다리꼴', group: 'quad' };
+      }
+      return { name: '사각형', group: 'quad' };
+    }
+    if (k === 5) return { name: allEq ? '정오각형' : '오각형', group: 'penta' };
+    if (k === 6) {
+      const ang = E.map((e, i) => dot(E[(i + k - 1) % k], e) / (L[i] * L[(i + k - 1) % k]));
+      return { name: allEq && ang.every(c => near(c, ang[0])) ? '정육각형' : '육각형', group: 'hexa' };
+    }
+    return { name: k + '각형', group: 'many' };
+  }
+
+  function classifyRound(S, sec) {
+    const n = sec.n, d = sec.d, cosA = Math.abs(n[1]), alpha = Math.acos(Math.min(1, cosA)) * 180 / Math.PI;
+    if (S.kind === 'sphere') {
+      const r = Math.sqrt(Math.max(0, S.R * S.R - d * d));
+      return { name: '원', group: 'circle', note: `구를 어떤 평면으로 잘라도 단면은 원이에요. 중심에서 평면까지 거리가 ${fmtNum(Math.abs(d))}이라 반지름은 ${fmtNum(r)}이에요.` };
+    }
+    const touchesBase = sec.poly.some(q => Math.abs(Math.abs(q.p[1]) - S.hh) < 1e-6 && (S.kind === 'cyl' || q.p[1] < 0));
+    if (S.kind === 'cyl') {
+      if (alpha < 0.01) return { name: '원', group: 'circle', note: '밑면과 평행하게 자르면 밑면과 합동인 원이에요.' };
+      if (alpha > 89.99) return { name: '직사각형', group: 'rect', note: Math.abs(d) < 1e-6 ? '회전축을 품는 평면으로 자르면 직사각형이에요. 회전축에 대해 선대칭이에요.' : '회전축과 평행한 평면으로 자르면 직사각형이에요.' };
+      return touchesBase
+        ? { name: '곡선과 선분으로 둘러싸인 모양', group: 'curve', note: '비스듬히 잘랐는데 밑면까지 잘려서, 타원의 일부와 선분으로 둘러싸인 모양이에요.' }
+        : { name: '타원', group: 'ellipse', note: '옆면만 비스듬히 자르면 길쭉한 원, 타원이 생겨요.' };
+    }
+    // 원뿔: 꼭짓점 (0, hh, 0), 밑면 y = -hh
+    const beta = Math.atan(S.r / (2 * S.hh)) * 180 / Math.PI, gen = 90 - beta;
+    const throughApex = Math.abs(dot(n, [0, S.hh, 0]) - d) < 1e-6;
+    if (throughApex) return { name: '이등변삼각형', group: 'tri', note: Math.abs(d) < 1e-6 && alpha > 89.99 ? '회전축을 품는 평면으로 자르면 이등변삼각형이에요. 두 변이 모두 모선이라 길이가 같아요.' : '꼭짓점을 지나게 자르면 두 변이 모두 모선이라 이등변삼각형이에요.' };
+    if (alpha < 0.01) return { name: '원', group: 'circle', note: '밑면과 평행하게 자르면 원이에요. 꼭짓점에 가까울수록 작아져요.' };
+    if (alpha < gen - 0.01) return touchesBase
+      ? { name: '곡선과 선분으로 둘러싸인 모양', group: 'curve', note: '비스듬히 잘랐는데 밑면까지 잘려서 타원의 일부와 선분으로 둘러싸였어요.' }
+      : { name: '타원', group: 'ellipse', note: `기울기가 모선보다 완만하면(${fmtNum(alpha)}° < ${fmtNum(gen)}°) 타원이 생겨요.` };
+    return { name: '곡선과 선분으로 둘러싸인 모양', group: 'curve', note: `모선만큼(${fmtNum(gen)}°) 또는 더 가파르게 자르면 밑면까지 잘려 곡선과 선분으로 둘러싸인 모양이 돼요. 고등학교에서 포물선·쌍곡선으로 배워요.` };
+  }
+
+  function fmtNum(x) { return (Math.round(x * 100) / 100).toString(); }
+  // 길이를 √ 꼴로 (분모 1·2·3·6 까지)
+  function fmtLen(L) {
+    const q = L * L;
+    for (const den of [1, 4, 9, 36]) {
+      const m = Math.round(q * den);
+      if (Math.abs(q * den - m) < 1e-6 && m > 0) {
+        let a = 1, b = m;
+        for (let f = 2; f * f <= b; f++) while (b % (f * f) === 0) { b /= f * f; a *= f; }
+        let s = Math.round(Math.sqrt(den));
+        const g = (x, y) => y ? g(y, x % y) : x, h = g(a, s);
+        a /= h; s /= h;
+        const top = b === 1 ? `${a}` : `${a === 1 ? '' : a}√${b}`;
+        return s === 1 ? top : `${top}/${s}`;
+      }
+    }
+    return fmtNum(L);
+  }
+
+  // 점 지정: 'A' (꼭짓점), ['A','B',t] (모서리 AB 위, A에서 t)
+  function pointOf(S, spec) {
+    if (typeof spec === 'string') return S.verts[S.labels.indexOf(spec)];
+    const [a, b, t] = spec;
+    return lerp(S.verts[S.labels.indexOf(a)], S.verts[S.labels.indexOf(b)], t);
+  }
+
+  return { SOLIDS, section, planeFrom3, planeFromTilt, classify, fmtLen, fmtNum, pointOf, sub, add, mul, dot, cross, len, norm, lerp };
+})();
+if (typeof module !== 'undefined') module.exports = CORE;
+
+</script>
+<script>
+(function () {
+  const { SOLIDS, section, planeFrom3, planeFromTilt, classify, fmtLen, fmtNum, pointOf, sub, add, mul, dot, cross, len, norm, lerp } = CORE;
+
+  // ---------- 고를 거리 ----------
+  const SOLID_LIST = [['cube', '정육면체'], ['box', '직육면체'], ['tri', '삼각기둥'], ['tetra', '정사면체'], ['pyra', '사각뿔'], ['cyl', '원기둥'], ['cone', '원뿔'], ['sphere', '구']];
+  const H = 0.5, T1 = 1 / 3;
+  const PRESET_PTS = {
+    cube: [
+      ['정삼각형', ['B', 'D', 'E']], ['이등변삼각형', ['A', 'C', ['B', 'F', H]]], ['정사각형', [['A', 'E', H], ['B', 'F', H], ['C', 'G', H]]],
+      ['직사각형', ['A', 'B', 'G']], ['마름모', ['A', ['B', 'F', H], 'G']], ['평행사변형', ['A', 'G', ['C', 'D', T1]]],
+      ['사다리꼴', ['A', ['C', 'D', H], ['E', 'H', H]]], ['등변사다리꼴', ['A', 'C', ['E', 'H', H]]], ['오각형', ['A', ['C', 'D', H], ['F', 'G', H]]],
+      ['육각형', [['A', 'B', H], ['A', 'D', H], ['F', 'G', T1]]], ['정육각형', [['A', 'B', H], ['A', 'D', H], ['F', 'G', H]]],
+    ],
+    box: [['직사각형', ['A', 'B', 'G']], ['이등변삼각형', ['A', 'C', 'F']], ['평행사변형', ['A', 'G', ['B', 'C', H]]], ['사다리꼴', ['A', 'C', ['E', 'H', H]]], ['오각형', ['A', ['C', 'D', H], ['F', 'G', H]]], ['육각형', [['A', 'B', H], ['A', 'D', H], ['F', 'G', H]]]],
+    tri: [['이등변삼각형', ['A', 'B', 'F']], ['직사각형', ['A', 'D', ['B', 'C', H]]], ['사다리꼴', ['A', 'C', ['D', 'E', H]]], ['오각형', [['A', 'B', H], ['D', 'F', H], ['A', 'D', H]]]],
+    tetra: [['정삼각형', [['A', 'B', H], ['A', 'C', H], ['A', 'D', H]]], ['이등변삼각형', ['A', 'B', ['C', 'D', H]]], ['정사각형', [['A', 'B', H], ['A', 'C', H], ['B', 'D', H]]], ['등변사다리꼴', [['A', 'C', H], ['A', 'B', H], ['B', 'D', T1]]]],
+    pyra: [['이등변삼각형', ['A', 'C', 'O']], ['정사각형', [['A', 'O', H], ['B', 'O', H], ['C', 'O', H]]], ['등변사다리꼴', ['A', 'B', ['C', 'O', H]]], ['오각형', [['A', 'D', H], ['A', 'B', H], ['B', 'O', H]]]],
+  };
+  const PRESET_TILT = {
+    cyl: [['밑면과 평행 → 원', [0, 0, 0.3]], ['회전축을 품게 → 직사각형', [90, 0, 0]], ['회전축과 평행 → 직사각형', [90, 0, 0.7]], ['조금 비스듬히 → 타원', [30, 0, 0]], ['많이 비스듬히', [60, 0, 0.3]]],
+    cone: [['밑면과 평행 → 원', [0, 0, 0]], ['회전축을 품게 → 이등변삼각형', [90, 0, 0]], ['조금 비스듬히 → 타원', [30, 0, -0.2]], ['가파르게', [75, 0, 0.4]]],
+    sphere: [['중심을 지나게 → 가장 큰 원', [0, 0, 0]], ['비스듬히 → 원', [40, 30, 0.7]]],
+    cube: [['밑면과 평행', [0, 0, 0.3]], ['비스듬히', [35, 30, 0.2]], ['많이 기울여', [55, 45, 0]]],
+    box: [['밑면과 평행', [0, 0, 0.3]], ['비스듬히', [35, 30, 0.2]]],
+    tri: [['밑면과 평행', [0, 0, 0.3]], ['비스듬히', [35, 30, 0.2]]],
+    tetra: [['비스듬히', [35, 30, 0.2]]],
+    pyra: [['밑면과 평행', [0, 0, 0]], ['비스듬히', [35, 30, 0.1]]],
+  };
+  const LETTERS = ['P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'];
+
+  const st = { kind: 'cube', mode: 'pts', snap: 'half', picks: [], sel: -1, tilt: [30, 0, 0], cut: false, keepBelow: true, showPlane: true, quiz: null };
+  let S = SOLIDS.cube();
+
+  // ---------- 3D ----------
+  const canvas = document.getElementById('c'), box = document.getElementById('canvasBox');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.localClippingEnabled = true;
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(5, 9, 7); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-7, 3, -4); scene.add(fill);
+  const target = new THREE.Vector3(0, 0, 0);
+  let theta = 0.62, phi = 1.12, zoom = 1;
+  const V3 = a => new THREE.Vector3(a[0], a[1], a[2]);
+
+  const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+  const solidMat = new THREE.MeshLambertMaterial({ color: 0x9cc8ff, side: THREE.DoubleSide, transparent: true, opacity: 0.42, depthWrite: false });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x1d4ed8 });
+  const secMat = new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const secLineMat = new THREE.LineBasicMaterial({ color: 0xc2410c });
+  const planeMat = new THREE.MeshBasicMaterial({ color: 0x2563eb, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false });
+  const pickMat = new THREE.MeshBasicMaterial({ color: 0xe11d48, depthTest: false });
+  const selMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, depthTest: false }); // 고른 점(끌어 옮길 점)
+  const dotMat = new THREE.MeshBasicMaterial({ color: 0xc2410c });
+
+  let solidGroup = new THREE.Group(), dyn = new THREE.Group();
+  scene.add(solidGroup); scene.add(dyn);
+
+  function sprite(text, color, size) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+    const g = cv.getContext('2d');
+    g.font = '700 84px "Gowun Batang", serif'; g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 10; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.strokeText(text, 64, 64); g.fillText(text, 64, 64);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(size, size, 1); sp.renderOrder = 10; return sp;
+  }
+  function disposeGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); }); }
+
+  function buildSolid() {
+    disposeGroup(solidGroup); scene.remove(solidGroup); solidGroup = new THREE.Group();
+    let geo;
+    if (S.kind === 'cyl') geo = new THREE.CylinderGeometry(S.r, S.r, 2 * S.hh, 72, 1);
+    else if (S.kind === 'cone') geo = new THREE.ConeGeometry(S.r, 2 * S.hh, 72, 1);
+    else if (S.kind === 'sphere') geo = new THREE.SphereGeometry(S.R, 48, 24);
+    else {
+      const pos = [];
+      S.faces.forEach(f => { for (let k = 1; k + 1 < f.idx.length; k++) [f.idx[0], f.idx[k], f.idx[k + 1]].forEach(i => pos.push(...S.verts[i])); });
+      geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+    }
+    solidGroup.add(new THREE.Mesh(geo, solidMat));
+    if (!S.round) {
+      const lp = []; S.edges.forEach(([a, b]) => lp.push(...S.verts[a], ...S.verts[b]));
+      const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+      solidGroup.add(new THREE.LineSegments(lg, edgeMat));
+      const cen = V3(S.center);
+      S.labels.forEach((t, i) => {
+        const p = V3(S.verts[i]), out = p.clone().sub(cen).normalize().multiplyScalar(0.28);
+        const sp = sprite(t, '#1d2b3a', 0.42); sp.position.copy(p.add(out)); solidGroup.add(sp);
+      });
+    } else if (S.kind !== 'sphere') {
+      [S.hh, -S.hh].forEach(y => { if (S.kind === 'cone' && y > 0) return;
+        const pts = Array.from({ length: 73 }, (_, k) => new THREE.Vector3(S.r * Math.cos(k / 36 * Math.PI), y, S.r * Math.sin(k / 36 * Math.PI)));
+        solidGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), edgeMat));
+      });
+    }
+    scene.add(solidGroup);
+  }
+
+  // ---------- 지금 자르는 평면 ----------
+  function currentPlane() {
+    if (st.mode === 'tilt') { const [a, f, o] = st.tilt; return planeFromTilt(a, f, o); }
+    if (st.picks.length < 3) return null;
+    return planeFrom3(...st.picks.map(p => p.pos));
+  }
+
+  function makePick(edge, t) {
+    if (t < 1e-9) return { vertex: edge[0], pos: S.verts[edge[0]] };
+    if (t > 1 - 1e-9) return { vertex: edge[1], pos: S.verts[edge[1]] };
+    if (edge[0] > edge[1]) { edge = [edge[1], edge[0]]; t = 1 - t; } // 모서리는 늘 앞 글자 → 뒤 글자 방향으로
+    return { edge, t, pos: lerp(S.verts[edge[0]], S.verts[edge[1]], t) };
+  }
+  function pickFromSpec(spec) {
+    if (typeof spec === 'string') { const i = S.labels.indexOf(spec); return { vertex: i, pos: S.verts[i] }; }
+    const a = S.labels.indexOf(spec[0]), b = S.labels.indexOf(spec[1]);
+    return makePick([a, b], spec[2]);
+  }
+
+  // 단면 꼭짓점 이름: 입체 꼭짓점이면 그 글자, 찍은 점이면 P·Q·R, 나머지는 그다음 글자
+  function nameSectionPoints(sec) {
+    const used = new Set();
+    const names = sec.poly.map(q => {
+      if (q.vertex != null) return S.labels[q.vertex];
+      const k = st.mode === 'pts' ? st.picks.findIndex(p => len(sub(p.pos, q.p)) < 1e-6) : -1;
+      if (k >= 0) { used.add(LETTERS[k]); return LETTERS[k]; }
+      return null;
+    });
+    let next = st.mode === 'pts' ? st.picks.length : 0;
+    return names.map(n => {
+      if (n) return n;
+      while (used.has(LETTERS[next])) next++;
+      return LETTERS[next++] || '·';
+    });
+  }
+
+  let lastSec = null, lastPlane = null;
+  function rebuildCut() {
+    disposeGroup(dyn); scene.remove(dyn); dyn = new THREE.Group(); scene.add(dyn);
+    const pl = currentPlane(); lastPlane = pl;
+    const sec = pl ? section(S, pl.n, pl.d) : null; lastSec = sec;
+    const hide = !!st.quiz && !st.quiz.revealed;
+
+    // 찍은 점
+    if (st.mode === 'pts') st.picks.forEach((p, i) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(i === st.sel ? 0.11 : 0.08, 16, 12), i === st.sel ? selMat : pickMat); m.position.copy(V3(p.pos)); m.renderOrder = 5; dyn.add(m);
+      if (p.vertex == null) { const sp = sprite(LETTERS[i], '#e11d48', 0.4); sp.position.copy(V3(p.pos)).add(new THREE.Vector3(0, 0.25, 0)); dyn.add(sp); }
+    });
+
+    const cutting = st.cut && sec && !hide;
+    if (cutting) {
+      const n = V3(pl.n);
+      if (st.keepBelow) clipPlane.set(n.clone().negate(), pl.d); else clipPlane.set(n, -pl.d);
+    }
+    solidMat.clippingPlanes = cutting ? [clipPlane] : [];
+    solidMat.opacity = cutting ? 1 : 0.42; solidMat.transparent = !cutting; solidMat.depthWrite = cutting; solidMat.needsUpdate = true;
+    edgeMat.clippingPlanes = cutting ? [clipPlane] : []; edgeMat.needsUpdate = true;
+    solidGroup.children.forEach(o => { if (o.isSprite) o.visible = !cutting || keeps(o.position); });
+
+    if (pl && st.showPlane && !hide) {
+      const n = V3(pl.n), c = n.clone().multiplyScalar(pl.d);
+      const g = new THREE.PlaneGeometry(6, 6), m = new THREE.Mesh(g, planeMat);
+      m.position.copy(c); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); dyn.add(m);
+    }
+    if (sec && !hide) {
+      const P = sec.poly.map(q => q.p), pos = [];
+      for (let k = 1; k + 1 < P.length; k++) pos.push(...P[0], ...P[k], ...P[k + 1]);
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      dyn.add(new THREE.Mesh(g, secMat));
+      dyn.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(P.map(V3)), secLineMat));
+      if (!S.round) {
+        const names = nameSectionPoints(sec);
+        sec.poly.forEach((q, i) => {
+          const isPick = st.mode === 'pts' && st.picks.some(p => len(sub(p.pos, q.p)) < 1e-6);
+          if (q.vertex == null && !isPick) {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), dotMat); m.position.copy(V3(q.p)); dyn.add(m);
+            const sp = sprite(names[i], '#c2410c', 0.36); sp.position.copy(V3(q.p)).add(new THREE.Vector3(0, 0.24, 0)); dyn.add(sp);
+          }
+        });
+      }
+    }
+    draw();
+  }
+  function keeps(p) { if (!lastPlane) return true; const s = dot(lastPlane.n, [p.x, p.y, p.z]) - lastPlane.d; return st.keepBelow ? s <= 0.35 : s >= -0.35; }
+
+  // ---------- 카메라 ----------
+  function frame() { const w = box.clientWidth, h = box.clientHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw(); }
+  function draw() {
+    const a = cam.aspect || 1, R = (a < 1 ? 13 / a * 0.75 : 13) / zoom, sp = Math.sin(phi);
+    cam.position.set(R * sp * Math.sin(theta), target.y + R * Math.cos(phi), R * sp * Math.cos(theta));
+    cam.up.set(0, 1, 0); cam.lookAt(target); renderer.render(scene, cam);
+  }
+  new ResizeObserver(frame).observe(box);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let tween = null;
+  const viewChips = () => document.querySelectorAll('.chip[data-view]');
+  function viewAngles(name) {
+    if (name === 'face' && lastPlane) { // 단면을 정면에서: 카메라를 평면의 법선 쪽에
+      let n = lastPlane.n; if (dot(n, [Math.sin(theta), 0, Math.cos(theta)]) < 0 && n[1] < 0.99) n = mul(n, -1);
+      return [Math.atan2(n[0], n[2]), Math.acos(Math.max(-1, Math.min(1, n[1]))) || 0.0005];
+    }
+    return { iso: [0.62, 1.12], front: [0, Math.PI / 2], top: [0, 0.0005] }[name] || [0.62, 1.12];
+  }
+  function goTo(name) {
+    const [t1, p1raw] = viewAngles(name), p1 = Math.max(0.0005, Math.min(Math.PI - 0.0005, p1raw));
+    viewChips().forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+    let t0 = theta; while (t1 - t0 > Math.PI) t0 += 2 * Math.PI; while (t0 - t1 > Math.PI) t0 -= 2 * Math.PI;
+    const p0 = phi, start = performance.now(), dur = reduce ? 0 : 520;
+    if (tween) cancelAnimationFrame(tween);
+    const step = now => {
+      const k = dur ? Math.min(1, (now - start) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+      theta = t0 + (t1 - t0) * e; phi = p0 + (p1 - p0) * e; draw();
+      if (k < 1) tween = requestAnimationFrame(step);
+    };
+    tween = requestAnimationFrame(step);
+  }
+  viewChips().forEach(b => b.addEventListener('click', () => goTo(b.dataset.view)));
+  const clampPhi = p => Math.max(0.0005, Math.min(Math.PI - 0.05, p));
+  const setZoom = z => { zoom = Math.max(0.5, Math.min(3, z)); draw(); };
+  const ptrs = new Map(); let pinch = 0, downAt = null, moved = 0;
+  const pinchDist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  let dragPick = -1, dragRaf = 0;
+  canvas.addEventListener('pointerdown', e => {
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (tween) cancelAnimationFrame(tween); if (ptrs.size === 2) { pinch = pinchDist(); dragPick = -1; }
+    downAt = { x: e.clientX, y: e.clientY }; moved = 0;
+    // 빨간 점을 잡으면 그 점을 끌어 옮긴다 (돌리기 대신)
+    if (ptrs.size === 1 && canEditPts()) { dragPick = hitPick(e.clientX, e.clientY); if (dragPick >= 0) { st.sel = dragPick; canvas.style.cursor = 'move'; } }
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId); if (!p) return;
+    moved += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
+    if (dragPick >= 0 && ptrs.size === 1) {
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const loc = locate(e.clientX, e.clientY);
+      if (loc && !st.picks.some((q, j) => j !== dragPick && len(sub(q.pos, loc.pos)) < 1e-6) && len(sub(loc.pos, st.picks[dragPick].pos)) > 1e-9) {
+        st.picks[dragPick] = loc; markPreset(null);
+        if (!dragRaf) dragRaf = requestAnimationFrame(() => { dragRaf = 0; update(); });
+      }
+      return;
+    }
+    if (ptrs.size === 1) {
+      theta -= (e.clientX - p.x) * 0.008; phi = clampPhi(phi - (e.clientY - p.y) * 0.008);
+      viewChips().forEach(b => b.setAttribute('aria-pressed', 'false')); draw();
+    }
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2) { const d = pinchDist(); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+  });
+  canvas.addEventListener('pointerup', e => {
+    const wasTap = ptrs.size === 1 && moved < 6, wasDrag = dragPick >= 0;
+    ptrs.delete(e.pointerId); pinch = 0; dragPick = -1; canvas.style.cursor = '';
+    if (wasDrag) { update(); return; }
+    if (wasTap) tapAt(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = 0; dragPick = -1; canvas.style.cursor = ''; });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener('keydown', e => {
+    const d = 0.12, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!m) return; e.preventDefault(); theta += m[0]; phi = clampPhi(phi + m[1]); draw();
+  });
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
+
+  // ---------- 점 찍기·옮기기 ----------
+  // 누른 곳 → 입체 위의 점. 모서리 가까이(18px 안)면 모서리 위, 아니면 누른 면 위. 「점이 붙는 곳」에 맞춰 붙인다
+  const canEditPts = () => st.mode === 'pts' && !S.round && !st.quiz;
+  function toScreen(v, r) { const p = V3(v).project(cam); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height]; }
+  function rayAt(px, py, r) { const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(px / r.width * 2 - 1, -(py / r.height) * 2 + 1), cam); return ray; }
+  const EDGE_GRID = { half: [0, 0.5, 1], third: [0, 1 / 4, 1 / 3, 0.5, 2 / 3, 3 / 4, 1] };
+  function locate(x, y) {
+    const r = canvas.getBoundingClientRect(), px = x - r.left, py = y - r.top;
+    const ray = rayAt(px, py, r);
+    const hit = ray.intersectObject(solidGroup.children[0], false)[0];
+    // 입체가 비쳐 보여서 뒤쪽 모서리도 가까이 그려진다 → 앞에 보이는 면보다 뒤에 있는 모서리는 거의 정확히(8px) 눌렀을 때만 잡는다
+    let best = null;
+    S.edges.forEach(([a, b]) => {
+      const A = toScreen(S.verts[a], r), B = toScreen(S.verts[b], r), dx = B[0] - A[0], dy = B[1] - A[1], l2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((px - A[0]) * dx + (py - A[1]) * dy) / l2));
+      const dist = Math.hypot(A[0] + dx * t - px, A[1] + dy * t - py);
+      const depth = cam.position.distanceTo(V3(lerp(S.verts[a], S.verts[b], t)));
+      const behind = hit && depth > hit.distance + 0.12;
+      const score = behind ? (dist < 8 ? dist + 100 : Infinity) : (dist < 18 ? dist : Infinity);
+      if (score < Infinity && (!best || score < best.score)) best = { a, b, score };
+    });
+    if (best) {
+      // 화면에서 잰 비율은 원근 때문에 조금 다르다 → 광선과 모서리의 가장 가까운 점으로
+      const A3 = V3(S.verts[best.a]), B3 = V3(S.verts[best.b]), onSeg = new THREE.Vector3();
+      ray.ray.distanceSqToSegment(A3, B3, null, onSeg);
+      let t = Math.max(0, Math.min(1, onSeg.sub(A3).dot(B3.clone().sub(A3)) / B3.distanceToSquared(A3)));
+      const grid = EDGE_GRID[st.snap];
+      t = grid ? grid.reduce((g0, g) => Math.abs(g - t) < Math.abs(g0 - t) ? g : g0, 0) : Math.round(t * 20) / 20;
+      return makePick([best.a, best.b], t);
+    }
+    if (!hit) return null;
+    const h = [hit.point.x, hit.point.y, hit.point.z];
+    let fi = -1, fd = Infinity;
+    S.faces.forEach((f, k) => { const d = Math.abs(dot(f.n, sub(h, f.c))); if (d < fd) { fd = d; fi = k; } });
+    return facePick(fi, h);
+  }
+  // 면 위의 점: 꼭짓점·중점 → 면의 한가운데, 등분점 → 면을 잘게 나눈 격자점, 아무 곳 → 누른 자리 그대로
+  function facePick(fi, h) {
+    const f = S.faces[fi];
+    if (st.snap === 'free') return { face: fi, pos: h };
+    let cands = [f.c];
+    if (st.snap === 'third') {
+      const V = f.idx.map(i => S.verts[i]), ks = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 3 / 4];
+      if (V.length === 4) ks.forEach(u => ks.forEach(v => cands.push(lerp(lerp(V[0], V[1], u), lerp(V[3], V[2], u), v))));
+      else if (V.length === 3) for (let a = 1; a <= 4; a++) for (let b = 1; a + b <= 5; b++) { const c = 6 - a - b; cands.push(add(add(mul(V[0], a / 6), mul(V[1], b / 6)), mul(V[2], c / 6))); }
+    }
+    const pos = cands.reduce((p0, p) => len(sub(p, h)) < len(sub(p0, h)) ? p : p0);
+    return { face: fi, pos };
+  }
+  function hitPick(x, y) {
+    const r = canvas.getBoundingClientRect(), px = x - r.left, py = y - r.top;
+    let k = -1, bd = 18;
+    st.picks.forEach((p, i) => { const s = toScreen(p.pos, r), d = Math.hypot(s[0] - px, s[1] - py); if (d < bd) { bd = d; k = i; } });
+    return k;
+  }
+  let pickMsg = '';
+  function tapAt(x, y) {
+    if (!canEditPts()) return;
+    const on = hitPick(x, y);
+    if (on >= 0) { st.sel = on; update(); return; } // 찍어 둔 점을 누르면 고르기
+    const p = locate(x, y);
+    if (!p) return;
+    if (st.picks.some(q => len(sub(q.pos, p.pos)) < 1e-6)) { pickMsg = '이미 찍은 점이에요.'; update(); return; }
+    if (st.picks.length < 3) { st.picks.push(p); st.sel = st.picks.length - 1; }
+    else { const k = st.sel >= 0 ? st.sel : 2; st.picks[k] = p; st.sel = k; pickMsg = `${LETTERS[k]} 점을 옮겼어요. 다른 점을 옮기려면 그 점을 먼저 눌러요.`; }
+    markPreset(null); update();
+  }
+
+  // ---------- 단면 2D 그림과 이유 ----------
+  const svg = document.getElementById('sec2d'), NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; }
+  // 면 이름은 교과서처럼 가장 앞 글자부터, 이웃 중 앞 글자 쪽으로 (BADC → ABCD)
+  function faceName(fi) {
+    const t = S.faces[fi].idx.map(i => S.labels[i]), n = t.length;
+    const s = t.indexOf(t.slice().sort()[0]), fw = t[(s + 1) % n] < t[(s + n - 1) % n];
+    return Array.from({ length: n }, (_, k) => t[(s + (fw ? k : n - k)) % n]).join('');
+  }
+
+  function drawSection() {
+    svg.innerHTML = '';
+    const nameEl = document.getElementById('secName'), rs = document.getElementById('reasons');
+    rs.innerHTML = '';
+    const reason = t => { const li = document.createElement('li'); li.innerHTML = t; rs.appendChild(li); };
+    const sec = lastSec;
+    if (st.quiz && !st.quiz.revealed) { nameEl.textContent = '?'; el('text', { class: 'empty', x: 210, y: 160, 'text-anchor': 'middle' }, '문제를 풀면 보여 줘요'); return; }
+    if (!sec) {
+      nameEl.textContent = '—';
+      el('text', { class: 'empty', x: 210, y: 160, 'text-anchor': 'middle' }, st.mode === 'pts' && st.picks.length < 3 ? `점을 세 개 찍으면 단면이 나와요 (${st.picks.length}/3)` : '이 평면은 입체와 만나지 않아요');
+      return;
+    }
+    if (sec.onFace) { nameEl.textContent = '면 그 자체'; reason('세 점이 모두 한 면 위에 있어서, 입체를 자른 게 아니라 그 면과 겹쳤어요. 다른 면 위의 점을 하나 골라 보세요.'); }
+    const cl = classify(S, sec);
+    if (!sec.onFace) nameEl.textContent = cl.name;
+
+    // 평면 위 좌표로 펴서 그린다
+    const P2 = sec.poly.map(q => { const r = sub(q.p, sec.c); return [dot(r, sec.u), dot(r, sec.w)]; });
+    const xs = P2.map(p => p[0]), ys = P2.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const sc = Math.min(330 / Math.max(maxX - minX, 1e-6), 230 / Math.max(maxY - minY, 1e-6));
+    const tx = p => [210 + (p[0] - (minX + maxX) / 2) * sc, 160 - (p[1] - (minY + maxY) / 2) * sc];
+    const Q = P2.map(tx), k = Q.length;
+    el('polygon', { class: 'poly', points: Q.map(p => p.join(',')).join(' ') });
+    if (S.round) { roundNotes(cl, sec, reason); return; }
+
+    const names = nameSectionPoints(sec);
+    const E = sec.poly.map((q, i) => sub(sec.poly[(i + 1) % k].p, q.p)), L = E.map(len);
+    const cx = Q.reduce((s, p) => s + p[0], 0) / k, cy = Q.reduce((s, p) => s + p[1], 0) / k;
+    // 꼭짓점 이름
+    Q.forEach((p, i) => { const dx = p[0] - cx, dy = p[1] - cy, m = Math.hypot(dx, dy) || 1; el('text', { class: 'vl', x: p[0] + dx / m * 16, y: p[1] + dy / m * 16 + 5, 'text-anchor': 'middle' }, names[i]); });
+    // 같은 길이 표시(눈금), 길이 글자
+    const groups = []; L.forEach((l, i) => { let g = groups.find(g => Math.abs(g.l - l) < 1e-6); if (!g) groups.push(g = { l, idx: [] }); g.idx.push(i); });
+    let tickN = 0;
+    groups.forEach(g => { g.ticks = g.idx.length > 1 ? ++tickN : 0; });
+    Q.forEach((p, i) => {
+      const q = Q[(i + 1) % k], mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, dx = q[0] - p[0], dy = q[1] - p[1], m = Math.hypot(dx, dy) || 1;
+      const nx = -dy / m, ny = dx / m, out = ((mx - cx) * nx + (my - cy) * ny) > 0 ? 1 : -1;
+      const g = groups.find(g => g.idx.includes(i));
+      for (let t = 0; t < g.ticks && g.ticks <= 3; t++) {
+        const o = (t - (g.ticks - 1) / 2) * 6;
+        el('line', { class: 'mark', x1: mx + dx / m * o - nx * 6, y1: my + dy / m * o - ny * 6, x2: mx + dx / m * o + nx * 6, y2: my + dy / m * o + ny * 6 });
+      }
+      el('text', { class: 'll', x: mx + nx * out * 20, y: my + ny * out * 20 + 4, 'text-anchor': 'middle' }, fmtLen(L[i]));
+    });
+    // 직각 표시
+    Q.forEach((p, i) => {
+      const a = E[(i + k - 1) % k], b = E[i];
+      if (Math.abs(dot(a, b)) > 1e-6 * len(a) * len(b)) return;
+      const qa = Q[(i + k - 1) % k], qb = Q[(i + 1) % k];
+      const u = [(qa[0] - p[0]), (qa[1] - p[1])], v = [(qb[0] - p[0]), (qb[1] - p[1])];
+      const lu = Math.hypot(...u), lv = Math.hypot(...v), s = 11;
+      const A = [p[0] + u[0] / lu * s, p[1] + u[1] / lu * s], B = [p[0] + v[0] / lv * s, p[1] + v[1] / lv * s];
+      el('path', { class: 'mark', d: `M ${A[0]} ${A[1]} L ${A[0] + B[0] - p[0]} ${A[1] + B[1] - p[1]} L ${B[0]} ${B[1]}` });
+    });
+
+    if (sec.onFace) return;
+    const sideName = i => names[i] + names[(i + 1) % k];
+    reason(`평면이 입체의 면 ${k}개를 지나가요. 단면의 변은 지나간 면마다 하나씩 생기니까 ${k === 3 ? '삼' : k === 4 ? '사' : k === 5 ? '오' : k === 6 ? '육' : k}각형이에요.`);
+    // 평행한 두 면에 생긴 변은 평행
+    const said = new Set();
+    sec.poly.forEach((q, i) => sec.poly.forEach((r, j) => {
+      if (j <= i || q.face < 0 || r.face < 0) return;
+      const f1 = S.faces[q.face], f2 = S.faces[r.face];
+      if (dot(f1.n, f2.n) > -1 + 1e-6) return;
+      const key = i + '-' + j; if (said.has(key)) return; said.add(key);
+      reason(`<b>${sideName(i)} ∥ ${sideName(j)}</b> — 평행한 두 면 ${faceName(q.face)}와 ${faceName(r.face)}를 한 평면이 자르면, 잘린 선끼리 평행해요.`);
+    }));
+    const eqG = groups.filter(g => g.idx.length > 1);
+    eqG.forEach(g => reason(`${g.idx.map(sideName).join(', ')}의 길이가 모두 ${fmtLen(g.l)}로 같아요.`));
+    if (cl.group === 'tri') {
+      const s = L.slice().sort((a, b) => a - b);
+      reason(`가장 긴 변의 제곱 ${fmtNum(s[2] * s[2])}이 나머지 두 변의 제곱의 합 ${fmtNum(s[0] * s[0] + s[1] * s[1])}보다 ${s[2] * s[2] < s[0] * s[0] + s[1] * s[1] - 1e-6 ? '작아서 세 각이 모두 예각이에요' : s[2] * s[2] > s[0] * s[0] + s[1] * s[1] + 1e-6 ? '커서 둔각삼각형이에요' : '같아서 직각삼각형이에요'}.`);
+    }
+    if (S.kind === 'cube' || S.kind === 'box') reason(`길이는 ${S.size}로 잰 거예요.`);
+  }
+
+  function roundNotes(cl, sec, reason) {
+    if (cl.note) reason(cl.note);
+    if (S.kind === 'cyl' && cl.group === 'rect') {
+      const w = 2 * Math.sqrt(Math.max(0, S.r * S.r - sec.d * sec.d));
+      reason(`가로 ${fmtNum(w)}, 세로 ${fmtNum(2 * S.hh)} (원기둥의 높이)인 직사각형이에요.`);
+    }
+    if (S.kind === 'cyl' && cl.group === 'circle') reason(`반지름 ${fmtNum(S.r)}인 원이에요.`);
+    if (S.kind === 'cone' && cl.group === 'circle') {
+      const y = sec.d / sec.n[1], r = S.r * (S.hh - y) / (2 * S.hh);
+      reason(`이 높이에서 반지름은 ${fmtNum(r)}이에요 (밑면 반지름 ${fmtNum(S.r)}).`);
+    }
+    reason(`${S.title}: ${S.size}`);
+  }
+
+  // ---------- 화면 묶기 ----------
+  const solidsBox = document.getElementById('solids');
+  SOLID_LIST.forEach(([k, t]) => {
+    const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = t; b.dataset.kind = k;
+    b.addEventListener('click', () => setSolid(k)); solidsBox.appendChild(b);
+  });
+  const presetPtsBox = document.getElementById('presetsPts'), presetTiltBox = document.getElementById('presetsTilt');
+  function markPreset(name) { document.querySelectorAll('#presetsPts .chip, #presetsTilt .chip, #canList .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.name === name))); }
+  function renderPresets() {
+    presetPtsBox.innerHTML = ''; presetTiltBox.innerHTML = '';
+    (PRESET_PTS[st.kind] || []).forEach(([name, specs]) => {
+      const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = name; b.dataset.name = name;
+      b.addEventListener('click', () => loadPtsPreset(name, specs)); presetPtsBox.appendChild(b);
+    });
+    (PRESET_TILT[st.kind] || []).forEach(([name, v]) => {
+      const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = name; b.dataset.name = name;
+      b.addEventListener('click', () => { st.tilt = v.slice(); syncTilt(); markPreset(name); update(); }); presetTiltBox.appendChild(b);
+    });
+    const can = document.getElementById('canList'); can.innerHTML = '';
+    PRESET_PTS.cube.forEach(([name, specs]) => {
+      const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = name; b.dataset.name = name;
+      b.addEventListener('click', () => { endQuiz(); if (st.kind !== 'cube') setSolid('cube'); setMode('pts'); loadPtsPreset(name, specs); goTo('iso'); });
+      can.appendChild(b);
+    });
+  }
+  function loadPtsPreset(name, specs) { endQuiz(); st.picks = specs.map(pickFromSpec); st.sel = -1; markPreset(name); update(); }
+
+  function setSolid(k) {
+    endQuiz();
+    st.kind = k; S = SOLIDS[k](); st.picks = []; st.sel = -1;
+    document.querySelectorAll('#solids .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
+    document.getElementById('solidSize').textContent = S.size;
+    document.getElementById('canCard').hidden = k !== 'cube';
+    document.querySelector('[data-mode="pts"]').disabled = S.round;
+    renderPresets(); buildSolid();
+    setMode(S.round ? 'tilt' : 'pts', true); // 각진 입체는 세 점으로, 둥근 입체는 기울여서 시작
+    const first = (st.mode === 'pts' ? PRESET_PTS[k] : PRESET_TILT[k]) || [];
+    if (first.length) { if (st.mode === 'pts') loadPtsPreset(first[0][0], first[0][1]); else { st.tilt = first[0][1].slice(); syncTilt(); markPreset(first[0][0]); update(); } }
+    else update();
+  }
+  function setMode(m, quiet) {
+    st.mode = m;
+    document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    document.getElementById('ptsPanel').hidden = m !== 'pts';
+    document.getElementById('tiltPanel').hidden = m !== 'tilt';
+    if (!quiet) { markPreset(null); update(); }
+  }
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { if (!b.disabled) { endQuiz(); setMode(b.dataset.mode); } }));
+  document.querySelectorAll('[data-snap]').forEach(b => b.addEventListener('click', () => {
+    st.snap = b.dataset.snap; document.querySelectorAll('[data-snap]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  document.getElementById('clearPts').addEventListener('click', () => { endQuiz(); st.picks = []; st.sel = -1; markPreset(null); update(); });
+
+  const alphaIn = document.getElementById('alpha'), phiIn = document.getElementById('phi'), offIn = document.getElementById('offset');
+  function syncTilt() {
+    alphaIn.value = st.tilt[0]; phiIn.value = st.tilt[1]; offIn.value = st.tilt[2];
+    document.getElementById('alphaOut').textContent = st.tilt[0] + '°';
+    document.getElementById('phiOut').textContent = st.tilt[1] + '°';
+    document.getElementById('offOut').textContent = fmtNum(st.tilt[2]);
+  }
+  [alphaIn, phiIn, offIn].forEach(inp => inp.addEventListener('input', () => {
+    st.tilt = [Number(alphaIn.value), Number(phiIn.value), Number(offIn.value)]; syncTilt(); markPreset(null); update();
+  }));
+  document.getElementById('cutToggle').addEventListener('change', e => { st.cut = e.target.checked; rebuildCut(); });
+  document.getElementById('planeToggle').addEventListener('change', e => { st.showPlane = e.target.checked; rebuildCut(); });
+  document.getElementById('flipSide').addEventListener('click', () => { st.keepBelow = !st.keepBelow; if (!st.cut) { st.cut = true; document.getElementById('cutToggle').checked = true; } rebuildCut(); });
+
+  // ---------- 찍은 점 목록 (누르면 그 점을 고르고, ×로 지운다) ----------
+  // t 를 가장 간단한 m : n 으로 (20 까지) — 1/3 → 1 : 2
+  function ratioOf(t) {
+    let best = [1, 1, Infinity];
+    for (let m = 1; m <= 20; m++) for (let n = 1; n <= 20; n++) { const e = Math.abs(m / (m + n) - t); if (e < best[2] - 1e-12) best = [m, n, e]; }
+    return best.slice(0, 2);
+  }
+  function pickText(p, i) {
+    if (p.vertex != null) return `꼭짓점 ${S.labels[p.vertex]}`;
+    const L = LETTERS[i];
+    if (p.face != null) return len(sub(p.pos, S.faces[p.face].c)) < 1e-6 ? `면 ${faceName(p.face)}의 한가운데` : `면 ${faceName(p.face)} 위`;
+    const A = S.labels[p.edge[0]], B = S.labels[p.edge[1]];
+    if (Math.abs(p.t - 0.5) < 1e-9) return `모서리 ${A}${B}의 중점`;
+    const [m, n] = ratioOf(p.t);
+    return `모서리 ${A}${B} 위 · ${A}${L} : ${L}${B} = ${m} : ${n}`;
+  }
+  function renderPicked() {
+    const ul = document.getElementById('plist'); ul.innerHTML = '';
+    st.picks.forEach((p, i) => {
+      const li = document.createElement('li'); if (i === st.sel) li.className = 'sel';
+      const b = document.createElement('b'); b.textContent = p.vertex != null ? S.labels[p.vertex] : LETTERS[i];
+      const t = document.createElement('span'); t.textContent = pickText(p, i);
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', `${b.textContent} 점 지우기`);
+      x.addEventListener('click', ev => { ev.stopPropagation(); endQuiz(); st.picks.splice(i, 1); st.sel = -1; markPreset(null); update(); });
+      li.addEventListener('click', () => { st.sel = st.sel === i ? -1 : i; update(); });
+      li.append(b, t, x); ul.appendChild(li);
+    });
+    if (st.picks.length < 3) {
+      const li = document.createElement('li'); li.className = 'empty';
+      li.textContent = `점 ${3 - st.picks.length}개를 더 찍어요. 모서리 가까이 누르면 모서리 위에, 면 가운데를 누르면 면 위에 찍혀요.`;
+      ul.appendChild(li);
+    }
+    const msg = document.getElementById('ptsMsg');
+    if (pickMsg) msg.textContent = pickMsg;
+    else if (st.mode === 'pts' && st.picks.length === 3 && !currentPlane()) msg.textContent = '세 점이 한 직선 위에 있어서 평면이 하나로 정해지지 않아요. 한 점을 끌어 옮겨 보세요.';
+    else if (st.mode === 'pts' && st.picks.length === 3) msg.textContent = '빨간 점을 끌면 그 점이 모서리·면을 따라 움직여요.';
+    else msg.textContent = '';
+    pickMsg = '';
+  }
+
+  function update() { renderPicked(); rebuildCut(); drawSection(); }
+
+  // ---------- 문제 ----------
+  const QUIZ_NAMES = ['정삼각형', '이등변삼각형', '직각삼각형', '정사각형', '직사각형', '마름모', '평행사변형', '사다리꼴', '등변사다리꼴', '오각형', '정오각형', '육각형', '정육각형'];
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  document.getElementById('quizBtn').addEventListener('click', () => {
+    const pool = S.round ? null : PRESET_PTS[st.kind];
+    if (!pool) setSolid('cube');
+    const list = PRESET_PTS[st.kind];
+    let pick; do { pick = list[Math.floor(Math.random() * list.length)]; } while (st.quiz && list.length > 1 && pick[0] === st.quiz.answer);
+    setMode('pts', true);
+    st.picks = pick[1].map(pickFromSpec); markPreset(null);
+    st.quiz = { answer: pick[0], revealed: false };
+    const opts = shuffle([pick[0], ...shuffle(QUIZ_NAMES.filter(n => n !== pick[0])).slice(0, 5)]);
+    const box = document.getElementById('quizOpts'); box.innerHTML = '';
+    opts.forEach(n => { const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = n; b.addEventListener('click', () => answer(n, b)); box.appendChild(b); });
+    const rv = document.createElement('button'); rv.className = 'btn'; rv.type = 'button'; rv.textContent = '정답 보기'; rv.addEventListener('click', () => reveal()); box.appendChild(rv);
+    document.getElementById('quizQ').textContent = `${S.title}에서 빨간 세 점을 지나는 평면으로 자르면 단면은 어떤 모양일까요?`;
+    const m = document.getElementById('quizMsg'); m.textContent = ''; m.className = '';
+    update(); goTo('iso');
+  });
+  function answer(n, b) {
+    const m = document.getElementById('quizMsg');
+    if (!st.quiz || st.quiz.revealed) return;
+    if (n === st.quiz.answer) { m.textContent = `맞았어요! ${n}이에요. 위에서 자른 모양과 이유를 확인해 보세요.`; m.className = 'ok'; reveal(true); }
+    else { m.textContent = `${n}은(는) 아니에요. 세 점이 어느 면 위에 있는지, 평행한 면이 있는지 다시 보세요.`; m.className = 'no'; b.disabled = true; }
+  }
+  function reveal(keepMsg) {
+    if (!st.quiz) return; st.quiz.revealed = true;
+    if (!keepMsg) { const m = document.getElementById('quizMsg'); m.textContent = `정답은 ${st.quiz.answer}이에요.`; m.className = 'ok'; }
+    rebuildCut(); drawSection();
+  }
+  function endQuiz() {
+    if (!st.quiz) return; st.quiz = null;
+    document.getElementById('quizOpts').innerHTML = '';
+    const m = document.getElementById('quizMsg'); m.textContent = ''; m.className = '';
+    document.getElementById('quizQ').textContent = '「문제 내기」를 누르면 빨간 세 점만 보여 줘요. 이 세 점을 지나는 평면으로 자른 단면을 골라 보세요.';
+  }
+
+  syncTilt();
+  setSolid('cube');
+  loadPtsPreset('정육각형', PRESET_PTS.cube.find(p => p[0] === '정육각형')[1]);
+  frame();
+})();
+</script>
+</body>
+</html>
