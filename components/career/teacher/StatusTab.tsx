@@ -61,7 +61,7 @@ export default function StatusTab({ students, consents, surveys, isOwner, onOpen
         <Stat label="아직 둘 다 안 냄" v={`${targets.filter((s) => !sv(s.id, 'student') && !sv(s.id, 'parent')).length}명`} />
       </div>
 
-      {isOwner && <SmsBox targets={targets} tests={tests} sv={sv} hasPhone={hasPhone} />}
+      {isOwner && <SmsBox key={form} form={form} targets={targets} tests={tests} sv={sv} hasPhone={hasPhone} />}
 
       <Card>
         <div className="flex items-center gap-2 flex-wrap">
@@ -146,7 +146,9 @@ function Stat({ label, v, sub }: { label: string; v: string; sub?: string }) {
  * 설문 문자 — 설명회 설문처럼 **문자 속 주소를 누르면 바로** 열린다(로그인 없음).
  * 학생·학부모마다 자기 링크가 따로 들어간다. 받는 분 확인(미리보기) → 이대로 보내기.
  */
-function SmsBox({ targets, tests, sv, hasPhone }: {
+function SmsBox({ form, targets, tests, sv, hasPhone }: {
+  /** 위에서 고른 질문지 — 테스트 학생(학년이 대상이 아님)에게는 이 질문지 링크가 간다 */
+  form: FormId
   targets: Student[]; tests: Student[]
   sv: (sid: string, role: string) => Survey | undefined
   hasPhone: (s: Student) => boolean
@@ -171,7 +173,9 @@ function SmsBox({ targets, tests, sv, hasPhone }: {
     setBusy(true); setErr('')
     const r = await apiFetch('/api/career/sms', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentIds: [...picked], toParent, toStudent, parentText: pText, studentText: sText, send }),
+      // ★ testForm — 테스트 학생은 학년으로 질문지가 안 정해지므로 위 탭에서 고른 것을 보낸다.
+      //   빠져 있어서 예비고1 탭에서 보내도 예비고2 링크가 나갔다 (원장님 2026-11-07)
+      body: JSON.stringify({ studentIds: [...picked], toParent, toStudent, parentText: pText, studentText: sText, testForm: form, send }),
     })
     const j = await r.json().catch(() => ({}))
     setBusy(false)
@@ -181,7 +185,7 @@ function SmsBox({ targets, tests, sv, hasPhone }: {
 
   return (
     <Card>
-      <h3 className="font-bold" style={{ color: GREEN }}>📩 설문 문자 보내기 <span className="text-xs font-normal text-gray-400">(원장님만 · 로그인 없이 문자 속 주소로 바로 설문)</span></h3>
+      <h3 className="font-bold" style={{ color: GREEN }}>📩 {FORMS[form].label} 질문지 문자 보내기 <span className="text-xs font-normal text-gray-400">(원장님만 · 로그인 없이 문자 속 주소로 바로 · 🧪 테스트 학생에게도 {FORMS[form].label} 질문지가 가요)</span></h3>
       <p className="text-xs text-gray-500 mt-1">학생·학부모마다 <b>자기 링크</b>가 따로 들어가요. 낸 답은 이 화면에 바로 쌓여요. 문자 속 <b>{'{이름}'}</b>은 학생 이름, <b>{'{링크}'}</b>는 그 사람 링크로 바뀝니다.</p>
 
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
