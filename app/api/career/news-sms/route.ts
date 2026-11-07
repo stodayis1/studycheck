@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   for (const s of students ?? []) {
     if (s.is_active === false && !isTestStudentId(s.id)) continue
     const fields = [...(fieldsBy.get(s.id) ?? [])]
-    const mine = events.filter((e) => matches(e, fields, s.grade))
+    const mine = events.filter((e) => matches(e, fields, isTestStudentId(s.id) ? null : s.grade))   // 테스트 학생은 학년 무관
     if (!mine.length) { noMatch.push(s.name); continue }
     mine.forEach((e) => used.add(e.id))
     const form = formForSend(s, 'pre2')

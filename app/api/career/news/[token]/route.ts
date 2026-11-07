@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server'
 import { serviceDb, isToken, fieldsOfStudent, linkUrl } from '@/lib/careerServer'
 import { PUBLIC_COLS, COMMON, matches, isUpcoming, type CareerEvent } from '@/lib/careerEvents'
+import { isTestStudentId } from '@/lib/testStudents'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     .eq('status', '승인').order('starts_on', { ascending: true, nullsFirst: false }).limit(300)
   const events = ((rows ?? []) as unknown as CareerEvent[])
     .filter((e) => isUpcoming(e))
-    .filter((e) => (fields ? matches(e, fields, s.grade) : e.fields.includes(COMMON)))
+    .filter((e) => (fields ? matches(e, fields, isTestStudentId(s.id) ? null : s.grade) : e.fields.includes(COMMON)))   // 테스트 학생은 학년 무관 — 다 보여야 시험이 된다
 
   return NextResponse.json({
     name: s.name, grade: s.grade, role: link.respondent,
