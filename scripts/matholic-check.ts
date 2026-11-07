@@ -922,6 +922,17 @@ T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
     && src.includes('count.exam')
 })
 
+// ★ 긁어서 넣는 스크립트도 **같은 함수**를 써야 한다 (원장님 2026-11-07 「너가 화면 보고
+//   반영해 주면 되잖아」). 스크립트가 따로 판단·저장하면 규칙이 두 벌이 된다.
+T('긁어 넣는 스크립트가 planRow·applyPlans 를 쓴다 (따로 판단하지 않는다)', () => {
+  const src = fs.readFileSync(path.resolve('scripts/matholic-apply.ts'), 'utf8')
+  return /planRow\(r, ctx\)/.test(src)
+    && /applyPlans\(db, plans,/.test(src)
+    && !/\.from\('exams'\)[\s\S]{0,30}\.insert/.test(src)
+    && !/\.from\('student_worksheets'\)[\s\S]{0,30}\.insert/.test(src)
+    && /args\.includes\('--save'\)/.test(src)   // 기본은 미리보기 — 붙여야만 넣는다
+})
+
 // ★ 넣는 일도 한 곳(lib/matholicApply.ts)에서 한다 — 화면이 직접 insert 하면 두 벌이 된다.
 T('화면이 넣기를 applyPlans 에 맡긴다 (화면에 insert 가 남아 있지 않다)', () => {
   const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
