@@ -61,9 +61,12 @@ h2 { font-family: var(--font-display); font-size: 17px; margin: 0; }
 .slide { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) 3.4em; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .slide input { width: 100%; accent-color: var(--accent); }
 .slide output { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); }
-.picked { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
-.picked li { display: flex; gap: 8px; align-items: baseline; }
-.picked b { color: var(--bad); font-family: var(--font-display); min-width: 1.2em; }
+.pform { display: grid; gap: 6px; }
+.prow { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 4px 6px; align-items: center; font-size: 14px; }
+.prow b { color: var(--bad); font-family: var(--font-display); font-size: 16px; }
+.prow select { font: inherit; font-size: 14px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+.prow .ratio { grid-column: 2; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.prow .ratio input { font: inherit; width: 3.2em; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; text-align: center; color: var(--ink); }
 .msg { margin: 0; font-size: 13px; color: var(--warn); min-height: 1.2em; }
 .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 
@@ -107,7 +110,7 @@ canvas#c:active { cursor: grabbing; }
     <div class="brand"><img src="/visual/suji.png" alt=""><div><b>수학의지혜</b><span>Wise Way to Win</span></div></div>
     <div class="eyebrow">중1-2 입체도형의 성질 · 입체도형의 단면</div>
     <h1>입체도형의 단면</h1>
-    <p>입체도형을 평면으로 자르면 어떤 모양이 생길까요? 정육면체는 모서리 위에 세 점을 찍어 자르고, 원기둥·원뿔·구는 평면을 기울여 잘라 봐요. 아래에 단면의 실제 모양과 그렇게 되는 이유가 나와요.</p>
+    <p>입체도형을 평면으로 자르면 어떤 모양이 생길까요? 정육면체는 모서리를 누르거나 자리를 골라 세 점을 정해 자르고, 원기둥·원뿔·구는 평면을 기울여 잘라 봐요. 아래에 단면의 실제 모양과 그렇게 되는 이유가 나와요.</p>
   </header>
 
   <div class="main">
@@ -133,7 +136,8 @@ canvas#c:active { cursor: grabbing; }
           <button class="chip" data-snap="third" aria-pressed="false">삼등분점까지</button>
           <button class="chip" data-snap="free" aria-pressed="false">아무 곳</button>
         </div>
-        <ul class="picked" id="picked"></ul>
+        <span class="lbl">점 직접 정하기 — 꼭짓점, 모서리 위(비율로), 면의 한가운데</span>
+        <div class="pform" id="pform"></div>
         <div class="btns"><button class="btn" id="clearPts">점 모두 지우기</button></div>
         <p class="msg" id="ptsMsg" aria-live="polite"></p>
       </div>
@@ -565,17 +569,17 @@ if (typeof module !== 'undefined') module.exports = CORE;
     return planeFrom3(...st.picks.map(p => p.pos));
   }
 
-  function pickName(p) {
-    if (p.vertex != null) return `꼭짓점 ${S.labels[p.vertex]}`;
-    const [a, b] = p.edge, A = S.labels[a], B = S.labels[b];
-    if (Math.abs(p.t - 0.5) < 1e-9) return `모서리 ${A}${B}의 중점`;
-    const frac = Math.abs(p.t - 1 / 3) < 1e-9 ? '1/3' : Math.abs(p.t - 2 / 3) < 1e-9 ? '2/3' : fmtNum(p.t);
-    return `모서리 ${A}${B} 위 (${A}에서 ${frac})`;
-  }
   function makePick(edge, t) {
     if (t < 1e-9) return { vertex: edge[0], pos: S.verts[edge[0]] };
     if (t > 1 - 1e-9) return { vertex: edge[1], pos: S.verts[edge[1]] };
+    if (edge[0] > edge[1]) { edge = [edge[1], edge[0]]; t = 1 - t; } // 모서리는 늘 앞 글자 → 뒤 글자 방향으로
     return { edge, t, pos: lerp(S.verts[edge[0]], S.verts[edge[1]], t) };
+  }
+  // t 를 가장 간단한 m : n 으로 (20 까지) — 1/3 → 1 : 2, 0.35 → 7 : 13
+  function ratioOf(t) {
+    let best = [1, 1, Infinity];
+    for (let m = 1; m <= 20; m++) for (let n = 1; n <= 20; n++) { const e = Math.abs(m / (m + n) - t); if (e < best[2] - 1e-12) best = [m, n, e]; }
+    return best.slice(0, 2);
   }
   function pickFromSpec(spec) {
     if (typeof spec === 'string') { const i = S.labels.indexOf(spec); return { vertex: i, pos: S.verts[i] }; }
@@ -911,14 +915,64 @@ if (typeof module !== 'undefined') module.exports = CORE;
   document.getElementById('planeToggle').addEventListener('change', e => { st.showPlane = e.target.checked; rebuildCut(); });
   document.getElementById('flipSide').addEventListener('click', () => { st.keepBelow = !st.keepBelow; if (!st.cut) { st.cut = true; document.getElementById('cutToggle').checked = true; } rebuildCut(); });
 
+  // ---------- 점 직접 정하기 (3D 에서 누른 점·대표 단면도 여기에 그대로 채워진다) ----------
+  const pform = document.getElementById('pform');
+  let formMsg = '';
   function renderPicked() {
-    const ul = document.getElementById('picked'); ul.innerHTML = '';
-    st.picks.forEach((p, i) => { const li = document.createElement('li'); li.innerHTML = `<b>${p.vertex != null ? S.labels[p.vertex] : LETTERS[i]}</b><span>${pickName(p)}</span>`; ul.appendChild(li); });
-    if (!st.picks.length) { const li = document.createElement('li'); li.innerHTML = '<span class="lbl">아직 찍은 점이 없어요. 3D에서 모서리를 눌러 보세요.</span>'; ul.appendChild(li); }
+    pform.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+      const p = st.picks[i], row = document.createElement('div'); row.className = 'prow';
+      const tag = document.createElement('b'); tag.textContent = p && p.vertex != null ? S.labels[p.vertex] : LETTERS[i];
+      const sel = document.createElement('select'); sel.id = 'psel' + i; sel.setAttribute('aria-label', `${i + 1}번째 점의 자리`);
+      const opt = (v, t, parent) => { const o = document.createElement('option'); o.value = v; o.textContent = t; parent.appendChild(o); };
+      opt('', '— 자리 고르기 —', sel);
+      const gV = document.createElement('optgroup'); gV.label = '꼭짓점'; S.labels.forEach((l, k) => opt('v:' + k, '꼭짓점 ' + l, gV));
+      const gE = document.createElement('optgroup'); gE.label = '모서리 위 (비율로)'; S.edges.forEach(([a, b]) => opt(`e:${a}-${b}`, `모서리 ${S.labels[a]}${S.labels[b]} 위`, gE));
+      const gF = document.createElement('optgroup'); gF.label = '면의 한가운데'; S.faces.forEach((f, k) => opt('f:' + k, `면 ${faceName(k)}의 한가운데`, gF));
+      sel.append(gV, gE, gF);
+      const ratio = document.createElement('span'); ratio.className = 'ratio';
+      const num = id => { const x = document.createElement('input'); x.type = 'number'; x.min = '1'; x.max = '99'; x.step = '1'; x.id = id; x.inputMode = 'numeric'; return x; };
+      const m = num('pm' + i), n = num('pn' + i), hint = document.createElement('span');
+      let rm = 1, rn = 1;
+      if (p && p.vertex != null) sel.value = 'v:' + p.vertex;
+      else if (p && p.face != null) sel.value = 'f:' + p.face;
+      else if (p) { sel.value = `e:${p.edge[0]}-${p.edge[1]}`; [rm, rn] = ratioOf(p.t); }
+      m.value = rm; n.value = rn;
+      const showHint = () => {
+        const v = sel.value; ratio.hidden = !v.startsWith('e:');
+        if (!ratio.hidden) { const [a, b] = v.slice(2).split('-').map(Number), L = LETTERS[i]; hint.textContent = `${S.labels[a]}${L} : ${L}${S.labels[b]} =`; }
+      };
+      ratio.append(hint, m, ':', n); showHint();
+      sel.addEventListener('change', () => { showHint(); readForm(); });
+      [m, n].forEach(x => x.addEventListener('change', readForm));
+      row.append(tag, sel, ratio); pform.appendChild(row);
+    }
     const msg = document.getElementById('ptsMsg');
-    if (st.mode === 'pts' && st.picks.length === 3 && !currentPlane()) msg.textContent = '세 점이 한 직선 위에 있어서 평면이 하나로 정해지지 않아요.';
-    else if (st.mode === 'pts' && st.picks.length < 3) msg.textContent = '';
+    if (formMsg) msg.textContent = formMsg;
+    else if (st.mode === 'pts' && st.picks.length === 3 && !currentPlane()) msg.textContent = '세 점이 한 직선 위에 있어서 평면이 하나로 정해지지 않아요.';
+    else if (st.mode === 'pts' && !st.picks.length) msg.textContent = '3D에서 모서리를 누르거나, 위 칸에서 자리를 골라 점을 정해요.';
     else msg.textContent = '';
+    formMsg = '';
+  }
+  function readForm() {
+    endQuiz();
+    const picks = [];
+    for (let i = 0; i < 3; i++) {
+      const v = document.getElementById('psel' + i).value;
+      if (!v) continue;
+      let p;
+      if (v.startsWith('v:')) { const k = Number(v.slice(2)); p = { vertex: k, pos: S.verts[k] }; }
+      else if (v.startsWith('f:')) { const k = Number(v.slice(2)); p = { face: k, pos: S.faces[k].c }; }
+      else {
+        const [a, b] = v.slice(2).split('-').map(Number);
+        const m = Math.round(Number(document.getElementById('pm' + i).value)), n = Math.round(Number(document.getElementById('pn' + i).value));
+        if (!(m >= 1 && n >= 1)) { formMsg = '비율은 1 이상의 자연수로 적어 주세요. 꼭짓점이면 위에서 「꼭짓점」을 고르세요.'; continue; }
+        p = makePick([a, b], m / (m + n));
+      }
+      if (picks.some(q => len(sub(q.pos, p.pos)) < 1e-6)) { formMsg = '같은 점을 두 번 골랐어요.'; continue; }
+      picks.push(p);
+    }
+    st.picks = picks; markPreset(null); update();
   }
 
   function update() { renderPicked(); rebuildCut(); drawSection(); }
