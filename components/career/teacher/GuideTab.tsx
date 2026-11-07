@@ -28,7 +28,7 @@ export default function GuideTab({ counts, myTestId, onTested }: {
   return (
     <div className="space-y-4">
       <Card>
-        <h2 className="text-base font-bold" style={{ color: GREEN }}>진로 설문은 이렇게 진행됩니다</h2>
+        <h2 className="text-base font-bold" style={{ color: GREEN }}>학생부 로드맵 질문지는 이렇게 진행됩니다</h2>
         <p className="text-xs text-gray-500 mt-1">설문 차수 {SURVEY_ROUND} · 한 학생에 학생 답 1장 + 학부모 답 1장</p>
 
         <div className="mt-4 grid md:grid-cols-2 gap-3 text-sm">
@@ -40,7 +40,7 @@ export default function GuideTab({ counts, myTestId, onTested }: {
           </Box>
           <Box t="② 어떻게 받나">
             <b>문자</b>로 나가요 (설명회 설문처럼). 학생·학부모마다 <b>자기 링크</b>가 들어 있어서 <b>로그인 없이</b> 누르면 바로 설문이 열려요.
-            <div className="text-xs text-gray-500 mt-1">학부모는 보호자 번호로, 학생은 학생 번호로 갑니다. 앱에 로그인하면 첫 화면 「진로 설문」 띠로도 할 수 있어요.</div>
+            <div className="text-xs text-gray-500 mt-1">학부모는 보호자 번호로, 학생은 학생 번호로 갑니다. 앱에 로그인하면 첫 화면 「학생부 로드맵」 띠로도 할 수 있어요.</div>
           </Box>
           <Box t="③ 어떤 순서로">
             <ol className="space-y-0.5">

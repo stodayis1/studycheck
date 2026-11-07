@@ -166,7 +166,7 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
               </Card>
 
               <Card>
-                <h3 className="text-sm font-bold text-gray-700">진로 설문 답</h3>
+                <h3 className="text-sm font-bold text-gray-700">질문지 답</h3>
                 <div className="mt-2 grid md:grid-cols-2 gap-3">
                   {(['student', 'parent'] as const).map((role) => {
                     const list = surveysOf(sel.id, role)
@@ -305,7 +305,7 @@ function LinkRow({ studentId, canHave, phone }: { studentId: string; canHave: bo
     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
       <span className="text-gray-500">학생 번호 {phone ? <b className="text-gray-700">{phone}</b> : <span className="text-amber-600">없음 (학생관리에서 입력)</span>}</span>
       <span className="text-gray-300">|</span>
-      <span className="text-gray-500">진로 설문 링크</span>
+      <span className="text-gray-500">질문지 링크</span>
       <button onClick={() => copy('student')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 복사</button>
       <button onClick={() => copy('parent')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학부모용 복사</button>
       <button onClick={() => openIt('student')} className="px-2 py-1 rounded-lg border" style={{ borderColor: LINE }}>학생용 열어 보기 ↗</button>

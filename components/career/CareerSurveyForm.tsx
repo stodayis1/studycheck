@@ -93,7 +93,7 @@ export default function CareerSurveyForm({
         {onBack && (
           <button onClick={onBack} className="mb-2 text-[12px] opacity-80">← 돌아가기</button>
         )}
-        <p className="text-[11px] font-bold tracking-widest opacity-80">수학의지혜 {F.label} 진로 설문</p>
+        <p className="text-[11px] font-bold tracking-widest opacity-80">수학의지혜 {F.label} 학생부 로드맵 질문지</p>
         <h1 className="mt-1.5 text-[22px] font-bold leading-tight whitespace-pre-line">{F.heading}</h1>
         <p className="mt-2 text-[12.5px] opacity-90">{F.lead}</p>
         <p className="mt-3 text-[11.5px] leading-relaxed opacity-75">

@@ -130,3 +130,14 @@ export function formForSend(student: { id: string; grade: string | null }, testF
   if (isTestStudentId(student.id)) return testForm === 'pre1' ? 'pre1' : 'pre2'
   return null
 }
+
+// ── 학생부 로드맵 소식 (2026-11-07) ──────────────────────────────────────────
+
+/** 이 학생이 질문지에서 고른 계열 — 학생 답·학부모 답을 합친다. 아무 답도 없으면 null */
+export async function fieldsOfStudent(db: Db, studentId: string): Promise<string[] | null> {
+  const { data } = await db.from('career_surveys').select('answers').eq('student_id', studentId)
+  if (!data?.length) return null
+  const set = new Set<string>()
+  for (const r of data) for (const f of (r.answers?.field ?? []) as string[]) set.add(f)
+  return [...set]
+}
