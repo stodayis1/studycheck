@@ -11,6 +11,7 @@ export type Student = {
   id: string; name: string; school: string | null; grade: string | null
   teacher_name: string | null; clinic_teacher_name: string | null; is_test: boolean | null; on_leave: boolean | null
   parent_phone?: string | null
+  student_phone?: string | null
 }
 export type Consent = {
   id: string; student_id: string; signer_role: 'student' | 'parent'; signer_name: string | null
@@ -24,20 +25,26 @@ export type Activity = {
 }
 
 /**
- * 학부모님께 보내는 안내 문자 — 앱 첫 화면 띠를 누르게 한다.
+ * 진로 설문 문자 — 학생·학부모마다 **자기 링크**가 들어간다 (로그인 없이 열림).
+ * {이름} → 학생 이름, {링크} → 그 사람 링크. 원장님 2026-11-07 「설명회 설문조사처럼 문자로」
  *
  * ★ **왜 하는지를 먼저 적는다** (원장님 2026-11-07 「이 설문을 하는 이유를 써줘야지.
  *   고등은 내신도 중요하지만 비교과관리도 중요하다는거 언급해주고. 미리미리 확인해서
  *   필요한 자료들을 확보하고 정보를 공유할 예정이니 설문조사에 응해달라」).
  *   까닭 없이 「설문 해주세요」부터 시작하면 안 읽힌다.
  */
-export const SMS_TEXT = '[수학의지혜]\n'
-  + '안녕하세요, 수학의지혜입니다.\n'
+export const SMS_PARENT = '[수학의지혜]\n'
+  + '안녕하세요, {이름} 학생 어머님·아버님. 수학의지혜입니다.\n'
   + '고등학교 성적은 내신으로만 끝나지 않습니다. 생활기록부에 남는 탐구·세특·동아리 같은 비교과 활동도 함께 쌓여야 합니다.\n'
   + '그래서 학생의 진로 방향을 미리 확인해 두려고 합니다. 필요한 자료를 그때그때 확보해 두고, 학교·학년별로 알아야 할 정보를 함께 나눠 드릴 예정입니다.\n'
-  + '짧은 진로 설문(3분)을 준비했습니다. 스터디체크 앱에 로그인하시면 첫 화면 초록색 「진로 설문」 띠에서 하실 수 있어요.\n'
-  + '학생 본인과 학부모님 각각 해 주시면 더 정확히 안내드릴 수 있습니다.\n'
-  + BASE
+  + '「학생부 로드맵」 질문지(3분)에 응해 주세요. 로그인 없이 아래 주소를 누르시면 바로 하실 수 있어요.\n'
+  + '{링크}'
+export const SMS_STUDENT = '[수학의지혜]\n'
+  + '{이름} 학생, 안녕하세요! 수학의지혜예요.\n'
+  + '고등학교는 내신만큼 생활기록부에 남는 탐구·세특·동아리 같은 비교과 활동도 중요해요.\n'
+  + '진로 방향을 미리 알아 두면 필요한 자료와 정보를 그때그때 챙겨 줄 수 있어요.\n'
+  + '「학생부 로드맵」 질문지(3분)에 답해 주세요. 아래 주소를 누르면 바로 할 수 있어요.\n'
+  + '{링크}'
 
 export const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
 

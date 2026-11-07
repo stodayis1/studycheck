@@ -28,15 +28,15 @@ export default function CareerBanner({ studentId, grade, href }: { studentId: st
 
   if (answered) return (
     <Link href={href} className="block rounded-2xl px-4 py-2.5 text-xs" style={{ background: '#F0FBF7', color: '#0F6E56', border: '1px solid #C7DED6' }}>
-      🧭 진로 설문을 보냈어요 · 보낸 답 보기 · 고치기 →
+      🧭 학생부 로드맵 질문지를 보냈어요 · 보낸 답 보기 · 고치기 →
     </Link>
   )
   return (
     <Link href={href} className="block rounded-2xl px-4 py-3.5" style={{ background: '#085041', color: '#fff' }}>
       <div className="text-[11px] font-bold tracking-widest opacity-80">
-        수학의지혜 {st.isTest ? '진로' : FORMS[form].label + ' 진로'} 설문{st.isTest ? ' · 🧪 테스트 학생' : ''}
+        수학의지혜 {st.isTest ? '' : FORMS[form].label + ' '}학생부 로드맵{st.isTest ? ' · 🧪 테스트 학생' : ''}
       </div>
-      <div className="text-[15px] font-bold mt-0.5">진로 설문에 답해 주세요 (약 3분)</div>
+      <div className="text-[15px] font-bold mt-0.5">학생부 로드맵 질문지에 답해 주세요 (약 3분)</div>
       <div className="text-xs mt-1 opacity-90">적어 준 진로에 맞춰 선택과목·탐구 주제를 챙겨 드려요 →</div>
     </Link>
   )

@@ -78,7 +78,7 @@ export default function CareerSurvey() {
   if (!st) return <div className="p-10 text-center text-gray-400 text-sm">불러오는 중…</div>
   if (!form) return (
     <div className="p-8 text-center text-sm text-gray-600 leading-relaxed">
-      진로 설문은 지금 <b>중3(예비고1)</b>·<b>고1(예비고2)</b> 학생과 학부모님께 받고 있어요.<br />
+      학생부 로드맵 질문지는 지금 <b>중3(예비고1)</b>·<b>고1(예비고2)</b> 학생과 학부모님께 받고 있어요.<br />
       {st.student.name} 학생({st.student.grade ?? '-'})은 대상이 아니에요.
       <div><button onClick={back} className="mt-4 underline text-gray-500">돌아가기</button></div>
     </div>

@@ -31,7 +31,7 @@ const ITEM = {
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
   schools:       { href: '/teacher/schools',        label: '학교 자료집',  icon: 'ti-school' },
   // 진로 설문·개인정보 동의·탐구보고서·세특 기록 (원장님 2026-11-07). 강사는 본인 담당 학생만 보인다.
-  career:        { href: '/teacher/career',         label: '진로·활동 기록', icon: 'ti-compass' },
+  career:        { href: '/teacher/career',         label: '학생부 로드맵', icon: 'ti-compass' },
   // ★ 이 화면과 「학습지 출제」(원장 전용)는 이름이 거의 같아 헷갈렸다.
   //   2026-10-26 에 「학습지 배부」로 갈랐다가, 배부만 하는 곳이 아니라 배정·점수·다음 단계까지
   //   하는 곳이라 2026-10-29 에 화면 제목과 같은 「학습지관리」로 되돌렸다 (원장님 지시).
