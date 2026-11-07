@@ -874,6 +874,27 @@ T('진단평가 제목에서 단원과 단계를 떼낸다', () => {
     && e.level === null && !/평가|월/.test(e.unitName ?? '')
 })
 
+// ── 2026-11-07 주말복습 TEST → 평가관리의 진단평가 ───────────────────────────
+//   원장님 「주말복습 테스트는 평가관리.진단평가로 가야해. 주중에 했던 범위를 테스트 하는 거거든」
+//   ★ 레벨이 적혀 있어도 평가다 — 위 「레벨이 있으면 레벨학습지」 규칙의 유일한 예외다.
+T('주말복습 TEST 는 레벨이 적혀 있어도 진단평가로 간다', () =>
+  isDiagnostic({ title: '고1 A 주말복습 TEST 1107(lv2.5)', kind: '단원학습 학습지', level: 2.5 }) === true
+  && isDiagnostic({ title: '고1 주말복습 TEST 1107 (lv3.5)', kind: '학습지', level: 3.5 }) === true
+  && isDiagnostic({ title: '고1S 주말복습 테스트 (lv3)', kind: '학습지', level: 3 }) === true)
+
+// ★ 「TEST」가 없는 주말복습은 학습지 그대로 둔다 — 과제까지 평가로 밀면 점수가 두 군데 생긴다.
+T('「주말복습 학습지」는 진단평가로 보내지 않는다', () =>
+  isDiagnostic({ title: '고1 주말복습 학습지(lv2)', kind: '학습지', level: 2 }) === false
+  // 매쓰홀릭은 「주말과제」의 종류를 「주말복습」으로 바꿔 준다 — 종류만 보고 평가로 밀면 안 된다
+  && isDiagnostic({ title: 'Daily Test (중등 2-2 삼각형의 성질)', kind: '주말복습', level: null }) === false)
+
+T('주말복습 TEST 는 단원을 「주말복습」 하나로 모은다', () => {
+  const a = parseDiagnosticTitle('고1 A 주말복습 TEST 1107(lv2.5)')
+  const b = parseDiagnosticTitle('고1 주말복습 TEST 1107 (lv3.5)')
+  return a.unitName === '주말복습' && a.level === 2.5
+    && b.unitName === '주말복습' && b.level === 3.5
+})
+
 // ★ 진단평가는 레벨이 없어도 막지 않는다 — 단계는 레벨 칸이 아니다.
 T('진단평가는 「레벨이 없어요」로 막지 않는다', () =>
   needsLevel({ title: '11월 주간평가(1) - 기본도형[1단계]', kind: '진단평가' }, BOOKS) === false
