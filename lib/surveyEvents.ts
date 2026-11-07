@@ -32,6 +32,11 @@ export type SurveyEvent = {
   /** 머리글 */
   heading: string
   lead: string
+  /**
+   * 카톡·문자로 주소를 보낼 때 뜨는 대표 그림 (원장님 2026-11-07 「다른 그림이 나가게 해줘」).
+   * `scripts/make-survey-og.py` 로 만들어 `public/og/` 에 둔다. 안 적으면 `/og/survey.png`.
+   */
+  og?: string
   /** 학년 고르기 보기 (빈 배열이면 묻지 않는다) */
   grades: string[]
   /**
@@ -67,6 +72,7 @@ export const SURVEY_EVENTS: SurveyEvent[] = [
     target: '초5 · 초6 학부모님',
     heading: '오늘 부모학교,\n어떠셨어요?',
     lead: '적어 주신 한 줄이 다음 시간을 바꿉니다',
+    og: '/og/survey-1121.png',
     grades: ['초5', '초6', '그 밖에'],
     found: {
       ask: '이번 부모학교를 어떻게 알게 되셨어요?',
