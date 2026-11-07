@@ -25,12 +25,15 @@ import { isTestStudentId, myTestStudentId } from '@/lib/testStudents'
 import GuideTab from '@/components/career/teacher/GuideTab'
 import StatusTab from '@/components/career/teacher/StatusTab'
 import RecordsTab from '@/components/career/teacher/RecordsTab'
+import EventsTab from '@/components/career/teacher/EventsTab'
 import { GREEN, LINE, type Student, type Consent, type Survey, type Activity } from '@/components/career/teacher/shared'
 
 const TABS = [
-  { key: 'guide', label: '① 설문 안내 · 미리보기' },
+  { key: 'guide', label: '① 질문지 안내 · 미리보기' },
   { key: 'status', label: '② 응답 현황' },
   { key: 'records', label: '③ 학생별 기록' },
+  // 계열별 박람회·설명회 소식 — 2주에 한 번 (원장님 2026-11-07)
+  { key: 'events', label: '④ 행사 소식' },
 ] as const
 
 export default function TeacherCareerPage() {
@@ -71,7 +74,7 @@ export default function TeacherCareerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="학생부 로드맵" subtitle="질문지 · 개인정보 동의 · 탐구보고서 · 세특" />
+      <Header title="학생부 로드맵" subtitle="질문지 · 개인정보 동의 · 탐구보고서 · 세특 · 행사 소식" />
       <div className="p-4 lg:p-6 space-y-4">
         <div className="flex gap-2 flex-wrap border-b pb-3" style={{ borderColor: LINE }}>
           {TABS.map((t) => (
@@ -94,6 +97,7 @@ export default function TeacherCareerPage() {
               <RecordsTab students={visible} consents={consents} surveys={surveys} acts={acts} setActs={setActs}
                 selId={selId} setSelId={setSelId} />
             )}
+            {tab === 'events' && <EventsTab isOwner={currentUser?.role === 'admin'} myName={currentUser?.name ?? ''} />}
           </>
         )}
       </div>
