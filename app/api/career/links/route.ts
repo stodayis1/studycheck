@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const { data: s } = await db.from('students').select('id, name, grade').eq('id', String(b?.studentId ?? '')).maybeSingle()
   if (!s) return NextResponse.json({ error: '학생을 찾지 못했어요.' }, { status: 404 })
   const form = formForSend(s, b?.testForm)
-  if (!form) return NextResponse.json({ error: '진로 설문 대상 학년(중3·고1)이 아니에요.' }, { status: 400 })
+  if (!form) return NextResponse.json({ error: '학생부 로드맵 질문지 대상 학년(중3·고1)이 아니에요.' }, { status: 400 })
   const [st, pa] = [await ensureLink(db, s.id, 'student', form), await ensureLink(db, s.id, 'parent', form)]
   return NextResponse.json({ form, student: linkUrl(st), parent: linkUrl(pa) })
 }

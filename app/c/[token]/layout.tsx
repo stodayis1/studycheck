@@ -30,7 +30,7 @@ export async function generateMetadata(
     } catch { /* 못 읽으면 기본 그림 */ }
   }
 
-  const title = form ? `수학의지혜 ${FORMS[form].label} 진로 설문` : '수학의지혜 진로 설문'
+  const title = form ? `수학의지혜 ${FORMS[form].label} 학생부 로드맵` : '수학의지혜 학생부 로드맵'
   const description = form === 'pre1'
     ? '고1 첫 학기부터 학생부가 쌓입니다 — 진로에 맞춰 미리 준비해요 · 약 3분, 로그인 없이'
     : form === 'pre2'

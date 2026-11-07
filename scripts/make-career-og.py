@@ -19,6 +19,7 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1200, 630
+BIG = ('학생부', '로드맵')
 UF = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Windows', 'Fonts')
 SERIF = os.path.join(UF, 'KoPubWorld Batang Light.ttf')
 SERIF_M = os.path.join(UF, 'KoPubWorld Batang Medium.ttf')
@@ -58,11 +59,12 @@ def make(name, grade_label, lines, theme):
 
     # 큰 글씨 두 줄 — 「진로」「설문」. 화면 왼쪽을 꽉 채운다
     #   글씨 상자의 위·아래 여백을 재서, 첫 줄 위 = 36px · 둘째 줄 아래 = H-36px 에 딱 맞춘다
-    big = ImageFont.truetype(SERIF, 288)
-    t1 = d.textbbox((0, 0), '진로', font=big)
-    t2 = d.textbbox((0, 0), '설문', font=big)
-    put('진로', (30, 36 - t1[1]), '진로', big, ink)
-    put('설문', (30, H - 36 - t2[3]), '설문', big, ink)
+    #   이름 「학생부 로드맵」 (원장님 2026-11-07 — 「진로 설문」보다 나은 말로)
+    big = ImageFont.truetype(SERIF, 228)
+    t1 = d.textbbox((0, 0), BIG[0], font=big)
+    t2 = d.textbbox((0, 0), BIG[1], font=big)
+    put(BIG[0], (30, 44 - t1[1]), BIG[0], big, ink)
+    put(BIG[1], (30, H - 44 - t2[3]), BIG[1], big, ink)
 
     # 오른쪽 세로 단 — 포장 옆의 작은 글씨처럼. 가는 세로선 하나로 큰 글씨와 가른다
     col_x = 752
@@ -81,7 +83,7 @@ def make(name, grade_label, lines, theme):
             y += 18   # 마지막 줄(약 3분 · 로그인 없이)은 설명과 한 칸 띄운다
         put(f'설명{i}', (x, y), t, f_line, sub)
         y += 46
-    put('영문', (x, H - 108), 'Career Survey · 2026', f_latin, sub)
+    put('영문', (x, H - 108), 'Student Roadmap · 2026', f_latin, sub)
 
     out = os.path.join('public', 'og', name)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -90,6 +92,6 @@ def make(name, grade_label, lines, theme):
 
 
 if __name__ == '__main__':
-    make('career-pre1.png', '예비고1', ['고1 첫 학기부터', '쌓이는 학생부,', '진로부터 함께', '약 3분 · 로그인 없이'], 'orange')
-    make('career-pre2.png', '예비고2', ['선택과목 · 탐구 ·', '비교과를 진로에', '맞춰 함께', '약 3분 · 로그인 없이'], 'pink')
-    make('career.png', '고등 준비', ['내신 + 비교과,', '진로에 맞춰', '함께 챙깁니다', '약 3분 · 로그인 없이'], 'pink')
+    make('career-pre1.png', '예비고1', ['고1 첫 학기부터', '쌓이는 학생부,', '진로부터 함께', '질문지 3분 · 로그인 없이'], 'orange')
+    make('career-pre2.png', '예비고2', ['선택과목 · 탐구 ·', '비교과를 진로에', '맞춰 함께', '질문지 3분 · 로그인 없이'], 'pink')
+    make('career.png', '고등 준비', ['내신 + 비교과,', '진로에 맞춰', '함께 챙깁니다', '수학의지혜가 함께'], 'pink')

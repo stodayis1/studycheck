@@ -71,7 +71,7 @@ export default function TeacherCareerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="진로·활동 기록" subtitle="진로 설문 · 개인정보 동의 · 탐구보고서 · 세특" />
+      <Header title="학생부 로드맵" subtitle="질문지 · 개인정보 동의 · 탐구보고서 · 세특" />
       <div className="p-4 lg:p-6 space-y-4">
         <div className="flex gap-2 flex-wrap border-b pb-3" style={{ borderColor: LINE }}>
           {TABS.map((t) => (
