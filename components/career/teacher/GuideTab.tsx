@@ -38,9 +38,9 @@ export default function GuideTab({ counts, myTestId, onTested }: {
             ))}
             <div className="text-xs text-gray-500 mt-1">다른 학년에게는 보이지 않아요. 테스트 학생(윤수지·테스트)에게는 두 설문이 다 보여요.</div>
           </Box>
-          <Box t="② 어디에 뜨나">
-            학생·학부모 <b>스터디체크 앱 첫 화면 맨 위</b>에 초록색 「진로 설문」 띠가 떠요. 누르면 설문지가 열려요.
-            <div className="text-xs text-gray-500 mt-1">다 내면 띠가 작은 「보낸 답 보기·고치기」로 바뀌어요.</div>
+          <Box t="② 어떻게 받나">
+            <b>문자</b>로 나가요 (설명회 설문처럼). 학생·학부모마다 <b>자기 링크</b>가 들어 있어서 <b>로그인 없이</b> 누르면 바로 설문이 열려요.
+            <div className="text-xs text-gray-500 mt-1">학부모는 보호자 번호로, 학생은 학생 번호로 갑니다. 앱에 로그인하면 첫 화면 「진로 설문」 띠로도 할 수 있어요.</div>
           </Box>
           <Box t="③ 어떤 순서로">
             <ol className="space-y-0.5">
@@ -49,7 +49,7 @@ export default function GuideTab({ counts, myTestId, onTested }: {
           </Box>
           <Box t="④ 답은 어디서 보나">
             이 화면 <b>「응답 현황」</b> 탭에서 학년별 집계·미응답 명단을, <b>「학생별 기록」</b> 탭에서 학생 한 명의 동의·학생 답·학부모 답을 봐요.
-            <div className="text-xs text-gray-500 mt-1">안내 문자는 「응답 현황」 탭에서 미응답 학부모님께 보냅니다(원장님).</div>
+            <div className="text-xs text-gray-500 mt-1">설문 문자는 「응답 현황」 탭 「📩 설문 문자 보내기」에서 보냅니다(원장님).</div>
           </Box>
         </div>
       </Card>
@@ -70,6 +70,7 @@ export default function GuideTab({ counts, myTestId, onTested }: {
                   className="rounded-lg py-2 text-sm font-semibold text-white" style={{ background: GREEN }}>
                   🧪 테스트 학생 「{me.name}」으로 해 보기
                 </button>
+                <TestLink form={f} studentId={myTestId} name={me.name} />
               </div>
             </div>
           ))}
@@ -201,6 +202,27 @@ function PreviewModal({ open, me, onClose, onTested }: {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** 테스트 학생의 실제 문자 링크(/c/<token>)를 새 창으로 연다 — 학부모님·학생이 문자로 받아 여는 화면 그대로 */
+function TestLink({ form, studentId, name }: { form: FormId; studentId: string; name: string }) {
+  const [err, setErr] = useState('')
+  async function go(k: 'student' | 'parent') {
+    setErr('')
+    const r = await apiFetch('/api/career/links', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, testForm: form }),
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { setErr(j.error ?? '링크를 만들지 못했어요.'); return }
+    window.open(j[k], '_blank')
+  }
+  return (
+    <div className="flex gap-2">
+      <button onClick={() => go('student')} className="flex-1 rounded-lg py-1.5 text-xs font-semibold border bg-white" style={{ borderColor: LINE }}>📩 {name} 학생 문자 링크 열기</button>
+      <button onClick={() => go('parent')} className="flex-1 rounded-lg py-1.5 text-xs font-semibold border bg-white" style={{ borderColor: LINE }}>📩 학부모 문자 링크 열기</button>
+      {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
   )
 }

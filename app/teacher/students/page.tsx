@@ -55,6 +55,8 @@ interface Student {
   clinic_teacher_name?: string
   parent_name: string
   parent_phone: string
+  /** 학생 본인 휴대폰 — 진로 설문 문자처럼 학생에게 직접 보낼 때 (원장님 2026-11-07). OPS 에는 없는 칸 */
+  student_phone?: string | null
   is_active: boolean
   textbook_grade: string
   wise_step: string
@@ -375,6 +377,7 @@ export default function TeacherStudentsPage() {
         class_time: editStudent.class_time, teacher_name: editStudent.teacher_name,
         clinic_teacher_name: (editStudent.clinic_teacher_name ?? '').trim() || null,
         parent_name: editStudent.parent_name, parent_phone: editStudent.parent_phone,
+        student_phone: String(editStudent.student_phone ?? '').trim() || null,
         textbook_grade: editStudent.textbook_grade,
         wise_step: editStudent.wise_step || 'W',
         skip_lesson_note: !!editStudent.skip_lesson_note,
@@ -555,6 +558,7 @@ export default function TeacherStudentsPage() {
         clinic_teacher_name: (newStudent.clinic_teacher_name ?? '').trim() || null,
         parent_name: newStudent.parent_name.trim(),
         parent_phone: newStudent.parent_phone.trim(),
+        student_phone: String(newStudent.student_phone ?? '').trim() || null,
         is_active: true,
         textbook_grade: newStudent.textbook_grade || 'B',
         wise_step: newStudent.wise_step || 'W',
@@ -1225,6 +1229,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label: teacherLabels(editStudent.grade).clinic, key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
+              { label:'학생 연락처', key:'student_phone', placeholder:'010-0000-0000 (학생 본인, 없으면 비워 두세요)' },
             ].map(({ label, key, placeholder }) => (
               <div key={key}>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
@@ -1459,6 +1464,7 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
               { label: teacherLabels(newStudent.grade).clinic, key:'clinic_teacher_name', placeholder:'클리닉 선생님 이름 (없으면 비워 두세요)' },
               { label:'보호자',     key:'parent_name',  placeholder:'보호자 이름' },
               { label:'보호자 연락처', key:'parent_phone', placeholder:'010-0000-0000' },
+              { label:'학생 연락처', key:'student_phone', placeholder:'010-0000-0000 (학생 본인, 없으면 비워 두세요)' },
             ].map(({ label, key, placeholder }) => (
               <div key={key}>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
