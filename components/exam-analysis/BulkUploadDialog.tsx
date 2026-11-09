@@ -29,6 +29,10 @@ export function BulkUploadDialog({ files, schools, onClose, onDone }: { files: F
   }))
   const missing = (r: Row) => !r.exam_year || !r.term || !r.exam_type || !r.school_name.trim() || !r.grade
   const nMissing = rows.filter((r) => r.state !== '올림' && missing(r)).length
+  // 처음 보는 학교 이름은 **막지 않고 표시만** 한다 — 새 학교일 수도 있지만, 파일명을 잘못 읽어
+  // 「년고양중」처럼 그럴듯하게 틀린 이름이 조용히 올라간 적이 있다 (2026-11-09).
+  const 낯선학교 = (r: Row) => !!r.school_name.trim() && !schoolList.includes(r.school_name.trim())
+  const nNew = rows.filter((r) => r.state !== '올림' && 낯선학교(r)).length
   const nameOf = (r: Row) => missing(r) ? '' : standardFileName(
     { exam_year: Number(r.exam_year), term: Number(r.term), exam_type: r.exam_type, school_name: r.school_name.trim(), grade: r.grade }, r.kind, r.file.name)
 
@@ -91,7 +95,9 @@ export function BulkUploadDialog({ files, schools, onClose, onDone }: { files: F
                       </select>
                     </td>
                     <td className="px-1 py-1">
-                      <input disabled={lock} list="bulk-schools" className={CELL + ' w-24'} style={red(r.school_name)} value={r.school_name} onChange={(e) => set(i, 'school_name', e.target.value)} placeholder="도래울중" />
+                      <input disabled={lock} list="bulk-schools" className={CELL + ' w-24'} title={낯선학교(r) ? '처음 보는 학교 이름이에요. 맞는지 확인해 주세요.' : ''}
+                        style={낯선학교(r) ? { borderColor: '#d97706', background: '#FFFBEB' } : red(r.school_name)}
+                        value={r.school_name} onChange={(e) => set(i, 'school_name', e.target.value)} placeholder="도래울중" />
                     </td>
                     <td className="px-1 py-1">
                       <select disabled={lock} className={CELL} style={red(r.grade)} value={r.grade} onChange={(e) => set(i, 'grade', e.target.value)}>
@@ -116,6 +122,7 @@ export function BulkUploadDialog({ files, schools, onClose, onDone }: { files: F
         <div className="mt-4 flex items-center gap-2">
           {rows.length > 1 && <button onClick={fillDown} disabled={busy} className="rounded-lg border px-3 py-2 text-xs font-semibold text-gray-600">빈칸을 첫 줄과 같게 채우기</button>}
           {nMissing > 0 && <span className="text-xs text-red-600">빈칸이 있는 {nMissing}개는 올라가지 않습니다</span>}
+          {nNew > 0 && <span className="text-xs" style={{ color: '#b45309' }}>노란 칸 {nNew}개 — 처음 보는 학교 이름이에요. 맞는지 확인해 주세요</span>}
           <div className="ml-auto flex gap-2">
             <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm">{allDone ? '닫기' : '취소'}</button>
             {!allDone && (

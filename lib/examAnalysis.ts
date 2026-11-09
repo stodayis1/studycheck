@@ -113,11 +113,12 @@ export function parseExamFileName(fileName: string): PaperKey | null {
 //   2026_1학기기말_신원중_중2_(답안입력완료).pdf · 26년 도래울중3-1 중간.pdf · 2026년 1학기 기말_원흥중2_원본.pdf
 export type ExamGuess = { exam_year: number | null; term: number | null; exam_type: string; school_name: string; grade: string; kind: string }
 export function guessExamFile(fileName: string): ExamGuess {
-  const n = fileName.normalize('NFC').replace(/\.[a-z0-9]+$/i, '')
+  const raw = fileName.normalize('NFC').replace(/\.[a-z0-9]+$/i, '')
   const ext = (fileName.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase()
-  const y4 = n.match(/(20\d{2})/)
-  const y2 = n.match(/(?:^|[^\d])(\d{2})년/)
+  const y4 = raw.match(/(20\d{2})/)
+  const y2 = raw.match(/(?:^|[^\d])(\d{2})년/)
   const exam_year = y4 ? Number(y4[1]) : y2 ? 2000 + Number(y2[1]) : null
+  const n = raw
   // 학기: 「1학기」 또는 「중3-1」「2-1」의 뒤 숫자
   const t1 = n.match(/([12])\s?학기/)
   const t2 = n.match(/[1-3]\s?-\s?([12])(?!\d)/)
@@ -130,6 +131,13 @@ export function guessExamFile(fileName: string): ExamGuess {
   const s2 = n.match(/([가-힣]{2,6})_(중|고)[1-3]/)
   if (s1) { school_name = s1[1]; level = s1[2] }
   else if (s2) { school_name = s2[1] + s2[2]; level = s2[2] }
+  // ★ 「2025년고양중…」처럼 연도를 **붙여 쓰면** 숫자만 떨어져 나가고 「년」이 남아 학교가
+  //   「년고양중」으로 잡힌다. 빨간 칸이 아니라 그럴듯한 글자라 아무도 안 보고 그대로 올라간다 —
+  //   2026-11-09 에 실제로 그렇게 저장됐다(2025 2학기 기말 「년고양중 중1」). 학교 이름이 갈라지면
+  //   시험대비·적중 대조에 영원히 안 걸린다(AGENTS.md 5번).
+  //   그래서 앞에 붙은 날짜·학기 낱말을 뗀다. (「년도」로 묶어 떼면 「2025년도래울중」의 「도」까지
+  //   먹으므로 「년」까지만 뗀다.) 시험은 scripts/exam-file-guess-check.ts.
+  school_name = school_name.replace(/^(?:년|월|일|학년|학기|차|회)+/, '')
   // 학년: 「중3」「원흥중2」「도래울중 2-1」「_중2」
   let grade = ''
   const g1 = n.match(/(중|고)\s?([1-3])(?!\s?학기)(?!\d)/)
