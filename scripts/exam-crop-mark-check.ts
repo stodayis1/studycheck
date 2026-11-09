@@ -93,6 +93,10 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('글자가 비었다고 그 번호를 통째로 건너뛰지 않는다', !/\n\s*if \(!text\) return\b/.test(src))
   ok('글자가 있을 때만 정답 글자로 적는다', src.includes('if (text) answers[m.no] = text'))
   ok('아랫줄이면 번호를 하얗게 지운다', /if \(below\) \{ g\.fillStyle = '#fff'/.test(src))
+  // 정답 그림을 **좌우로도** 바짝 자르는가 — 빈자리를 안고 있으면 어디에 놓아도 글씨가 작아진다
+  ok('정답 그림을 위아래·좌우 둘 다 바짝 자른다',
+    src.includes('const c2 = inkCols(g, c.width, c.height)') && /if \(r2 && c2\) \{/.test(src))
+  ok('세로줄 판(inkCols)이 있다', /function inkCols\(/.test(src))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)

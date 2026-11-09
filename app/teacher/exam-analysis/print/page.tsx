@@ -11,11 +11,15 @@ export default function ExamPaperPrintPage() {
   const { currentUser, loading } = useAuth()
   const [data, setData] = useState<any>(null)
   const [err, setErr] = useState<string | null>(null)
+  // ?what=answers 로 들어오면 「빠른 정답」부터 보여 준다 (시험지 화면의 단추가 이 주소로 연다)
+  const [what, setWhat] = useState<'paper' | 'answers'>('paper')
 
   useEffect(() => {
     if (loading || !currentUser) return
     // useSearchParams 는 Suspense 가 필요해서 주소에서 직접 읽는다
-    const paper = new URLSearchParams(window.location.search).get('paper')
+    const sp = new URLSearchParams(window.location.search)
+    const paper = sp.get('paper')
+    if (sp.get('what') === 'answers') setWhat('answers')
     if (!paper) { setErr('시험지를 고르지 않았습니다.'); return }
     apiFetch(`/api/exam-analysis?print=${paper}`)
       .then(async (r) => {
@@ -28,5 +32,5 @@ export default function ExamPaperPrintPage() {
 
   if (err) return <p className="p-10 text-center text-gray-500">{err}</p>
   if (!data) return <p className="p-10 text-center text-gray-400">불러오는 중…</p>
-  return <ExamPaperPrint paper={data.paper} problems={data.problems} />
+  return <ExamPaperPrint paper={data.paper} problems={data.problems} initial={what} />
 }

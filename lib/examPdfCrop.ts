@@ -63,6 +63,24 @@ function inkRows(ctx: CanvasRenderingContext2D, w: number, h: number): [number, 
   return first < 0 ? null : [first, last]
 }
 
+// 글자가 있는 **첫 세로줄·마지막 세로줄** (없으면 null). inkRows 의 가로 판.
+// 정답 그림은 단 폭을 통째로 잘라 오므로 오른쪽이 거의 비어 있다 — 그대로 두면 화면·인쇄에서
+// 그 빈자리까지 폭을 차지해 글씨가 작게 보인다 (원장님 2026-11-09 「18~20번은 너무 작게 보이는데」).
+function inkCols(ctx: CanvasRenderingContext2D, w: number, h: number): [number, number] | null {
+  if (w < 1 || h < 1) return null
+  const d = ctx.getImageData(0, 0, w, h).data
+  let first = -1, last = -1
+  for (let x = 0; x < w; x++) {
+    let ink = false
+    for (let y = 0; y < h; y += 2) {
+      const i = (y * w + x) * 4
+      if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < INK) { ink = true; break }
+    }
+    if (ink) { if (first < 0) first = x; last = x }
+  }
+  return first < 0 ? null : [first, last]
+}
+
 function sub(src: HTMLCanvasElement, x: number, y: number, w: number, h: number): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h))
@@ -219,8 +237,13 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           }
         }
         g.putImageData(im, 0, 0)
+        // 위아래뿐 아니라 **좌우로도** 바짝 잘라 둔다 — 빈자리를 안고 있으면 어디에 놓아도 글씨가 작아진다
         const r2 = inkRows(g, c.width, c.height)
-        if (r2) answerImages[m.no] = sub(c, 0, Math.max(0, r2[0] - 6), c.width, Math.min(c.height, r2[1] + 8) - Math.max(0, r2[0] - 6))
+        const c2 = inkCols(g, c.width, c.height)
+        if (r2 && c2) {
+          const x0 = Math.max(0, c2[0] - 6), y0 = Math.max(0, r2[0] - 6)
+          answerImages[m.no] = sub(c, x0, y0, Math.min(c.width, c2[1] + 8) - x0, Math.min(c.height, r2[1] + 8) - y0)
+        }
       })
       continue
     }
