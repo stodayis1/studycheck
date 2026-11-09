@@ -23,6 +23,14 @@ export function markLimit(sizes: number[]): number {
   return s[Math.floor(s.length / 2)] * 0.85
 }
 
+// 정답표에서 정답이 번호 **아랫줄**부터 적혀 있는가. 같은 줄에 적힌 정답(「18) 가 × 나」)의
+// 위·아래 첨자는 밑줄이 몇 pt 어긋날 뿐이므로, **한 줄 높이(글자 크기의 1.3배)** 를 넘어야 아랫줄로 본다.
+// 2026-11-09 고양중 중1 — 18)은 같은 줄(어긋남 6.4pt < 11.7), 19)·20)은 아랫줄(14.7pt).
+// 시험: scripts/exam-crop-mark-check.ts
+export function answerBelow(markBase: number, markSize: number, bases: number[], y1: number): boolean {
+  return bases.some((b) => b > markBase + markSize * 1.3 && b <= y1)
+}
+
 export type CroppedProblem = {
   no: number
   page: number
@@ -157,14 +165,14 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
     if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
       inAnswers = true
-      const marks: { no: number; c: number; y0: number; xr: number }[] = []
+      const marks: { no: number; c: number; y0: number; yb: number; base: number; h: number; xr: number }[] = []
       let want = lastAnswerNo + 1
       for (const c of [0, 1]) {
         const ws = lineStarts.filter((t) => colOf(t.x) === c).sort((a, b) => a.base - b.base)
         for (const t of ws) {
           if (t.str.startsWith(`${want})`)) {
             const head = `${want})`
-            marks.push({ no: want, c, y0: t.top, xr: t.str === head ? t.x1 : Math.min(t.x1, t.x + t.size * 0.56 * head.length) })
+            marks.push({ no: want, c, y0: t.top, yb: t.bottom, base: t.base, h: t.size, xr: t.str === head ? t.x1 : Math.min(t.x1, t.x + t.size * 0.56 * head.length) })
             want++
           }
         }
@@ -183,12 +191,19 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         if (/^[①②③④⑤,\s]+$/.test(text.replace(/[^\p{L}\p{N}①②③④⑤,]/gu, '') || ' ')) text = text.replace(/[^①②③④⑤,]/g, '')   // 빈 수식 틀 같은 찌꺼기는 버린다
         const lead = text.match(/^[①②③④⑤](\s*,\s*[①②③④⑤])*/)
         if (lead && text.length > lead[0].length) text = lead[0]          // 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
-        if (!text) return
-        answers[m.no] = text
-        if (/^([①②③④⑤,\s]+|-?\d+(\.\d+)?)$/.test(text)) return
+        if (text) answers[m.no] = text
+        if (text && /^([①②③④⑤,\s]+|-?\d+(\.\d+)?)$/.test(text)) return   // 글자로 다 옮긴 정답은 그림이 필요 없다
+        // ★ 글자가 하나도 안 남아도 **여기서 멈추지 않는다.** 서술형 정답이 수식 글꼴로만 적힌 쪽이 있다 —
+        //   2026-11-09 고양중 중1 19)·20) 의 「△ABD ≡ △ACE」 가 통째로 수식이라 글자가 다 날아갔고,
+        //   전에는 그 번호를 통째로 건너뛰어 화면에 **아무것도** 안 올라왔다(18)은 「가·나」가 한글이라 올라왔다).
+        // 그런 정답은 번호 **아랫줄**부터 적힌다. 번호 오른쪽부터 자르면 아랫줄 왼쪽이 잘려 나가므로
+        //   단 왼쪽부터 자르고 번호 글자만 하얗게 지운다 (같은 줄에 적힌 정답은 전과 같이 번호 오른쪽부터).
+        const below = answerBelow(m.base, m.h, items.filter((t) => colOf(t.x) === m.c && t.x < x1).map((t) => t.base), y1)
+        const xa = below ? cols[m.c][0] - 1 : m.xr + 1
         // 분수는 번호 줄보다 위로 올라온다 → 위로 9pt 더. 대신 윗 정답의 꼬리가 딸려 오면 지운다
-        const c = sub(canvas, (m.xr + 1) * Z, (m.y0 - 9) * Z, (x1 - m.xr - 1) * Z, (y1 - 2 - (m.y0 - 9)) * Z)
+        const c = sub(canvas, xa * Z, (m.y0 - 9) * Z, (x1 - xa) * Z, (y1 - 2 - (m.y0 - 9)) * Z)
         const g = c.getContext('2d', { willReadFrequently: true })!
+        if (below) { g.fillStyle = '#fff'; g.fillRect(0, 8 * Z, (m.xr - xa + 1) * Z, (m.yb - m.y0 + 3) * Z) }
         const im = g.getImageData(0, 0, c.width, c.height)
         const gray = (x: number, y: number) => { const i = (y * c.width + x) * 4; return im.data[i] * 0.299 + im.data[i + 1] * 0.587 + im.data[i + 2] * 0.114 }
         const todo: [number, number][] = []
