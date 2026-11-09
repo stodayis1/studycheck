@@ -11,11 +11,15 @@
  *   node --import ./scripts/ts-resolve.mjs scripts/exam-crop-mark-check.ts [다른lib경로]
  *   (일부러 망가뜨린 사본을 경로로 넘기면 **실패해야** 검사다)
  */
+import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit } = (await import(pathToFileURL(libPath).href)) as { markLimit: (s: number[]) => number }
+const { markLimit, answerBelow } = (await import(pathToFileURL(libPath).href)) as {
+  markLimit: (s: number[]) => number
+  answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
+}
 
 let pass = 0, all = 0
 function ok(말: string, 참: boolean, 덧: string = '') {
@@ -66,6 +70,29 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
 {
   const 정답표 = Array(30).fill(6.72)          // 번호만 줄줄이
   ok('번호만 가득한 쪽은 미주로 안 본다(정답표 가지로 간다)', !(6.72 < markLimit(정답표)))
+}
+
+// ── 정답이 번호 아랫줄에 적힌 서술형 ────────────────────────────────────────
+// 2026-11-09 고양중 중1 11쪽에서 실제로 잰 자리 (밑줄 y · 글자 9pt)
+{
+  const y1 = 700
+  ok('18) 「가 × 나」 — 같은 줄로 본다 (첨자가 6.4pt 어긋나 있어도)',
+    answerBelow(509.4, 9, [512.2, 515.8, 509.4], y1) === false)
+  ok('19) 「△ABD ≡ △ACE」 — 아랫줄로 본다',
+    answerBelow(539.0, 9, [553.7, 568.9, 584.0], y1) === true)
+  ok('20) — 아랫줄로 본다', answerBelow(607.9, 9, [622.6, 637.7, 652.9], y1) === true)
+  // 한 줄짜리 정답도 바로 아랫줄에 적힌다 — 기준을 넓게 잡으면 이것이 「같은 줄」로 밀려 왼쪽이 잘린다
+  ok('아랫줄이 한 줄뿐인 정답도 아랫줄로 본다', answerBelow(539.0, 9, [553.7], y1) === true)
+  ok('다음 번호 자리(y1) 아래 글자는 내 정답이 아니다', answerBelow(607.9, 9, [700.5, 720.0], 700) === false)
+  ok('번호만 있고 아무것도 없으면 아랫줄이 아니다', answerBelow(539.0, 9, [], y1) === false)
+}
+
+// ── 글자가 안 남는 정답도 그림으로는 남겨야 한다 (흐름은 글자로 확인한다) ──
+{
+  const src = fs.readFileSync(libPath, 'utf8')
+  ok('글자가 비었다고 그 번호를 통째로 건너뛰지 않는다', !/\n\s*if \(!text\) return\b/.test(src))
+  ok('글자가 있을 때만 정답 글자로 적는다', src.includes('if (text) answers[m.no] = text'))
+  ok('아랫줄이면 번호를 하얗게 지운다', /if \(below\) \{ g\.fillStyle = '#fff'/.test(src))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)
