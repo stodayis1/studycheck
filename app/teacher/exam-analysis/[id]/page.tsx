@@ -19,6 +19,7 @@ import PdfImportDialog from '@/components/exam-analysis/PdfImportDialog'
 import ClaudeRequest from '@/components/exam-analysis/ClaudeRequest'
 import BlogCards from '@/components/exam-analysis/BlogCards'
 import { Card, Field, GREEN, INPUT, openPrint, post } from '@/components/exam-analysis/ui'
+import { PaperKeyEditor } from '@/components/exam-analysis/PaperKeyEditor'
 
 // 손풀이 그림의 긴 쪽이 이보다 작으면 블로그에서 글씨가 흐리다 (태블릿 원본 내보내기는 보통 2000px 을 넘는다)
 const HANDSOLVE_MIN_PX = 2000
@@ -188,8 +189,12 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="시험 정보">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <Field label="학교 · 학년"><div className="py-2 font-semibold">{paper.school_name} {paper.grade}</div></Field>
-              <Field label="연도 · 학기 · 구분"><div className="py-2">{paper.exam_year}년 {paper.term}학기 {paper.exam_type}</div></Field>
+              {isAdmin ? (
+                <PaperKeyEditor paper={paper} onMoved={load} />
+              ) : (<>
+                <Field label="학교 · 학년"><div className="py-2 font-semibold">{paper.school_name} {paper.grade}</div></Field>
+                <Field label="연도 · 학기 · 구분"><div className="py-2">{paper.exam_year}년 {paper.term}학기 {paper.exam_type}</div></Field>
+              </>)}
               <Field label="시험명"><input className={INPUT} value={val('exam_name')} onChange={(e) => set('exam_name', e.target.value)} /></Field>
               <Field label="시험 종료일"><input type="date" className={INPUT} value={val('exam_end_date')} onChange={(e) => set('exam_end_date', e.target.value)} /></Field>
               <Field label="시험범위" wide><input className={INPUT} value={val('exam_scope')} onChange={(e) => set('exam_scope', e.target.value)} placeholder="예) 이차방정식 ~ 이차함수의 그래프" /></Field>

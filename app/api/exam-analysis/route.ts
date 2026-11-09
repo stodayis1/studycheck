@@ -15,9 +15,11 @@ import { randomUUID, randomInt } from 'crypto'
 import { staffOrDeny } from '@/lib/apiAuth'
 import { normalizeSchool } from '@/lib/school'
 import {
-  EXAM_TYPES, FILE_KINDS, MATCH_LEVELS, Q_TYPES,
-  bankAnswer, checkFileName, discNos, examPrefix, handsolveLabel, hitSummary, normNo, parseAnswerTable, sortOrderOf, sourceKey, standardFileName,
+  EXAM_TYPES, FILE_KINDS, GRADES, MATCH_LEVELS, Q_TYPES,
+  bankAnswer, checkFileName, defaultExamName, discNos, examPrefix, examSheetTitle, handsolveLabel, hitSummary, normNo,
+  parseAnswerTable, renameForPaper, sortOrderOf, sourceKey, standardFileName,
 } from '@/lib/examAnalysis'
+import type { PaperKey } from '@/lib/examAnalysis'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -384,7 +386,7 @@ export async function POST(req: Request) {
         if (dup) return NextResponse.json({ error: '이미 있는 시험지입니다.', id: dup.id }, { status: 409 })
         const { data, error } = await supabase.from('exam_papers').insert({
           ...row,
-          exam_name: p.exam_name || `${row.exam_year} ${row.term}학기 ${row.exam_type}`,
+          exam_name: p.exam_name || defaultExamName(row),
           ...pick(p, ['exam_scope', 'exam_end_date', 'work_due_date', 'blog_from_date', 'priority', 'assignee', 'note']),
           created_by: me.name,
         }).select('id').single()
@@ -423,6 +425,75 @@ export async function POST(req: Request) {
         if (error) return bad(error.message, 500)
         const synced = 'answers_text' in patch ? await syncAnswers(supabase, b.id, patch.answers_text) : 0
         return NextResponse.json({ ok: true, answersSynced: synced })
+      }
+
+      // ── 시험 정보 바로잡기 (원장만) — 학교 · 학년 · 연도 · 학기 · 구분
+      //
+      // 왜 필요한가 (원장님 2026-11-09 「내가 수정할 수 있게도 해야지. 강사들은 말고, 관리자는 수정가능」)
+      //   올릴 때 짐작해서 채운 값이 틀리면(「년고양중」) 고칠 길이 없었다. 학교 이름이 한 글자만 달라도
+      //   그 시험지는 시험대비·적중 대조에 영원히 안 걸린다.
+      //
+      // ★ 학교·학년은 이 시험지에 딸린 **다른 곳에도 글자 그대로 박혀 있다.** 한쪽만 고치면 조용히 어긋난다:
+      //     파일 이름 · 문항의 출처 열쇠(source_key) · 문제은행 문항의 출처 · 통째 인쇄 학습지 제목.
+      //   그래서 여기서 다 같이 고치고, 몇 개를 고쳤는지 돌려준다(화면이 원장님께 알려 준다).
+      //   보관함의 실제 경로(uuid)와 그림 파일은 건드리지 않는다 — 지우는 변경은 하지 않는다.
+      case 'movePaper': {
+        if (!isAdmin) return adminOnly()
+        const before = await getPaper(b.id)
+        if (!before) return bad('시험지를 찾을 수 없습니다.', 404)
+        const to: PaperKey = {
+          exam_year: Number(b.key?.exam_year), term: Number(b.key?.term), exam_type: String(b.key?.exam_type ?? ''),
+          school_name: normalizeSchool(b.key?.school_name), grade: String(b.key?.grade ?? ''),
+        }
+        if (!to.exam_year || ![1, 2].includes(to.term) || !EXAM_TYPES.includes(to.exam_type) || !to.school_name || !GRADES.includes(to.grade))
+          return bad('연도 · 학기 · 시험구분 · 학교 · 학년을 모두 바르게 골라 주세요.')
+        const from: PaperKey = {
+          exam_year: before.exam_year, term: before.term, exam_type: before.exam_type,
+          school_name: before.school_name, grade: before.grade,
+        }
+        const 그대로 = (['exam_year', 'term', 'exam_type', 'school_name', 'grade'] as const)
+          .every((k) => String(from[k]) === String(to[k]))
+        if (그대로) return NextResponse.json({ ok: true, unchanged: true })
+        const { data: dup } = await supabase.from('exam_papers').select('id').match(to as any).maybeSingle()
+        if (dup && dup.id !== b.id)
+          return bad(`「${to.school_name} ${to.grade} · ${defaultExamName(to)}」 줄이 이미 있어요. 그 줄로 들어가서 고쳐 주세요.`)
+
+        const patch: any = { ...to, updated_at: now }
+        // 시험명을 따로 적지 않으셨으면(자동으로 붙인 이름) 새 값으로 다시 짓는다. 손으로 적으신 이름은 그대로 둔다
+        if (!before.exam_name || before.exam_name === defaultExamName(from)) patch.exam_name = defaultExamName(to)
+        const { error } = await supabase.from('exam_papers').update(patch).eq('id', b.id)
+        if (error) return bad(error.message, 500)
+
+        // ① 파일 이름
+        let files = 0
+        const { data: fl } = await supabase.from('exam_paper_files').select('id, file_name').eq('paper_id', b.id)
+        for (const f of fl ?? []) {
+          const name = renameForPaper(from, to, f.file_name)
+          if (name === f.file_name) continue
+          await supabase.from('exam_paper_files').update({ file_name: name }).eq('id', f.id)
+          files++
+        }
+        // ② 문항의 출처 열쇠 · ③ 문제은행 문항의 출처
+        let questions = 0, bank = 0
+        const { data: qs } = await supabase.from('exam_questions').select('id, question_no, source_key, problem_id').eq('paper_id', b.id)
+        for (const q of qs ?? []) {
+          const sk = sourceKey(to, q.question_no)
+          if (sk !== q.source_key) {
+            await supabase.from('exam_questions').update({ source_key: sk }).eq('id', q.id)
+            questions++
+          }
+          if (q.problem_id) {
+            const { error: pe } = await supabase.from('problems')
+              .update({ source_key: sk, source_school_name: to.school_name, source_grade: to.grade })
+              .eq('id', q.problem_id)
+            if (!pe) bank++
+          }
+        }
+        // ④ 통째 인쇄 학습지 제목 · 학년 · 학기
+        const { data: sh } = await supabase.from('exam_sheets').select('id').eq('note', sheetNote(b.id)).maybeSingle()
+        if (sh) await supabase.from('exam_sheets').update({ title: examSheetTitle(to), grade: to.grade, semester: to.term }).eq('id', sh.id)
+
+        return NextResponse.json({ ok: true, files, questions, bank, sheet: !!sh })
       }
 
       // ── 파일 올릴 임시 주소 받기 (브라우저가 이 주소로 직접 올린다 — PDF 가 커서 서버를 거치지 않는다)
@@ -775,7 +846,7 @@ export async function POST(req: Request) {
           .eq('paper_id', paper.id).not('problem_id', 'is', null).order('sort_order')
         const list = qs ?? []
         if (!list.length) return bad('문제은행에 들어간 문항이 없습니다.')
-        const title = `${String(paper.exam_year).slice(2)}년 ${paper.school_name} ${paper.term}학기 ${paper.exam_type}`
+        const title = examSheetTitle(paper)
         let { data: sheet } = await supabase.from('exam_sheets').select('id, code').eq('note', sheetNote(paper.id)).maybeSingle()
         if (!sheet) {
           const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

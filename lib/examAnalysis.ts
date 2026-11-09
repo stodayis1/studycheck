@@ -64,6 +64,35 @@ export function expectedPaperFileName(p: PaperKey, kind: string) {
   return `${examPrefix(p)}_${p.school_name}_${p.grade}_${kind}.pdf`
 }
 
+// 시험명을 따로 안 적었을 때 자동으로 붙는 이름: 「2025 2학기 기말고사」
+export function defaultExamName(p: PaperKey) {
+  return `${p.exam_year} ${p.term}학기 ${p.exam_type}`
+}
+
+// 통째 인쇄 학습지(exam_sheets) 제목: 「25년 고양중 2학기 기말고사」
+export function examSheetTitle(p: PaperKey) {
+  return `${String(p.exam_year).slice(2)}년 ${p.school_name} ${p.term}학기 ${p.exam_type}`
+}
+
+/**
+ * 시험 정보(학교·학년·연도·학기·구분)를 바로잡을 때 **파일 이름도 따라 고친다**.
+ *
+ * 왜 — 파일 이름에 학교·학년이 박혀 있다(2025_2학기기말_고양중_중1_원본.pdf).
+ * 시험 쪽만 고치면 목록에는 「고양중」, 내려받는 파일은 「년고양중」이 되어 더 헷갈린다.
+ * (보관함의 실제 경로는 uuid 라 건드릴 것이 없다 — 보이는 이름만 고친다.)
+ *
+ * 못 알아보는 이름은 **그대로 둔다**. 지우거나 지어내지 않는다.
+ */
+export function renameForPaper(from: PaperKey, to: PaperKey, fileName: string): string {
+  const n = String(fileName ?? '').normalize('NFC')
+  const head = (p: PaperKey) => `${examPrefix(p)}_${p.school_name}_${p.grade}_`
+  if (n.startsWith(head(from))) return head(to) + n.slice(head(from).length)
+  // 손풀이: 고양중_중1_18번_손풀이_김T.png
+  const hand = (p: PaperKey) => `${p.school_name}_${p.grade}_`
+  if (n.startsWith(hand(from))) return hand(to) + n.slice(hand(from).length)
+  return n
+}
+
 // 파일명 규칙 검사. 맞으면 null, 틀리면 안내 문구를 돌려준다 (올리는 것 자체는 막지 않는다)
 export function checkFileName(p: PaperKey, kind: string, fileName: string): string | null {
   const name = fileName.normalize('NFC')

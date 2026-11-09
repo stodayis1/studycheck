@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/examAnalysis.ts')
-const { guessExamFile } = await import(pathToFileURL(target).href)
+const { guessExamFile, renameForPaper, defaultExamName, examSheetTitle, sourceKey } = await import(pathToFileURL(target).href)
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -58,6 +58,26 @@ function 짐작(name: string, want: Want) {
 짐작('2026_2학기중간_신원고_고1_문제정답해설.pdf', { school_name: '신원고', grade: '고1', kind: '문제정답해설' })
 짐작('2026_2학기중간_신원고_고1_해설.pdf', { kind: '해설' })
 짐작('2026_2학기중간_신원고_고1_정답.pdf', { kind: '정답' })
+
+// ── 시험 정보 바로잡기(원장님 전용)가 딸린 것까지 같이 고치는가 ──────────────────
+//    학교 이름이 틀린 채 올라간 것을 고칠 때, 파일 이름 · 출처 열쇠 · 인쇄 제목이 같이 안 바뀌면
+//    목록에는 「고양중」, 내려받는 파일은 「년고양중」이 되어 더 헷갈린다.
+const 틀린것 = { exam_year: 2025, term: 2, exam_type: '기말고사', school_name: '년고양중', grade: '중1' }
+const 바른것 = { exam_year: 2025, term: 2, exam_type: '기말고사', school_name: '고양중', grade: '중1' }
+
+T('시험지 파일 이름이 따라 바뀐다', () =>
+  renameForPaper(틀린것, 바른것, '2025_2학기기말_년고양중_중1_원본.pdf') === '2025_2학기기말_고양중_중1_원본.pdf')
+T('손풀이 파일 이름도 따라 바뀐다', () =>
+  renameForPaper(틀린것, 바른것, '년고양중_중1_18번_손풀이_김T.png') === '고양중_중1_18번_손풀이_김T.png')
+T('학년 · 연도까지 바꾸면 파일 이름도 다 바뀐다', () =>
+  renameForPaper(바른것, { ...바른것, exam_year: 2026, grade: '중2', term: 1, exam_type: '중간고사' },
+    '2025_2학기기말_고양중_중1_문제.pdf') === '2026_1학기중간_고양중_중2_문제.pdf')
+T('규칙과 다른 이름은 **그대로 둔다** (지어내지 않는다)', () =>
+  renameForPaper(틀린것, 바른것, '아무렇게나 지은 이름.pdf') === '아무렇게나 지은 이름.pdf')
+T('문항 출처 열쇠가 새 학교 이름으로 지어진다', () =>
+  sourceKey(바른것, '18') === '2025_2학기기말_고양중_중1_18번')
+T('시험명 · 인쇄 학습지 제목', () =>
+  defaultExamName(바른것) === '2025 2학기 기말고사' && examSheetTitle(바른것) === '25년 고양중 2학기 기말고사')
 
 console.log(`\n통과 ${pass} / 전체 ${total}`)
 if (pass !== total) process.exit(1)
