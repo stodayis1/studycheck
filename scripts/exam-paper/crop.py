@@ -33,12 +33,21 @@ def col_bounds(page):
     return [(left, mid - 4), (mid + 5, max(right, mid + 5 + (mid - 4 - left)))]
 
 
+def mark_limit(sizes):
+    """미주 번호는 본문보다 작다 — 그 쪽 본문 크기(가운데값)의 85% 미만만 미주로 본다.
+    절대 크기(9pt)로 보면 본문을 크게 잡은 파일에서 안 걸린다 (2026-11-09 고양중 중1).
+    lib/examPdfCrop.ts 의 markLimit 과 **같은 규칙**이다 — 한쪽만 고치지 말 것."""
+    s = sorted(v for v in sizes if v > 0)
+    return s[len(s) // 2] * 0.85 if s else 9.0
+
+
 def markers(page, cols):
     spans = [s for b in page.get_text("dict")["blocks"] for l in b.get("lines", []) for s in l["spans"] if s["text"].strip()]
+    limit = mark_limit([s["size"] for s in spans])
     out = []
     for s in spans:
         m = MARK.match(s["text"].strip())
-        if m and s["size"] < 9:
+        if m and s["size"] < limit:
             x0, y0, x1, y1 = s["bbox"]
             col = 0 if x0 < cols[1][0] - 5 else 1
             if abs(x0 - cols[col][0]) < 12:          # 단의 맨 왼쪽에 있는 것만

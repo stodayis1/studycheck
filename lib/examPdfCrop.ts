@@ -11,6 +11,18 @@ const Z = DPI / 72
 const INK = 200                       // 이보다 어두우면 글자·그림
 const MARK = /^(\d+)\)$/
 
+// 미주 번호는 **본문보다 작다**. 전에는 「8.5pt 보다 작으면」으로 봤는데, 한글에서 본문을 크게
+// (11.5pt) 잡아 만든 파일은 미주가 8.63pt 로 찍혀 **한 끗 차이로 안 걸렸다** — 2026-11-09
+// 고양중 중1 2025 2학기 기말이 11쪽 내내 0개였다(「문항 번호를 찾지 못했습니다」).
+// 두 파일을 재 보니 미주÷본문 비는 6.72/9.0 = 0.747, 8.63/11.5 = 0.750 으로 같다.
+// 절대 크기가 아니라 **비**가 규칙이다 → 그 쪽 본문 글자 크기(가운데값)의 85% 보다 작은 것만 미주로 본다.
+// 시험: scripts/exam-crop-mark-check.ts   (scripts/exam-paper/crop.py 에도 같은 규칙이 있다)
+export function markLimit(sizes: number[]): number {
+  const s = sizes.filter((v) => v > 0).sort((a, b) => a - b)
+  if (!s.length) return 8.5                      // 글자가 없으면 옛 기준
+  return s[Math.floor(s.length / 2)] * 0.85
+}
+
 export type CroppedProblem = {
   no: number
   page: number
@@ -78,6 +90,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   const answers: Record<number, string> = {}
   const answerImages: Record<number, HTMLCanvasElement> = {}
   let inAnswers = false, lastAnswerNo = 0
+  let markShaped = 0                    // 「N)」 꼴이 있기는 했나 — 안 걸렸을 때 뭐라고 알릴지 가른다
 
   for (let pi = 0; pi < doc.numPages; pi++) {
     onProgress?.(pi + 1, doc.numPages)
@@ -124,8 +137,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     // 작은 미주 번호 = 문항 시작
     // 번호가 문제 첫 줄과 같은 줄에 찍힌 파일도 있다 (「10) 다음 중 옳지 않은 것은?」).
     // 그때는 번호 줄 아래부터 자르면 첫 줄이 날아간다 → 그 줄 위에서부터 자르고 번호 글자만 지운다 (top · box)
+    const limit = markLimit(items.map((t) => t.size))
+    markShaped += items.filter((t) => MARK.test(t.str)).length
     const ms = items
-      .filter((t) => MARK.test(t.str) && t.size < 8.5 && Math.abs(t.x - cols[colOf(t.x)][0]) < 12)
+      .filter((t) => MARK.test(t.str) && t.size < limit && Math.abs(t.x - cols[colOf(t.x)][0]) < 12)
       .map((t) => {
         const col = colOf(t.x)
         const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 4 && o.x >= t.x1 - 1 && o.x < cols[col][1])
@@ -260,7 +275,9 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   }
   for (const p of out) if (essayRanges.some(([a, b]) => a <= p.no && p.no <= b)) p.essay = true
   const nos = out.map((p) => p.no)
-  if (!out.length) warnings.push('문항 번호(작은 미주 번호 「1)」)를 찾지 못했습니다. 한글에서 변환한 PDF 인지 확인해 주세요.')
+  if (!out.length) warnings.push(markShaped
+    ? `문항 번호 「1)」 꼴을 ${markShaped}개 찾았지만 문항 시작으로 보지 않았습니다 — 미주 번호가 본문보다 작은지(본문의 85% 미만), 단 맨 왼쪽에 찍혔는지 확인해 주세요.`
+    : '문항 번호(작은 미주 번호 「1)」)를 찾지 못했습니다. 한글에서 변환한 PDF 인지 확인해 주세요.')
   else if (nos.some((n, i) => n !== i + 1)) warnings.push(`문항 번호가 1부터 이어지지 않습니다: ${nos.join(', ')}`)
   return { pages: doc.numPages, problems: out, answersFound: Object.keys(answers).length, warnings }
 }
