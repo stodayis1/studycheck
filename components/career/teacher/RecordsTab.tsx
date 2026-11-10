@@ -6,7 +6,7 @@
 // ★ 보이는 학생은 학생관리와 같다(canViewStudent — 강사는 본인 담당만, 「테스트」는 모두에게).
 //   적기·고치기는 canEditStudent (주임모드는 보기만). 지우기는 deleted_at 만 채운다.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
@@ -70,6 +70,36 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
   const limit = LETTER_LIMITS[f.kind]
   const count = letterCount(detailText)
   const selHasOptional = sel ? !!(activeConsent(sel.id, 'student')?.optional_agreed || activeConsent(sel.id, 'parent')?.optional_agreed) : false
+
+  // ★ 질문지에 **학생이 적어 준** 동아리·탐구 주제를 활동 기록으로 옮긴다
+  //   (원장님 2026-11-10 「학생이 탐구보고서 수행평가 동아리 진로활동 등을 써 줬잖아」).
+  //   그냥 두면 질문지 안에만 갇혀 있어서 로드맵이 「활동이 하나도 없어요」라고 말한다.
+  const surveyDrafts = useMemo(() => {
+    if (!sel) return [] as { kind: string; title: string; grade_at: string }[]
+    const lines = (v: any) => String(v ?? '').split(/[\n;]/).map((x) => x.trim()).filter((x) => x.length >= 4)
+    const out: { kind: string; title: string; grade_at: string }[] = []
+    for (const l of lines(selAnswer.inquiry)) out.push({ kind: '탐구보고서', title: l.slice(0, 200), grade_at: '고1' })
+    for (const l of lines(selAnswer.club)) out.push({ kind: '동아리', title: l.slice(0, 200), grade_at: sel.grade ?? '' })
+    for (const l of lines(selAnswer.mid_activities)) out.push({ kind: '진로활동', title: l.slice(0, 200), grade_at: '중3' })
+    const had = new Set(actsOf(sel.id).map((x) => x.title.trim()))
+    return out.filter((x) => !had.has(x.title.trim()))
+  }, [sel, surveys, acts])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function importFromSurvey() {
+    if (!sel || !surveyDrafts.length) return
+    if (!confirm(`질문지에 적어 준 ${surveyDrafts.length}건을 활동 기록으로 가져올까요?
+제목만 들어가니, 가져온 뒤 다섯 칸(왜·어떻게·알게 된 것…)을 채워 주세요.`)) return
+    setBusy(true); setErr('')
+    const rows = surveyDrafts.map((d) => ({
+      student_id: sel.id, kind: d.kind, title: d.title, grade_at: d.grade_at || null,
+      detail: composeDetail({ free: '질문지에 학생이 적어 준 것이에요. 다섯 칸을 채워 주세요.' }),
+      source: 'survey', created_by: currentUser?.id ?? null, created_by_name: currentUser?.name ?? null,
+    }))
+    const res = await supabase.from('student_activities').insert(rows).select()
+    setBusy(false)
+    if (res.error) { setErr('가져오지 못했어요: ' + res.error.message); return }
+    setActs((p) => [...((res.data ?? []) as Activity[]), ...p])
+  }
 
   function openNew(seed?: Partial<ReturnType<typeof emptyForm>> & { why?: string }) {
     setF({ ...emptyForm(), grade_at: sel?.grade ?? '', ...seed })
@@ -226,8 +256,14 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
               <Card>
                 <div className="flex items-center">
                   <h3 className="text-sm font-bold text-gray-700">활동 기록 (탐구보고서 · 세특 · 수행평가 …)</h3>
+                  {canEdit && !showForm && surveyDrafts.length > 0 && (
+                    <button onClick={importFromSurvey} disabled={busy}
+                      className="ml-auto px-3 py-1.5 rounded-xl text-sm border bg-white disabled:opacity-50" style={{ borderColor: LINE, color: GREEN }}>
+                      질문지에서 가져오기 {surveyDrafts.length}건
+                    </button>
+                  )}
                   {canEdit && !showForm && (
-                    <button onClick={openNew} className="ml-auto px-3 py-1.5 rounded-xl text-sm text-white" style={{ background: GREEN }}>+ 기록 추가</button>
+                    <button onClick={() => openNew()} className={`${surveyDrafts.length > 0 ? 'ml-2' : 'ml-auto'} px-3 py-1.5 rounded-xl text-sm text-white`} style={{ background: GREEN }}>+ 기록 추가</button>
                   )}
                 </div>
                 {!canEdit && <p className="text-xs text-gray-400 mt-1">본인 담당 학생만 적을 수 있어요(보기 전용).</p>}
@@ -257,8 +293,15 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                           style={f.kind === k ? { background: GREEN, color: '#fff', borderColor: GREEN } : { borderColor: LINE, background: '#fff' }}>{k}</button>
                       ))}
                     </div>
+                    {/* ★ 동의는 **둘**이다 — [필수] 진로·학교 활동 / [선택] 학생부 기재 내용(세특).
+                        필수만 누른 학생이 많아서, 「또 동의를 받으라는 거냐」로 읽힌다(원장님 2026-11-10).
+                        그래서 무엇이 막히고 무엇은 그냥 되는지까지 적는다. */}
                     {f.kind === '세특' && !selHasOptional && (
-                      <p className="text-xs text-amber-700">⚠ 학생부(세특) 수집 선택 동의가 아직 없습니다. 동의를 먼저 받아 주세요.</p>
+                      <p className="text-xs text-amber-700">
+                        ⚠ {sel.name} 학생은 <b>[필수]</b> 동의만 했고 <b>[선택] 학생부 기재 내용(세특)</b>은 아직이에요.
+                        탐구보고서·수행평가·동아리는 그냥 적으시면 되고, <b>학생부 세특 문구를 그대로 옮길 때만</b> 선택 동의가 필요해요.
+                        위 「개인정보 동의」 칸에서 「학생부(세특) ✗」로 보이는 그 칸이에요.
+                      </p>
                     )}
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       <input value={f.school_year} onChange={(e) => setF({ ...f, school_year: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="학년도" className="rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: LINE }} />
@@ -270,7 +313,7 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                       <input type="date" value={f.activity_date} onChange={(e) => setF({ ...f, activity_date: e.target.value })} className="rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: LINE }} />
                     </div>
                     <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} maxLength={200}
-                      placeholder={f.kind === '세특' ? '세특 한 줄 요약 (예: 공통수학1 — 이차함수 최적화 탐구)' : '주제·제목 (예: 피보나치 수열과 황금비)'}
+                      placeholder={f.kind === '세특' ? '세특 한 줄 요약 (예: 공통수학1 — 이차함수로 매점 가격 따져 보기)' : '주제·제목 (예: 우리 학교 급식 잔반은 무엇에 따라 늘어나나)'}
                       className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: LINE }} />
                     {/* ★ 다섯 칸으로 나눠 묻는다 (원장님 2026-11-10 「구체적으로 물어서 학생이
                         각각 내용을 구체적으로 쓰게」). 한 칸짜리 「내용」으로 두면 한 줄로 끝나서

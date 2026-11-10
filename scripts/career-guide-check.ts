@@ -178,6 +178,21 @@ T('주제 사전에 AI 단골 소재가 없다 (학교가 알아본다)', () => 
   return 단골.every((w) => !hay.includes(w))
 })
 
+T('화면 보기글에도 AI 단골 소재가 없다 (보기글을 그대로 따라 쓴다)', () => {
+  // 2026-11-10: 사전에서는 뺐는데 **입력칸 보기글**에 「피보나치 수열과 황금비」가 남아 있었다
+  const 단골 = ['피보나치', '황금비', '케플러', '벌집', '몬티홀', '프랙털']
+  const files = [
+    'components/career/teacher/RecordsTab.tsx',
+    'components/career/teacher/PlanCard.tsx',
+    'lib/careerRecordRules.ts',
+    'lib/careerSurvey.ts',
+  ]
+  return files.every((f) => {
+    const src = fs.readFileSync(path.resolve(f), 'utf8')
+    return 단골.every((w) => !src.includes(w))
+  })
+})
+
 T('주제 사전 글투에 AI 말투가 없다', () => {
   const 말투 = ['를 통해', '을 통해', '고찰', '중요성', '융합적', '알아보고자', '함양']
   const hay = MATH_TOPICS.map((t: any) => t.title + ' ' + t.question + ' ' + t.how).join(' ')
@@ -238,6 +253,14 @@ T('넉 달 넘게 기록이 비면 알려 준다', () => {
     today: '2026-11-10',
   })
   return plan.gaps.some((g: string) => g.includes('넉 달'))
+})
+
+T('질문지에 적어 준 동아리·탐구를 활동 기록으로 가져온다', () => {
+  const src = fs.readFileSync(path.resolve('components/career/teacher/RecordsTab.tsx'), 'utf8')
+  return src.includes('selAnswer.inquiry') && src.includes('selAnswer.club')
+    && src.includes("source: 'survey'") && src.includes('질문지에서 가져오기')
+    // 이미 같은 제목이 있으면 또 넣지 않는다
+    && src.includes('const had = new Set(actsOf(sel.id).map((x) => x.title.trim()))')
 })
 
 T('학생별 기록 화면이 다섯 칸과 로드맵 읽기를 쓴다', () => {
