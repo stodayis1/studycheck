@@ -20,6 +20,7 @@ import { unitNameBeside, unitLabel, unitParen, levelText, wsRowsToText, wsRowsFr
 // ★ planRow 는 **늘 진짜 lib/matholic.ts** 를 쓴다(망가뜨린 사본을 넘겨도 영향 없음) —
 //   여기서는 「갈림길이 제자리에 있나」만 본다. 규칙 자체는 위 검사들이 직접 본다.
 import { planRow } from '../lib/matholicPlan.ts'
+import { applyPlans } from '../lib/matholicApply.ts'
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
@@ -36,6 +37,17 @@ function T(name: string, fn: () => boolean) {
   try { ok = fn() } catch (e: any) { err = e?.message ?? String(e) }
   if (ok) { pass++; console.log(`✓ ${name}`) }
   else console.log(`✗ ${name}${err ? ` — ${err}` : ''}`)
+}
+
+// ★ 기다려야 하는 검사(applyPlans 처럼)는 **반드시 TA 로** 쓴다. T 에 async 함수를 넘기면
+//   돌려받는 Promise 가 늘 참이라 **무엇을 넣어도 통과한다** — 검사가 없는 것과 같다.
+const pending: Promise<void>[] = []
+function TA(name: string, fn: () => Promise<boolean>) {
+  total++
+  pending.push(fn().then(
+    (ok) => { if (ok) { pass++; console.log(`✓ ${name}`) } else console.log(`✗ ${name}`) },
+    (e: any) => { console.log(`✗ ${name} — ${e?.message ?? String(e)}`) },
+  ))
 }
 
 // ── 2026-10-29 에 매쓰홀릭에서 실제로 복사한 글자. **생김새는 그대로, 학생 이름만 가상**이다.
@@ -1052,7 +1064,7 @@ T('planRow 가 줄마다 갈 곳을 정한다', () => {
   const 학생 = { id: 'S1', name: '가짜학생', grade: '고1', teacher_name: '주한' }
   const ctx = {
     mine: [학생], rules: {}, books: BOOKS, concepts: [] as any[],
-    wsByStudent: new Map(), sessionsOf: new Map(),
+    wsByStudent: new Map(), sessionsOf: new Map(), classDays: new Set<string>(),
     coreByKey: new Map(), examByKey: new Map(),
   }
   const 줄 = (title: string, kind: string, level: number | null) =>
@@ -1074,6 +1086,7 @@ T('planRow — Daily Test 는 레벨이 있어도 학습일지로 간다', () =>
     mine: [학생], rules: {}, books: BOOKS, concepts: [] as any[],
     wsByStudent: new Map(),
     sessionsOf: new Map([['S1', [{ id: 'C1', student_id: 'S1', session_date: '2026-11-10', daily_test_score: null }]]]),
+    classDays: new Set<string>(),
     coreByKey: new Map(), examByKey: new Map(),
   }
   const 줄 = (title: string, level: number | null) =>
@@ -1091,6 +1104,72 @@ T('planRow 안에서 데일리 갈림길이 평가·레벨 갈림길보다 위�
   const lv = src.indexOf('needsLevel(row, ctx.books)')
   return daily > 0 && diag > 0 && lv > 0 && daily < diag && daily < lv
 })
+
+// -- 2026-11-10 그날 학습일지가 아직 없으면 **만들어서** 적는다 (원장님) --------------
+// 11/10 고1 네 명(화·목·토 수업)이 그랬다 — 저녁 수업이라 낮에는 그날 일지가 없어서
+// 데일리테스트 점수가 통째로 넘어갔다.
+const DAILY_CTX = (classDays: string[], sessions: any[] = []) => ({
+  mine: [{ id: 'S1', name: '가짜학생', grade: '고1', teacher_name: '주한' }],
+  rules: {}, books: BOOKS, concepts: [] as any[],
+  wsByStudent: new Map(),
+  sessionsOf: sessions.length ? new Map([['S1', sessions]]) : new Map(),
+  classDays: new Set(classDays),
+  coreByKey: new Map(), examByKey: new Map(),
+})
+const DAILY_ROW = {
+  line: 1, student: '가짜학생', date: '2026-11-10', kind: '학습지', course: '공통수학2 (2022 개정)',
+  title: '고1 A Daily Test 1110 (lv2.5)', level: 2.5, right: 9, total: 10, score: 90,
+  raw: '고1 A Daily Test 1110 (lv2.5)',
+}
+
+T('수업이 있는 날인데 일지가 없으면 — 일지를 새로 만들어 적는다', () => {
+  const p = planRow(DAILY_ROW as any, DAILY_CTX(['2026-11-10|S1']) as any)
+  return p.mode === 'daily' && p.newSession === true && p.sessionId === null
+    && /학습일지가 아직 없어요/.test(p.why)
+})
+
+T('수업이 없는 날이면 일지를 만들지 않는다 (집에서 푼 것)', () => {
+  const p = planRow(DAILY_ROW as any, DAILY_CTX([]) as any)
+  return p.mode === 'skip' && !p.newSession
+})
+
+T('일지가 이미 있으면 새로 만들지 않고 그 칸에 적는다', () => {
+  const p = planRow(DAILY_ROW as any, DAILY_CTX(['2026-11-10|S1'],
+    [{ id: 'C1', student_id: 'S1', session_date: '2026-11-10', daily_test_score: null }]) as any)
+  return p.mode === 'daily' && p.sessionId === 'C1' && !p.newSession
+})
+
+TA('applyPlans — 일지가 없으면 class_sessions 를 만들어 점수를 넣는다', async () => {
+  const 적힌것: any[] = []
+  const db: any = { from: (t: string) => ({
+    insert: (v: any) => { 적힌것.push([t, v]); return { error: null as any } },
+    update: (v: any) => ({ eq: () => ({ error: null as any }) }),
+  }) }
+  const plan: any = planRow(DAILY_ROW as any, DAILY_CTX(['2026-11-10|S1']) as any)
+  plan.studentId = 'S1'
+  const r = await applyPlans(db as any, [plan], { teacherName: '주한', books: BOOKS })
+  const [표, 값] = 적힌것[0] ?? []
+  return r.daily === 1 && r.created === 0 && 표 === 'class_sessions'
+    && 값?.student_id === 'S1' && 값?.session_date === '2026-11-10'
+    && 값?.daily_test_score === 90 && 값?.session_type === '정규'
+})
+
+T('화면과 스크립트가 classDays 를 넘긴다 (빼먹으면 늘 「수업이 없어요」)', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  const job = fs.readFileSync(path.resolve('scripts/matholic-apply.ts'), 'utf8')
+  return src.includes('classDays,') && src.includes('expectedStudentsOn(supabase as any, d)')
+    && job.includes('classDays,') && job.includes('expectedStudentsOn(db, d)')
+})
+
+T('데일리테스트 줄에는 학습지 고르기·갈래 칩을 보여 주지 않는다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/matholic/page.tsx'), 'utf8')
+  // 「다시 넣기」를 누르면 데일리테스트가 레벨학습지로 만들어지던 자리
+  return src.includes("p.mode !== 'done' && p.mode !== 'daily' && !isDailyTest(p.row)")
+    && src.includes("p.mode !== 'daily' && !isDailyTest(p.row) && p.mode !== 'core'")
+    && src.includes("(p.mode === 'daily' || isDailyTest(p.row))")
+})
+
+await Promise.all(pending)   // 기다리는 검사들이 끝난 뒤에 셈한다
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
