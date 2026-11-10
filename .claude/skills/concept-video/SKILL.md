@@ -122,6 +122,10 @@ node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통
 - 유튜브 id는 둘 중 하나: `--ids <_유튜브_주소.json>`(재생목록 없이 올린 영상 — 공통수학1 방식) 또는 `--playlist-env YOUTUBE_PLAYLIST_CM2`(재생목록 제목에서 읽음, 공통수학2 방식).
 - 운영 DB를 쓰는 작업이다. 먼저 `--dry`로 편수·연결 수를 보고 돌린다.
 
+- 쎈 풀이영상(중등): `sync_lesson_videos.mjs` 를 과정 폴더에 돌리면 개념·증명까지 덮어쓰고 book 이 「개념+유형」으로 들어간다 → 쓰지 말 것.
+  `ssen_solution_sql.mjs <풀이영상> <과정> docs/sql/쎈풀이영상_<과정>.sql` 로 적용·되돌리기 SQL 을 만들어 원장님 확인 → `ssen_solution_apply.mjs <풀이영상> <과정>`(저장소에서, 같은 행을 넣고 있는 번호는 건너뜀).
+  grade 「중1-2」·kind 대표예제·order_label 「01-풀이01」·book 「쎈 중1-2」. 넣기 전 youtube_id 가 다른 과정에 이미 있는지 확인(유일 키).
+
 ## 필요한 키 (`.env.local`, 이름만)
 - `ELEVENLABS_API_KEY` (권한: Text to Speech, Voices Write, Speech to Text)
 - `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET`, `YOUTUBE_OAUTH_REFRESH_TOKEN` (처음은 `yt_thumbnails.mjs` 기기 로그인으로 refresh token을 얻는다)
@@ -166,3 +170,4 @@ node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통
 - 2026-11-06 중학교 풀이영상 = 쎈 B단계 대표문제(유형마다 하나). 재료 `ssen_materials.mjs --grade 중1 --semester 2 --out <과정 폴더>/_재료/풀이` → 대본 `docs/대본/<과정>/풀이/`(지침 `docs/대본/중1-2/풀이/_대본쓰기_지침.md`) → `render_all.py … --solutions --video <과정 폴더>`(풀이영상 폴더는 render_all 이 붙인다 — --video 에 풀이영상까지 주면 한 겹 더 생긴다). 쎈 해설집은 스캔본이라 풀이 그림 없이 직접 풀고 정답과 맞춘다. 썸네일 solution_m1·m2·m3(증명색보다 한 단계 진하게), 배지 「쎈 60번」·「쎈 14쪽」. 노트의 ①~⑤ 는 $①$ 처럼 수식 안에
 - 2026-11-06 원장님: 도형 풀이는 말로만 하지 말고 그림 위에서 짚는다 — 꼭짓점은 꼭짓점을, 모서리·직선은 그 선을, 보조선은 직접 긋기 → `board.py`(그림판·marks: point·seg·path·line·ray·aux·angle·poly·circle·label), 좌표는 `board_grid.py`, 확인은 proof_validate --sheet 의 `<id>_그림판.png`. 그림판은 둘레에 흰 여백(꼭짓점이 그림 끝에 붙으면 동그라미가 잘림)
 - 2026-11-06 중1-1: 맑은 고딕(그림판 label·말풍선 글꼴)엔 빼기표 U+2212 「−」 가 없어 □ 로 깨진다 → board.py label·proof_video 말풍선은 그릴 때 「–」(U+2013)로 바꾼다. 노트 손글씨 글꼴에선 × 가 x 와 똑같이 보여 틀린 보기 표시는 「(틀림)」 으로 쓴다. 문제은행 standard_types 제목에 분수가 빠진 것(「y=a x」 = y=a/x)이 있어 대본 title 은 바로잡아 쓴다(파일 이름은 / 를 못 써서 그대로). 셸 heredoc 안 파이썬으로 대본 JSON 을 고치면 `\` 가 하나로 줄어 `\rightarrow` 가 제어 문자로 깨진다 → Write 도구로
+- 2026-11-10 쎈 풀이영상 앱 연결은 sync_lesson_videos 대신 ssen_solution_sql/apply 로(개념·증명 덮어쓰기·교재명 오류 방지). 중1-2 165편 넣음
