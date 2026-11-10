@@ -16,9 +16,10 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, answerBelow } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, answerBelow, eqText } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
+  eqText: (s: string) => string
 }
 
 let pass = 0, all = 0
@@ -97,6 +98,29 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('정답 그림을 위아래·좌우 둘 다 바짝 자른다',
     src.includes('const c2 = inkCols(g, c.width, c.height)') && /if \(r2 && c2\) \{/.test(src))
   ok('세로줄 판(inkCols)이 있다', /function inkCols\(/.test(src))
+}
+
+// ── 「1.」 꼴 작업본 (번호·배점이 수식 글꼴이라 글자로 안 읽히는 것) ────────
+// 2026-11-10 신원중 중1 2025 2학기 기말이 이 꼴이었다. 숫자표(E034~E03D)가 맞는지는
+// **그 파일의 문항 번호가 1,2,3… 으로 읽히는가**로 가린다 — 배점 합이 100점으로 맞았다.
+{
+  const D = (n: number) => String.fromCharCode(0xe034 + n)      // 0→'1' … 8→'9', 9→'0'
+  ok('E034~E03C 가 1~9', eqText(D(0) + D(1) + D(2) + D(8)) === '1239')
+  ok('E03D 가 0', eqText(D(9)) === '0')
+  ok('두 자리 번호도 읽는다', eqText(D(0) + D(9)) === '10')
+  ok('배점 「[3점]」 을 읽는다', eqText('[' + D(2) + '점]') === '[3점]')
+  ok('한글·보기 글자는 그대로 둔다', eqText('① 가나 ≡ △') === '① 가나 ≡ △')
+  ok('표에 없는 수식 글자는 손대지 않는다', eqText('') === '')
+}
+{
+  const src = fs.readFileSync(libPath, 'utf8')
+  ok('미주 번호가 하나도 없을 때만 「1.」 꼴로 본다', /if \(!ms\.length\) \{[\s\S]{0,600}PUA\.test/.test(src))
+  ok('번호가 차례와 다르면 숫자표를 안 쓴다', src.includes('if (read && read !== String(dotNo + 1)) dotOk = false'))
+  ok('숫자표는 맞을 때만 쓴다', src.includes('dotUsed && dotOk ? eqText(t) : t'))
+  ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun) continue'))
+  ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
+  ok('맨 아래 「※ 확인사항」 은 문항에 안 넣는다', src.includes('/^※/.test(t.str)'))
+  ok('정답표는 「1)」 과 「1.」 두 꼴을 다 읽는다', src.includes('[`${want})`, `${want}.`]'))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)
