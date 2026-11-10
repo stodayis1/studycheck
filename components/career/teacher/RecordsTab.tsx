@@ -85,6 +85,32 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
     return out.filter((x) => !had.has(x.title.trim()))
   }, [sel, surveys, acts])   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ★ 「활동 적어 줘」 문자 — 학생 링크(/a/<token>)를 보낸다. 미리보기 → 확인 → 발송.
+  //   원장님 2026-11-10 「학생에게 바로 보낼 수 있는 버튼도 만들어줘. 학생들은 로그인을 잘 안 하거든」
+  const isOwner = currentUser?.role === 'admin'
+  async function sendActSms(ask: string[] = []) {
+    if (!sel) return
+    setBusy(true); setErr('')
+    try {
+      const pre = await apiFetch('/api/career/act-sms', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: sel.id, ask }),
+      })
+      const j = await pre.json().catch(() => ({}))
+      if (!pre.ok) { setErr(j.error ?? '문자를 준비하지 못했어요.'); return }
+      if (!confirm(`${j['받는분']} 에게 이대로 보낼까요?
+
+${j['글']}`)) return
+      const go = await apiFetch('/api/career/act-sms', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: sel.id, ask, send: true }),
+      })
+      const k = await go.json().catch(() => ({}))
+      if (!go.ok) { setErr(k.error ?? '문자를 보내지 못했어요.'); return }
+      alert(k['테스트모드'] ? '보냈습니다 (OPS 테스트 모드라 실제로는 안 나갔어요).' : '보냈습니다.')
+    } finally { setBusy(false) }
+  }
+
   async function importFromSurvey() {
     if (!sel || !surveyDrafts.length) return
     if (!confirm(`질문지에 적어 준 ${surveyDrafts.length}건을 활동 기록으로 가져올까요?
@@ -248,7 +274,8 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
 
               {/* 적힌 활동으로 본 지금 상태와 다음 걸음 (원장님 2026-11-10) */}
               <PlanCard grade={sel.grade ?? null} answers={selAnswer} acts={actsOf(sel.id)}
-                onUseTopic={canEdit ? (t) => openNew({ title: t.title, subject: t.subject, why: t.why }) : undefined} />
+                onUseTopic={canEdit ? (t) => openNew({ title: t.title, subject: t.subject, why: t.why }) : undefined}
+                onAsk={isOwner ? (ask) => sendActSms(ask) : undefined} busy={busy} />
 
               {/* 고른 계열·학과 → 2028 권장 이수과목 (원장님 2026-11-10) */}
               <SubjectGuideCard fields={selFields} major={selMajor} />
@@ -256,14 +283,20 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
               <Card>
                 <div className="flex items-center">
                   <h3 className="text-sm font-bold text-gray-700">활동 기록 (탐구보고서 · 세특 · 수행평가 …)</h3>
+                  {isOwner && !showForm && (
+                    <button onClick={() => sendActSms()} disabled={busy}
+                      className="ml-auto px-3 py-1.5 rounded-xl text-sm border bg-white disabled:opacity-50" style={{ borderColor: LINE, color: GREEN }}>
+                      📩 학생에게 적어 달라고 보내기
+                    </button>
+                  )}
                   {canEdit && !showForm && surveyDrafts.length > 0 && (
                     <button onClick={importFromSurvey} disabled={busy}
-                      className="ml-auto px-3 py-1.5 rounded-xl text-sm border bg-white disabled:opacity-50" style={{ borderColor: LINE, color: GREEN }}>
+                      className={`${isOwner ? 'ml-2' : 'ml-auto'} px-3 py-1.5 rounded-xl text-sm border bg-white disabled:opacity-50`} style={{ borderColor: LINE, color: GREEN }}>
                       질문지에서 가져오기 {surveyDrafts.length}건
                     </button>
                   )}
                   {canEdit && !showForm && (
-                    <button onClick={() => openNew()} className={`${surveyDrafts.length > 0 ? 'ml-2' : 'ml-auto'} px-3 py-1.5 rounded-xl text-sm text-white`} style={{ background: GREEN }}>+ 기록 추가</button>
+                    <button onClick={() => openNew()} className={`${isOwner || surveyDrafts.length > 0 ? 'ml-2' : 'ml-auto'} px-3 py-1.5 rounded-xl text-sm text-white`} style={{ background: GREEN }}>+ 기록 추가</button>
                   )}
                 </div>
                 {!canEdit && <p className="text-xs text-gray-400 mt-1">본인 담당 학생만 적을 수 있어요(보기 전용).</p>}
