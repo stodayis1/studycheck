@@ -13,6 +13,8 @@ import { apiFetch } from '@/lib/apiFetch'
 import { ACTIVITY_KINDS, ACTIVITY_STATUS, FORMS, QUESTIONS, CONSENT_VERSION, formForGrade } from '@/lib/careerSurvey'
 import { isTestStudentId } from '@/lib/testStudents'
 import { RECORD_RULES, forbiddenWarnings, letterCount, LETTER_LIMITS } from '@/lib/careerRecordRules'
+import { EMPTY_PARTS, PART_LABELS, composeDetail, parseDetail, isSplitKind, type ActivityParts } from '@/lib/activityParts'
+import PlanCard from './PlanCard'
 import SubjectGuideCard from './SubjectGuideCard'
 import { GREEN, MINT, LINE, Badge, Card, type Student, type Consent, type Survey, type Activity } from './shared'
 
@@ -38,6 +40,8 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
   const [tab, setTab] = useState('pre2')
   const [q, setQ] = useState('')
   const [f, setF] = useState(emptyForm())
+  // ★ 활동은 다섯 칸으로 나눠 묻는다 (원장님 2026-11-10). 세특만 한 칸 그대로.
+  const [parts, setParts] = useState<ActivityParts>({ ...EMPTY_PARTS })
   const [showForm, setShowForm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -59,19 +63,26 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
   const selAnswer = sel ? (surveysOf(sel.id, 'student')[0] ?? surveysOf(sel.id, 'parent')[0])?.answers ?? {} : {}
   const selFields: string[] = Array.isArray(selAnswer.field) ? selAnswer.field : []
   const selMajor: string = String(selAnswer.major ?? '')
+  // 다섯 칸을 합친 것이 실제로 저장되는 글이다 — 경고·글자수도 이걸 본다
+  const detailText = isSplitKind(f.kind) ? composeDetail(parts) : f.detail
   // 적은 글에 **학생부에 못 들어갈 말**이 있나 (막지 않고 알려만 준다)
-  const warns = forbiddenWarnings(f.title, f.detail)
+  const warns = forbiddenWarnings(f.title, detailText)
   const limit = LETTER_LIMITS[f.kind]
-  const count = letterCount(f.detail)
+  const count = letterCount(detailText)
   const selHasOptional = sel ? !!(activeConsent(sel.id, 'student')?.optional_agreed || activeConsent(sel.id, 'parent')?.optional_agreed) : false
 
-  function openNew() { setF({ ...emptyForm(), grade_at: sel?.grade ?? '' }); setShowForm(true); setErr('') }
+  function openNew(seed?: Partial<ReturnType<typeof emptyForm>> & { why?: string }) {
+    setF({ ...emptyForm(), grade_at: sel?.grade ?? '', ...seed })
+    setParts({ ...EMPTY_PARTS, why: seed?.why ?? '' })
+    setShowForm(true); setErr('')
+  }
   function openEdit(a: Activity) {
     setF({
       id: a.id, kind: a.kind, school_year: a.school_year ? String(a.school_year) : '', semester: a.semester ? String(a.semester) : '',
       grade_at: a.grade_at ?? '', subject: a.subject ?? '', title: a.title, detail: a.detail ?? '', status: a.status ?? '',
       activity_date: a.activity_date ?? '',
     })
+    setParts(parseDetail(a.detail))
     setShowForm(true); setErr('')
   }
 
@@ -84,7 +95,7 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
     const row = {
       kind: f.kind, school_year: f.school_year ? Number(f.school_year) : null, semester: f.semester ? Number(f.semester) : null,
       grade_at: f.grade_at.trim() || null, subject: f.subject.trim() || null, title: f.title.trim().slice(0, 200),
-      detail: f.detail.trim() || null, status: f.status || null, activity_date: f.activity_date || null,
+      detail: detailText.trim() || null, status: f.status || null, activity_date: f.activity_date || null,
       updated_at: new Date().toISOString(),
     }
     const res = f.id
@@ -205,6 +216,10 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                 </div>
               </Card>
 
+              {/* 적힌 활동으로 본 지금 상태와 다음 걸음 (원장님 2026-11-10) */}
+              <PlanCard grade={sel.grade ?? null} answers={selAnswer} acts={actsOf(sel.id)}
+                onUseTopic={canEdit ? (t) => openNew({ title: t.title, subject: t.subject, why: t.why }) : undefined} />
+
               {/* 고른 계열·학과 → 2028 권장 이수과목 (원장님 2026-11-10) */}
               <SubjectGuideCard fields={selFields} major={selMajor} />
 
@@ -257,9 +272,37 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                     <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} maxLength={200}
                       placeholder={f.kind === '세특' ? '세특 한 줄 요약 (예: 공통수학1 — 이차함수 최적화 탐구)' : '주제·제목 (예: 피보나치 수열과 황금비)'}
                       className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: LINE }} />
-                    <textarea value={f.detail} onChange={(e) => setF({ ...f, detail: e.target.value })} rows={5}
-                      placeholder={f.kind === '세특' ? '학생부에 적힌 세특 문구 그대로' : '내용 · 방법 · 결과 · 선생님 의견'}
-                      className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: LINE }} />
+                    {/* ★ 다섯 칸으로 나눠 묻는다 (원장님 2026-11-10 「구체적으로 물어서 학생이
+                        각각 내용을 구체적으로 쓰게」). 한 칸짜리 「내용」으로 두면 한 줄로 끝나서
+                        나중에 읽을 것이 없다. 이 다섯 칸이 그대로 탐구보고서·세특의 뼈대다.
+                        세특만 나누지 않는다 — 학생부 문구를 그대로 옮기는 칸이라서. */}
+                    {!isSplitKind(f.kind) ? (
+                      <textarea value={f.detail} onChange={(e) => setF({ ...f, detail: e.target.value })} rows={5}
+                        placeholder="학생부에 적힌 세특 문구 그대로"
+                        className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: LINE }} />
+                    ) : (
+                      <div className="space-y-2">
+                        {parts.free.trim() && (
+                          <div>
+                            <label className="text-[11px] text-gray-500">예전에 적어 둔 내용</label>
+                            <textarea value={parts.free} onChange={(e) => setParts({ ...parts, free: e.target.value })} rows={2}
+                              className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: LINE }} />
+                          </div>
+                        )}
+                        {PART_LABELS.map((pl) => (
+                          <div key={pl.key}>
+                            <label className="text-[11px] font-semibold" style={{ color: GREEN }}>{pl.label}</label>
+                            <span className="ml-1.5 text-[10px] text-gray-400">{pl.hint}</span>
+                            <textarea value={parts[pl.key]} onChange={(e) => setParts({ ...parts, [pl.key]: e.target.value })}
+                              rows={pl.key === 'why' || pl.key === 'found' ? 3 : 2}
+                              className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: LINE }} />
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-gray-400">
+                          다 채우지 않아도 저장돼요. 빈 칸은 「무엇을 더 물어봐야 하는지」로 로드맵에 보여 드려요.
+                        </p>
+                      </div>
+                    )}
                     {/* 글자 수 — 교육정보시스템은 Byte 로 센다(한글 1자 3Byte). 세특은 과목당 500자 */}
                     {limit != null && count.letters > 0 && (
                       <p className={`text-[11px] ${count.letters > limit ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
