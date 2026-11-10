@@ -130,6 +130,9 @@ const WEEKEND_REVIEW = /주말\s*복습\s*(?:TEST|테스트|시험|평가)/i
  *                                                보내면 학교 점수에 학원 점수가 섞인다
  *   교재 · 교과서 · **교재 이름 자체**          → 쌍둥이 학습지
  *   데일리 · Daily Test                       → 학습일지의 데일리테스트 칸 (학습지가 아니다)
+ *                                              ★ **레벨이 적혀 있어도 이쪽이 먼저다** (`isDailyTest`)
+ *                                                — 고등은 데일리테스트를 무조건 보기 때문에
+ *                                                「Daily Test … _Lv3」 꼴로 레벨이 붙어 온다
  *   **그 밖에 전부**                          → **레벨학습지**
  *
  *   ★ 과제 · 오답 · 이너프원은 **따로 칸을 만들지 않는다. 다 레벨학습지다.**
@@ -393,9 +396,24 @@ export function parseMatholic(text: string, today: Date = new Date()): ParseResu
  *   한 자리도 안 틀렸다 — 선생님들이 그걸 손으로 치고 계셨던 것이다.
  *
  *   학습지로 넣으면 **같은 점수가 두 군데에 생기고** 성취도·브리핑이 이중으로 센다.
+ *
+ * ★★ **레벨이 적혀 있어도 데일리테스트가 먼저다** — 원장님 2026-11-10
+ *   「학습지에서 Daily Test 이것도 데일리테스트로 들어가야 하거든. 레벨이 쓰여 있어도
+ *    Daily Test 는 데일리테스트로 들어가는게 우선이야. 고등은 데일리테스트를 무조건 보거든」.
+ *   그래서 이 판정은 **레벨을 보지 않는다**(`level` 을 인자로도 안 받는다). 2026-11-06 의
+ *   「레벨이 적혀 있으면 레벨학습지」 규칙은 **평가(주간·주말평가)에만** 걸리는 것이고,
+ *   데일리테스트는 거기에 안 걸린다. 지키는 자리가 세 곳이다 —
+ *     ① `planRow` 에서 데일리 갈림길이 **평가·레벨보다 먼저** 온다
+ *     ② `isDiagnostic` 이 데일리면 **스스로 비킨다** (아래 그 함수 첫 줄)
+ *     ③ `isEnoughOne` 이 데일리를 가로채지 않는다
+ *
+ * ★ 「Daily Test」 사이에 무엇이 끼어도 읽는다 — 「Daily-Test」·「Daily_Test」·「DailyTest」.
+ *   매쓰홀릭 제목은 선생님마다 다르게 쓰신다. `\s*` 만 두면 하이픈이 든 꼴이 조용히
+ *   레벨학습지로 새어 나간다(2026-11-10 실측: 「Daily-Test」가 안 걸렸다).
  */
+const DAILY = /daily[\s._-]*test|데일리/i
 export function isDailyTest(row: { title?: string | null; kind?: string | null }): boolean {
-  return /daily\s*test|데일리/i.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+  return DAILY.test(`${row.title ?? ''} ${row.kind ?? ''}`)
 }
 
 /**
@@ -586,6 +604,10 @@ export function coreTestRound(row: { title?: string | null; kind?: string | null
  */
 export function isDiagnostic(row: { title?: string | null; kind?: string | null; level?: number | null }): boolean {
   if (coreTestRound(row)) return false
+  // ★ 데일리테스트가 평가보다 먼저다 (원장님 2026-11-10 「레벨이 쓰여 있어도 Daily Test 는
+  //   데일리테스트로 들어가는게 우선」). 「주말복습 Daily Test」처럼 두 말이 같이 적혀 와도
+  //   학습일지로 가야 한다 — 고등은 주중 범위를 데일리테스트로 매일 보기 때문이다.
+  if (isDailyTest(row)) return false
   if (WEEKEND_REVIEW.test(String(row.title ?? ''))) return true
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
   if (!/진단\s*평가|주간\s*평가|주말\s*평가/.test(t)) return false

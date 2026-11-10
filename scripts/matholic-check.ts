@@ -446,6 +446,29 @@ T('주말복습 TEST 는 데일리테스트가 아니다 (학습지로 간다)',
   && isDailyTest({ title: '고1A Daily Test 0903 (lv2.5)', kind: '학습지' })
   && isDailyTest({ title: '데일리 테스트 3회', kind: '학습지' }))
 
+// ── 2026-11-10 「레벨이 쓰여 있어도 Daily Test 는 데일리테스트가 우선」 (원장님) ────────
+T('Daily Test 는 레벨이 적혀 있어도 데일리테스트다 (고등은 매일 본다)', () => {
+  const 줄들 = [
+    { title: '고2 Daily Test 1110_Lv3', kind: '학습지', level: 3 },
+    { title: '고1A Daily Test 0903 (lv2.5)', kind: '단원학습 학습지', level: 2.5 },
+    { title: '고2 DAILY TEST 미적분 3단원 Lv4', kind: '학습지', level: 4 },
+  ]
+  // 데일리테스트는 레벨을 보지 않는다. 그리고 평가(진단평가)로도 새지 않아야 한다.
+  return 줄들.every((r) => isDailyTest(r) && !isDiagnostic(r) && !isEnoughOne(r))
+})
+
+T('Daily 와 Test 사이에 무엇이 끼어도 데일리테스트다 (-·_·붙여쓰기)', () =>
+  ['고1 Daily-Test 1110 Lv2', '고1 Daily_Test 1110 Lv2', '고1 DailyTest 1110 Lv2',
+   '고1 Daily.Test 1110 Lv2', '고1 daily test 1110 Lv2']
+    .every((title) => isDailyTest({ title, kind: '학습지' })))
+
+T('데일리테스트가 평가보다 먼저다 (두 말이 같이 적혀 와도 학습일지로)', () =>
+  // 평가로 읽힐 말(주간평가 · 주말복습 TEST)이 같이 적혀 있어도 데일리가 이긴다
+  !isDiagnostic({ title: '고2 주간평가 Daily Test 1110', kind: '학습지', level: null })
+  && !isDiagnostic({ title: '고1 A 주말복습 TEST Daily Test 1110(lv2.5)', kind: '학습지', level: 2.5 })
+  // 데일리라는 말이 없으면 예전대로 평가다 (주말복습 규칙을 깨지 않았는지)
+  && isDiagnostic({ title: '고1 A 주말복습 TEST 1107(lv2.5)', kind: '학습지', level: 2.5 }))
+
 // ── 학생 찾기 — 동명이인
 const ALL = [
   { id: 'a', name: '한지후', grade: '고1', teacher_name: '주한' },
@@ -1043,6 +1066,30 @@ T('planRow 가 줄마다 갈 곳을 정한다', () => {
     && b.mode === 'core' && b.coreRound === '본고사'
     && c.mode === 'new'
     && d.mode === 'skip'   // 스터디체크에 없는 학생
+})
+
+T('planRow — Daily Test 는 레벨이 있어도 학습일지로 간다', () => {
+  const 학생 = { id: 'S1', name: '가짜학생', grade: '고2', teacher_name: '주한' }
+  const ctx = {
+    mine: [학생], rules: {}, books: BOOKS, concepts: [] as any[],
+    wsByStudent: new Map(),
+    sessionsOf: new Map([['S1', [{ id: 'C1', student_id: 'S1', session_date: '2026-11-10', daily_test_score: null }]]]),
+    coreByKey: new Map(), examByKey: new Map(),
+  }
+  const 줄 = (title: string, level: number | null) =>
+    ({ line: 1, student: '가짜학생', date: '2026-11-10', kind: '학습지', course: '미적분 (2022 개정)',
+       title, level, right: 9, total: 10, score: 90, raw: title })
+  const a = planRow(줄('고2 Daily Test 1110_Lv3', 3), ctx as any)
+  const b = planRow(줄('고2 Daily-Test 1110_Lv3', 3), ctx as any)
+  return a.mode === 'daily' && a.sessionId === 'C1' && b.mode === 'daily' && b.sessionId === 'C1'
+})
+
+T('planRow 안에서 데일리 갈림길이 평가·레벨 갈림길보다 위에 있다', () => {
+  const src = fs.readFileSync(path.resolve('lib/matholicPlan.ts'), 'utf8')
+  const daily = src.indexOf('if (isDailyTest(row)) {')
+  const diag = src.indexOf('if (isDiagnostic(row)) {')
+  const lv = src.indexOf('needsLevel(row, ctx.books)')
+  return daily > 0 && diag > 0 && lv > 0 && daily < diag && daily < lv
 })
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
