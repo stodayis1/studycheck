@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { ACTIVITY_KINDS, ACTIVITY_STATUS, FORMS, QUESTIONS, CONSENT_VERSION, formForGrade } from '@/lib/careerSurvey'
 import { isTestStudentId } from '@/lib/testStudents'
+import { RECORD_RULES, forbiddenWarnings, letterCount, LETTER_LIMITS } from '@/lib/careerRecordRules'
+import SubjectGuideCard from './SubjectGuideCard'
 import { GREEN, MINT, LINE, Badge, Card, type Student, type Consent, type Survey, type Activity } from './shared'
 
 const GRADE_TABS = [
@@ -53,6 +55,14 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
 
   const sel = students.find((s) => s.id === selId) ?? null
   const canEdit = sel ? canEditStudent(sel) : false
+  // 그 학생이 질문지에 적은 계열·학과 — 권장 이수과목을 찾는 열쇠 (학생 답을 먼저, 없으면 학부모 답)
+  const selAnswer = sel ? (surveysOf(sel.id, 'student')[0] ?? surveysOf(sel.id, 'parent')[0])?.answers ?? {} : {}
+  const selFields: string[] = Array.isArray(selAnswer.field) ? selAnswer.field : []
+  const selMajor: string = String(selAnswer.major ?? '')
+  // 적은 글에 **학생부에 못 들어갈 말**이 있나 (막지 않고 알려만 준다)
+  const warns = forbiddenWarnings(f.title, f.detail)
+  const limit = LETTER_LIMITS[f.kind]
+  const count = letterCount(f.detail)
   const selHasOptional = sel ? !!(activeConsent(sel.id, 'student')?.optional_agreed || activeConsent(sel.id, 'parent')?.optional_agreed) : false
 
   function openNew() { setF({ ...emptyForm(), grade_at: sel?.grade ?? '' }); setShowForm(true); setErr('') }
@@ -195,6 +205,9 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                 </div>
               </Card>
 
+              {/* 고른 계열·학과 → 2028 권장 이수과목 (원장님 2026-11-10) */}
+              <SubjectGuideCard fields={selFields} major={selMajor} />
+
               <Card>
                 <div className="flex items-center">
                   <h3 className="text-sm font-bold text-gray-700">활동 기록 (탐구보고서 · 세특 · 수행평가 …)</h3>
@@ -203,6 +216,22 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                   )}
                 </div>
                 {!canEdit && <p className="text-xs text-gray-400 mt-1">본인 담당 학생만 적을 수 있어요(보기 전용).</p>}
+
+                {/* ★ 학생부에 못 들어가는 것 — 적기 전에 보이게 (원장님 2026-11-10).
+                    근거는 『2026 학교생활기록부 기재요령(고등학교)』. lib/careerRecordRules.ts 한 곳에 둔다. */}
+                <details className="mt-2 rounded-xl p-3" style={{ background: '#FFF7ED', border: '1px solid #FDBA74' }}>
+                  <summary className="text-xs font-bold cursor-pointer" style={{ color: '#9A3412' }}>
+                    학생부에 못 들어가는 것 — 적기 전에 한 번 보기
+                  </summary>
+                  <ul className="mt-2 space-y-1.5">
+                    {RECORD_RULES.map((r, i) => (
+                      <li key={i} className="text-[11px] leading-relaxed" style={{ color: '#7C2D12' }}>· {r}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[10px]" style={{ color: '#9A3412' }}>
+                    근거: 2026학년도 학교생활기록부 기재요령(고등학교) · 17개 시도교육청
+                  </p>
+                </details>
 
                 {showForm && (
                   <div className="mt-3 rounded-xl p-4 space-y-2" style={{ background: MINT }}>
@@ -231,6 +260,16 @@ export default function RecordsTab({ students, consents, surveys, acts, setActs,
                     <textarea value={f.detail} onChange={(e) => setF({ ...f, detail: e.target.value })} rows={5}
                       placeholder={f.kind === '세특' ? '학생부에 적힌 세특 문구 그대로' : '내용 · 방법 · 결과 · 선생님 의견'}
                       className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: LINE }} />
+                    {/* 글자 수 — 교육정보시스템은 Byte 로 센다(한글 1자 3Byte). 세특은 과목당 500자 */}
+                    {limit != null && count.letters > 0 && (
+                      <p className={`text-[11px] ${count.letters > limit ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
+                        {count.letters}자 / {limit}자 ({count.bytes}Byte){count.letters > limit ? ' — 학생부에는 이만큼 못 들어가요' : ''}
+                      </p>
+                    )}
+                    {/* 학생부에 못 들어갈 말이 보이면 알린다 — 저장은 막지 않는다(우리 기록에는 남겨 둘 수 있다) */}
+                    {warns.map((w) => (
+                      <p key={w} className="text-[11px] text-amber-700">⚠ {w}</p>
+                    ))}
                     <div className="flex flex-wrap gap-2 items-center">
                       <span className="text-xs text-gray-500">진행:</span>
                       {ACTIVITY_STATUS.map((s) => (
