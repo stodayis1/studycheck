@@ -39,6 +39,7 @@ import {
   type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit, type MatholicRow, type ParseResult, type StudentLite, type WsCandidate, type DiagnosticParts,
 } from '@/lib/matholic'
 import { planRow, type MatholicPlan as Plan, type Mode, type PlanContext } from '@/lib/matholicPlan'
+import { expectedStudentsOn } from '@/lib/expectedToday'
 import { applyPlans } from '@/lib/matholicApply'
 
 // 한 줄을 어디에 넣을지 정하는 **판단**은 lib/matholicPlan.ts 에 있다 — 화면과 스크립트가
@@ -127,6 +128,15 @@ export default function MatholicImportPage() {
         arr.push(c); sessionsOf.set(c.student_id, arr)
       }
 
+      // 그날 **시간표에 수업이 있는** 학생 — 학습일지가 아직 없을 때 새로 만들어도 되는지
+      // 가리는 데 쓴다 (원장님 2026-11-10). 공휴일·휴원일·대체수업·첫 수업 전은
+      // expectedStudentsOn 이 이미 빼 준다. 데일리테스트가 있는 날짜만 묻는다.
+      const classDays = new Set<string>()
+      for (const d of dates) {
+        const exp = await expectedStudentsOn(supabase as any, d)
+        for (const id of exp.ids) classDays.add(`${d}|${id}`)
+      }
+
       // 코어테스트도 이미 들어간 것을 먼저 읽는다 — 같은 날 같은 회차를 두 번 넣지 않는다.
       const coreDates = [...new Set(res.rows.filter((r) => coreTestRound(r)).map((r) => r.date))]
       const cores = coreDates.length === 0 || ids.length === 0 ? [] : (await Promise.all(
@@ -146,7 +156,7 @@ export default function MatholicImportPage() {
 
       // 판단은 lib/matholicPlan.ts 한 곳에서 한다. 여기서 읽어 온 것들을 그대로 넘긴다.
       const ctx: PlanContext = { mine, rules, books: bookNames, concepts,
-        wsByStudent: byStudent, sessionsOf, coreByKey, examByKey }
+        wsByStudent: byStudent, sessionsOf, classDays, coreByKey, examByKey }
       setPlans(res.rows.map((row) => planRow(row, ctx)))
     } finally { setReading(false) }
   }
@@ -266,8 +276,13 @@ export default function MatholicImportPage() {
                       </select>
                     )}
 
-                    {p.mode === 'daily' && (
-                      <span className={cx(칩, 'bg-amber-100 text-amber-800')}>학습일지 · 데일리테스트</span>
+                    {/* ★ 데일리테스트는 **들어가든 못 들어가든** 데일리테스트로 보여 준다
+                        (원장님 2026-11-10 「데일리테스트 여전히 못읽는데?」 — 넘어간 줄에
+                        「레벨학습지」 칩이 붙어 있어서 못 읽은 줄 아셨다). */}
+                    {(p.mode === 'daily' || isDailyTest(p.row)) && (
+                      <span className={cx(칩, p.mode === 'daily' ? 'bg-amber-100 text-amber-800' : 'bg-amber-50 text-amber-700')}>
+                        학습일지 · 데일리테스트{p.newSession ? ' (일지 새로 만듦)' : ''}
+                      </span>
                     )}
                     {p.mode === 'core' && (
                       <span className={cx(칩, 'bg-purple-100 text-purple-800')}>평가관리 · 코어테스트 {p.coreRound}</span>
@@ -282,14 +297,17 @@ export default function MatholicImportPage() {
                     )}
                     {/* ★ 어느 갈래로 들어가는지 — 레벨학습지·오답학습지·쌍둥이.
                         이게 없으면 「비상교과서」가 쌍둥이로 걸렸는지 **화면만 보고는 알 수 없다.** */}
-                    {p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'exam' && p.mode !== 'excluded' && p.studentId && (() => {
+                    {p.mode !== 'daily' && !isDailyTest(p.row) && p.mode !== 'core' && p.mode !== 'exam' && p.mode !== 'excluded' && p.studentId && (() => {
                       const 갈래 = worksheetTypeOf(p.row, books)
                       const [말, 색] = 갈래 === 'twin' ? ['쌍둥이 학습지', 'bg-indigo-100 text-indigo-800']
                         : 갈래 === 'similar' ? ['오답학습지', 'bg-rose-100 text-rose-800']
                         : ['레벨학습지', 'bg-emerald-100 text-emerald-800']
                       return <span className={cx(칩, 색)}>{말}</span>
                     })()}
-                    {p.mode !== 'done' && p.mode !== 'daily' && p.mode !== 'core' && p.mode !== 'exam' && p.mode !== 'excluded' && p.studentId && (
+                    {/* ★ 데일리테스트 줄에는 **학습지 고르기를 보여 주지 않는다** —
+                        「다시 넣기」를 누르면 데일리테스트가 레벨학습지로 새로 만들어져
+                        같은 점수가 두 군데 생긴다 (2026-11-10 에 그렇게 보이고 있었다). */}
+                    {p.mode !== 'done' && p.mode !== 'daily' && !isDailyTest(p.row) && p.mode !== 'core' && p.mode !== 'exam' && p.mode !== 'excluded' && p.studentId && (
                       <>
                         <select value={p.wsId ?? ''} onChange={(e) => {
                           const id = e.target.value || null

@@ -43,6 +43,13 @@ export interface MatholicPlan {
   wsId: string | null
   /** 데일리테스트일 때 적을 수업 기록 (class_sessions.id) */
   sessionId: string | null
+  /**
+   * 데일리테스트인데 **그날 학습일지가 아직 없을 때** — 학습일지를 새로 만들어 적는다
+   * (원장님 2026-11-10). 고등은 저녁 수업이라 낮에 붙여넣으면 일지가 아직 없다.
+   * ★ **시간표에 그날 수업이 있는 학생만** 이렇게 한다 (`PlanContext.classDays`) —
+   *   집에서 푼 것까지 일지를 만들면 수업 안 한 날에 학습일지가 생긴다.
+   */
+  newSession?: boolean
   /** 코어테스트일 때 회차 이름 (예비 1회 · 예비 2회 · 본고사) */
   coreRound: string | null
   /**
@@ -77,6 +84,13 @@ export interface PlanContext {
   wsByStudent: Map<string, WsCandidate[]>
   /** 학생별 수업 기록 (데일리테스트를 붙일 자리) */
   sessionsOf: Map<string, SessionLite[]>
+  /**
+   * 그 날짜에 **시간표상 수업이 있는** 학생 — 열쇠는 `날짜|학생id`.
+   * `lib/expectedToday.ts` 의 `expectedStudentsOn(db, 날짜)` 로 만든다 (공휴일·휴원일·
+   * 대체수업·첫 수업 전·학습일지 안 쓰는 학생이 이미 빠져 있다).
+   * 데일리테스트인데 그날 학습일지가 없을 때 **새로 만들어도 되는지**를 이걸로 가린다.
+   */
+  classDays: Set<string>
   /** 이미 들어간 코어테스트 — `학생id|날짜|회차` → 점수 */
   coreByKey: Map<string, number | null>
   /** 이미 들어간 진단평가 — `학생id|날짜|단원` → 점수 */
@@ -136,8 +150,18 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
     // (집에서 풀고 다음 수업에 가져오는 경우). 앞은 보지 않는다.
     const hit = pickSessionForDaily(row.date, ctx.sessionsOf.get(sid) ?? [])
     if (!hit) {
+      // ★ 그날 **시간표에 수업이 있는** 학생이면 학습일지를 새로 만들어 적는다
+      //   (원장님 2026-11-10). 고등은 저녁 수업이라 낮에 붙여넣으면 그날 일지가 아직
+      //   없고, 예전에는 그 점수가 통째로 넘어갔다 — 11/10 고1 네 명이 그랬다.
+      //   출결·진도·과제는 비운다. 「미작성」 알림에는 그대로 잡히므로(출결 없음)
+      //   선생님이 저녁에 일지를 여시면 점수만 이미 들어가 있는 상태가 된다.
+      if (ctx.classDays.has(`${row.date}|${sid}`)) {
+        return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null,
+          mode: 'daily', newSession: true,
+          why: tag(`${row.date} 학습일지가 아직 없어요 — 새로 만들어 데일리테스트 칸에 적습니다`) }
+      }
       return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, mode: 'skip',
-        why: tag(`${row.date} 뒤로 수업이 없어요 — 적을 데가 없어 넘어갑니다`) }
+        why: tag(`${row.date} 은 수업이 없는 날이고 뒤로도 수업이 없어요 — 적을 데가 없어 넘어갑니다`) }
     }
     const { session: ses, gapDays } = hit
     const 어디 = gapDays === 0 ? '' : ` (${ses.session_date} 수업에 붙입니다 · ${gapDays}일 뒤)`

@@ -47,10 +47,19 @@ export async function applyPlans(
     const label = `${p.row.student} ${p.row.date} ${p.row.score}점`
     try {
       if (p.mode === 'daily' && p.sessionId) {
-        // 학습일지의 데일리테스트 점수. 수업 기록은 **만들지 않는다** — 없으면 건너뛴다.
-        // (출결·학부모 브리핑이 수업 기록을 보고 돌기 때문에 함부로 만들면 안 된다.)
         const { error } = await db.from('class_sessions')
           .update({ daily_test_score: p.row.score }).eq('id', p.sessionId)
+        if (error) throw new Error(error.message)
+        daily++
+      } else if (p.mode === 'daily' && p.newSession && p.studentId) {
+        // ★ 그날 학습일지가 아직 없을 때만 **새로 만든다** (원장님 2026-11-10).
+        //   아무 때나 만들면 안 된다 — 출결·학부모 브리핑·미작성 알림이 이 표를 보고 돈다.
+        //   그래서 `planRow` 가 **시간표에 그날 수업이 있는 학생**(classDays)만 이 길로 보낸다.
+        //   점수 칸만 채우고 출결·진도·과제는 비워 둔다 — 선생님이 쓰실 자리다.
+        const { error } = await db.from('class_sessions').insert({
+          student_id: p.studentId, session_date: p.row.date, session_type: '정규',
+          daily_test_score: p.row.score, created_by: teacherName ?? '매쓰홀릭',
+        })
         if (error) throw new Error(error.message)
         daily++
       } else if (p.mode === 'core' && p.studentId && p.coreRound) {

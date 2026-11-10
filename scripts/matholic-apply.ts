@@ -32,6 +32,7 @@ import {
   type MatholicRow, type NameRules, type SessionLite, type ConceptRow, type StudentLite, type WsCandidate,
 } from '../lib/matholic.ts'
 import { planRow, type PlanContext, type MatholicPlan } from '../lib/matholicPlan.ts'
+import { expectedStudentsOn } from '../lib/expectedToday.ts'
 import { applyPlans } from '../lib/matholicApply.ts'
 
 // ── .env.local 읽기 (다른 스크립트와 같은 방식) ──────────────────────────────
@@ -128,6 +129,14 @@ async function buildContext(rows: MatholicRow[]): Promise<PlanContext> {
     arr.push(c); sessionsOf.set(c.student_id, arr)
   }
 
+  // 그날 시간표에 수업이 있는 학생 — 학습일지가 없을 때 새로 만들어도 되는지 가린다
+  // (원장님 2026-11-10). 화면과 같은 함수(expectedStudentsOn)를 쓴다.
+  const classDays = new Set<string>()
+  for (const d of dates) {
+    const exp = await expectedStudentsOn(db, d)
+    for (const id of exp.ids) classDays.add(`${d}|${id}`)
+  }
+
   // 이미 들어간 코어테스트·진단평가 (두 번 넣지 않으려고)
   const coreDates = [...new Set(rows.filter((r) => coreTestRound(r)).map((r) => r.date))]
   const cores = coreDates.length === 0 || ids.length === 0 ? [] : (await Promise.all(
@@ -143,7 +152,7 @@ async function buildContext(rows: MatholicRow[]): Promise<PlanContext> {
         .eq('exam_type', '진단평가').in('student_id', chunk).in('exam_date', examDates).order('id'))))).flat()
   const examByKey = new Map(exams.map((e) => [`${e.student_id}|${e.exam_date}|${e.unit_name ?? ''}`, e.score]))
 
-  return { mine, rules, books, concepts, wsByStudent, sessionsOf, coreByKey, examByKey }
+  return { mine, rules, books, concepts, wsByStudent, sessionsOf, classDays, coreByKey, examByKey }
 }
 
 const 한글 = (s: string, n: number) => {
