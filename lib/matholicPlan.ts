@@ -127,21 +127,10 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
       mode: 'core', why: tag(`평가관리 · 코어테스트 ${round} 로 넣습니다`) }
   }
 
-  // ★ 주간·주말평가와 주말복습 TEST 는 학습지가 아니라 **평가관리의 진단평가**로 간다
-  //   (원장님 2026-11-06 「주간평가는 평가로 들어가야해」 · 2026-11-07 「주말복습 테스트는
-  //    평가관리.진단평가로 가야해」). 코어테스트(월간평가)를 먼저 본 뒤라야 새지 않는다.
-  if (isDiagnostic(row)) {
-    const d = parseDiagnosticTitle(row.title)
-    const already = ctx.examByKey.get(`${sid}|${row.date}|${d.unitName ?? ''}`)
-    if (already != null) {
-      return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
-        mode: 'done', why: tag(`평가관리에 진단평가 ${already}점이 이미 있어요`) }
-    }
-    const 단원말 = d.unitName ? `단원 「${d.unitName}」` : '단원을 못 읽었어요 — 제목은 메모에 남깁니다'
-    return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
-      mode: 'exam', why: tag(`평가관리 · 진단평가로 넣습니다 (${단원말}${d.level != null ? ` · ${d.level}단계` : ''})`) }
-  }
-
+  // ★ 데일리테스트는 **평가·레벨학습지보다 먼저** 본다 — 원장님 2026-11-10 「레벨이 쓰여
+  //   있어도 Daily Test 는 데일리테스트로 들어가는게 우선이야. 고등은 데일리테스트를 무조건
+  //   보거든」. 고등 제목은 「고1A Daily Test 1110 (lv2.5)」처럼 레벨이 붙어 오므로,
+  //   레벨 갈림길이 먼저 돌면 학습지로 새고 같은 점수가 두 군데 생긴다.
   if (isDailyTest(row)) {
     // 그날 수업이 있으면 그 수업에. 없으면 **그 뒤** 가장 가까운 수업에
     // (집에서 풀고 다음 수업에 가져오는 경우). 앞은 보지 않는다.
@@ -159,6 +148,21 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
     return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: ses.id, coreRound: null, unit: null, mode: 'daily',
       why: tag((ses.daily_test_score == null ? '학습일지 데일리테스트 칸에 적습니다'
         : `학습일지에 ${ses.daily_test_score}점이 적혀 있어요 — ${row.score}점으로 바꿉니다`) + 어디) }
+  }
+
+  // ★ 주간·주말평가와 주말복습 TEST 는 학습지가 아니라 **평가관리의 진단평가**로 간다
+  //   (원장님 2026-11-06 「주간평가는 평가로 들어가야해」 · 2026-11-07 「주말복습 테스트는
+  //    평가관리.진단평가로 가야해」). 코어테스트(월간평가)를 먼저 본 뒤라야 새지 않는다.
+  if (isDiagnostic(row)) {
+    const d = parseDiagnosticTitle(row.title)
+    const already = ctx.examByKey.get(`${sid}|${row.date}|${d.unitName ?? ''}`)
+    if (already != null) {
+      return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
+        mode: 'done', why: tag(`평가관리에 진단평가 ${already}점이 이미 있어요`) }
+    }
+    const 단원말 = d.unitName ? `단원 「${d.unitName}」` : '단원을 못 읽었어요 — 제목은 메모에 남깁니다'
+    return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
+      mode: 'exam', why: tag(`평가관리 · 진단평가로 넣습니다 (${단원말}${d.level != null ? ` · ${d.level}단계` : ''})`) }
   }
 
   // 제목에 적힌 단원 이름을 개념 사전에 대고 찾는다. 못 찾으면 null 이고,
