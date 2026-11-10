@@ -10,6 +10,23 @@ const DPI = 200
 const Z = DPI / 72
 const INK = 200                       // 이보다 어두우면 글자·그림
 const MARK = /^(\d+)\)$/
+// 한글 작업본은 두 꼴이 있다.
+//   ① 미주 꼴 「1)」 — 번호가 작은 글씨로 따로 찍힌다 (MARK)
+//   ② 「1.」 꼴 — 수학의지혜 시험지 양식으로 짠 작업본. **번호가 수식 글꼴**이라 PDF 에서
+//      글자로 아예 안 읽힌다(사용자 영역 글자로 나온다). 그래서 번호는 나온 **차례대로** 매긴다.
+//      2026-11-10 신원중 중1 2025 2학기 기말이 이 꼴이었다(미주 0개 → 통째로 막혔다).
+const PUA = /^[\uE000-\uF8FF]+$/          // 수식 글꼴 글자 (글자로 옮길 수 없다)
+// 한글 수식 글꼴의 **숫자**는 사용자 영역 글자로 찍힌다 — 실측(2026-11-10 신원중)으로는
+//   E034~E03C = 1~9, E03D = 0 이다. 글꼴마다 다를 수 있으므로 **그 파일에서 맞는지 확인한 뒤에만** 쓴다:
+//   「1.」 꼴 문항 번호를 이 표로 읽어 1, 2, 3 … 으로 이어지면 맞는 표다(dotOk). 맞을 때만
+//   배점 「[3점]」 과 숫자 정답을 되살려 읽는다. 안 맞으면 전처럼 그냥 버린다.
+const EQ_FROM = 0xe034
+const EQ_DIGITS = '1234567890'
+export function eqText(s: string): string {
+  return s.replace(/[-]/g, (c) => EQ_DIGITS[c.codePointAt(0)! - EQ_FROM] ?? '')
+}
+
+const ESSAY_HEAD = /^\[\s*(논술|서술)형/   // 「[논술형 1-1]」
 
 // 미주 번호는 **본문보다 작다**. 전에는 「8.5pt 보다 작으면」으로 봤는데, 한글에서 본문을 크게
 // (11.5pt) 잡아 만든 파일은 미주가 8.63pt 로 찍혀 **한 끗 차이로 안 걸렸다** — 2026-11-09
@@ -116,7 +133,39 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   const answers: Record<number, string> = {}
   const answerImages: Record<number, HTMLCanvasElement> = {}
   let inAnswers = false, lastAnswerNo = 0
+  let dotNo = 0                         // 「1.」 꼴에서 매긴 마지막 번호 (쪽을 넘어서도 이어진다)
+  let essayRun = false                  // 논술형 묶음 안인가 (딸린 물음은 같은 문항으로 붙인다)
+  let dotUsed = false                   // 「1.」 꼴로 읽었나
+  let dotOk = true                      // 수식 글꼴 숫자표가 이 파일에 맞나 (번호가 1,2,3… 으로 읽히나)
+  let essayQ = 0                        // 논술형 묶음에 매긴 문항 번호 (정답 그림을 여기에 붙인다)
+  const dec = (t: string) => (dotUsed && dotOk ? eqText(t) : t)   // 표가 맞을 때만 숫자를 되살린다
   let markShaped = 0                    // 「N)」 꼴이 있기는 했나 — 안 걸렸을 때 뭐라고 알릴지 가른다
+
+  // ── 머리말·쪽 번호 가려내기 ────────────────────────────────────────────────
+  // 「수학의 지혜 · 1학년 · 수학 · 신원중 · 3/12」 처럼 **쪽마다 같은 자리에 되풀이되는** 글자는
+  // 문항이 아니다. 안 가리면 다음 단 맨 위의 머리말이 앞 문항 그림에 딸려 들어간다
+  // (2026-11-10 신원중 — 문항마다 머리말 띠가 붙어 그림이 쪽 높이만큼 길어졌다).
+  const sigOf = (x: number, base: number, str: string) => `${Math.round(x)}|${Math.round(base)}|${str}`
+  const numSig = (x: number, base: number) => `${Math.round(x / 5) * 5}|${Math.round(base)}`
+  const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$/      // 「3」 · 「3/12」 — 쪽마다 글자가 달라진다
+  const seen = new Map<string, number>()
+  const seenNum = new Map<string, number>()
+  for (let pi = 0; pi < doc.numPages; pi++) {
+    const pg = await doc.getPage(pi + 1)
+    const vp = pg.getViewport({ scale: 1 })
+    for (const it of (await pg.getTextContent()).items as any[]) {
+      const str = String(it.str ?? '').trim()
+      if (!str) continue
+      const t = pdfjs.Util.transform(vp.transform, it.transform)
+      seen.set(sigOf(t[4], t[5], str), (seen.get(sigOf(t[4], t[5], str)) ?? 0) + 1)
+      if (PAGE_NO.test(str)) seenNum.set(numSig(t[4], t[5]), (seenNum.get(numSig(t[4], t[5])) ?? 0) + 1)
+    }
+  }
+  // 쪽이 셋 이상일 때만 본다 (두 쪽짜리에서 우연히 같은 자리에 같은 글자가 올 수 있다)
+  const REPEAT = doc.numPages >= 3 ? Math.max(3, Math.ceil(doc.numPages * 0.6)) : doc.numPages + 1
+  const isRunning = (t: Item) =>
+    (seen.get(sigOf(t.x, t.base, t.str)) ?? 0) >= REPEAT ||
+    (PAGE_NO.test(t.str) && (seenNum.get(numSig(t.x, t.base)) ?? 0) >= REPEAT)
 
   for (let pi = 0; pi < doc.numPages; pi++) {
     onProgress?.(pi + 1, doc.numPages)
@@ -131,13 +180,25 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     await page.render({ canvasContext: ctx, viewport: vp, canvas, intent: 'print' } as any).promise
 
     const tc = await page.getTextContent()
-    const items: Item[] = []
+    const raw: Item[] = []
     for (const it of tc.items as any[]) {
       if (!it.str || !it.str.trim()) continue
       const t = pdfjs.Util.transform(vp1.transform, it.transform)
       const size = Math.hypot(t[2], t[3])
-      items.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size })
+      raw.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size })
     }
+    // 되풀이되는 글자가 있는 **띠 전체**를 뺀다 — 쪽 번호처럼 쪽마다 글자가 달라지는 것도
+    // 같은 띠 안에 있으면 머리말이다 (안 빼면 그 글자 때문에 본문 위끝이 머리말까지 올라간다)
+    const head = raw.filter(isRunning)
+    const topBand = Math.max(0, ...head.filter((t) => t.base < vp1.height * 0.25).map((t) => t.bottom))
+    const botBand = Math.min(vp1.height, ...head.filter((t) => t.base > vp1.height * 0.75).map((t) => t.top))
+    const items = raw.filter((t) => !isRunning(t) && t.base > topBand && t.base < botBand)
+    // 본문이 들어 있는 세로 범위 — 이 밖(머리말 띠·쪽 번호·테두리 줄)은 문항 그림에 넣지 않는다
+    const bodyTop = items.length ? Math.min(...items.map((t) => t.top)) - 2 : topBand + 2
+    // 맨 아래 「※ 확인사항 …」 안내는 문항이 아니다 (마지막 문항 그림에 딸려 들어간다)
+    const noteTop = Math.min(...items.filter((t) => /^※/.test(t.str)).map((t) => t.top), Infinity)
+    const bodyBottom = Math.min(botBand - 2, noteTop - 4,
+      items.length ? Math.max(...items.map((t) => t.bottom)) + 6 : vp1.height)
 
     // 두 단의 가로 범위 — 가운데 세로선이 있으면 그 자리, 없으면 쪽 한가운데
     let mid = vp1.width / 2
@@ -165,20 +226,22 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     // 그때는 번호 줄 아래부터 자르면 첫 줄이 날아간다 → 그 줄 위에서부터 자르고 번호 글자만 지운다 (top · box)
     const limit = markLimit(items.map((t) => t.size))
     markShaped += items.filter((t) => MARK.test(t.str)).length
-    const ms = items
+    type Mark = { no: number; col: number; y0: number; y1: number; top: number | null; box?: [number, number, number, number] }
+    const ms: Mark[] = items
       .filter((t) => MARK.test(t.str) && t.size < limit && Math.abs(t.x - cols[colOf(t.x)][0]) < 12)
-      .map((t) => {
+      .map((t): Mark => {
         const col = colOf(t.x)
         const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 4 && o.x >= t.x1 - 1 && o.x < cols[col][1])
         return {
           no: Number(t.str.match(MARK)![1]), col, y0: t.top, y1: t.bottom,
-          top: same.length ? Math.min(t.top, ...same.map((o) => o.top)) - 2 : null as number | null,
+          top: same.length ? Math.min(t.top, ...same.map((o) => o.top)) - 2 : null,
           box: [t.x, t.top, t.x1, t.bottom] as [number, number, number, number],
         }
       })
 
     // 정답표 쪽: 번호만 줄줄이 있거나, 작은 미주 번호 없이 「1) ③」 줄이 5개 넘게 있는 쪽
-    const lineStarts = items.filter((t) => /^\d+\)/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
+    // 정답표는 「1) ③」 과 「1. ④」 두 꼴이 다 있다
+    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
     const nMark = items.filter((t) => MARK.test(t.str)).length
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
     if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
@@ -188,8 +251,8 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       for (const c of [0, 1]) {
         const ws = lineStarts.filter((t) => colOf(t.x) === c).sort((a, b) => a.base - b.base)
         for (const t of ws) {
-          if (t.str.startsWith(`${want})`)) {
-            const head = `${want})`
+          const head = [`${want})`, `${want}.`].find((h) => t.str.startsWith(h))
+          if (head) {
             marks.push({ no: want, c, y0: t.top, yb: t.bottom, base: t.base, h: t.size, xr: t.str === head ? t.x1 : Math.min(t.x1, t.x + t.size * 0.56 * head.length) })
             want++
           }
@@ -197,15 +260,15 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       }
       lastAnswerNo = want - 1
       const rows = inkRows(ctx, canvas.width, canvas.height)
-      const bottom = Math.min(vp1.height, (rows ? rows[1] / Z : vp1.height) + 6)
+      const bottom = Math.min(vp1.height, (rows ? rows[1] / Z : vp1.height) + 6, bodyBottom)
       marks.forEach((m, i) => {
         const nxt = marks[i + 1] && marks[i + 1].c === m.c ? marks[i + 1] : null
         const y1 = nxt ? nxt.y0 - 1 : bottom
         const x1 = cols[m.c][1]
         // 번호 글자와 정답이 한 덩어리(「10) ⑤」)로 올 수 있어 단 왼쪽부터 읽고 번호를 떼어 낸다.
         // 수식 글꼴의 사용자 영역 글자(분수선 등)는 글자로 옮길 수 없어 버린다
-        let text = textIn(items, cols[m.c][0] - 1, m.y0 - 1, x1, y1).replace(/[-]/g, '').replace(/\s+/g, ' ').trim()
-        text = text.replace(new RegExp(`(^|\\s)${m.no}\\)\\s*`), ' ').trim().replace(/^(논술|서술)형?\s*\d+\s*[.)]\s*/, '')
+        let text = dec(textIn(items, cols[m.c][0] - 1, m.y0 - 1, x1, y1)).replace(/[-]/g, '').replace(/\s+/g, ' ').trim()
+        text = text.replace(new RegExp(`(^|\\s)${m.no}[).]\\s*`), ' ').trim().replace(/^(논술|서술)형?\s*\d+\s*[.)]\s*/, '')
         if (/^[①②③④⑤,\s]+$/.test(text.replace(/[^\p{L}\p{N}①②③④⑤,]/gu, '') || ' ')) text = text.replace(/[^①②③④⑤,]/g, '')   // 빈 수식 틀 같은 찌꺼기는 버린다
         const lead = text.match(/^[①②③④⑤](\s*,\s*[①②③④⑤])*/)
         if (lead && text.length > lead[0].length) text = lead[0]          // 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
@@ -245,12 +308,60 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           answerImages[m.no] = sub(c, x0, y0, Math.min(c.width, c2[1] + 8) - x0, Math.min(c.height, r2[1] + 8) - y0)
         }
       })
+      // 「[논술형 1-1] …」 처럼 번호가 안 붙은 정답은 **그림 한 장**으로 모아 그 문항에 붙인다
+      // (원장님 2026-11-10 「논술형은 21번 한 문항으로 통째」)
+      if (essayQ && !answerImages[essayQ]) {
+        const es = items.filter((t) => ESSAY_HEAD.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
+        if (es.length) {
+          const c0 = colOf(es[0].x)
+          const ey = Math.min(...es.map((t) => t.top)) - 2
+          const cv = sub(canvas, (cols[c0][0] - 1) * Z, ey * Z, (cols[c0][1] - cols[c0][0] + 1) * Z, (bottom - ey) * Z)
+          const gg = cv.getContext('2d', { willReadFrequently: true })!
+          const rr = inkRows(gg, cv.width, cv.height)
+          const cc = inkCols(gg, cv.width, cv.height)
+          if (rr && cc) {
+            const ax = Math.max(0, cc[0] - 6), ay = Math.max(0, rr[0] - 6)
+            answerImages[essayQ] = sub(cv, ax, ay, Math.min(cv.width, cc[1] + 8) - ax, Math.min(cv.height, rr[1] + 8) - ay)
+          }
+        }
+      }
       continue
+    }
+
+    // ── 미주 번호가 하나도 없으면 「1.」 꼴 작업본으로 다시 본다 ──────────────
+    // 번호가 수식 글꼴이라 글자로 안 읽히므로 **나온 차례대로** 매긴다. 번호 글자와 그 뒤의
+    // 「. 」 까지만 하얗게 지우고 첫 줄부터 자른다 (번호 줄 아래부터 자르면 첫 줄이 날아간다).
+    if (!ms.length) {
+      for (const c of [0, 1]) {
+        const cands = items
+          .filter((t) => colOf(t.x) === c && Math.abs(t.x - cols[c][0]) < 12 && t.base > 100)
+          .sort((a, b) => a.base - b.base)
+        for (const t of cands) {
+          const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 3)
+          const next = same.filter((o) => o.x >= t.x1 - 1).sort((a, b) => a.x - b.x)[0]
+          const 번호 = PUA.test(t.str) && !!next && next.x < t.x1 + 8 && next.str.startsWith('.')
+          const 논술 = ESSAY_HEAD.test(t.str)
+          if (!번호 && !논술) continue
+          if (논술 && essayRun) continue          // 묶음에 딸린 물음 → 앞 문항에 이어 붙인다
+          essayRun = 논술
+          dotUsed = true
+          // 번호 글자를 숫자표로 읽어 본다 — 차례와 다르면 그 표는 이 파일에 안 맞는 것이다
+          if (번호) { const read = eqText(t.str); if (read && read !== String(dotNo + 1)) dotOk = false }
+          const top = Math.min(t.top, ...same.map((o) => o.top)) - 2
+          ms.push({
+            no: ++dotNo, col: c, y0: t.top, y1: t.bottom, top,
+            // 논술형 줄은 지우지 않는다 (「[논술형 1-1]」 이 문제의 일부다)
+            box: 번호 ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom] : undefined,
+          })
+          if (논술) essayQ = dotNo
+        }
+      }
+      ms.sort((a, b) => a.col - b.col || a.y0 - b.y0)
     }
 
     // 쪽·단 순서대로 「번호 자리」와 「단 끝」을 한 줄로 늘어놓는다
     const pageRows = inkRows(ctx, canvas.width, canvas.height)
-    const bottom = Math.min(vp1.height, (pageRows ? pageRows[1] / Z : vp1.height) + 4)
+    const bottom = Math.min(vp1.height, (pageRows ? pageRows[1] / Z : vp1.height) + 4, bodyBottom)
     const stream: { c: number; y0: number; y1: number | null; no: number | null; erase?: [number, number, number, number] }[] = []
     for (const c of [0, 1]) {
       const cm = ms.filter((m) => m.col === c).sort((a, b) => a.y0 - b.y0)
@@ -260,7 +371,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         const start = m.top ?? m.y1 + 1
         const cut = (m.top ?? m.y0) - 1
         if (cut > y + 1) stream.push({ c, y0: y, y1: cut, no: null })          // 앞 문항의 이어지는 부분
-        stream.push({ c, y0: start, y1: null, no: m.no, erase: m.top !== null ? m.box : undefined })
+        stream.push({ c, y0: start, y1: null, no: m.no, erase: m.top !== null ? m.box : undefined })   // box 가 없으면 안 지운다
         y = start
       }
       if (stream.length > startLen && stream[stream.length - 1].y1 === null) stream[stream.length - 1].y1 = bottom
@@ -272,7 +383,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       if (s.no !== null) { cur = { no: s.no, page: pi + 1, parts: [], text: '' }; problems.push(cur) }
       if (!cur || s.y1! - s.y0 < 3) continue
       const [x0, x1] = cols[s.c]
-      const y0 = Math.max(s.y0, 30)
+      const y0 = Math.max(s.y0, bodyTop)
       cur.text += ' ' + textIn(items, x0, y0, x1, s.y1!)
       if (s.erase) {           // 같은 줄에 찍힌 번호 글자를 지운다
         ctx.fillStyle = '#fff'
@@ -296,7 +407,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     g.fillStyle = '#fff'; g.fillRect(0, 0, w, h)
     let y = 0
     for (const c of p.parts) { g.drawImage(c, 0, y); y += c.height + 10 }
-    const text = p.text.replace(/\s+/g, ' ').trim()
+    const text = dec(p.text).replace(/\s+/g, ' ').trim()
     const pts = text.match(/[\[(]\s*(\d+(?:\.\d+)?)\s*점\s*[\])]/)          // [4점] 또는 (4점)
     // 「[논술형17~20]」 같은 묶음 표시는 그 문항이 아니라 뒤 문항들의 것이다 → 떼고 본다
     const own = text.replace(/\[\s*(논술|서술)형\s*\d+\s*[~∼-]\s*\d+\s*\]/g, '')
@@ -315,7 +426,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   const nos = out.map((p) => p.no)
   if (!out.length) warnings.push(markShaped
     ? `문항 번호 「1)」 꼴을 ${markShaped}개 찾았지만 문항 시작으로 보지 않았습니다 — 미주 번호가 본문보다 작은지(본문의 85% 미만), 단 맨 왼쪽에 찍혔는지 확인해 주세요.`
-    : '문항 번호(작은 미주 번호 「1)」)를 찾지 못했습니다. 한글에서 변환한 PDF 인지 확인해 주세요.')
+    : '문항 번호를 찾지 못했습니다 — 미주 꼴 「1)」 도, 「1.」 꼴도 없습니다. 한글에서 변환한 PDF 인지, 번호가 단 맨 왼쪽에 있는지 확인해 주세요.')
   else if (nos.some((n, i) => n !== i + 1)) warnings.push(`문항 번호가 1부터 이어지지 않습니다: ${nos.join(', ')}`)
   return { pages: doc.numPages, problems: out, answersFound: Object.keys(answers).length, warnings }
 }
