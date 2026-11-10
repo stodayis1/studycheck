@@ -16,6 +16,10 @@ const { forbiddenWarnings, letterCount, RECORD_RULES, LETTER_LIMITS } = await im
 const { SUBJECT_GUIDE_2028 } = await import('../lib/data/subjectGuide2028.ts')
 const { ROADMAP_CALENDAR } = await import('../lib/data/roadmapCalendar.ts')
 const { buildSeed } = await import('../lib/roadmapSeed.ts')
+const { composeDetail, parseDetail, filledCount, isSplitKind, PART_LABELS } = await import('../lib/activityParts.ts')
+const { makePlan, pickTopics, isLinked } = await import('../lib/careerPlan.ts')
+const { MATH_TOPICS } = await import('../lib/data/mathTopics.ts')
+const { CAREER_FIELDS } = await import('../lib/careerSurvey.ts')
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -135,7 +139,7 @@ T('학생별 기록 화면이 권장과목 카드와 기재 규칙을 쓴다', (
   const src = fs.readFileSync(path.resolve('components/career/teacher/RecordsTab.tsx'), 'utf8')
   return src.includes('<SubjectGuideCard fields={selFields} major={selMajor} />')
     && src.includes('RECORD_RULES.map')
-    && src.includes('forbiddenWarnings(f.title, f.detail)')
+    && src.includes('forbiddenWarnings(f.title, detailText)')
     && src.includes('warns.map')
 })
 
@@ -143,6 +147,133 @@ T('권장과목 자료를 브라우저로 통째로 내려보내지 않는다', 
   // lib/data/subjectGuide2028.ts 는 서버에서만 쓴다 — 화면 파일이 바로 불러오면 번들이 커진다
   const files = ['components/career/teacher/SubjectGuideCard.tsx', 'components/career/teacher/RecordsTab.tsx']
   return files.every((f) => !fs.readFileSync(path.resolve(f), 'utf8').includes('data/subjectGuide2028'))
+})
+
+// ── 2026-11-10 활동을 다섯 칸으로 묻고, 그것으로 로드맵을 그린다 ──────────────
+T('다섯 칸을 담았다 다시 읽으면 그대로다', () => {
+  const parts = { why: '간호 쪽이 궁금해서', how: '표로 손으로 계산했다', found: '여섯 시간마다 절반', stuck: '자료가 모자랐다', next: '다른 약과 견주기', free: '' }
+  const back = parseDetail(composeDetail(parts))
+  return PART_LABELS.every((p: any) => back[p.key] === (parts as any)[p.key]) && filledCount(back) === 5
+})
+
+T('예전에 한 줄로 적어 둔 기록은 통째로 「내용」으로 읽힌다 (안 사라진다)', () => {
+  const old = '이차함수로 최적화를 해 봄. 자료는 급식실에서 받음.'
+  const back = parseDetail(old)
+  return back.free === old && back.why === '' && filledCount(back) === 0
+})
+
+T('세특은 다섯 칸으로 나누지 않는다 (학생부 문구 그대로)', () =>
+  !isSplitKind('세특') && isSplitKind('탐구보고서') && isSplitKind('수행평가'))
+
+T('주제 사전 — 계열 이름이 질문지와 같은 말이고, 55개쯤 된다', () => {
+  const ok = new Set([...CAREER_FIELDS, '공통'])
+  return MATH_TOPICS.length >= 50
+    && MATH_TOPICS.every((t: any) => t.fields.length && t.fields.every((f: string) => ok.has(f)))
+    && MATH_TOPICS.every((t: any) => t.question.length > 10 && t.how.length > 20)
+})
+
+T('주제 사전에 AI 단골 소재가 없다 (학교가 알아본다)', () => {
+  const 단골 = ['피보나치', '황금비', '케플러', '벌집', '몬티홀', '프랙털', '쾨니히스베르크']
+  const hay = MATH_TOPICS.map((t: any) => t.title + t.question + t.how + t.concepts).join(' ')
+  return 단골.every((w) => !hay.includes(w))
+})
+
+T('화면 보기글에도 AI 단골 소재가 없다 (보기글을 그대로 따라 쓴다)', () => {
+  // 2026-11-10: 사전에서는 뺐는데 **입력칸 보기글**에 「피보나치 수열과 황금비」가 남아 있었다
+  const 단골 = ['피보나치', '황금비', '케플러', '벌집', '몬티홀', '프랙털']
+  const files = [
+    'components/career/teacher/RecordsTab.tsx',
+    'components/career/teacher/PlanCard.tsx',
+    'lib/careerRecordRules.ts',
+    'lib/careerSurvey.ts',
+  ]
+  return files.every((f) => {
+    const src = fs.readFileSync(path.resolve(f), 'utf8')
+    return 단골.every((w) => !src.includes(w))
+  })
+})
+
+T('주제 사전 글투에 AI 말투가 없다', () => {
+  const 말투 = ['를 통해', '을 통해', '고찰', '중요성', '융합적', '알아보고자', '함양']
+  const hay = MATH_TOPICS.map((t: any) => t.title + ' ' + t.question + ' ' + t.how).join(' ')
+  return 말투.every((w) => !hay.includes(w))
+})
+
+T('다음 주제는 계열·학년에 맞는 것으로 고른다', () => {
+  const got = pickTopics(['의약·보건'], '고1', [])
+  return got.length === 3
+    && got.every((t: any) => t.fields.includes('의약·보건') || t.fields.includes('공통'))
+    && got.every((t: any) => t.grades.includes('고1'))
+})
+
+T('이미 한 주제는 다시 권하지 않는다', () => {
+  // 후보가 적은 계열로 본다 — 후보가 많으면 걸러지지 않아도 우연히 안 뽑혀 검사가 헐거워진다
+  const pool = pickTopics(['예술·체육'], '고2', [], 99)
+  const done = pool.slice(0, 3).map((t: any) => ({ kind: '탐구보고서', title: t.title }))
+  const again = pickTopics(['예술·체육'], '고2', done as any)
+  const doneIds = new Set(pool.slice(0, 3).map((t: any) => t.id))
+  return pool.length >= 5 && again.length === 3 && again.every((t: any) => !doneIds.has(t.id))
+})
+
+T('계열을 안 정했으면 공통 주제만 준다', () =>
+  pickTopics(['아직 모름'], '고1', []).every((t: any) => t.fields.includes('공통')))
+
+T('진로와 이어진 활동을 센다', () => {
+  const a = { kind: '탐구보고서', title: '약물 농도와 반감기', detail: '', subject: '수학' }
+  const b = { kind: '수행평가', title: '우리 반 급식 잔반', detail: '', subject: '수학' }
+  return isLinked(a as any, ['의약·보건'], '') && !isLinked(b as any, ['의약·보건'], '')
+})
+
+T('로드맵 읽기 — 빈 칸과 짧은 기록을 집어낸다', () => {
+  const plan = makePlan({
+    grade: '고1',
+    answers: { field: ['의약·보건'], major: '간호학과' },
+    acts: [
+      { kind: '수행평가', title: '통계 수행평가', detail: '했음', activity_date: '2026-11-01' },
+      { kind: '탐구보고서', title: '약물 반감기 탐구', detail: composeDetail({ why: '간호에 관심이 있어서', how: '표로 계산', found: '6시간마다 절반', stuck: '', next: '' }), activity_date: '2026-11-05' },
+    ],
+    today: '2026-11-10',
+  })
+  return plan.counts.length === 2
+    && plan.linked === 1
+    && plan.gaps.some((g: string) => g.includes('동아리'))
+    && plan.thin.some((t: any) => t.title === '통계 수행평가' && t.missing.length >= 4)
+    && plan.topics.length === 3
+})
+
+T('기록이 없으면 그렇게 말한다 (지어내지 않는다)', () => {
+  const plan = makePlan({ grade: '고1', answers: { field: ['공학'] }, acts: [], today: '2026-11-10' })
+  return plan.headline.includes('없어요') && plan.gaps.some((g: string) => g.includes('활동이 하나도'))
+})
+
+T('넉 달 넘게 기록이 비면 알려 준다', () => {
+  const plan = makePlan({
+    grade: '고1', answers: { field: ['공학'] },
+    acts: [{ kind: '탐구보고서', title: '다리 모양', detail: '', activity_date: '2026-05-01' }],
+    today: '2026-11-10',
+  })
+  return plan.gaps.some((g: string) => g.includes('넉 달'))
+})
+
+T('질문지에 적어 준 동아리·탐구를 활동 기록으로 가져온다', () => {
+  const src = fs.readFileSync(path.resolve('components/career/teacher/RecordsTab.tsx'), 'utf8')
+  return src.includes('selAnswer.inquiry') && src.includes('selAnswer.club')
+    && src.includes("source: 'survey'") && src.includes('질문지에서 가져오기')
+    // 이미 같은 제목이 있으면 또 넣지 않는다
+    && src.includes('const had = new Set(actsOf(sel.id).map((x) => x.title.trim()))')
+})
+
+T('학생별 기록 화면이 다섯 칸과 로드맵 읽기를 쓴다', () => {
+  const src = fs.readFileSync(path.resolve('components/career/teacher/RecordsTab.tsx'), 'utf8')
+  return src.includes('<PlanCard') && src.includes('PART_LABELS.map')
+    && src.includes('isSplitKind(f.kind)') && src.includes('composeDetail(parts)')
+})
+
+T('규칙 안내에 별표(**) 가 남아 있지 않다 (화면엔 글자로 그대로 보인다)', () => {
+  const src = fs.readFileSync(path.resolve('lib/careerRecordRules.ts'), 'utf8')
+  const from = src.indexOf('export const RECORD_RULES')
+  const rules = src.slice(from, src.indexOf(']', from))
+  return !rules.includes('**')
 })
 
 // ── 진짜 route.ts 를 그대로 돌려 본다 (베껴 쓴 사본 말고) ──────────────────

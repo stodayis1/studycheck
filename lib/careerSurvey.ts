@@ -106,7 +106,7 @@ export const QUESTIONS: Question[] = [
     max: 12, forms: ['pre2'], section: 'study' },
   { id: 'elective_status', label: '선택과목 신청 상태', type: 'single', options: ['확정됐어요', '신청했지만 바꿀 수 있어요', '아직 신청 전이에요', '모르겠어요'], forms: ['pre2'], section: 'study' },
   { id: 'club', label: '동아리 이름과 하는 활동', type: 'textarea', max: 1000, forms: ['pre2'], section: 'school' },
-  { id: 'inquiry', label: '1학년 때 쓴 탐구보고서·수행평가 주제', type: 'textarea', max: 2000, forms: ['pre2'], help: '과목과 주제를 한 줄씩. 예: 수학 - 피보나치 수열과 자연', section: 'school' },
+  { id: 'inquiry', label: '1학년 때 쓴 탐구보고서·수행평가 주제', type: 'textarea', max: 2000, forms: ['pre2'], help: '과목과 주제를 한 줄씩. 예: 사회 - 쓰레기 소각장 주민 갈등 (수행평가 발표)', section: 'school' },
   { id: 'admission', label: '생각하는 대입 전형', type: 'single', options: ['학생부종합', '학생부교과', '정시(수능)', '논술', '아직 모름'], forms: ['pre2'], section: 'school' },
 
   // 공통 마무리
