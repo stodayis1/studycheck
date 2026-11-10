@@ -61,3 +61,20 @@ on conflict (url, starts_on) do nothing returning id, title;
 
 ## 규칙 추가 기록
 - 2026-11-07 스킬 처음 만듦 (확인 후 발송 · 2주에 한 번 · 공식 출처만)
+- 2026-11-10 **정기 소식**을 같이 올린다 (아래 「달마다 챙길 것」). 행사가 없는 달에도 보낼 것이 생긴다. 자료는 연간이슈캘린더에서 온 `lib/data/roadmapCalendar.ts` — 지어내지 않는다
+
+## 달마다 챙길 것 — 정기 소식 (2026-11-10)
+
+찾아낸 행사만으로는 **행사가 없는 달에 보낼 것이 없다.** 학년·월별로 그 달에 챙길 것을 같이 올린다.
+
+```
+node --import ./scripts/ts-resolve.mjs scripts/career-news-seed.ts --months=2        # 미리보기
+node --import ./scripts/ts-resolve.mjs scripts/career-news-seed.ts --months=2 --save # 「검토대기」로 올리기
+```
+
+- 자료는 `lib/data/roadmapCalendar.ts` (연간이슈캘린더 2026 중 중3·고1·고2 107줄). 지어내지 않는다.
+- kind = `정기 소식` · fields = `공통` · 그 달 1일~말일. 줄마다 주소 꼬리(`#roadmap-…`)가 달라야 한다
+  (`career_events` 는 unique (url, starts_on)).
+- **두 달치씩** 심는다 — 2주에 한 번 보내는 흐름과 맞다. 이미 있는 주소는 건너뛴다.
+- 되돌리기: `delete from career_events where found_by = 'claude(연간캘린더)' and status = '검토대기';`
+- 행사 찾기를 돌릴 때 **이번 달·다음 달 정기 소식이 올라가 있는지 먼저 본다.**
