@@ -1169,6 +1169,16 @@ T('데일리테스트 줄에는 학습지 고르기·갈래 칩을 보여 주지
     && src.includes("(p.mode === 'daily' || isDailyTest(p.row))")
 })
 
+T('학습일지 화면이 데일리테스트가 들어와 있다고 알린다 (탭을 안 열어도)', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/learning-notes/page.tsx'), 'utf8')
+  // ① 모달 알림 문구 ② 데일리 탭 표시점 ③ 일지를 쓰기 전에도 카드에 점수 칩
+  //    ④ 열 때 점수를 다시 읽는다 (낡은 빈 값으로 덮어쓰지 않게)
+  return src.includes('오늘 데일리테스트 ') && src.includes('점이 들어와 있어요')
+    && src.includes("t.key === 'daily' && dailyTestScore !== ''")
+    && src.includes('session?.daily_test_score != null')
+    && /select\('daily_test_score, daily_test_unit'\)/.test(src)
+})
+
 await Promise.all(pending)   // 기다리는 검사들이 끝난 뒤에 셈한다
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)

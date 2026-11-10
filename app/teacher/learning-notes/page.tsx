@@ -1374,6 +1374,20 @@ export default function TeacherLearningNotesPage() {
     //   안 읽어 오면 일괄 배부 화면에서 켜 둔 것이 학습일지를 한 번 저장하는 순간 사라진다.
     setHwPhotoAsk(new Set(asksOf(photoAsks, session?.id ?? '').map((a) => 영상열쇠(a.video_url))))
     setShowNoteModal(true)
+
+    // ★ 데일리테스트 점수만은 **열 때 그 자리에서 다시 읽는다** (원장님 2026-11-10).
+    //   매쓰홀릭 긁어 넣기가 방금 넣었을 수 있는데 화면이 들고 있는 값은 30초 전 것이다.
+    //   낡은 빈 값으로 열면 저장할 때 **방금 들어온 점수를 빈 칸으로 덮어쓴다.**
+    if (session) {
+      supabase.from('class_sessions').select('daily_test_score, daily_test_unit').eq('id', session.id).maybeSingle()
+        .then(({ data }: any) => {
+          if (!data) return
+          setDailyTestScore(data.daily_test_score != null ? String(data.daily_test_score) : '')
+          setDailyTestUnit(data.daily_test_unit ?? '')
+          setSessions((prev) => prev.map((s) => s.id === session.id
+            ? { ...s, daily_test_score: data.daily_test_score, daily_test_unit: data.daily_test_unit } : s))
+        })
+    }
   }
 
   // 학습일지에서 결석 체크가 저장되면 OPS(학원 행정 프로그램)에도 실시간으로 결석을 알려서
@@ -2035,6 +2049,14 @@ ${e?.message ?? '연결 실패'}
 
         {/* 가운데 — 남는 만큼만. 넘치면 잘린다(자세한 것은 눌러서 본다) */}
         <div className="flex-1 min-h-0 overflow-hidden px-3 py-2">
+          {/* ★ 데일리테스트 점수는 **일지를 쓰기 전에도** 보여 준다 (원장님 2026-11-10).
+              예전에는 알림장이 있어야 가운데 칸이 그려져서, 매쓰홀릭에서 점수만 들어온
+              학생은 카드에 아무 표시가 없었다 — 「학습일지에 안 들어갔다」로 보인다. */}
+          {session?.daily_test_score != null && (
+            <span className={cx(칩, 'bg-amber-100 text-amber-800 mb-1 inline-block')}>
+              데일리 {session.daily_test_score}점
+            </span>
+          )}
           {note && session ? (
             <div className="flex flex-wrap gap-1.5">
               <span className={cx(칩,
@@ -3985,10 +4007,24 @@ ${e?.message ?? '연결 실패'}
                   style={noteTab === t.key
                     ? { background: '#F5C4B3', color: '#712B13', borderColor: '#F5C4B3' }
                     : { background: 'white', color: '#1f2937', borderColor: '#9FE1CB60' }}>
-                  {t.label}
+                  {t.label}{t.key === 'daily' && dailyTestScore !== '' ? ' ●' : ''}
                 </button>
               ))}
             </div>
+
+            {/* ★ 데일리테스트 점수가 이미 들어와 있으면 **어느 탭에서나** 보이게 알린다
+                (원장님 2026-11-10 「학습일지에 넣을때 오늘의 데일리 테스트 반영되어 있다고
+                 알림문구 뜨게해줘」). 매쓰홀릭에서 긁어 온 점수는 데일리테스트 탭 **안에만**
+                 있어서, 그 탭을 열지 않으면 들어온 줄을 알 수 없었다. */}
+            {dailyTestScore !== '' && (
+              <button onClick={() => setNoteTab('daily')} type="button"
+                className="w-full text-left mb-4 px-3 py-2 rounded-xl text-xs font-bold"
+                style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74', color: '#9A3412' }}>
+                <i className="ti ti-check align-[-0.125em]" /> 오늘 데일리테스트 {dailyTestScore}점이 들어와 있어요
+                {dailyTestUnit ? ` · ${dailyTestUnit}` : ''}
+                <span className="ml-1 font-semibold opacity-70">— 눌러서 보기</span>
+              </button>
+            )}
 
             {/* ── 수업내용 탭 ── */}
             {noteTab === 'basic' && (
