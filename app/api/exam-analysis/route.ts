@@ -257,18 +257,33 @@ export async function GET(req: Request) {
         .select('id, exam_year, term, exam_type, school_name, grade, exam_name').eq('id', printId).maybeSingle()
       if (!paper) return bad('시험지를 찾을 수 없습니다.', 404)
       const { data: qs } = await supabase.from('exam_questions')
-        .select('question_no, sort_order, problem_id').eq('paper_id', printId).not('problem_id', 'is', null)
+        .select('question_no, sort_order, problem_id, answer, q_type, source_memo').eq('paper_id', printId).not('problem_id', 'is', null)
         .order('sort_order').order('question_no')
       const ids = (qs ?? []).map((x: any) => x.problem_id)
       if (!ids.length) return bad('아직 문항별로 잘라 넣지 않은 시험지입니다.', 404)
-      const { data: ps } = await supabase.from('problems').select('id, image_path').in('id', ids)
-      const pathOf = new Map<number, string>((ps ?? []).map((p: any) => [p.id, p.image_path]))
-      const { data: urls } = await supabase.storage.from(PROBLEM_BUCKET)
-        .createSignedUrls((ps ?? []).map((p: any) => p.image_path).filter(Boolean), 7200)
+      const { data: ps } = await supabase.from('problems').select('id, image_path, answer_image_path').in('id', ids)
+      const byId = new Map<number, any>((ps ?? []).map((p: any) => [p.id, p]))
+      // 문항 그림과 **정답 그림**(글자로 못 옮긴 서술형 정답)을 한꺼번에 서명한다 — 빠른 정답 인쇄가 쓴다
+      const paths = (ps ?? []).flatMap((p: any) => [p.image_path, p.answer_image_path]).filter(Boolean)
+      const { data: urls } = paths.length
+        ? await supabase.storage.from(PROBLEM_BUCKET).createSignedUrls(paths, 7200)
+        : { data: [] as any[] }
       const signedOf = new Map<string, string>((urls ?? []).filter((u: any) => u.signedUrl && !u.error).map((u: any) => [u.path, u.signedUrl]))
       return NextResponse.json({
         paper,
-        problems: (qs ?? []).map((x: any) => ({ no: x.question_no, url: signedOf.get(pathOf.get(x.problem_id) ?? '') ?? '' })),
+        problems: (qs ?? []).map((x: any) => {
+          const p = byId.get(x.problem_id)
+          return {
+            no: x.question_no,
+            url: signedOf.get(p?.image_path ?? '') ?? '',
+            // 빠른 정답 — 그림 정답이 있으면 **그림이 먼저**다. 서술형 정답은 수식이 섞여 글자로 옮기면 깨진다
+            // (2026-11-09 고양중 중1 18번 「가 × 나」가 글자로는 「가 × 나 ,」로 남았다)
+            answer: x.answer ?? null,
+            answerUrl: signedOf.get(p?.answer_image_path ?? '') ?? null,
+            qType: x.q_type ?? null,
+            points: Number(String(x.source_memo ?? '').match(/배점\s*(\d+)/)?.[1]) || null,
+          }
+        }),
       })
     }
 

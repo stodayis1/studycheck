@@ -234,6 +234,11 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
               </button>
             )}
             {data.sheetCode && (
+              <button onClick={() => openPrint(id, 'answers')} className="mt-2 w-full rounded-lg border px-4 py-2 text-sm font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
+                <i className="ti ti-list-check mr-1.5" />빠른 정답만 인쇄 (손으로 채점할 때)
+              </button>
+            )}
+            {data.sheetCode && (
               <button onClick={() => openPrint(id, 'qr')} className="mt-2 w-full rounded-lg border px-4 py-2 text-sm font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
                 <i className="ti ti-qrcode mr-1.5" />QR 채점 학습지 양식으로 인쇄
               </button>
