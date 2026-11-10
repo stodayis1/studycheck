@@ -12,12 +12,15 @@ import { useMemo } from 'react'
 import { makePlan, type PlanAct } from '@/lib/careerPlan'
 import { GREEN, MINT, LINE, Card } from './shared'
 
-export default function PlanCard({ grade, answers, acts, onUseTopic }: {
+export default function PlanCard({ grade, answers, acts, onUseTopic, onAsk, busy }: {
   grade: string | null
   answers: Record<string, any> | null
   acts: PlanAct[]
   /** 「이 주제로 기록 추가」 — 기록 폼을 제목·왜 칸까지 채워 연다 */
   onUseTopic?: (t: { title: string; why: string; subject: string }) => void
+  /** 「이거 적어 달라고 문자 보내기」 — 빈 칸 목록을 그대로 학생에게 (원장님만) */
+  onAsk?: (ask: string[]) => void
+  busy?: boolean
 }) {
   const plan = useMemo(() => makePlan({ grade, answers, acts }), [grade, answers, acts])
 
@@ -53,7 +56,17 @@ export default function PlanCard({ grade, answers, acts, onUseTopic }: {
 
       {plan.thin.length > 0 && (
         <div className="mt-3">
-          <div className="text-xs font-bold text-gray-600">더 물어볼 것 (기록이 너무 짧아요)</div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs font-bold text-gray-600">더 물어볼 것 (기록이 너무 짧아요)</div>
+            {onAsk && (
+              <button
+                onClick={() => onAsk(plan.thin.slice(0, 5).map((t) => `${t.title} — ${t.missing.slice(0, 2).join(' · ')}`))}
+                disabled={busy}
+                className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-white disabled:opacity-50" style={{ background: GREEN }}>
+                📩 이거 적어 달라고 보내기
+              </button>
+            )}
+          </div>
           <ul className="mt-1 space-y-1">
             {plan.thin.slice(0, 5).map((t) => (
               <li key={t.title} className="text-xs text-gray-600">

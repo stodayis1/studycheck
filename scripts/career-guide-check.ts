@@ -20,6 +20,7 @@ const { composeDetail, parseDetail, filledCount, isSplitKind, PART_LABELS } = aw
 const { makePlan, pickTopics, isLinked } = await import('../lib/careerPlan.ts')
 const { MATH_TOPICS } = await import('../lib/data/mathTopics.ts')
 const { CAREER_FIELDS } = await import('../lib/careerSurvey.ts')
+const { actSmsText } = await import('../app/api/career/act-sms/route.ts')
 
 let pass = 0, total = 0
 function T(name: string, fn: () => boolean) {
@@ -274,6 +275,57 @@ T('규칙 안내에 별표(**) 가 남아 있지 않다 (화면엔 글자로 그
   const from = src.indexOf('export const RECORD_RULES')
   const rules = src.slice(from, src.indexOf(']', from))
   return !rules.includes('**')
+})
+
+// ── 2026-11-10 학생이 직접 적는 길 (/a/<token>) ──────────────────────────────
+T('학생 링크 API — 학생 토큰만 열고, 남의 기록은 못 고치게 막혀 있다', () => {
+  const src = fs.readFileSync(path.resolve('app/api/career/acts/[token]/route.ts'), 'utf8')
+  return src.includes("link.respondent !== 'student'")          // 학부모 토큰으로는 안 열린다
+    && src.includes(".eq('student_id', o.student.id)")           // 그 학생 기록인지 서버에서 확인
+    && src.includes("mine.kind === '세특'")                      // 세특은 학생이 못 고친다
+    && src.includes("ACTIVITY_KINDS.filter((k) => k !== '세특')") // 세특은 학생이 못 만든다
+    && !src.includes('.delete(')                                 // 지우는 길은 아예 없다
+})
+
+let actsStatus = 0
+try {
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://localhost:54321'
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'check-only'
+  const mod: any = await import('../app/api/career/acts/[token]/route.ts')
+  const res = await mod.GET(new Request('http://localhost/api/career/acts/zzz'), { params: Promise.resolve({ token: 'zzz' }) })
+  actsStatus = res.status
+} catch (e: any) {
+  actsStatus = -1
+  console.log('  (acts route 를 못 불렀습니다: ' + (e?.message ?? e) + ')')
+}
+T('엉뚱한 주소는 404 — acts route.ts 를 그대로 돌려 확인', () => actsStatus === 404)
+
+T('문자 글에 링크와 까닭이 들어간다', () => {
+  const plain = actSmsText('김규리', 'https://x/a/abc', [])
+  const asked = actSmsText('김규리', 'https://x/a/abc', ['사회 수행평가 — 무엇을 알게 됐나'])
+  return plain.includes('https://x/a/abc') && plain.includes('김규리')
+    && plain.includes('로그인 없이')
+    && asked.includes('이번에 채워 줄 것') && asked.includes('무엇을 알게 됐나')
+})
+
+T('「적어 달라고 보내기」는 원장만', () => {
+  const api = fs.readFileSync(path.resolve('app/api/career/act-sms/route.ts'), 'utf8')
+  const src = fs.readFileSync(path.resolve('components/career/teacher/RecordsTab.tsx'), 'utf8')
+  return /staffOrDeny\(req, \{ adminOnly: true \}\)/.test(api)
+    && api.includes('b.send !== true')                           // 기본은 미리보기
+    && src.includes("currentUser?.role === 'admin'")             // 화면도 원장만 (관리자모드 토글과 무관)
+    && src.includes('sendActSms')
+})
+
+T('학생 화면이 다섯 칸으로 묻고, 빈 칸을 짚어 준다', () => {
+  const src = fs.readFileSync(path.resolve('app/a/[token]/page.tsx'), 'utf8')
+  return src.includes('PART_LABELS.map') && src.includes('아직 안 적은 것')
+    && src.includes('composeDetail(parts)') && src.includes('parseDetail(a.detail)')
+})
+
+T('학생 링크에 전용 대표 그림이 붙는다', () => {
+  const src = fs.readFileSync(path.resolve('app/a/[token]/layout.tsx'), 'utf8')
+  return src.includes('openGraph') && src.includes('/og/') && src.includes('index: false')
 })
 
 // ── 진짜 route.ts 를 그대로 돌려 본다 (베껴 쓴 사본 말고) ──────────────────
