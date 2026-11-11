@@ -5,7 +5,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useAuth } from '@/hooks/useAuth'
-import { cx } from '@/lib/utils'
+import { cx, fetchAllRows } from '@/lib/utils'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { normalizeSchool } from '@/lib/school'
 import { VERSION_KEY, CURRENT_TERM, versionFor, versionCount } from '@/lib/examPrepVersion'
@@ -122,11 +122,16 @@ export default function TeacherExamPrepPage() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: sData }, { data: ieData }, { data: vData }, { data: aData }, { data: esData }] = await Promise.all([
+    // ★ student_exam_prep 는 한 번에 1000행만 온다 — 2026-11-11 에 2,332행이 되면서
+    //   시험일 오름차순 앞쪽(지난 10월 중간고사)이 1000칸을 다 먹고 **중1·중2 12월 배정이
+    //   통째로 안 왔다.** 원장님 「시험배정에 안뜨는데?」. fetchAllRows 로 페이지를 돌린다.
+    //   페이지가 밀리지 않게 유일한 정렬(id)을 끝에 붙인다.
+    const [{ data: sData }, { data: ieData }, { data: vData }, aData, { data: esData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       supabase.from('inner_enough').select('*').order('school_name').order('grade').order('level').order('unit_no'),
       supabase.from('app_settings').select('value').eq('key', VERSION_KEY).maybeSingle(),
-      supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: true }),
+      fetchAllRows(() => supabase.from('student_exam_prep').select('*, inner_enough(*)')
+        .order('exam_date', { ascending: true }).order('id')),
       supabase.from('exam_schedule').select('*').order('exam_date'),
     ])
     setVersionMap((vData as any)?.value ?? null)
@@ -136,7 +141,7 @@ export default function TeacherExamPrepPage() {
       setScheduleSchools(uniqueSchools)
     }
     if (ieData) setInnerEnough(ieData)
-    if (aData) setAssignments(aData as StudentExamPrep[])
+    setAssignments((aData ?? []) as StudentExamPrep[])
     if (esData) setExamSchedules(esData)
     setLoading(false)
   }
