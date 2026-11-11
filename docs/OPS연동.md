@@ -118,6 +118,41 @@ OPS `보강관리 > 결석 목록 > + 결석 등록` 에 기간으로 넣고, �
   휴원생 수만큼 어긋나 보인다. 2026-10-09 에 이걸 퇴원 누락으로 잘못 읽은 적이 있다.
   반드시 `on_leave` 를 함께 보고 판단할 것.
 
+### 수업시간의 주인은 `schedules` 다 — `class_time` 은 그것을 적은 글자일 뿐 (2026-11-11)
+
+원장님 「수업시간 변경요청은 스터디체크에서 들어온다. 내가 반영을 누르면 스터디체크에서 바뀌고
+그게 OPS에도 반영되게 해 달라」 — **그 길은 이미 있다.** 학생관리의 「시간표 변경요청 반영」과
+학생 수정 저장은 모두 `writeSchedules()`(`app/teacher/students/page.tsx`) 한 곳을 지나고,
+거기서 ① `schedules` 를 다시 쓰고 ② `students.class_time` 글자를 만들어 넣고
+③ `/api/sync-student-to-ops` 로 OPS 에 `class_time` · `schedule_days` · `weekly_sessions` 를 민다.
+OPS 학생목록 카드는 글자가 아니라 `schedule_days` 배열로 요일을 보여 주므로 그 배열까지 보내야 한다.
+반영이 실패하면 화면이 「OPS로 반영은 실패했어요」를 띄운다.
+
+**그런데 글자를 쓰는 길이 하나 더 있다 — 엑셀 업로드.** `handleImport()` 는 엑셀 「수업」 열의
+글자를 `class_time` 에 그대로 넣고 `schedules` 는 만들지 않는다. 그래서 신입은 글자만 있고 실제
+시간표가 없는 상태로 시작하고, 나중에 누가 시간표를 짜 넣으면 둘이 갈린다.
+2026-11-11 확인 결과 **재원생 193명 중 40명의 글자가 실제 시간표와 달랐다** —
+「월수금3」, 「오후5시」, 「고등 화목토2반」처럼 요일·시각을 알 수 없는 옛 표기가 남아 OPS 로도
+그대로 복사돼 있었다(초6 7명 포함).
+
+- **어긋났는지 보는 법** — 글자와 시간표에서 만든 글을 맞춰 본다:
+  ```sql
+  select st.name, st.class_time,
+    string_agg(sc.day_of_week || to_char(sc.start_time,'HH24:MI') || '·' || sc.periods || '교시',
+      ', ' order by position(sc.day_of_week in '월화수목금토일'), sc.start_time) as 만든글
+  from students st join schedules sc on sc.student_id = st.id and sc.is_active
+  where st.is_active and coalesce(st.is_test,false) = false
+  group by st.id, st.name, st.class_time
+  having coalesce(st.class_time,'') <> string_agg(...)   -- 위와 같은 식
+  ```
+- **`schedules` 를 믿어도 되나** — 믿을 수 있다. 어긋난 40명 중 36명은 `schedules` 의 요일이
+  최근 6주 `class_sessions` 의 실제 수업 요일과 똑같았다. 나머지 4명은 실제 수업에 요일이 더 있었다
+  (보강이 정규로 기록됐을 수 있다) — 그런 건 눈으로 보고 정한다.
+- 고치는 SQL: `docs/sql/수업시간_글자_시간표로_맞추기.sql` (되돌리기 짝 있음).
+  글자만 고치고 `schedules` 는 건드리지 않는다.
+- 고친 뒤에는 **OPS 로 한 번 밀어야** 한다. 글자를 DB 에서 바로 고치면 OPS 는 모른다 —
+  학생관리에서 그 학생 시간표를 다시 저장하거나, `/api/sync-student-to-ops` 를 불러 준다.
+
 ## 주의
 
 - **키가 서로 얽혀 있다.** StudyCheck의 키를 바꾸면 OPS 쪽 `STUDYCHECK_*` 환경변수도 바꿔야 하고,
