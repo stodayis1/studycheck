@@ -150,6 +150,10 @@ export default function CareerSurveyForm({
             </li>
           ))}
         </ol>
+        {/* 원장님 2026-11-11 「탐구보고서나 수행평가 쓸 게 너무 많아서 못 썼단 친구도 있었거든. 그거 다 써야 하는 건가?」 */}
+        <p className="mt-2.5 text-[11.5px] font-semibold" style={{ color: GREEN }}>
+          꼭 써야 하는 건 <b style={{ color: BROWN }}>*</b> 표시(관심 계열) 하나예요. 나머지는 아는 만큼만, 없으면 비워 두세요.
+        </p>
         {parent && (
           <p className="mt-2.5 text-[11.5px] text-gray-500">학부모님은 자녀에 대해 아시는 만큼 적어 주세요. 모르는 칸은 비워 두셔도 됩니다.</p>
         )}

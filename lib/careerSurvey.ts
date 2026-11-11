@@ -98,15 +98,15 @@ export const QUESTIONS: Question[] = [
   { id: 'fav_subjects', label: '좋아하는 과목', type: 'multi', options: ['국어', '수학', '영어', '사회', '과학', '정보', '예체능', '기타'], max: 8, forms: ['pre1'], section: 'study' },
   { id: 'strong_subjects', label: '자신 있는 과목', type: 'multi', options: ['국어', '수학', '영어', '사회', '과학', '정보', '예체능', '기타'], max: 8, forms: ['pre1'], section: 'study' },
   { id: 'math_progress', label: '지금 수학 선행은 어디까지?', type: 'single', options: ['중3 과정', '공통수학1 진행 중', '공통수학1 끝', '공통수학2 진행 중', '공통수학2 끝 이상'], forms: ['pre1'], section: 'study' },
-  { id: 'mid_activities', label: '중학교 때 한 진로 활동·동아리', type: 'textarea', max: 1000, forms: ['pre1'], help: '진로연계학기 활동, 동아리, 직업 체험 등', section: 'school' },
+  { id: 'mid_activities', label: '중학교 때 한 진로 활동·동아리', type: 'textarea', max: 1000, forms: ['pre1'], help: '진로연계학기 활동, 동아리, 직업 체험 등 — 생각나는 것만, 없으면 비워 두세요', section: 'school' },
 
   // 예비고2
   { id: 'math_electives', label: '2학년 수학 선택과목 (신청했거나 할 것)', type: 'multi',
     options: ['대수', '미적분Ⅰ', '확률과 통계', '기하', '미적분Ⅱ', '경제 수학', '인공지능 수학', '직무 수학', '수학과 문화', '실용 통계', '수학과제 탐구', '아직 모름'],
     max: 12, forms: ['pre2'], section: 'study' },
   { id: 'elective_status', label: '선택과목 신청 상태', type: 'single', options: ['확정됐어요', '신청했지만 바꿀 수 있어요', '아직 신청 전이에요', '모르겠어요'], forms: ['pre2'], section: 'study' },
-  { id: 'club', label: '동아리 이름과 하는 활동', type: 'textarea', max: 1000, forms: ['pre2'], section: 'school' },
-  { id: 'inquiry', label: '1학년 때 쓴 탐구보고서·수행평가 주제', type: 'textarea', max: 2000, forms: ['pre2'], help: '과목과 주제를 한 줄씩. 예: 사회 - 쓰레기 소각장 주민 갈등 (수행평가 발표)', section: 'school' },
+  { id: 'club', label: '동아리 이름과 하는 활동', type: 'textarea', max: 1000, forms: ['pre2'], help: '한 줄이면 충분해요. 없으면 비워 두세요', section: 'school' },
+  { id: 'inquiry', label: '1학년 때 쓴 탐구보고서·수행평가 주제', type: 'textarea', max: 2000, forms: ['pre2'], help: '기억나는 것 한두 개만 적어도 돼요. 없으면 비워 두세요 — 자세한 건 수업 때 선생님과 같이 정리해요. 예: 사회 - 쓰레기 소각장 주민 갈등 (수행평가 발표)', section: 'school' },
   { id: 'admission', label: '생각하는 대입 전형', type: 'single', options: ['학생부종합', '학생부교과', '정시(수능)', '논술', '아직 모름'], forms: ['pre2'], section: 'school' },
 
   // 공통 마무리
