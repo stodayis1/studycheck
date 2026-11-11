@@ -214,7 +214,7 @@ export default function TeacherCurriculumPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [{ data: sData }, { data: tData }, { data: cData }, pData, { data: catData }, { data: epData }] = await Promise.all([
+    const [{ data: sData }, { data: tData }, { data: cData }, pData, { data: catData }, epData] = await Promise.all([
       // ★ 휴원 학생도 같이 불러온다 (원장님 2026-10-29 「삭제요청 1 떠서 들어갔는데 0건」).
       //   휴원은 is_active=false + on_leave=true 로 적힌다(OPS 가 그렇게 쓴다 — docs/OPS연동.md).
       //   is_active 만 보면 휴원생이 통째로 빠지는데, 교재와 삭제요청은 그대로 남아 있다.
@@ -229,14 +229,16 @@ export default function TeacherCurriculumPage() {
       // 골라 가져와서 전송량을 줄인다 (updated_at, session_id는 이 화면에서 안 씀)
       fetchAllRows(() => supabase.from('progress_checks').select('id,student_id,concept_id,check_count,student_textbook_id')),
       supabase.from('textbook_catalog').select('*').eq('is_active', true).order('sort_order'),
-      supabase.from('student_exam_prep').select('*, inner_enough(*)').order('exam_date', { ascending: false }),
+      // ★ 1000행 한도 — 2026-11-11 에 2,332행이 됐다. 페이지를 돌려 다 읽는다(유일 정렬 id 를 끝에).
+      fetchAllRows(() => supabase.from('student_exam_prep').select('*, inner_enough(*)')
+        .order('exam_date', { ascending: false }).order('id')),
     ])
     if (sData) setStudents(sData)
     if (tData) setTextbooks(tData)
     if (cData) setConcepts(cData)
     setProgressChecks(pData)
     if (catData) setCatalog(catData)
-    if (epData) setExamPreps(epData)
+    setExamPreps(epData ?? [])
     setLoading(false)
   }
 

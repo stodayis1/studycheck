@@ -822,7 +822,7 @@ export default function TeacherLearningNotesPage() {
     // 이 화면 어디에도 전체 목록으로 쓰이는 곳이 없다 - 전부 openNoteModal()에서 학생을 선택하는
     // 순간 그 학생 것만 새로 불러오게 이미 되어 있어서(진도/과제배부 탭용), 페이지를 열 때마다
     // 전체를 통째로 받아오는 건 그냥 낭비였다 - 초기 로딩에서 제거.
-    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, { data: epData }, { data: apmData }, { data: ssenbData }] = await Promise.all([
+    const [{ data: sData }, scData, ssData, nData, { data: fbData }, { data: cData }, { data: stData }, { data: catLNData }, { data: vwData }, epData, { data: apmData }, { data: ssenbData }] = await Promise.all([
       supabase.from('students').select('*').eq('is_active', true).order('name'),
       // schedules/class_sessions/learning_notes는 1000행을 훌쩍 넘어서 PostgREST 기본 상한(1000행)에 걸리면
       // limit()을 아무리 크게 줘도 서버가 1000행에서 잘라버린다 - 끝까지 순회해서 전부 가져온다.
@@ -838,9 +838,12 @@ export default function TeacherLearningNotesPage() {
       //   status 는 거의 쓰이지 않아(972건 중 done 2건) 「끝남」을 상태로는 알 수 없다 —
       //   그래서 **시험일**로 거른다. 시험 당일까지는 보이고 그 뒤로는 사라진다.
       //   (지난 배정은 시험대비 화면의 「지난 시험까지 보기」로 확인할 수 있다)
-      supabase.from('student_exam_prep').select('*, inner_enough(*)')
+      //   ★ 1000행 한도 — 앞으로의 배정만 걸러도 2026-11-11 에 1,363행이 됐다(중1·중2가 들어오면서).
+      //     그냥 읽으면 1000행에서 잘려 어떤 학년이 통째로 안 보인다. 페이지를 돌려 다 읽는다.
+      fetchAllRows(() => supabase.from('student_exam_prep').select('*, inner_enough(*)')
         .neq('status', 'done')
-        .gte('exam_date', new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0]),
+        .gte('exam_date', new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0])
+        .order('id')),
       supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name, concept_book_page_start, concept_book_page_end, concept_book_workbook_name'),
       supabase.from('ssenb_problem_map').select('*'),
     ])
@@ -855,7 +858,7 @@ export default function TeacherLearningNotesPage() {
     if (ssenbData) setSsenbProblemMap(ssenbData)
     if (catLNData) setLNCatalog(catLNData)
     if (vwData) setVideoWatchLogs(vwData)
-    if (epData) setExamPreps(epData)
+    setExamPreps(epData ?? [])
     if (apmData) {
       const m: Record<string, {
         page_start: number; page_end: number; workbook_name: string
