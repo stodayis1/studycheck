@@ -1,7 +1,7 @@
 /**
  * 강의영상 목록(lesson_videos) 채우기 — 영상 폴더의 .구간.json + 유튜브 재생목록
  *
- *   node scripts/lesson-video/sync_lesson_videos.mjs "<영상 폴더>" [--grade 공통수학2] [--playlist-env YOUTUBE_PLAYLIST_CM2] [--dry]
+ *   node scripts/lesson-video/sync_lesson_videos.mjs "<영상 폴더>" [--grade 공통수학2] [--playlist-env YOUTUBE_PLAYLIST_CM2] [--dry] [--linked-only]
  *
  * · 영상 폴더: NN_개념_….구간.json, NN_증명K_….구간.json (lesson_video.py / proof_video.py 결과)
  *   + 하위 폴더 풀이영상/NN_풀이MM_….구간.json (필수예제 풀이 — DB kind 는 '대표예제', order_label 「01-풀이01」)
@@ -30,7 +30,7 @@ const dry = args.includes('--dry')
 const idsFile = opt('--ids', null)
 
 // 1) 영상 폴더 → 행
-const rows = []
+let rows = []
 const conceptCodes = {}
 const files = fs.readdirSync(dir).filter(f => f.endsWith('.구간.json'))
 for (const f of files.filter(f => /_개념_/.test(f))) {
@@ -108,6 +108,8 @@ const { data: old, error: e0 } = await db.from('lesson_videos').select('order_la
 if (e0) throw e0
 const oldBy = Object.fromEntries((old || []).map(o => [o.order_label, o.youtube_id]))
 for (const r of rows) { if (!r.youtube_id && oldBy[r.order_label]) r.youtube_id = oldBy[r.order_label]; r.updated_at = new Date().toISOString() }
+// --linked-only: 유튜브에 아직 안 올린 편은 넣지 않는다 — 유형 개념 API(type-concepts)는 youtube_id 가 빈 행도 영상 목록에 싣는다
+if (args.includes('--linked-only')) rows = rows.filter(r => r.youtube_id)
 const { error } = await db.from('lesson_videos').upsert(rows, { onConflict: 'grade,order_label' })
 if (error) throw error
 console.log('저장 완료')
