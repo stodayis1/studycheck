@@ -33,7 +33,8 @@ for (let i = 0; i < raw.length; i += 50)
 
 const sec = (d) => { const m = (d || '').match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0 }
 // 유튜브는 파일 이름의 _ 를 띄어쓰기로, ( ) - 를 빼거나 띄어쓰기로 바꾼다
-const norm = (s) => s.normalize('NFC').replace(/\.mp4$/i, '').replace(/[()\-]/g, ' ').replace(/[_\s]+/g, ' ').trim()
+// 유튜브가 괄호·빼기표를 지우면서 빈칸도 붙여 버린다(「y=a(x-p)²」→「y=ax p²」, 「(다항식)×(다항식)」→「다항식×다항식」) → 빈칸은 아예 빼고 견준다. 같은 영상인지는 ② 원본 크기가 가른다
+const norm = (s) => s.normalize('NFC').replace(/\.mp4$/i, '').replace(/[()\-_\s]/g, '')
 const files = fs.readdirSync(dir), oldDir = path.join(dir, '_옛판'), old = fs.existsSync(oldDir) ? fs.readdirSync(oldDir) : []
 const seen = {}, ok = [], bad = [], other = []
 for (const it of raw) {

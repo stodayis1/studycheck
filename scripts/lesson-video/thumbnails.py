@@ -46,6 +46,13 @@ THEME = {
     # 공통수학1 풀이: 증명(진한 파랑)보다 한 단계 더 진한 파랑
     'solution_cm1': dict(bg=(84, 126, 196), grid=(74, 114, 184), badge=(10, 28, 64), pill=(208, 224, 248),
                     label=(12, 28, 60), title=(8, 18, 40), foot=(226, 234, 248)),
+    # 중학교 풀이(쎈 대표유형): 학년 증명색보다 한 단계 더 진하게 — 공통수학과 같은 짜임
+    'solution_m1': dict(bg=(214, 166, 52), grid=(202, 154, 42), badge=(80, 48, 0), pill=(252, 236, 186),
+                    label=(70, 42, 2), title=(40, 24, 0), foot=(252, 240, 206)),
+    'solution_m2': dict(bg=(204, 102, 132), grid=(192, 90, 120), badge=(96, 10, 40), pill=(250, 214, 224),
+                    label=(84, 12, 36), title=(50, 6, 20), foot=(250, 226, 234)),
+    'solution_m3': dict(bg=(126, 106, 200), grid=(114, 94, 188), badge=(36, 18, 90), pill=(222, 214, 248),
+                    label=(34, 20, 78), title=(20, 10, 48), foot=(232, 226, 250)),
     # 풀이: 개념(연한 연두) → 증명(진한 초록) 보다 한 단계 더 진한 초록 (원장님 2026-10-21)
     'solution': dict(bg=(84, 158, 110), grid=(74, 146, 98), badge=(10, 46, 26), pill=(205, 236, 214),
                     label=(12, 40, 24), title=(8, 24, 16), foot=(226, 242, 230)),
@@ -178,8 +185,11 @@ def main():
             G = json.load(open(g, encoding='utf-8'))
             bub = next((st['bubble'] for st in G['steps'][2:] if st.get('lines')), G['steps'][-1]['bubble'])
             # 원장님 2026-10-21: 썸네일에 교재 쪽과 문제 번호가 꼭 있어야 한다 → 배지 「필수예제 05」, 옆에 「개념+유형 60쪽」
-            make('solution' if grade == '공통수학2' else 'solution_cm1', G['label'], '', G['title'], bub, 'ABCD'[k % 4],
-                 pill=f"개념+유형 {G['book_page']}쪽").save(base + '.jpg', quality=93)
+            # 중학교는 쎈 대표유형(배지 「쎈 60번」, 옆에 「쎈 14쪽」)
+            kind = {'공통수학2': 'solution', '공통수학1': 'solution_cm1'}.get(grade) or 'solution_m' + grade[1]
+            book = '쎈' if G['label'].startswith('쎈') else '개념+유형'
+            make(kind, G['label'], '', G['title'], bub, 'ABCD'[k % 4],
+                 pill=f"{book} {G['book_page']}쪽").save(base + '.jpg', quality=93)
             made.append(os.path.basename(base))
         print(len(made), '장'); [print(' ', m) for m in made]; return
     only = set(a[a.index('--only') + 1].split(',')) if '--only' in a else None
