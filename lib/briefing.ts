@@ -12,6 +12,9 @@
 //   알림톡은 **템플릿당 고정 이미지 1장**만 되고 그 이미지엔 링크도 못 건다.
 //   학생마다 다른 사진은 애초에 실을 수 없어서, 사진은 「알림장·사진」 버튼 뒤 페이지로 보낸다.
 
+// 학습지 제목을 다루는 규칙은 한 곳에 둔다(lib/worksheetTitle.ts — 순수 함수).
+import { dropEchoParen } from './worksheetTitle'
+
 export const BODY_LIMIT = 1000
 // 1,000자에 딱 붙이면 카카오 쪽 계산이 우리와 1~2자 달라도 터진다. 950자에서 멈춘다.
 export const BODY_BUDGET = 950
@@ -468,8 +471,21 @@ export function hwLines(ses: BriefingSession, videos?: BriefingVideos): string[]
     const page = entry ? entry.split('·').slice(-1)[0]?.trim() : null
     out.push(page && page !== name ? `· ${name} ${page}` : `· ${name}`)
   }
+  // ★ 학습지 과제 줄은 저장된 글을 그대로 쓴다. 그런데 그 글에 **같은 말이 괄호로 또**
+  //   들어 있는 것이 있다(원장님 2026-11-12 「정리해줘」) —
+  //     「… 중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제) · 3.5레벨」
+  //   만드는 쪽(학습일지)도 고쳤지만, **이미 저장된 글**이 날마다 그대로 나가므로 여기서도 뗀다.
+  //   학습지 여럿은 ' / ' 로, 한 건 안은 ' · ' 로 이어져 있다 — 가운데 단원 칸만 손본다.
   const ws = (ses.hw_worksheet_range ?? '').trim()
-  if (ws) out.push(`· 학습지 ${ws}`)
+  if (ws) {
+  //   매쓰홀릭 제목에 붙어 오는 **별표**(「* 레벨학습지 (6-2) 4단원 *」)도 뗀다 — 학부모님께
+  //   보이는 글에 쓸 데가 없다. 괄호 안 「(6-2)」는 학년·학기라 **남긴다**.
+    const 정리 = ws.split(' / ').map((part) =>
+      part.split(' · ')
+        .map((seg) => dropEchoParen(seg).replace(/^[*＊\s]+|[*＊\s]+$/g, '').replace(/\s+/g, ' '))
+        .filter(Boolean).join(' · ')).join(' / ')
+    out.push(`· 학습지 ${정리}`)
+  }
   // 교재를 안 고르고 메모만 남긴 과제는 "📝 ..." 조각으로 들어 있다.
   const memo = pageParts.find((p) => p.trim().startsWith('📝 '))
   if (memo) out.push(`· ${memo.slice(2).trim()}`)

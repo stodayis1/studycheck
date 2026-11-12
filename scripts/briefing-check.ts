@@ -11,7 +11,8 @@
  */
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { buildBriefing, worksheetTail, learningResult, BODY_LIMIT, BODY_BUDGET,
+import { dropEchoParen } from '../lib/worksheetTitle.ts'
+import { buildBriefing, worksheetTail, learningResult, hwLines, BODY_LIMIT, BODY_BUDGET,
   BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
   BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
   BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE } from '../lib/briefing.ts'
@@ -278,6 +279,37 @@ function matchesTemplate(body: string, which: 'full' | 'nonote' = 'full') {
     process.exit(1)
   }
   console.log('학습 결과 칸 자가확인 ✓ (장마다 한 줄 · 칸 모자라면 외 N장 · 결석엔 한 줄)')
+}
+
+// ★ 과제 배부의 학습지 줄 — **같은 말을 괄호로 또** 적은 꼬리를 떼는가 (원장님 2026-11-12).
+{
+  const T = (name: string, got: string, want: string) => {
+    if (got !== want) {
+      console.error(`✗ 과제 학습지 줄 — ${name}\n   나온 것: 「${got}」\n   나와야: 「${want}」`)
+      process.exit(1)
+    }
+  }
+  T('괄호 안이 앞말을 그대로 품으면 뗀다 (괄호 안에 날짜 괄호가 또 있다)',
+    dropEchoParen('중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제)'),
+    '중등 1-1 (2026.11.02) 오답과제')
+  T('별표·레벨학습지 꼴도 같은 말로 본다',
+    dropEchoParen('* 레벨학습지 (5-2) 3단원 * (* 레벨학습지 (5-2) 3단원 *)'),
+    '* 레벨학습지 (5-2) 3단원 *')
+  T('진짜 범위는 건드리지 않는다', dropEchoParen('2단원 (소수의 나눗셈)'), '2단원 (소수의 나눗셈)')
+  T('날짜 괄호로 끝나는 제목도 건드리지 않는다',
+    dropEchoParen('중등 1-1 (2026.11.02)'), '중등 1-1 (2026.11.02)')
+  T('괄호가 없으면 그대로', dropEchoParen('전범위'), '전범위')
+  T('빈 글자도 터지지 않는다', dropEchoParen(null), '')
+
+  // 실제 브리핑 줄에 실리는지 — 함수만 맞고 본문에 안 실리면 아무 뜻이 없다.
+  const 줄 = hwLines({
+    session_date: '2026-11-11',
+    hw_worksheet_range: '초6 · 중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제) · 3.5레벨'
+      + ' / 초6 · * 레벨학습지 (6-2) 4단원 * · 4레벨',
+  }).find((l) => l.startsWith('· 학습지 ')) ?? ''
+  T('브리핑 과제 줄에 실린다 — 별표도 떼고, 학년·학기 괄호는 남긴다', 줄,
+    '· 학습지 초6 · 중등 1-1 (2026.11.02) 오답과제 · 3.5레벨 / 초6 · 레벨학습지 (6-2) 4단원 · 4레벨')
+  console.log('과제 학습지 줄 자가확인 ✓ (되풀이된 괄호·별표만 떼고 진짜 범위는 남긴다)')
 }
 
 // 「알림장 없는 판」을 쓸 수 있다고 보고 검사할지(--nonote). 심사 통과 뒤 모습을 미리 본다.
