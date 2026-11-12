@@ -629,21 +629,63 @@ function MonthTabs({ uid, months, panels }: {
   )
 }
 
-/** 레벨학습지 점수 현황 */
+/**
+ * 학습지·테스트 점수 (예전 이름 「레벨학습지 점수 현황」)
+ *
+ * ★ 2026-11-12 — **데일리테스트도 같이** 보여 준다 (원장님).
+ *   고등부는 레벨학습지를 쓰지 않고 데일리테스트를 본다. 그런데 이 화면이 학습지만
+ *   보여 줘서 고1·고2 학부모님께는 **영구히 빈 화면**이 나갔다(학습지 기록이 한 번도
+ *   없는 학생 12명). 버튼 이름도 「학습지·테스트 점수」로 바꿨다.
+ *
+ * ★ 그리고 **「그 뒤로 새로 채점된 학습지가 없다」**를 말해 준다.
+ *   태하 어머니가 「브리핑이 계속 11월 7일로 온다」고 하신 것이 이 화면이었다 —
+ *   11/09·11/11 브리핑으로 들어와도 맨 위가 늘 11-07 이라 멈춘 것처럼 보였다.
+ *
+ * ★ 옛 링크(이미 나간 브리핑)의 스냅샷에는 dailyRows·asOf 가 **없다.**
+ *   없어도 예전과 똑같이 그려져야 한다 — 그래서 전부 `?? []` / 있을 때만 쓴다.
+ */
 function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
-  const rows: any[] = d.rows ?? []
+  const wsRows: any[] = d.rows ?? []
+  const dailyRows: any[] = d.dailyRows ?? []
+  const hasWs = wsRows.length > 0
+  const hasDaily = dailyRows.length > 0
+
+  // 학습지와 데일리테스트를 한 줄기로 모아 달별로 끊는다.
+  type Row = { kind: 'ws' | 'daily'; date: string; unit: string; level?: any; score: number | null
+    scoredYet?: boolean; isRetry?: boolean }
+  const rows: Row[] = [
+    ...wsRows.map((r): Row => ({
+      kind: 'ws', date: r.date, unit: r.unit, level: r.level, score: r.score ?? null,
+      scoredYet: r.scoredYet, isRetry: r.isRetry,
+    })),
+    // 범위(daily_test_unit)를 안 적으신 날이 많다. 그때는 제목을 비우고 아래
+    // 「데일리테스트」 표시만 남긴다 — 둘 다 「데일리테스트」면 같은 말이 두 번 보인다.
+    ...dailyRows.map((r): Row => ({
+      kind: 'daily', date: r.date, unit: r.unit || '', score: r.score ?? null, scoredYet: true,
+    })),
+  ]
   // ★ 쭉 늘어놓으면 6개월치가 한 화면에 쏟아져 읽을 수가 없다. 달로 끊어 좌우로 넘긴다.
   const months = [...new Set(rows.map((r) => monthOf(r.date)).filter(Boolean) as string[])].sort()
+
+  // 「그 뒤로 새 학습지가 없다」 — 스냅샷을 떠낸 날(asOf)보다 마지막 채점일이 앞일 때만.
+  const 마지막채점 = d.lastScoredDate as string | undefined
+  const 떠낸날 = d.asOf as string | undefined
+  const 멈춤안내 = hasWs && 마지막채점 && 떠낸날 && 마지막채점 < 떠낸날
+    ? `${Number(마지막채점.slice(5, 7))}월 ${Number(마지막채점.slice(8, 10))}일 이후 새로 채점된 학습지가 없어요.`
+    : null
 
   const panel = (m: string) => {
     const mine = rows.filter((r) => monthOf(r.date) === m)
     const scored = mine.filter((r) => r.score != null)
     const avg = scored.length
-      ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : null
+      ? Math.round(scored.reduce((a, r) => a + (r.score as number), 0) / scored.length) : null
+    const 학습지수 = mine.filter((r) => r.kind === 'ws').length
+    const 테스트수 = mine.filter((r) => r.kind === 'daily').length
     return (
       <>
         <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
-          이 달 {mine.length}장
+          이 달 {[학습지수 ? `학습지 ${학습지수}장` : '', 테스트수 ? `테스트 ${테스트수}회` : '']
+            .filter(Boolean).join(' · ')}
           {avg != null && <> · 평균 <b style={{ color: tierColor(avg) }}>{avg}점</b></>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -665,8 +707,10 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                {!r.scoredYet && <span style={{ fontSize: 9, color: TEXT_MUTED }}>채점 전</span>}
-                {r.scoredYet && r.score < 70 && <span style={{ fontSize: 9, color: RED }}>70점 미만 · 다시 풀어요</span>}
+                {r.kind === 'daily' && <span style={{ fontSize: 9, color: NAVY }}>데일리테스트</span>}
+                {r.kind === 'ws' && !r.scoredYet && <span style={{ fontSize: 9, color: TEXT_MUTED }}>채점 전</span>}
+                {r.kind === 'ws' && r.scoredYet && (r.score as number) < 70
+                  && <span style={{ fontSize: 9, color: RED }}>70점 미만 · 다시 풀어요</span>}
                 {r.isRetry && <span style={{ fontSize: 9, color: ORANGE_MID }}>재도전(쌍둥이)</span>}
               </div>
             </div>
@@ -677,25 +721,47 @@ function WorksheetScores({ d, link }: { d: any; link: ReportLink }) {
   }
 
   return (
-    <Shell title="레벨학습지 점수 현황" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
-        <Stat label="평균 점수" value={d.avgScore != null ? `${d.avgScore}점` : '-'} color={tierColor(d.avgScore)} />
-        {/* 통과 = 그 단원에서 가장 최근 채점한 본 학습지가 70점 이상 (docs/초등레벨학습지.md).
-            예전에 쓰던 status='passed' 는 「처리 완료」일 뿐이라 70점 미만도 들어간다. */}
-        <Stat label="단원 통과" value={d.unitsJudged ? `${d.unitsPassed}/${d.unitsJudged}` : '-'}
-          color={d.unitsJudged && d.unitsPassed === d.unitsJudged ? NAVY : ORANGE} />
-        <Stat label="받은 학습지" value={`${d.count ?? 0}장`} />
-      </div>
-      <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 12 }}>위 숫자는 최근 6개월 전체입니다.</div>
+    <Shell title="학습지·테스트 점수" name={d.studentName} grade={d.studentGrade} period={d.periodLabel}>
+      {/* ★ 학습지를 쓰는 학생과 데일리테스트만 보는 학생은 볼 숫자가 다르다.
+          고등부에게 「단원 통과 -/-」를 보여 주는 것은 빈칸을 보여 주는 것과 같다. */}
+      {hasWs ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+          <Stat label="평균 점수" value={d.avgScore != null ? `${d.avgScore}점` : '-'} color={tierColor(d.avgScore)} />
+          {/* 통과 = 그 단원에서 가장 최근 채점한 본 학습지가 70점 이상 (docs/초등레벨학습지.md).
+              예전에 쓰던 status='passed' 는 「처리 완료」일 뿐이라 70점 미만도 들어간다. */}
+          <Stat label="단원 통과" value={d.unitsJudged ? `${d.unitsPassed}/${d.unitsJudged}` : '-'}
+            color={d.unitsJudged && d.unitsPassed === d.unitsJudged ? NAVY : ORANGE} />
+          <Stat label="받은 학습지" value={`${d.count ?? 0}장`} />
+        </div>
+      ) : hasDaily ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+          <Stat label="데일리테스트 평균" value={d.dailyAvg != null ? `${d.dailyAvg}점` : '-'} color={tierColor(d.dailyAvg)} />
+          <Stat label="본 횟수" value={`${d.dailyCount ?? dailyRows.length}회`} />
+        </div>
+      ) : null}
+      {(hasWs || hasDaily) && (
+        <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 12 }}>위 숫자는 최근 6개월 전체입니다.</div>
+      )}
+
+      {멈춤안내 && (
+        <div style={{
+          background: '#fff8ef', border: `1px solid ${ORANGE_MID}`, borderRadius: 10,
+          padding: '9px 12px', marginBottom: 12, fontSize: 11, color: TEXT_BODY, lineHeight: 1.5,
+        }}>
+          {멈춤안내}
+        </div>
+      )}
 
       {months.length === 0 ? (
-        <Empty text="최근 6개월 동안 받은 레벨학습지가 없어요." />
+        <Empty text="최근 6개월 동안 받은 학습지·테스트 기록이 없어요." />
       ) : (
         <MonthTabs uid="ws" months={months} panels={months.map(panel)} />
       )}
-      <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
-        레벨학습지는 70점 미만이면 같은 단원을 다시 풀어 단원을 확실히 넘기고 갑니다.
-      </div>
+      {hasWs && (
+        <div style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
+          레벨학습지는 70점 미만이면 같은 단원을 다시 풀어 단원을 확실히 넘기고 갑니다.
+        </div>
+      )}
     </Shell>
   )
 }

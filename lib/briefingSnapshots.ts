@@ -60,7 +60,9 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
       .eq('student_id', student.id).gte('assigned_at', sixMonthsAgo)
       .order('assigned_at', { ascending: false }).limit(200),
     db.from('class_sessions')
-      .select('id, session_date, progress_content')
+      // ★ 데일리테스트도 같이 읽는다 (원장님 2026-11-12) — 고등부는 레벨학습지를 안 써서
+      //   「학습지·테스트 점수」 페이지가 영구히 비어 있었다(학습지 기록 없는 학생 12명).
+      .select('id, session_date, progress_content, daily_test_score, daily_test_unit')
       .eq('student_id', student.id).gte('session_date', attendFrom).lte('session_date', date)
       .order('session_date', { ascending: false }).limit(200),
   ])
@@ -115,6 +117,19 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
   const unitsPassed = unitsJudged.filter((u) => u.score >= 70).length
 
   const scored = wsRows.filter((r) => r.score != null)
+
+  // ── 데일리테스트 (원장님 2026-11-12) ────────────────────────────────────
+  // ★ 고등부는 레벨학습지를 쓰지 않고 데일리테스트를 본다. 그래서 이 페이지가
+  //   고1·고2 학부모님께는 **영구히 빈 화면**이었다. 버튼 이름을
+  //   「학습지·테스트 점수」로 바꾸고, 그 학생에게 있는 것을 보여 준다.
+  const dailyRows = (pastSessions ?? [])
+    .filter((s: any) => s.daily_test_score != null)
+    .map((s: any) => ({
+      date: s.session_date,
+      score: s.daily_test_score as number,
+      unit: (s.daily_test_unit ?? '').trim() || null,
+    }))
+
   const worksheetSnapshot = {
     studentName: student.name,
     studentGrade: student.grade,
@@ -125,6 +140,15 @@ export async function snapshots(db: SupabaseClient, student: any, date: string, 
     avgScore: scored.length ? Math.round(scored.reduce((a, r) => a + (r.score as number), 0) / scored.length) : null,
     unitsJudged: unitsJudged.length,
     unitsPassed,
+    // ★ 「언제 떠낸 사진인가」 — 이것이 없으면 화면이 「그 뒤로 새 학습지가 없다」를 말할 수 없다.
+    asOf: date,
+    /** 가장 마지막으로 **채점된** 학습지 날짜. 이 날짜가 asOf 보다 앞이면 화면에 알린다. */
+    lastScoredDate: scored.reduce<string | null>(
+      (max, r) => (r.date && (!max || r.date > max) ? r.date : max), null),
+    dailyRows,
+    dailyCount: dailyRows.length,
+    dailyAvg: dailyRows.length
+      ? Math.round(dailyRows.reduce((a, r) => a + r.score, 0) / dailyRows.length) : null,
   }
 
   // ── 출결현황 및 과제달성률 현황 ─────────────────────────────────────────
