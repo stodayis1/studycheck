@@ -1918,6 +1918,28 @@ RPC·환경설정 오류가 나도 fixture 로 **자동 fallback 하지 않는�
   042 는 여전히 `question-webapp-dev-122db1` 를 포함하고 21 commit 앞서 있다.
 - 되돌리면: 두 트리가 다시 갈라진다.
 
+### D-173 — 045 저장 SQL 을 **운영에 적용했다** (2026-11-12)
+
+- 상태: `CONFIRMED` (원장님이 Supabase SQL Editor 에서 실행)
+- 무엇이 생겼나: `public.learning_attempts`(8칸) · `public.learning_actions`(16칸) ·
+  색인 5개(+기본키 2) · 정책 4개 · 함수 `apply_learning_action`(DEFINER) ·
+  `learning_caller_is_server`(INVOKER). 둘 다 `search_path=""`.
+- 인가 대조: 실행권한이 `service_role` 에만 있다. `anon`·`authenticated` **없음.**
+  두 표 모두 RLS 켜짐. 학생 insert 정책은 **주지 않았다** — 학생은 RPC 로만 기록을 남긴다.
+- **데이터가 사라지지 않았다.** 적용 전후 정확히 센 값이 같다 —
+  students 235 · problems 38,372 · gradings 5 · grading_answers 113 ·
+  exam_sheet_problems 766 · exam_sheets 38 · lesson_videos 1,003 ·
+  video_watch_logs 63 · standard_types 1,247 · type_learning_assets 0.
+  `learning_notes` 만 9,137 → 9,141 (+4) 인데 이 SQL 은 그 표를 **건드리지 않는다**
+  (불가침 목록). 같은 날 선생님들이 알림장을 쓴 것으로 본다.
+- 새 두 표는 **0행**이다. 아직 학생 기록이 들어오지 않았다 — 승인 명세가 0건이라
+  도움이 나가지 않고, 학생 쪽 첫 사용도 아직 없다.
+- 되돌리기: `045_learning_actions_rollback.sql` (세 단계). 격리 PostgreSQL 에서
+  적용·되돌리기를 돌려 봤고, 그 과정에서 되돌리기 1단계 결함(소유자가 암묵적 EXECUTE 를
+  유지하는 것)을 찾아 고쳤다.
+- 남은 것: ① 승인 명세 0건 ② 학생 경로로 실제 한 바퀴 돌려 `learning_actions` 에
+  행이 생기는지 확인.
+
 ### D-172 — 영상 후보를 **고정 3편에서 유형 기반으로** 바꿨다
 
 - 상태: `CONFIRMED` (GPT 후속 지시 2026-11-12, 원장님 전달)

@@ -16,13 +16,16 @@
 
 운영 Supabase(`cggskjxsyrvuhsldgkoj`) `public` 스키마를 읽어 확인한 것:
 
-- `learning_attempts` · `learning_actions` — **없다.** 045 SQL 미실행.
+- `learning_attempts` · `learning_actions` — **생겼다. 045 SQL 적용 완료 (2026-11-12).**
+  대조: 칸 8·16 · RLS 둘 다 켜짐 · 색인 5(+PK 2) · 정책 4 · 함수 2(DEFINER·INVOKER,
+  `search_path=""`) · 실행권한은 `service_role` 에만 (`anon`·`authenticated` 없음) ·
+  새 표 0행 · **기존 표 행수 적용 전과 동일.**
 - `type_learning_assets` — 있다. **0 행.**
 - `lesson_videos` 1003 행 · `problems` 38,372 행 · `students` 235 행 (실서비스 운영 중)
 
-→ **지금 학생이 질문앱을 쓰면 풀이 기록이 저장되지 않는다.** 이것이 유일한 막힌 곳이다.
+→ 저장 자리는 **생겼다.** 남은 막힌 곳은 **승인 명세 0건** 하나다 (§2).
 
-## 1. 요청 — 045 SQL 운영 실행 승인
+## 1. 045 SQL — **적용 끝났다** (승인 요청이 아니라 결과 보고다)
 
 파일: `docs/sql/migrations/045_learning_actions.sql` (적용) · `045_learning_actions_rollback.sql` (되돌리기)
 `043_learning_actions.sql` 은 **실행하지 않는다** (결함 7건 때문에 045 로 대체).
@@ -66,8 +69,9 @@
 `problem_id` 가 정수로 떨어지지 않으면 거부 · payload 가 객체가 아니면 거부.
 같은 행동 키는 판정 전에 advisory lock 으로 직렬화한다.
 
-> **묻는 것 ①: 이 SQL 을 운영에 실행해도 되는가.** 실행은 원장님 환경에서 하고,
-> 되돌리기 파일이 쌍으로 있다. 반대하면 어느 조각을 어떻게 바꿀지 적어 주면 그대로 고친다.
+> **묻는 것 ① — 더 이상 묻지 않는다. 적용됐다** (2026-11-12, 원장님 실행 · D-173).
+> 되돌리기 파일이 쌍으로 있다. 설계에 반대하면 지금도 되돌릴 수 있다 (두 표가 0행이라
+> 잃을 데이터가 없다). 바꿀 조각을 적어 주면 그대로 고친다.
 
 ## 1-b. 후속 지시 중 **하나가 실제로 어긋나 있었다 — 고쳤다** (D-172)
 
