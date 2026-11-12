@@ -1,6 +1,13 @@
 -- 045_learning_actions.sql — 학습 행동 기록 (043 을 고친 판)
 --
--- 상태: **초안이다. 운영에서 실행하지 않았다.**
+-- 상태: **운영에 적용됐다 (2026-11-12, 원장님이 Supabase SQL Editor 에서 실행).**
+--   적용 뒤 대조한 것 — 표 2개(칸 8·16, RLS 켜짐) · 색인 5개(+기본키 2) · 정책 4개 ·
+--   함수 2개(DEFINER·INVOKER, `search_path=""`) · 실행권한은 `service_role` 에만
+--   (`anon`·`authenticated` 없음). 새 표는 0행. 기존 표 행수는 적용 전과 같다
+--   (students 235 · problems 38372 · gradings 5 · grading_answers 113 ·
+--    exam_sheet_problems 766 · lesson_videos 1003 · video_watch_logs 63).
+--   다시 실행해도 안전하다 — 0단계 선행점검이 모양이 다르면 멈춘다.
+--
 --   GPT-EXEC-045 §2 가 043 의 결함 일곱 가지를 고치라고 했고, 이 파일이 그것이다.
 --   043 (`043_learning_actions.sql`) 은 **실행하지 않는다** — 그 파일 머리에 적어 두었다.
 --
