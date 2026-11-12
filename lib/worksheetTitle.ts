@@ -38,6 +38,45 @@ export function unitNameBeside(unit?: string | null, unitName?: string | null): 
   return n
 }
 
+/**
+ * **같은 말을 괄호로 또 적은 꼬리**를 뗀다 (원장님 2026-11-12 「정리해줘」).
+ *
+ *   중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제)
+ *     → 중등 1-1 (2026.11.02) 오답과제
+ *
+ * 왜 생기나 — 과제 배부 글은 `단원 (범위)` 꼴로 만드는데, `unitNameBeside` 가
+ * 「단원 칸을 품고 있는 더 긴 이름」을 범위로 돌려준다(「2단원」 옆 「2단원 소수의 나눗셈」을
+ * 살리려고 일부러 그렇게 돼 있다). 그 값을 **괄호에 넣으면** 앞말이 통째로 두 번 찍힌다.
+ * `unitParen` 은 이 경우를 가려내는데, 학습일지의 과제 배부 글은 안 가렸다.
+ *
+ * ★ 괄호 안에 또 괄호가 있다(날짜 「(2026.11.02)」). 그래서 정규식이 아니라 **뒤에서부터
+ *   짝을 세어** 맨 바깥 괄호를 찾는다. `/\([^)]*\)$/` 는 날짜 괄호에서 잘못 끊긴다.
+ * ★ 안쪽이 앞말과 **같은 말이거나 앞말을 품고 있을 때만** 뗀다. 진짜 범위
+ *   (「2단원 (소수의 나눗셈)」)는 건드리지 않는다.
+ */
+export function dropEchoParen(text?: string | null): string {
+  const t = String(text ?? '').trim()
+  if (!t.endsWith(')')) return t
+  let depth = 0
+  let open = -1
+  for (let i = t.length - 1; i >= 0; i--) {
+    if (t[i] === ')') depth++
+    else if (t[i] === '(') {
+      depth--
+      if (depth === 0) { open = i; break }
+    }
+  }
+  if (open <= 0) return t
+  const head = t.slice(0, open).trim()
+  const inner = t.slice(open + 1, -1).trim()
+  if (!head || !inner) return t
+  // 「오답학습지」 같은 머리말만 더 붙은 것도 **같은 말**로 본다.
+  const 씻기 = (s: string) => s.replace(/오답학습지/g, '').replace(/[\s_·()（）[\]*＊]+/g, '').toLowerCase()
+  const [h, n] = [씻기(head), 씻기(inner)]
+  if (!h || !n) return t
+  return n === h || n.includes(h) || h.includes(n) ? head : t
+}
+
 /** 「2단원 소수의 나눗셈」 · 「전범위」 — 빈칸으로 이어 붙인 단원. */
 export function unitLabel(unit?: string | null, unitName?: string | null): string {
   const u = String(unit ?? '').trim()

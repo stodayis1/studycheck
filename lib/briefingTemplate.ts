@@ -24,6 +24,7 @@ import {
   BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
   BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
   BRIEFING_TEMPLATE_V3, BRIEFING_TEMPLATE_V3_NONOTE,
+  BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE,
 } from './briefing'
 import { aligoPost } from './aligo'
 
@@ -87,10 +88,34 @@ const BTN3: [string, string][] = [
 /** 알림장 없는 판은 「알림장·사진 보기」가 없다. */
 const BTN2: [string, string][] = BTN3.slice(0, 2)
 
+/**
+ * V4 의 버튼 — 첫 버튼 이름을 **「학습지·테스트 점수」** 로 바꿨다 (원장님 2026-11-12).
+ *
+ * 왜
+ *   고등부는 레벨학습지를 쓰지 않고 데일리테스트를 본다. 그런데 버튼이
+ *   「레벨학습지 점수 현황」 하나뿐이라, 고1·고2 학부모님께는 **영구히 빈 페이지**가 나갔다
+ *   (학습지 기록이 한 번도 없는 학생 12명).
+ *
+ * ★ 버튼은 템플릿에 **박혀 있어서** 학생마다 다르게 보낼 수 없다. 그래서 이름을 둘 다
+ *   담는 말로 바꾸고, **페이지가** 그 학생에게 있는 것을 보여 준다(학습지 또는 데일리테스트).
+ *   학년별로 판을 또 나누면 등록·심사가 두 배가 된다.
+ */
+const BTN3_V4: [string, string][] = [
+  ['학습지·테스트 점수', `${APP_URL}/report/#{점수토큰}`],
+  ['출결·과제달성률 현황', `${APP_URL}/report/#{출결토큰}`],
+  ['알림장·사진 보기', `${APP_URL}/report/#{알림장토큰}`],
+]
+const BTN2_V4: [string, string][] = BTN3_V4.slice(0, 2)
+
+/** V4 의 첫 버튼 이름 — 라우트가 「우리 버튼」을 만들 때도 같은 글자를 써야 한다. */
+export const V4_SCORE_BUTTON = BTN3_V4[0][0]
+
 export interface BriefingTemplateCodes {
   v1: string | null; v1NoNote: string | null
   v2: string | null; v2NoNote: string | null
   v3: string | null; v3NoNote: string | null
+  /** 「▶ 학습 결과」 한 칸 판 (2026-11-12). 이것이 있으면 이 판이 먼저다. */
+  v4: string | null; v4NoNote: string | null
   /** 못 물어봤으면 그 까닭 (목록을 못 받았을 때). 그때는 전부 null 이다. */
   note?: string
   /** 판마다 **왜 못 골랐는지** — 「안 바뀌네?」를 화면에서 바로 알 수 있게. */
@@ -106,6 +131,7 @@ export interface BriefingTemplateCodes {
 
 const EMPTY: BriefingTemplateCodes = {
   v1: null, v1NoNote: null, v2: null, v2NoNote: null, v3: null, v3NoNote: null,
+  v4: null, v4NoNote: null,
 }
 
 /** 띄어쓰기·줄바꿈 차이만 빼고 같은가 — 「거의 같은데 왜 안 잡히지」를 짚어 주려고 쓴다. */
@@ -198,6 +224,8 @@ export async function resolveBriefingTemplateCodes(): Promise<BriefingTemplateCo
       v2NoNote: noNote ? find('v2NoNote', BRIEFING_TEMPLATE_V2_NONOTE, BTN2) : null,
       v3: find('v3', BRIEFING_TEMPLATE_V3, BTN3),
       v3NoNote: noNote ? find('v3NoNote', BRIEFING_TEMPLATE_V3_NONOTE, BTN2) : null,
+      v4: find('v4', BRIEFING_TEMPLATE_V4, BTN3_V4),
+      v4NoNote: noNote ? find('v4NoNote', BRIEFING_TEMPLATE_V4_NONOTE, BTN2_V4) : null,
       why,
       buttons: regBtn,
     }
@@ -227,6 +255,8 @@ export function pickCodes(auto: BriefingTemplateCodes) {
     v2NoNote: noNote ? (auto.v2NoNote ?? env('ALIGO_BRIEFING_TPL_CODE_V2_NONOTE')) : null,
     v3: auto.v3 ?? env('ALIGO_BRIEFING_TPL_CODE_V3'),
     v3NoNote: noNote ? (auto.v3NoNote ?? env('ALIGO_BRIEFING_TPL_CODE_V3_NONOTE')) : null,
+    v4: auto.v4 ?? env('ALIGO_BRIEFING_TPL_CODE_V4'),
+    v4NoNote: noNote ? (auto.v4NoNote ?? env('ALIGO_BRIEFING_TPL_CODE_V4_NONOTE')) : null,
     buttons: auto.buttons ?? {},
   }
 }

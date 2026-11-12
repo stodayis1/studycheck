@@ -12,6 +12,9 @@
 //   알림톡은 **템플릿당 고정 이미지 1장**만 되고 그 이미지엔 링크도 못 건다.
 //   학생마다 다른 사진은 애초에 실을 수 없어서, 사진은 「알림장·사진」 버튼 뒤 페이지로 보낸다.
 
+// 학습지 제목을 다루는 규칙은 한 곳에 둔다(lib/worksheetTitle.ts — 순수 함수).
+import { dropEchoParen } from './worksheetTitle'
+
 export const BODY_LIMIT = 1000
 // 1,000자에 딱 붙이면 카카오 쪽 계산이 우리와 1~2자 달라도 터진다. 950자에서 멈춘다.
 export const BODY_BUDGET = 950
@@ -165,6 +168,63 @@ export const BRIEFING_TEMPLATE_V3_NONOTE = `[수학의지혜 수업 브리핑]
 
 아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
 
+/**
+ * ★ V4 — 점수를 **「▶ 학습 결과」 한 칸에 모았다** (원장님 2026-11-12).
+ *
+ * 왜
+ *   「정작 학습지가 여러개 있는 경우는 '~외 3건' 이런식으로 표기되더라고.
+ *     학습지 제목 레벨 점수가 표기되도록 하면 어떨까 싶어」
+ *   어느 판에도 「▶ 학습지」 줄이 없어서, 학습지 점수를 과제 성취도 칸 뒤에 **60자**로
+ *   밀어 넣고 있었다(`worksheetTail`). 60자에 안 들어가면 단원 이름을 깎고, 그래도 안 되면
+ *   한 장만 쓰고 「외 N장」을 붙인다. 11/07 박태하는 여덟 장을 풀었는데 두 장만 나갔다.
+ *
+ * 왜 「▶ 학습지」 줄만 더하지 않고 한 칸에 모으나
+ *   알림톡 본문은 승인된 템플릿과 **글자 단위로** 같아야 하고, 줄이 있는 판과 없는 판을
+ *   따로 등록해야 한다. 「학습지」 줄을 따로 더하면 알림장 × 데일리테스트 × 학습지 =
+ *   **판 8개**가 되고 심사도 여덟 번이다. 세 값을 한 칸에 모으면 **변수 칸 안의 글자는
+ *   심사와 무관**하므로 판이 **2개**(알림장 있음·없음)로 줄고, 「본문과 코드가 어긋나
+ *   조용히 안 나가는」 사고(2026-10-30, 1,074건)가 걸릴 자리도 그만큼 줄어든다.
+ *
+ * ★ 데일리테스트도 이 칸에 한 줄로 들어간다 — 그래서 V3 의 「▶ 데일리테스트」 줄이 없다.
+ */
+export const BRIEFING_TEMPLATE_V4 = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+
+▶ 학습 결과
+#{학습결과}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+▶ 선생님 알림장
+#{알림장}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
+/** V4 중 알림장 칸이 없는 것. */
+export const BRIEFING_TEMPLATE_V4_NONOTE = `[수학의지혜 수업 브리핑]
+#{학생명} 학생 · #{날짜}
+
+▶ 출결  #{출결}
+▶ 과제 달성률  #{과제달성률}
+
+▶ 학습 결과
+#{학습결과}
+
+▶ 오늘 나간 진도
+#{진도}
+
+▶ 다음 시간까지 과제
+#{과제배부}
+
+아래 버튼에서 아이의 누적 현황을 보실 수 있어요.`
+
 // 칸마다의 상한. 합이 넉넉히 950 안에 들어오게 잡았다(골격 약 150자 + 아래 합 774자).
 const CAP = {
   학생명: 20,
@@ -175,6 +235,10 @@ const CAP = {
   학습지결과: 72,
   과제성취도: 72,
   데일리테스트: 34,
+  // ★ V4 의 「▶ 학습 결과」 칸. 성취도·데일리테스트·학습지가 **줄 단위로** 들어간다.
+  //   학습지 한 줄이 35자쯤이라 240 이면 대여섯 장이 그대로 들어간다 (그게 이 판의 목적이다).
+  //   넘치면 뒤쪽 학습지 줄을 덜어 「· 학습지 외 N장」으로 바꾼다 — 말줄임표로 끊지 않는다.
+  학습결과: 240,
   진도: 350,
   과제배부: 250,
   알림장: 300,
@@ -276,6 +340,10 @@ function unitText(raw: string, cap: number) {
   //   「이차함수(일반형)의 그래프」를 빈칸으로 바꾸면 「이차함수 의 그래프」가 된다.
   let t = raw.replace(/[(（\[][^)）\]]*[)）\]]/g, '')
   t = t.replace(/[*＊]/g, ' ').replace(/레벨학습지/g, ' ')
+  // ★ 오답 재출제 제목은 머리말이 두 겹이다 —
+  //   「오답학습지 오답유사학습 [오답 유사] 4학년 2학기 4단원」. 한 겹으로 줄인다.
+  //   (2026-11-12 박태하 11/07 여덟 장이 전부 이 꼴이었다)
+  t = t.replace(/오답학습지/g, ' ').replace(/오답유사학습/g, '오답유사')
   t = t.replace(/\s+/g, ' ').trim().replace(/^[-·,.]+|[-·,~]+$/g, '').trim()
   if (t.length <= cap) return t
   // ★ 낱말 한가운데가 아니라 **마디에서** 끊는다. 단원 이름은 「가~나」·「가, 나, 다」 꼴이 많다.
@@ -320,6 +388,61 @@ export function worksheetTail(rows: BriefingWorksheet[], budget = 60): string {
   return ''
 }
 
+/**
+ * V4 의 「▶ 학습 결과」 칸을 **줄 단위로** 만든다 (원장님 2026-11-12).
+ *
+ *   · 과제 성취도 90%
+ *   · 데일리테스트 95점 · 쎈 P.18~P.40
+ *   · 학습지 4학년 2학기 4단원 Lv3.5 83점
+ *   · 학습지 오답유사 4학년 2학기 4단원 Lv3 100점
+ *
+ * ★ 학습지는 **들어온 차례대로 한 장에 한 줄.** 점수 큰 것부터 고르지 않는다
+ *   (골라 보이면 안 된다 — `worksheetTail` 과 같은 규칙이다).
+ * ★ 칸(budget)이 모자라면 **뒤쪽 학습지 줄을 덜어** 「· 학습지 외 N장」으로 바꾼다.
+ *   말줄임표로 낱말을 끊지 않는다.
+ * ★ 결석한 날은 점수를 볼 수 없으니 그 한 줄만 쓴다.
+ */
+export function learningResult(a: {
+  결석?: boolean
+  /** 학습일지의 과제 성취도 (%) */
+  성취도?: number | null
+  /** 성취도 뒤에 붙일 단원·레벨 — 그날 학습지가 있으면 학습지 줄이 들고 가므로 비운다 */
+  성취도꼬리?: (string | null | undefined)[]
+  데일리점수?: number | null
+  데일리범위?: string | null
+  worksheets?: BriefingWorksheet[]
+}, budget: number = CAP.학습결과): string {
+  if (a.결석) return '· 결석으로 수업에 참여하지 못했습니다'
+
+  const head: string[] = []
+  if (a.성취도 != null) {
+    head.push([`· 과제 성취도 ${a.성취도}%`,
+      ...(a.성취도꼬리 ?? []).map((x) => String(x ?? '').trim()).filter(Boolean)].join(' · '))
+  }
+  if (a.데일리점수 != null) {
+    head.push([`· 데일리테스트 ${a.데일리점수}점`,
+      (a.데일리범위 ?? '').trim() || null].filter(Boolean).join(' · '))
+  }
+
+  const ws = (a.worksheets ?? []).filter((w) => w && w.score != null)
+  const wsLine = (w: BriefingWorksheet) => {
+    const 단원 = unitText(((w.unit_name || w.unit) ?? '').trim(), 26)
+    const lv = lvText(w.current_level)
+    return ['· 학습지', 단원, lv ? `Lv${lv}` : '', `${w.score}점`].filter(Boolean).join(' ')
+  }
+
+  for (let take = ws.length; take >= 0; take--) {
+    const lines = [...head, ...ws.slice(0, take).map(wsLine)]
+    const rest = ws.length - take
+    // 한 장도 못 적을 때는 「외」가 아니다 — 앞에 적은 것이 없으니까.
+    if (rest > 0) lines.push(take > 0 ? `· 학습지 외 ${rest}장` : `· 학습지 ${rest}장`)
+    const t = lines.join('\n')
+    if (t.length <= budget) return t || '· 오늘은 채점된 과제·학습지가 없어요'
+  }
+  // 성취도·데일리만으로도 칸을 넘기는 날 — 그건 clip 이 맡는다.
+  return head.join('\n') || '· 오늘은 채점된 과제·학습지가 없어요'
+}
+
 export interface BriefingFeedback {
   content?: string | null
   ai_message?: string | null   // 글이 아니라 {"images":[...]} 다
@@ -348,8 +471,21 @@ export function hwLines(ses: BriefingSession, videos?: BriefingVideos): string[]
     const page = entry ? entry.split('·').slice(-1)[0]?.trim() : null
     out.push(page && page !== name ? `· ${name} ${page}` : `· ${name}`)
   }
+  // ★ 학습지 과제 줄은 저장된 글을 그대로 쓴다. 그런데 그 글에 **같은 말이 괄호로 또**
+  //   들어 있는 것이 있다(원장님 2026-11-12 「정리해줘」) —
+  //     「… 중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제) · 3.5레벨」
+  //   만드는 쪽(학습일지)도 고쳤지만, **이미 저장된 글**이 날마다 그대로 나가므로 여기서도 뗀다.
+  //   학습지 여럿은 ' / ' 로, 한 건 안은 ' · ' 로 이어져 있다 — 가운데 단원 칸만 손본다.
   const ws = (ses.hw_worksheet_range ?? '').trim()
-  if (ws) out.push(`· 학습지 ${ws}`)
+  if (ws) {
+  //   매쓰홀릭 제목에 붙어 오는 **별표**(「* 레벨학습지 (6-2) 4단원 *」)도 뗀다 — 학부모님께
+  //   보이는 글에 쓸 데가 없다. 괄호 안 「(6-2)」는 학년·학기라 **남긴다**.
+    const 정리 = ws.split(' / ').map((part) =>
+      part.split(' · ')
+        .map((seg) => dropEchoParen(seg).replace(/^[*＊\s]+|[*＊\s]+$/g, '').replace(/\s+/g, ' '))
+        .filter(Boolean).join(' · ')).join(' / ')
+    out.push(`· 학습지 ${정리}`)
+  }
   // 교재를 안 고르고 메모만 남긴 과제는 "📝 ..." 조각으로 들어 있다.
   const memo = pageParts.find((p) => p.trim().startsWith('📝 '))
   if (memo) out.push(`· ${memo.slice(2).trim()}`)
@@ -416,6 +552,12 @@ export interface BriefingResult {
   template: 'full' | 'nonote'
   /** 「데일리테스트」 줄이 있는 판(V3)으로 만들었는가 — 보낼 때 코드를 가른다 */
   dailyShown: boolean
+  /**
+   * 어느 판으로 만들었는가. 보낼 때 **이 값으로 코드를 고른다** —
+   * 본문과 코드가 어긋나면 카카오가 조용히 거절한다(2026-10-30, 1,074건).
+   * `dailyShown` 은 옛 이름이라 그대로 둔다(V3 일 때만 true).
+   */
+  version: 'v1' | 'v2' | 'v3' | 'v4'
   hasNotice: boolean
   bodyLen: number
   overLimit: boolean
@@ -458,6 +600,14 @@ export function buildBriefing(args: {
   useV3?: boolean
   /** V3 중 알림장 없는 판까지 심사를 통과했는가 (V3 로 갈 때의 noNoteTemplate). */
   noNoteTemplateV3?: boolean
+  /**
+   * 「▶ 학습 결과」 한 칸 판(V4)을 쓸 수 있는가. 심사 통과 뒤에만 켠다.
+   * ★ V3 와 달리 **조건이 없다** — 성취도·데일리테스트·학습지가 다 그 칸으로 들어가므로
+   *   켜져 있으면 늘 이 판으로 나간다. 그래서 판이 두 개뿐이다.
+   */
+  useV4?: boolean
+  /** V4 중 알림장 없는 판까지 심사를 통과했는가. */
+  noNoteTemplateV4?: boolean
   /** 그날 영상 과제 (편수·증명 편수). 부르는 쪽이 lesson_videos 를 보고 넣는다. */
   videos?: BriefingVideos
   /**
@@ -565,11 +715,24 @@ export function buildBriefing(args: {
     ? [`${데일리점수}점`, (ses.daily_test_unit ?? '').trim() || null].filter(Boolean).join(' · ')
     : '해당 없음'
 
+  // ★ V4 의 「▶ 학습 결과」 — 성취도·데일리테스트·학습지를 **줄 단위로** 모은다.
+  //   학습지가 여러 장이면 장마다 한 줄이 그대로 들어간다(원장님 2026-11-12).
+  const 학습결과 = learningResult({
+    결석,
+    성취도: note?.worksheet_score ?? null,
+    // 그날 학습지가 있으면 단원·레벨은 학습지 줄이 들고 간다 — 두 번 읽히지 않게.
+    성취도꼬리: 성취도단원,
+    데일리점수: 데일리점수,
+    데일리범위: ses.daily_test_unit ?? null,
+    worksheets: args.worksheets ?? [],
+  })
+
   const vars: Record<VarName, string> = {
     학생명: clip(학생명, CAP.학생명),
     날짜: clip(날짜, CAP.날짜),
     출결: clip(출결, CAP.출결),
     과제달성률: clip(과제달성률, CAP.과제달성률),
+    학습결과: clip(학습결과, CAP.학습결과),
     학습지결과: clip(학습지결과, CAP.학습지결과),
     과제성취도: clip(과제성취도, CAP.과제성취도),
     데일리테스트: clip(데일리테스트, CAP.데일리테스트),
@@ -589,9 +752,12 @@ export function buildBriefing(args: {
   // ★ 알림장이 하나도 없으면 그 칸이 **아예 없는 판**으로 보낸다.
   //   빈말("오늘은 따로 남긴 말씀이 없어요")을 채워 넣으면 성의 없어 보인다.
   const hasNotice = noticeParts.length > 0
+  // ★ V4 가 켜져 있으면 그 판이 먼저다 — 점수가 다 「▶ 학습 결과」 칸으로 들어가므로
+  //   V2·V3 의 점수 칸을 쓸 일이 없다.
+  const v4 = !!args.useV4
   // ★ 데일리테스트를 본 날만 그 줄이 있는 판으로 간다. 코드가 없으면(심사 전) 예전대로.
-  const v3 = !!args.useV3 && hasDaily
-  const v2 = !!args.useV2
+  const v3 = !v4 && !!args.useV3 && hasDaily
+  const v2 = !v4 && !!args.useV2
 
   // ── 데일리테스트를 붙인다 (원장님 2026-10-17) ───────────────────────────
   // 「▶ 데일리테스트」 **한 줄**을 쓰려면 알리고에 템플릿을 새로 등록해 심사를 받아야 한다.
@@ -599,7 +765,8 @@ export function buildBriefing(args: {
   //   「▶ 과제 성취도  100% · 데일리테스트 95점」
   // 변수 칸 안의 글자는 심사와 무관하다 — 그래서 **지금 쓰는 판 그대로 오늘부터** 나간다.
   // 새 판(V3)으로 가면 그 줄이 따로 생기므로 붙이지 않는다(두 번 나가면 안 된다).
-  if (!v3 && hasDaily) {
+  // ★ V4 는 「▶ 학습 결과」 칸이 데일리테스트를 이미 한 줄로 들고 있다 — 붙이지 않는다.
+  if (!v4 && !v3 && hasDaily) {
     const 꼬리 = ` · 데일리테스트 ${vars.데일리테스트}`
     // 예전 판의 「지난 학습지」 칸은 성취도가 **비었을 때** 이미 데일리테스트를 쓰고 있다.
     // 그 경우엔 같은 말이 두 번 되니 붙이지 않는다.
@@ -613,7 +780,9 @@ export function buildBriefing(args: {
   // ── 그날 학습지 점수를 붙인다 (원장님 2026-10-30) ───────────────────────
   // 데일리테스트를 먼저 붙이고 이걸 붙인다 — 칸이 모자라면 **학습지 쪽이 잘리게** 하려는 것이다.
   // 고등부는 데일리테스트가 더 중요하다(원장님 2026-10-17).
-  if (학습지있음) {
+  // ★ V4 는 학습지를 **장마다 한 줄**로 이미 적었다 — 꼬리로 또 붙이지 않는다.
+  //   이 판을 만든 까닭이 바로 「외 N장」을 없애는 것이다.
+  if (!v4 && 학습지있음) {
     const slot: VarName = v2 ? '과제성취도' : '학습지결과'
     const base = vars[slot] === '해당 없음' ? '' : vars[slot]
     // 남은 칸만큼만 쓴다. ★ 18자도 안 남으면 **아예 안 붙인다** — 낱말 한가운데서
@@ -623,13 +792,16 @@ export function buildBriefing(args: {
     if (꼬리) vars[slot] = clip(base ? `${base} · ${꼬리}` : 꼬리, CAP[slot])
   }
 
-  // 「알림장 없는 판」을 쓸 수 있는지는 **지금 쓰는 판**에 달렸다 — V3 로 가면 V3 의 것을 본다.
-  const useNoNote = !hasNotice && (v3 ? !!args.noNoteTemplateV3 : !!args.noNoteTemplate)
-  const tpl = v3
-    ? (useNoNote ? BRIEFING_TEMPLATE_V3_NONOTE : BRIEFING_TEMPLATE_V3)
-    : v2
-      ? (useNoNote ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_V2)
-      : (useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE)
+  // 「알림장 없는 판」을 쓸 수 있는지는 **지금 쓰는 판**에 달렸다 — V4 로 가면 V4 의 것을 본다.
+  const useNoNote = !hasNotice && (
+    v4 ? !!args.noNoteTemplateV4 : v3 ? !!args.noNoteTemplateV3 : !!args.noNoteTemplate)
+  const tpl = v4
+    ? (useNoNote ? BRIEFING_TEMPLATE_V4_NONOTE : BRIEFING_TEMPLATE_V4)
+    : v3
+      ? (useNoNote ? BRIEFING_TEMPLATE_V3_NONOTE : BRIEFING_TEMPLATE_V3)
+      : v2
+        ? (useNoNote ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_V2)
+        : (useNoNote ? BRIEFING_TEMPLATE_NONOTE : BRIEFING_TEMPLATE)
   // ★ \w 는 한글을 못 잡는다. #{학생명} 같은 한글 변수가 그대로 남아 본문이 통째로
   //   골격 그대로 나가 버린다(실제로 그랬다 — scripts/briefing-check.ts 가 잡아냈다).
   const render = (v: Record<string, string>) =>
@@ -657,6 +829,7 @@ export function buildBriefing(args: {
     photoCount: photos.length,
     template: useNoNote ? 'nonote' : 'full',
     dailyShown: v3,
+    version: v4 ? 'v4' : v3 ? 'v3' : v2 ? 'v2' : 'v1',
     hasNotice,
   }
 }

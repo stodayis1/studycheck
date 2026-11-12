@@ -55,8 +55,18 @@ const sendBy = new Map(sends.map((r: any) => [r.student_id, r]))
 const wsBy = new Map<string, any[]>()
 for (const w of (ws ?? []) as any[]) wsBy.set(w.student_id, [...(wsBy.get(w.student_id) ?? []), w])
 
+/**
+ * `--v4` — **아직 심사 전인** 「▶ 학습 결과」 판으로 그려 본다 (2026-11-12).
+ * 그 판으로 나가면 그날 글이 어떻게 보이는지 미리 보려는 것이다.
+ * ★ 그때 나간 글과 **다른** 판이므로 글자 수 대조는 하지 않는다.
+ */
+const V4 = process.argv.includes('--v4')
+
 /** 어느 판으로 나갔는지는 기록에 없다 — 글자 수가 맞는 판을 찾는다. */
-const 판들 = [
+const 판들 = V4 ? [
+  { 이름: '학습 결과 판(미리보기)', f: { useV4: true, noNoteTemplateV4: false } },
+  { 이름: '학습 결과 판(알림장 없음·미리보기)', f: { useV4: true, noNoteTemplateV4: true } },
+] : [
   { 이름: '데일리테스트 판', f: { useV2: true, useV3: true, noNoteTemplate: false, noNoteTemplateV3: false } },
   { 이름: '과제 성취도 판', f: { useV2: true, useV3: false, noNoteTemplate: false, noNoteTemplateV3: false } },
   { 이름: '예전 판', f: { useV2: false, useV3: false, noNoteTemplate: false, noNoteTemplateV3: false } },
@@ -79,15 +89,19 @@ for (const ses of (sessions ?? []) as any[]) {
     videos: { total: urls.length, proof: 0 },
     worksheets: wsBy.get(st.id) ?? [], makeup: null, ...f,
   })
-  const 고른판 = 판들.find((p) => 만들기(p.f).bodyLen === send?.body_len) ?? 판들[0]
+  // 미리보기(--v4)는 알림장이 있나 없나로만 판을 가른다 — 대조할 기록이 없다.
+  const 고른판 = V4
+    ? (만들기(판들[0].f).hasNotice ? 판들[0] : 판들[1])
+    : (판들.find((p) => 만들기(p.f).bodyLen === send?.body_len) ?? 판들[0])
   const brief = 만들기(고른판.f)
-  const 같나 = brief.bodyLen === send?.body_len
-  if (같나) 맞음++; else 안맞음++
+  const 같나 = !V4 && brief.bodyLen === send?.body_len
+  if (!V4) { if (같나) 맞음++; else 안맞음++ }
 
   console.log('\n' + '─'.repeat(72))
   console.log(`${st.name} (${st.grade}) · ${date} · ${고른판.이름}`)
-  console.log(`글자 수 ${brief.bodyLen} ${같나 ? '= 기록된 것과 같음 ✔ (그때 나간 글과 같습니다)'
-    : `≠ 기록 ${send?.body_len} ✗ (그 뒤에 일지가 바뀌었을 수 있어요)`}`)
+  console.log(`글자 수 ${brief.bodyLen} ${V4 ? '(아직 심사 전인 판 — 그때 나간 글과 다릅니다)'
+    : 같나 ? '= 기록된 것과 같음 ✔ (그때 나간 글과 같습니다)'
+      : `≠ 기록 ${send?.body_len} ✗ (그 뒤에 일지가 바뀌었을 수 있어요)`}`)
   console.log('─'.repeat(72))
   console.log(brief.body)
 }

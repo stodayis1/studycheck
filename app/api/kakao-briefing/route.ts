@@ -26,7 +26,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/aligo'
 import { randomBytes } from 'crypto'
 import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
-import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
+import { resolveBriefingTemplateCodes, pickCodes, V4_SCORE_BUTTON } from '@/lib/briefingTemplate'
 import { attachPastExamMemos } from '@/lib/pastExamMemo'
 import { RESEND_KEY, pickResend, allDates, dropDates } from '@/lib/briefingResend'
 import { buildBriefing } from '@/lib/briefing'
@@ -243,7 +243,8 @@ async function run(opts: {
   //   사람이 기억해야 하는 단계는 언젠가 빠진다 — 그 단계를 없앤다.
   //   못 물어보면(키 없음·연결 실패) 예전처럼 환경변수로 떨어진다.
   const tpl = pickCodes(await resolveBriefingTemplateCodes())
-  out.template = tpl.v3 ? '데일리테스트 판' : tpl.v2 ? '과제 성취도 판' : '예전 판'
+  out.template = tpl.v4 ? '학습 결과 판'
+    : tpl.v3 ? '데일리테스트 판' : tpl.v2 ? '과제 성취도 판' : '예전 판'
 
   // 설정이 빠졌으면 **여기서** 멈춘다. 반쯤 보내 놓고 멈추는 것이 제일 나쁘다.
   const cfg: AligoConfig | null = dryRun ? null : aligoConfig()
@@ -307,6 +308,10 @@ async function run(opts: {
       //   (원장님 2026-10-17: 고등부는 데일리테스트를 더 많이 쓰신다).
       useV3: !!tpl.v3,
       noNoteTemplateV3: !!tpl.v3NoNote,
+      // ★ 「▶ 학습 결과」 한 칸 판 (원장님 2026-11-12). 코드가 들어오면 이 판이 먼저다 —
+      //   학습지를 **장마다 한 줄**로 적으려고 만든 판이다(「외 N장」을 없애는 것이 목적).
+      useV4: !!tpl.v4,
+      noNoteTemplateV4: !!tpl.v4NoNote,
     })
 
     if (dryRun) {
@@ -357,11 +362,13 @@ async function run(opts: {
       //   본문도 lib/briefing.ts 가 같은 조건으로 새 판 서식에 맞춰 만든다 — 둘이 어긋나면 안 나간다.
       // ★ 본문을 어느 판으로 만들었는지(brief)와 보내는 코드가 **반드시 같아야** 한다.
       //   어긋나면 에러도 없이 그냥 안 나간다. brief 가 고른 것을 그대로 따른다.
-      const tplForThis = brief.dailyShown
-        ? (brief.template === 'nonote' ? (tpl.v3NoNote || tpl.v3!) : tpl.v3!)
-        : brief.template === 'nonote'
-          ? (tpl.v2 ? (tpl.v2NoNote || tpl.v2) : (tpl.v1NoNote || cfg!.tplCode))
-          : (tpl.v2 || cfg!.tplCode)
+      const tplForThis = brief.version === 'v4'
+        ? (brief.template === 'nonote' ? (tpl.v4NoNote || tpl.v4!) : tpl.v4!)
+        : brief.dailyShown
+          ? (brief.template === 'nonote' ? (tpl.v3NoNote || tpl.v3!) : tpl.v3!)
+          : brief.template === 'nonote'
+            ? (tpl.v2 ? (tpl.v2NoNote || tpl.v2) : (tpl.v1NoNote || cfg!.tplCode))
+            : (tpl.v2 || cfg!.tplCode)
       // ★ 버튼은 **승인된 템플릿에 등록된 것과 개수·이름·링크가 같아야** 한다.
       //   하나라도 다르면 카카오가 「메시지가 템플릿과 일치하지않음」으로 **거절**하고,
       //   우리 기록에는 「접수됨」으로 남아 아무도 모른다 — 2026-10-30 에 알림장 없는 판이
@@ -370,12 +377,15 @@ async function run(opts: {
       //   그래서 **우리가 들고 있는 버튼을 고집하지 않는다.** 알리고에 등록된 버튼을
       //   그대로 쓰고, 링크의 #{…토큰} 자리만 이 학생 것으로 바꾼다. 그러면 어긋날 수가 없다.
       //   목록 API 가 버튼을 안 주면(그럴 수 있다) 예전처럼 우리 것으로 보낸다.
-      const tplKey = (['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote'] as const)
+      const tplKey = (['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote', 'v4', 'v4NoNote'] as const)
         .find((k) => tpl[k] && tpl[k] === tplForThis)
       const 토큰: Record<string, string> = { 점수토큰: tScore, 출결토큰: tAtt, 알림장토큰: tNotice }
       const 등록버튼 = tplKey ? tpl.buttons?.[tplKey] : undefined
+      // ★ V4 는 첫 버튼 이름이 다르다 — 고등부도 볼 것이 있어야 해서 「학습지·테스트 점수」로
+      //   바꿨다(원장님 2026-11-12). 이름이 한 글자라도 다르면 카카오가 거절한다.
+      const 점수버튼이름 = brief.version === 'v4' ? V4_SCORE_BUTTON : '레벨학습지 점수 현황'
       const 우리버튼 = [
-        { name: '레벨학습지 점수 현황', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tScore}`, linkPc: `${APP_URL}/report/${tScore}` },
+        { name: 점수버튼이름, linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tScore}`, linkPc: `${APP_URL}/report/${tScore}` },
         { name: '출결·과제달성률 현황', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tAtt}`, linkPc: `${APP_URL}/report/${tAtt}` },
         ...(brief.template === 'nonote' ? [] : [
           { name: '알림장·사진 보기', linkType: 'WL' as const, linkMo: `${APP_URL}/report/${tNotice}`, linkPc: `${APP_URL}/report/${tNotice}` },

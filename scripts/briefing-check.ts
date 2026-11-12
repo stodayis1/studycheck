@@ -11,8 +11,11 @@
  */
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { buildBriefing, worksheetTail, BODY_LIMIT, BODY_BUDGET, BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
-  BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE } from '../lib/briefing.ts'
+import { dropEchoParen } from '../lib/worksheetTitle.ts'
+import { buildBriefing, worksheetTail, learningResult, hwLines, BODY_LIMIT, BODY_BUDGET,
+  BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
+  BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
+  BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE } from '../lib/briefing.ts'
 
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -87,8 +90,12 @@ const fixedOf = (tpl: string) => tpl.split('\n')
 
 // 「과제 성취도」 판(V2)으로 검사할지. 지금 실제로 나가는 판이다 — 둘 다 돌려 봐야 한다.
 const V2 = process.argv.includes('--v2')
-const TPL = V2 ? BRIEFING_TEMPLATE_V2 : BRIEFING_TEMPLATE
-const TPL_NONOTE = V2 ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_NONOTE
+// 「▶ 학습 결과」 한 칸 판(V4) — 학습지를 장마다 한 줄로 적는다(2026-11-12).
+// 심사 통과 전에 **실데이터 전량으로** 1,000자를 넘는 건이 없는지 미리 재 보는 길이다.
+const V4 = process.argv.includes('--v4')
+const TPL = V4 ? BRIEFING_TEMPLATE_V4 : V2 ? BRIEFING_TEMPLATE_V2 : BRIEFING_TEMPLATE
+const TPL_NONOTE = V4 ? BRIEFING_TEMPLATE_V4_NONOTE
+  : V2 ? BRIEFING_TEMPLATE_V2_NONOTE : BRIEFING_TEMPLATE_NONOTE
 const FIXED = fixedOf(TPL)
 const FIXED_NONOTE = fixedOf(TPL_NONOTE)
 
@@ -187,6 +194,124 @@ function matchesTemplate(body: string, which: 'full' | 'nonote' = 'full') {
   console.log('학습지 꼬리 자가확인 ✓ (결석엔 안 붙고, 출석엔 붙고, 레벨 .0 은 떼고)')
 }
 
+// ★ V4 「▶ 학습 결과」 칸 자가확인 — 이 판을 만든 까닭이 「외 N장」을 없애는 것이므로,
+//   **장마다 한 줄이 그대로 나오는지**가 이 검사의 핵심이다.
+{
+  const T = (name: string, got: string, want: string) => {
+    if (got !== want) {
+      console.error(`✗ 학습 결과 칸 — ${name}\n   나온 것:\n${got}\n   나와야:\n${want}`)
+      process.exit(1)
+    }
+  }
+  T('성취도 · 데일리 · 학습지가 줄마다 하나씩',
+    learningResult({
+      성취도: 90, 데일리점수: 95, 데일리범위: '쎈 P.18~P.40',
+      worksheets: [
+        { unit_name: '4학년 2학기 4단원', current_level: '3.5', score: 83 },
+        { unit_name: '오답학습지 오답유사학습 [오답 유사] 4학년 2학기 4단원', current_level: '3.0', score: 100 },
+      ],
+    }),
+    ['· 과제 성취도 90%',
+      '· 데일리테스트 95점 · 쎈 P.18~P.40',
+      '· 학습지 4학년 2학기 4단원 Lv3.5 83점',
+      '· 학습지 오답유사 4학년 2학기 4단원 Lv3 100점'].join('\n'))
+
+  T('여덟 장도 여덟 줄 — 「외 N장」으로 뭉개지지 않는다 (2026-11-07 박태하)',
+    learningResult({
+      성취도: 90,
+      worksheets: Array.from({ length: 8 }, (_, i) => ({
+        unit_name: '오답학습지 오답유사학습 [오답 유사] 4학년 2학기 4단원',
+        current_level: '3.0', score: 100 - i,
+      })),
+    }, 400),
+    ['· 과제 성취도 90%',
+      ...Array.from({ length: 8 }, (_, i) =>
+        `· 학습지 오답유사 4학년 2학기 4단원 Lv3 ${100 - i}점`)].join('\n'))
+
+  T('칸이 모자라면 뒤쪽을 덜어 「외 N장」 — 말줄임표로 끊지 않는다',
+    learningResult({
+      worksheets: [
+        { unit_name: '가', current_level: '1.0', score: 90 },
+        { unit_name: '나', current_level: '2.0', score: 80 },
+        { unit_name: '다', current_level: '3.0', score: 70 },
+      ],
+    }, 45),   // 세 줄은 47자라 안 들어가고, 두 줄 + 「외 1장」이 43자로 들어간다
+    ['· 학습지 가 Lv1 90점', '· 학습지 나 Lv2 80점', '· 학습지 외 1장'].join('\n'))
+
+  T('한 장도 못 적으면 「외」가 아니다',
+    learningResult({ worksheets: [{ unit_name: '가', current_level: '1.0', score: 90 }] }, 12),
+    '· 학습지 1장')
+
+  T('결석한 날은 그 한 줄만',
+    learningResult({ 결석: true, 성취도: 90, worksheets: [{ unit_name: '가', score: 90 }] }),
+    '· 결석으로 수업에 참여하지 못했습니다')
+
+  T('아무 점수도 없으면 빈 머리글이 아니라 한 줄', learningResult({}),
+    '· 오늘은 채점된 과제·학습지가 없어요')
+
+  T('학습지가 있으면 성취도 뒤에 단원·레벨을 또 쓰지 않는다',
+    learningResult({ 성취도: 90, 성취도꼬리: [], worksheets: [{ unit_name: '4단원', current_level: '3.0', score: 88 }] }),
+    ['· 과제 성취도 90%', '· 학습지 4단원 Lv3 88점'].join('\n'))
+
+  T('학습지가 없는 날은 성취도 뒤에 단원·레벨을 적는다',
+    learningResult({ 성취도: 90, 성취도꼬리: ['4단원', 'Lv3.5'] }),
+    '· 과제 성취도 90% · 4단원 · Lv3.5')
+
+  // V4 본문에 그 줄들이 **실제로 실리는지** — 함수만 맞고 본문에 안 실리면 아무 뜻이 없다.
+  const v4본문 = buildBriefing({
+    studentName: '시험', studentGrade: '초4', session: { session_date: '2026-11-07' },
+    note: { attendance: '정시', worksheet_score: 90 },
+    useV4: true,
+    worksheets: [
+      { unit_name: '4학년 2학기 4단원', current_level: '3.5', score: 83 },
+      { unit_name: '* 레벨학습지 (4-2) 4단원 *', current_level: '3.0', score: 75 },
+    ],
+  }).body
+  for (const 줄 of ['▶ 학습 결과', '· 과제 성취도 90%',
+    '· 학습지 4학년 2학기 4단원 Lv3.5 83점', '· 학습지 4단원 Lv3 75점']) {
+    if (!v4본문.includes(줄)) {
+      console.error(`✗ V4 본문에 「${줄}」이 없습니다.\n${v4본문}`)
+      process.exit(1)
+    }
+  }
+  if (v4본문.includes('외 1장') || v4본문.includes('▶ 과제 성취도')) {
+    console.error(`✗ V4 인데 예전 꼴(외 N장 · 과제 성취도 줄)이 남았습니다.\n${v4본문}`)
+    process.exit(1)
+  }
+  console.log('학습 결과 칸 자가확인 ✓ (장마다 한 줄 · 칸 모자라면 외 N장 · 결석엔 한 줄)')
+}
+
+// ★ 과제 배부의 학습지 줄 — **같은 말을 괄호로 또** 적은 꼬리를 떼는가 (원장님 2026-11-12).
+{
+  const T = (name: string, got: string, want: string) => {
+    if (got !== want) {
+      console.error(`✗ 과제 학습지 줄 — ${name}\n   나온 것: 「${got}」\n   나와야: 「${want}」`)
+      process.exit(1)
+    }
+  }
+  T('괄호 안이 앞말을 그대로 품으면 뗀다 (괄호 안에 날짜 괄호가 또 있다)',
+    dropEchoParen('중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제)'),
+    '중등 1-1 (2026.11.02) 오답과제')
+  T('별표·레벨학습지 꼴도 같은 말로 본다',
+    dropEchoParen('* 레벨학습지 (5-2) 3단원 * (* 레벨학습지 (5-2) 3단원 *)'),
+    '* 레벨학습지 (5-2) 3단원 *')
+  T('진짜 범위는 건드리지 않는다', dropEchoParen('2단원 (소수의 나눗셈)'), '2단원 (소수의 나눗셈)')
+  T('날짜 괄호로 끝나는 제목도 건드리지 않는다',
+    dropEchoParen('중등 1-1 (2026.11.02)'), '중등 1-1 (2026.11.02)')
+  T('괄호가 없으면 그대로', dropEchoParen('전범위'), '전범위')
+  T('빈 글자도 터지지 않는다', dropEchoParen(null), '')
+
+  // 실제 브리핑 줄에 실리는지 — 함수만 맞고 본문에 안 실리면 아무 뜻이 없다.
+  const 줄 = hwLines({
+    session_date: '2026-11-11',
+    hw_worksheet_range: '초6 · 중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제) · 3.5레벨'
+      + ' / 초6 · * 레벨학습지 (6-2) 4단원 * · 4레벨',
+  }).find((l) => l.startsWith('· 학습지 ')) ?? ''
+  T('브리핑 과제 줄에 실린다 — 별표도 떼고, 학년·학기 괄호는 남긴다', 줄,
+    '· 학습지 초6 · 중등 1-1 (2026.11.02) 오답과제 · 3.5레벨 / 초6 · 레벨학습지 (6-2) 4단원 · 4레벨')
+  console.log('과제 학습지 줄 자가확인 ✓ (되풀이된 괄호·별표만 떼고 진짜 범위는 남긴다)')
+}
+
 // 「알림장 없는 판」을 쓸 수 있다고 보고 검사할지(--nonote). 심사 통과 뒤 모습을 미리 본다.
 const NONOTE = process.argv.includes('--nonote')
 let over = 0
@@ -211,6 +336,8 @@ for (const ses of sessions) {
     worksheets: wsOf.get(fbKey(ses.student_id, ses.session_date)) ?? [],
     noNoteTemplate: NONOTE,
     useV2: V2,
+    useV4: V4,
+    noNoteTemplateV4: NONOTE,
   })
   lens.push(r.bodyLen)
   if (r.overLimit) over++
@@ -228,13 +355,18 @@ for (const ses of sessions) {
   const 학습지있던날 = (wsOf.get(fbKey(ses.student_id, ses.session_date)) ?? []).length > 0
     && (noteOf.get(ses.id)?.attendance ?? '') !== '결석'
   if (학습지있던날) {
-    if (성취도줄?.includes(' · 학습지 ') || 성취도줄?.includes('  학습지 ')) tailShown++
+    // ★ V4 는 꼬리가 아니라 **줄**이다 — 「· 학습지 …」 줄이 한 줄이라도 있어야 한다.
+    //   장수까지 맞는지는 위 자가확인이 본다(여기는 실데이터 전량이라 장수가 들쭉날쭉하다).
+    const 실렸나 = V4
+      ? r.body.split('\n').some((l) => l.startsWith('· 학습지 '))
+      : (성취도줄?.includes(' · 학습지 ') || 성취도줄?.includes('  학습지 '))
+    if (실렸나) tailShown++
     else {
       tailDropped++
       if (!firstDropped) firstDropped = { who: nameOf.get(ses.student_id) ?? '?', date: ses.session_date }
     }
   }
-  if (성취도줄 && 성취도줄.includes(' · 학습지 ') && 성취도줄.trimEnd().endsWith('…')) {
+  if (!V4 && 성취도줄 && 성취도줄.includes(' · 학습지 ') && 성취도줄.trimEnd().endsWith('…')) {
     cutTail++
     if (!firstCut) { firstCut = { who: nameOf.get(ses.student_id) ?? '?', date: ses.session_date, line: 성취도줄.trim() }
       console.log('DBG', JSON.stringify(r.vars['#{과제성취도}'] ?? r.vars['#{학습지결과}']), (r.vars['#{과제성취도}'] ?? r.vars['#{학습지결과}']).length, JSON.stringify(wsOf.get(fbKey(ses.student_id, ses.session_date)))) }
@@ -248,7 +380,8 @@ for (const ses of sessions) {
 lens.sort((a, b) => a - b)
 const at = (p: number) => lens[Math.min(lens.length - 1, Math.floor(lens.length * p))]
 console.log(`골격만: ${TPL.length}자 (변수 자리 포함)`)
-console.log(`수업 ${sessions.length.toLocaleString()}건 검사 — ${V2 ? '과제 성취도 판(V2)' : '예전 판'}`)
+console.log(`수업 ${sessions.length.toLocaleString()}건 검사 — ${
+  V4 ? '학습 결과 판(V4)' : V2 ? '과제 성취도 판(V2)' : '예전 판'}`)
 console.log(`  본문 길이  중간값 ${at(0.5)}자 · 90% ${at(0.9)}자 · 99% ${at(0.99)}자 · 최대 ${worst.len}자`)
 console.log(`  ${BODY_BUDGET}자(안전선) 초과 : ${overBudget}건`)
 console.log(`  ${BODY_LIMIT}자(카카오 한도) 초과 : ${over}건  ${over === 0 ? '✓' : '✗ 이 건들은 발송이 거부됩니다'}`)

@@ -11,7 +11,7 @@ import { cx, fetchAllRows, formatDailyTestUnitLabel, formatWorksheetScope, textb
 import { getSsenbStepProblems, formatSsenbStepSummary, groupConceptOrdersBySsenbSubChapter, getSsenbSubChapterForConceptOrder, getConceptOrdersForSsenbSubChapter, type SsenbProblem } from '@/lib/ssenbSteps'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { ATT_EXAM } from '@/lib/attendance'
-import { unitParen, unitLabel, levelText, wsRowsToText, wsRowsFromText } from '@/lib/worksheetTitle'
+import { unitParen, unitLabel, levelText, wsRowsToText, wsRowsFromText, dropEchoParen } from '@/lib/worksheetTitle'
 import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
@@ -1885,7 +1885,12 @@ ${e?.message ?? '연결 실패'}
             //   (원장님 2026-10-19. 10/19 최다빈 학생은 이 한 줄이 539자였다).
             .map((ws: any) => {
               const scope = formatWorksheetScope(concepts, ws.unit, ws.unit_name)
-              return `${ws.grade_level} · ${ws.unit}${scope ? ` (${scope})` : ''} · ${ws.current_level}레벨`
+              // ★ 범위가 단원 칸을 **품고 있으면** 괄호에 넣지 않는다 (원장님 2026-11-12).
+              //   넣으면 앞말이 통째로 두 번 찍혀 학부모 과제 칸으로 그대로 나간다 —
+              //     「중등 1-1 (2026.11.02) 오답과제 (오답학습지 중등 1-1 (2026.11.02) 오답과제)」
+              //   `unitParen` 은 이 경우를 가려내는데 여기만 안 가렸다. dropEchoParen 이 그 규칙이다.
+              const 단원 = dropEchoParen(scope ? `${ws.unit} (${scope})` : ws.unit)
+              return `${ws.grade_level} · ${단원} · ${ws.current_level}레벨`
             })
           if (labels.length) return labels.join(' / ')
         }
