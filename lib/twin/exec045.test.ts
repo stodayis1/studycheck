@@ -85,6 +85,11 @@ const BIG_ID = '9007199254740993'
 const VID1 = '350b973a-46f6-4dee-981e-0143f8312423'
 const VID2 = '8e59d4bc-1e4f-4e65-b056-40c948da4fd8'
 const VID3 = '58671e09-3268-45b1-895a-34f3fca3eaaa'
+/** 044 기록에 **없는** 영상 — 「그 뒤에 올라온 것」 */
+const VID_NEW_A = 'e5b46da8-624e-47f0-9e9d-3cf8297a3cc1'
+const VID_NEW_B = '11111111-2222-3333-4444-555555555555'
+/** 비활성 — 조회되면 안 된다 */
+const VID_OFF = '99999999-8888-7777-6666-555555555555'
 
 function freshTables(): Tables {
   return {
@@ -126,6 +131,23 @@ function freshTables(): Tables {
         book: '개념유형', youtube_id: 'ccccccccccc', duration_seconds: 137.425,
         scenes: [{ start: 12, end: 48, label: '유도' }],
         type_codes: ['공수1-01-07'], is_active: true },
+      // ↓ 044 기록에 **없는** 영상 둘. 「그 뒤에 올라온 영상」을 흉내 낸다.
+      //   고정 id 로 읽던 때는 이 둘이 **영원히 보이지 않았다** (실제로 그랬다 — 운영 01-07 은 6편)
+      { id: VID_NEW_A, grade: '공통수학1', kind: '대표예제', order_label: '03-풀이03',
+        title: '필수예제 07 곱셈 공식의 변형', chapter: '다항식', sub_chapter: '곱셈 공식의 변형',
+        book: '개념유형', youtube_id: 'ddddddddddd', duration_seconds: 105.039,
+        scenes: [{ start: 5, end: 30, label: '차를 세 개 만들기' }],
+        type_codes: ['공수1-01-07'], is_active: true },
+      { id: VID_NEW_B, grade: '공통수학1', kind: '개념', order_label: '02',
+        title: '다항식의 곱셈', chapter: '다항식', sub_chapter: '곱셈 공식',
+        book: '개념유형', youtube_id: 'eeeeeeeeeee', duration_seconds: 150,
+        scenes: [{ start: 0, end: 20, label: '오늘 배울 개념' }],
+        type_codes: ['공수1-01-02'], is_active: true },
+      // 비활성은 **조회되지 않아야** 한다
+      { id: VID_OFF, grade: '공통수학1', kind: '개념', order_label: '02-옛',
+        title: '쓰지 않는 옛 영상', chapter: '다항식', sub_chapter: '곱셈 공식',
+        book: '개념유형', youtube_id: 'fffffffffff', duration_seconds: 100,
+        scenes: [], type_codes: ['공수1-01-02'], is_active: false },
     ],
     // 「배정」 = 이 학생이 **실제로 제출한** 시험지 (operationalDeps 가 설명한 그대로)
     gradings: [{ id: 'g-1', sheet_id: SHEET, student_id: STUDENT_A },
@@ -162,6 +184,12 @@ function makeClient(tables: Tables, log: CallLog) {
       const set = new Set(vs.map(String))
       rows = rows.filter((r) => set.has(String(r[c])))
       return push('in', c, vs)
+    }
+    // 배열 칸이 **값을 품고 있는가** (`type_codes` 로 영상을 고르는 데 쓴다)
+    api.contains = (c: string, vs: unknown[]) => {
+      rows = rows.filter((r) => Array.isArray(r[c])
+        && vs.every((v) => (r[c] as unknown[]).map(String).includes(String(v))))
+      return push('contains', c, vs)
     }
     api.is = (c: string, v: unknown) => {
       rows = rows.filter((r) => (v === null ? (r[c] === null || r[c] === undefined) : r[c] === v))
@@ -356,7 +384,9 @@ test('W2 운영 모드의 의존성은 **운영 조회·운영 저장소**다 �
   assert.equal(d.store.planDraftPersisted, false)
   // 첫 세트 상한을 넘기지 않았다
   assert.ok(d.content.problems.length <= 10)
-  assert.ok(d.content.assets.length <= 3)
+  // 영상 상한은 **유형당**이다. 전체 3편으로 걸면 새 영상이 밀려난다 (2026-11-12)
+  const { FIRST_SET } = await import('../learning/providers')
+  assert.ok(d.content.assets.length <= FIRST_SET.maxVideosPerType * FIRST_SET.typeCodes.length)
 })
 
 test('W3 운영 행동은 **RPC 로 가고 시험 저장소를 건드리지 않는다**', async () => {
@@ -700,8 +730,8 @@ test('F3 **승인 명세가 비어 있으면 영상이 학생에게 나가지 �
   install()
   const { resolveLearningDeps } = await import('../learning/deps')
   const d = await resolveLearningDeps()
-  // 영상은 세 편 **조회됐다** — 없는 것이 아니다
-  assert.equal(d.content.assets.length, 3)
+  // 영상은 **다섯 편** 조회됐다 (044 기록 3 + 그 뒤 올라온 2). 비활성 1편은 빠졌다
+  assert.equal(d.content.assets.length, 5)
   // 그런데 관계는 0개다 — 승인이 없기 때문이다
   for (const p of d.content.problems) {
     assert.deepEqual(d.content.relationsFor(p.problemId), [],
@@ -709,13 +739,67 @@ test('F3 **승인 명세가 비어 있으면 영상이 학생에게 나가지 �
   }
   // 검수 다섯 칸은 **각각 실제 상태**다 (044 §6-3)
   const r = d.content.videoReadiness
-  assert.equal(r.length, 3)
+  assert.equal(r.length, 5)
   for (const v of r) {
     assert.equal(v.assetExists, 'yes')
     for (const k of ['playbackVerified', 'studentAccess', 'exposureReviewed'] as const) {
       assert.equal(v[k], 'unknown', `${k} 를 모르는데 채웠습니다`)
     }
     assert.equal(v.confirmItemsReady, 'no')
+  }
+  // 044 기록이 **없는** 영상은 그 사실이 적혀 있다 — 우선순위를 지어내지 않는다
+  const byId = new Map(r.map((v) => [v.videoId, v]))
+  assert.equal(byId.get(VID2).recordedCandidate, true)
+  assert.equal(byId.get(VID2).priority, 2)
+  assert.equal(byId.get(VID_NEW_A).recordedCandidate, false)
+  assert.equal(byId.get(VID_NEW_A).priority, 0, '기록이 없는데 우선순위를 만들었습니다')
+  assert.equal(byId.get(VID_NEW_A).targetTypeCode, '공수1-01-07',
+    '기록이 없으면 조회한 행의 유형을 써야 합니다')
+})
+
+test('F3-b **새 영상이 코드를 고치지 않고 후보에 들어온다** (2026-11-12 GPT 후속 지시)', async () => {
+  const { tables } = install()
+  const { supabaseContentProvider } = await import('../learning/supabaseContent')
+  const { FIRST_SET_VIDEO_IDS } = await import('../learning/firstSet')
+
+  const before = (await supabaseContentProvider().listAssets()).map((a) => a.assetId)
+  // 044 기록에 **없는** 두 편이 이미 들어 있다 — 고정 id 로 읽던 때는 못 들어왔다
+  assert.ok(before.includes(VID_NEW_A), '기록에 없는 영상이 빠졌습니다 — 고정이 살아 있습니다')
+  assert.ok(before.includes(VID_NEW_B))
+  assert.ok(!before.includes(VID_OFF), '비활성 영상이 들어왔습니다')
+  assert.ok(!FIRST_SET_VIDEO_IDS.includes(VID_NEW_A))
+
+  // 이제 **운영에 영상을 한 편 더 올린다.** 코드는 한 줄도 고치지 않는다
+  const NEW = '77777777-6666-5555-4444-333333333333'
+  ;(tables.lesson_videos as Array<Record<string, unknown>>).push({
+    id: NEW, grade: '공통수학1', kind: '증명', order_label: '03-증명2',
+    title: '방금 올린 증명 영상', chapter: '다항식', sub_chapter: '곱셈 공식의 변형',
+    book: '개념유형', youtube_id: 'ggggggggggg', duration_seconds: 120,
+    scenes: [], type_codes: ['공수1-01-07'], is_active: true,
+  })
+
+  // provider 를 새로 만든다 (한 요청 안의 캐시를 피한다)
+  const after = (await supabaseContentProvider().listAssets()).map((a) => a.assetId)
+  assert.ok(after.includes(NEW),
+    '새로 올린 영상이 후보에 들어오지 않습니다 — 새 영상마다 코드를 고쳐야 하는 구조입니다')
+  assert.equal(after.length, before.length + 1)
+
+  // 두 유형이 **모두** 덮여 있다 (전역 상한이 한 유형을 밀어내지 않았다 — 044 §3)
+  const assets = await supabaseContentProvider().listAssets()
+  const covered = new Set(assets.flatMap((a) => a.typeCodes))
+  assert.ok(covered.has('공수1-01-02') && covered.has('공수1-01-07'))
+})
+
+test('F3-c 넓혀도 **학생에게 나가는 것은 늘지 않는다** — 관문은 승인 명세다', async () => {
+  install()
+  const { resolveLearningDeps } = await import('../learning/deps')
+  const d = await resolveLearningDeps()
+  // 영상은 5편인데
+  assert.equal(d.content.assets.length, 5)
+  // 관계는 0개다. 후보를 넓힌 것이 승인을 넓히지 **않는다**
+  for (const p of d.content.problems) {
+    assert.deepEqual(d.content.relationsFor(p.problemId), [],
+      '후보를 넓혔더니 승인 없는 관계가 생겼습니다')
   }
 })
 

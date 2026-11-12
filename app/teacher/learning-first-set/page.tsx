@@ -92,7 +92,7 @@ type Payload = {
   note?: string
   error?: string
   why?: string
-  scope?: { typeCodes: readonly string[]; maxProblems: number; maxVideos: number }
+  scope?: { typeCodes: readonly string[]; maxProblems: number; maxVideosPerType: number }
   types?: Array<{ typeCode: string; title: string; chapter?: string }>
   problems?: ProblemForReview[]
   videos?: VideoForReview[]
@@ -225,7 +225,7 @@ export default function LearningFirstSetPage() {
             </span>
             <span className="text-gray-600">
               유형 {data.scope?.typeCodes.join(' · ')} · 문항 {problems.length}/{data.scope?.maxProblems}
-              {' · '}영상 {videos.length}/{data.scope?.maxVideos}
+              {' · '}영상 {videos.length}편 (유형당 최대 {data.scope?.maxVideosPerType})
             </span>
           </div>
           <p className="mt-2 text-gray-700">{data.note}</p>

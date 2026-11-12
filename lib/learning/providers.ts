@@ -33,7 +33,20 @@ export const FIRST_SET = {
   typeCodes: ['공수1-01-02', '공수1-01-07'] as const,
   maxProblems: 10,
   maxProblemsPerType: 5,
-  maxVideos: 3,
+  /**
+   * **유형당** 영상 상한이다. 전체 상한이 아니다.
+   *
+   * 전체로 걸면 유형 하나가 통째로 밀려난다 — 044 §3 이 그렇게 터졌다.
+   * 그리고 영상은 **계속 추가되고 있다** (GPT 후속 지시 2026-11-12). 그래서
+   * 후보를 고정 id 로 박지 않고 `lesson_videos.type_codes` 로 읽는다.
+   * 새 영상이 올라오면 **코드를 고치지 않고** 이 상한 안에서 후보에 들어온다.
+   */
+  maxVideosPerType: 12,
+  /**
+   * 044 가 **검수 후보로 기록한** 편수다. 구현의 상한이 아니다.
+   * 기록은 기록으로 두고(그 편들의 검수 상태를 잃지 않으려고), 조회는 유형으로 넓혔다.
+   */
+  recordedCandidates: 3,
 } as const
 
 export type ContentSource = 'demo' | 'supabase'
@@ -57,8 +70,11 @@ export type VideoReadiness = {
   title: string
   /** 이 영상이 대표하는 유형. 전역 상한이 유형을 밀어내지 않았는지 보는 칸 */
   targetTypeCode: string
+  /** 044 가 적어 둔 우선순위. **기록이 없으면 `0`** 이다 — 1·2·3 을 지어내지 않는다 */
   priority: number
-  /** 고정 id 로 조회했을 때 **행이 나왔는가**. 없으면 아래 `assetExists` 는 모름이다 */
+  /** 044 검수 기록이 있는 후보인가. 없으면 아래 네 칸은 전부 「모름」이다 */
+  recordedCandidate: boolean
+  /** 조회에서 **행이 나왔는가**. 없으면 아래 `assetExists` 는 모름이다 */
   fetched: boolean
   /** `youtube_id` 에 식별값이 있는가. **재생 성공의 증거가 아니다** (044 §2) */
   assetExists: 'yes' | 'no' | 'unknown'
@@ -70,7 +86,7 @@ export type VideoReadiness = {
   exposureReviewed: 'yes' | 'no' | 'unknown'
   /** 확인 행동으로 낼 **검수된** 항목이 있는가 */
   confirmItemsReady: 'yes' | 'no' | 'unknown'
-  /** 고정 목록에 적어 둔 `assetExists` 와 지금 읽은 값이 **다른가** */
+  /** 044 기록의 `assetExists` 와 지금 읽은 값이 **다른가**. 기록이 없으면 `false` */
   assetExistsDisagrees: boolean
 }
 

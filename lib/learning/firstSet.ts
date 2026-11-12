@@ -1,5 +1,15 @@
 /**
- * 첫 학습 세트의 **고정 영상 후보** — GPT_VIDEO_MAP_044_RESULT §4
+ * 첫 학습 세트의 **검수 기록이 있는 영상 후보** — GPT_VIDEO_MAP_044_RESULT §4
+ *
+ * ⚠️ 2026-11-12 부터 이 목록은 **조회 필터가 아니다.**
+ *   GPT 후속 지시: 「개념영상·문제풀이영상·증명영상은 계속 추가되고 있다.
+ *   첫 시범의 3편에 영구 고정하거나, 새 영상마다 코드를 수정하는 구조로 만들지 마세요.」
+ *   그래서 후보 조회는 `lesson_videos.type_codes` 로 한다 (`supabaseContent.loadVideos`).
+ *   이 목록은 그 중 **044 가 검수 상태를 적어 둔 편들**을 가리키는 기록으로 남는다 —
+ *   기록을 지우면 그 편들의 「노출 검수 안 됨」 같은 사실을 잃는다.
+ *
+ *   실제로 고정은 **이미 낡아 있었다**: 코드가 01-07 에 2편을 박아 둔 사이
+ *   운영에는 6편(개념2·증명2·대표예제2)이 되어 있었다 (2026-11-12 운영 조회).
  *
  * 왜 고정 id 로 바꾸는가 — **내가 만든 버그를 고치는 것이다**
  *   `READONLY_LEARNING_CONTENT_043.sql` 과 아래 `supabaseContent.loadVideos()` 는
@@ -57,8 +67,14 @@ export type FirstSetVideo = {
 /** 전체 상한. 044 §4 가 유지하라고 한 값 */
 export const MAX_FIRST_SET_VIDEOS = 3
 
-/** 아직 모르는 네 칸. `assetExists` 만 후보별로 다르다 */
-const UNKNOWN_REVIEW = {
+/**
+ * 아직 모르는 네 칸. `assetExists` 만 후보별로 다르다.
+ *
+ * 044 기록이 **없는** 영상에도 이 값을 쓴다 — 기록이 없다는 것은
+ * 「검수를 통과했다」가 아니라 **「모른다」**다. `confirmItemsReady` 만
+ * `no` 인 것은 확인 문항이 실제로 아직 없기 때문이다 (044 §6-3).
+ */
+export const UNKNOWN_REVIEW = {
   playbackVerified: 'unknown',
   studentAccess: 'unknown',
   exposureReviewed: 'unknown',
@@ -185,6 +201,53 @@ export function selectFirstSetVideos<T extends VideoRowLike>(
     if (row === undefined) { missing.push(w); continue }
     picked.push({ want: w, row })
   }
+  return { picked, missing }
+}
+
+/** `planFirstSetVideos` 가 돌려주는 한 편. `want` 가 `null` 이면 044 기록이 **없는** 영상이다 */
+export type PlannedVideo<T> = { row: T; want: FirstSetVideo | null }
+
+/**
+ * 조회한 영상 전체를 **순서만 정해** 내놓는다 — 2026-11-12 GPT 후속 지시판.
+ *
+ * `selectFirstSetVideos` 와 무엇이 다른가
+ *   저쪽은 **044 기록에 있는 3편만** 남기고 나머지를 버린다. 그래서 그 뒤에 올라온
+ *   영상이 영원히 보이지 않았다. 이쪽은 **버리지 않는다.** 상한은 조회하는 쪽에서
+ *   `FIRST_SET.maxVideosPerType` 으로 **유형별로** 걸고, 여기서는 순서만 정한다.
+ *
+ * 순서
+ *   ① 044 가 검수 상태를 적어 둔 편 — 그 우선순위대로. 검수 기록이 있는 것을 먼저 본다
+ *   ② 나머지 — `order_label`(동률은 id)로. 조회 결과의 순서를 믿지 않는다
+ *
+ * `missing` 은 **기록은 있는데 조회되지 않은** 편이다. 다른 영상으로 메우지 않는다 —
+ * 비활성이 됐거나 지워졌다는 사실 자체를 검수 화면이 보아야 한다 (044 §6-2).
+ */
+export function planFirstSetVideos<T extends VideoRowLike>(
+  rows: readonly T[],
+  want: readonly FirstSetVideo[] = FIRST_SET_VIDEOS,
+): { picked: Array<PlannedVideo<T>>; missing: FirstSetVideo[] } {
+  const byId = new Map<string, T>()
+  // 같은 영상이 두 유형에 걸려 두 번 조회될 수 있다 — **id 로 한 번만** 둔다
+  for (const r of rows) byId.set(String(r.id), r)
+
+  const picked: Array<PlannedVideo<T>> = []
+  const missing: FirstSetVideo[] = []
+  const taken = new Set<string>()
+
+  for (const w of [...want].sort((a, b) => a.priority - b.priority)) {
+    const row = byId.get(w.videoId)
+    if (row === undefined) { missing.push(w); continue }
+    picked.push({ row, want: w })
+    taken.add(w.videoId)
+  }
+
+  const rest = [...byId.values()]
+    .filter((r) => !taken.has(String(r.id)))
+    .sort((a, b) =>
+      String(a.order_label ?? '').localeCompare(String(b.order_label ?? ''))
+      || String(a.id).localeCompare(String(b.id)))
+  for (const row of rest) picked.push({ row, want: null })
+
   return { picked, missing }
 }
 

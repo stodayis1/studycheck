@@ -92,12 +92,21 @@ test('V1 **측정**: 옛 방식은 유형 하나를 밀어내고, 지금 방식�
   assert.deepEqual([...newTypes].sort(), ['공수1-01-02', '공수1-01-07'])
 })
 
-test('V2 전체 상한 3편을 **유지한다** — 유형을 맞추려고 넓히지 않는다', () => {
+test('V2 044 의 3편은 **기록으로** 남고, 구현 상한이 되지 않는다', () => {
+  // 044 가 적어 둔 값은 그대로다 — 기록을 고치지 않는다
   assert.equal(MAX_FIRST_SET_VIDEOS, 3)
-  assert.equal(CANDIDATES.max_first_set_videos, 3, '044 결과가 준 상한과 같아야 합니다')
-  assert.equal(FIRST_SET.maxVideos, 3, '첫 세트 범위의 상한과 어긋납니다')
-  assert.ok(selectFirstSetVideos(RETURNED_ROWS).picked.length <= 3)
+  assert.equal(CANDIDATES.max_first_set_videos, 3, '044 결과가 준 기록과 같아야 합니다')
   assert.equal(FIRST_SET_VIDEOS.length, 3)
+  assert.equal(FIRST_SET.recordedCandidates, 3, '기록 편수가 어긋납니다')
+
+  // **그 3편이 조회 상한이 되면 안 된다** (2026-11-12 GPT 후속 지시).
+  // 실제로 굳어 있었다: 코드가 01-07 에 2편을 박은 사이 운영은 6편이 됐다.
+  assert.ok(!('maxVideos' in FIRST_SET),
+    '전체 상한이 살아 있습니다 — 새 영상이 영원히 밀려납니다')
+  assert.equal(FIRST_SET.maxVideosPerType, 12, '상한은 **유형당**이어야 합니다')
+
+  // 기록만 남기는 옛 고르기는 여전히 3편으로 좁힌다 — 그래서 조회에 쓰지 않는다
+  assert.ok(selectFirstSetVideos(RETURNED_ROWS).picked.length <= 3)
 })
 
 test('V3 고정 목록이 **두 유형을 모두** 대표한다', () => {
@@ -123,17 +132,35 @@ test('V5 조회 결과의 **순서를 믿지 않는다** — 우선순위 순으
   assert.deepEqual(picked.map((p) => p.row.id), [...FIRST_SET_VIDEO_IDS])
 })
 
-test('V6 운영 어댑터에 **전역 정렬·상한 선택 경로가 없다**', () => {
+test('V6 운영 어댑터의 정렬·상한이 **유형별**이다 — 전역이 아니다', () => {
   const src = read('lib/learning/supabaseContent.ts')
   const videos = src.slice(src.indexOf('async function loadVideos'), src.indexOf('return {\n    source:'))
 
-  assert.ok(/\.in\('id', \[\.\.\.FIRST_SET_VIDEO_IDS\]\)/.test(videos),
-    '고정 id 로 읽지 않습니다')
-  assert.ok(!/order\('order_label'/.test(videos),
-    'order_label 정렬로 다시 고르고 있습니다 (044 §3 이 지적한 경로)')
-  assert.ok(!/\.limit\(/.test(videos),
-    '조회에 전역 상한이 남아 있습니다')
-  assert.ok(/selectFirstSetVideos\(/.test(videos),
+  // ① 고정 id 로 읽지 **않는다** (2026-11-12). 그 방식은 새 영상을 영원히 밀어냈다
+  assert.ok(!videos.includes(".in('id'"),
+    '고정 id 조회가 살아 있습니다 — 새 영상이 후보에 못 들어옵니다')
+  assert.ok(!videos.includes('FIRST_SET_VIDEO_IDS'),
+    '조회가 아직 고정 목록에 묶여 있습니다')
+
+  // ② 유형으로 읽는다 — 단일 출처는 `lesson_videos.type_codes`
+  assert.ok(videos.includes(".contains('type_codes', [code])"),
+    'type_codes 로 읽지 않습니다')
+
+  // ③ 정렬·상한은 **유형을 도는 루프 안**에 있어야 한다.
+  //    전역에 걸면 유형 하나가 통째로 밀려난다 — 044 §3 이 그렇게 터졌다
+  const at = videos.indexOf('for (const code of TYPES)')
+  assert.ok(at > 0, '유형별로 돌지 않습니다')
+  const inLoop = videos.slice(at)
+  assert.ok(inLoop.includes("order('order_label'"), '유형 루프 안에 정렬이 없습니다')
+  assert.ok(inLoop.includes('.limit(FIRST_SET.maxVideosPerType)'),
+    '유형당 상한이 루프 안에 없습니다')
+  // 루프 **밖**에는 정렬·상한이 없다
+  const outside = videos.slice(0, at)
+  assert.ok(!outside.includes('.order(') && !outside.includes('.limit('),
+    '루프 밖에 전역 정렬·상한이 있습니다')
+
+  // ④ 고르는 규칙은 한 곳이다
+  assert.ok(videos.includes('planFirstSetVideos('),
     '고르는 규칙이 두 곳으로 갈라졌습니다')
 })
 

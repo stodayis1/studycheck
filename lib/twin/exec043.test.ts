@@ -111,7 +111,12 @@ test('P5 첫 세트 범위가 **요청서와 같다**', () => {
   assert.deepEqual([...FIRST_SET.typeCodes], ['공수1-01-02', '공수1-01-07'])
   assert.equal(FIRST_SET.maxProblems, 10)
   assert.equal(FIRST_SET.maxProblemsPerType, 5)
-  assert.equal(FIRST_SET.maxVideos, 3)
+  // 영상 상한은 **유형당**이다. 전체로 걸면 유형 하나가 밀려난다 (044 §3)
+  assert.equal(FIRST_SET.maxVideosPerType, 12)
+  // 044 가 검수 후보로 **기록한** 편수. 구현의 상한이 아니다
+  assert.equal(FIRST_SET.recordedCandidates, 3)
+  assert.ok(!('maxVideos' in FIRST_SET),
+    '전체 상한이 되살아났습니다 — 그러면 새 영상이 다시 밀려납니다')
 })
 
 test('P6 운영 어댑터는 **시연 파일을 import 하지 않는다**', () => {
