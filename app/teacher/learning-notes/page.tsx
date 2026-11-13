@@ -18,7 +18,7 @@ import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 import { splitTeachers, teachersOf, teacherLabels } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
-import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
+import { buildBriefing, BODY_LIMIT, diagnosticLabel } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { canAssignVideos } from '@/lib/videoAssign'
 import { youtubeId, lessonLabel, needsPhoto, photoUrlsOf, photoLabelOf, photoBrief, type LessonVideo } from '@/lib/lessonVideos'
@@ -333,6 +333,13 @@ export default function TeacherLearningNotesPage() {
   const NO_HOMEWORK_MARKER = '오늘은 새 과제 없음'
   // 학습지 - 진행중 목록
   const [worksheets, setWorksheets] = useState<any[]>([])
+  /**
+   * 미리보기에 쓸 그 학생의 코어테스트·진단평가 (평가관리 exams).
+   * ★ 매쓰홀릭에서 긁어온 점수는 스터디체크 안에서 갈라져 저장되지만, 학부모님께는
+   *   「▶ 학습 결과」 한 칸으로 모아 나간다 (원장님 2026-11-13). 미리보기도 같아야 한다 —
+   *   미리보기와 나가는 글이 어긋나면 아무도 못 잡는다.
+   */
+  const [noteExams, setNoteExams] = useState<any[]>([])
   const [lnCatalog, setLNCatalog] = useState<any[]>([])
   const [progressChecks, setProgressChecks] = useState<any[]>([])
   const [videoWatchLogs, setVideoWatchLogs] = useState<any[]>([])
@@ -1288,6 +1295,13 @@ export default function TeacherLearningNotesPage() {
         ])
       }
     })
+    // 코어테스트·진단평가 — 브리핑 미리보기의 「▶ 학습 결과」 칸에 들어간다.
+    supabase.from('exams')
+      .select('student_id, exam_type, exam_date, title, unit_name, level, score, memo, created_at')
+      .eq('student_id', student.id).in('exam_type', ['코어테스트', '진단평가'])
+      .not('score', 'is', null)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setNoteExams(data ?? []))
     supabase.from('student_textbooks').select('*').eq('student_id', student.id).then(({ data }) => {
       if (data) {
         setStudentTextbooks((prev) => [
@@ -1982,10 +1996,19 @@ ${e?.message ?? '연결 실패'}
         worksheets: worksheets.filter((w) =>
           w.student_id === noteStudent.id && w.score != null
           && String(w.submitted_at ?? '').slice(0, 10) === day) as any,
+        // 그날 코어테스트·진단평가 — 발송 쪽과 **같은 규칙**(그날 · 점수 있음)으로 고른다.
+        coreTests: noteExams
+          .filter((e) => e.exam_type === '코어테스트' && e.exam_date === day)
+          .map((e) => ({ 회차: e.title ?? null, 점수: Number(e.score) })),
+        diagnostics: noteExams
+          .filter((e) => e.exam_type === '진단평가' && e.exam_date === day)
+          .map((e) => ({ 이름: diagnosticLabel(e.memo), 단원: e.unit_name ?? null, 단계: e.level == null ? null : Number(e.level), 점수: Number(e.score) })),
         noNoteTemplate: !!briefMode?.noNoteTemplate,
         noNoteTemplateV3: !!briefMode?.noNoteTemplateV3,
         useV2: !!briefMode?.useV2,
         useV3: !!briefMode?.useV3,
+        useV4: !!briefMode?.useV4,
+        noNoteTemplateV4: !!briefMode?.noNoteTemplateV4,
       })
     } catch { return null }
   })()
