@@ -7,7 +7,7 @@
 // 색은 대표 썸네일과 같은 파스텔 (원장님 「짙은 초록색 말고 파스텔 핑크·오렌지 계열로 세련되게」).
 
 import { use, useEffect, useState } from 'react'
-import { roadmapSerif } from '@/lib/roadmapFont'
+import { roadmapSerif, RoadmapSerifLink } from '@/lib/roadmapFont'
 import { fmtWhen, COMMON, type CareerEvent } from '@/lib/careerEvents'
 
 const BG = '#FBEFF2'
@@ -39,6 +39,7 @@ export default function RoadmapNewsPage({ params }: { params: Promise<{ token: s
   const who = d.role === 'parent' ? `${d.name} 학생 어머님·아버님` : `${d.name} 학생`
   return (
     <div className="min-h-screen" style={{ background: BG, color: INK }}>
+      <RoadmapSerifLink />
       <div className="mx-auto max-w-lg">
         <header className="px-6 pt-8 pb-6" style={{ background: PINK }}>
           <p className="text-[11px] tracking-[0.2em]" style={{ color: SUB }}>수학의지혜 수학학원 · STUDENT ROADMAP</p>
