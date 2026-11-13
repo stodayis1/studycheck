@@ -392,6 +392,8 @@ export function worksheetTail(rows: BriefingWorksheet[], budget = 60): string {
  * V4 의 「▶ 학습 결과」 칸을 **줄 단위로** 만든다 (원장님 2026-11-12).
  *
  *   · 과제 성취도 90%
+ *   · 코어테스트 예비 1회 72점
+ *   · 진단평가 기본도형 1단계 85점
  *   · 데일리테스트 95점 · 쎈 P.18~P.40
  *   · 학습지 4학년 2학기 4단원 Lv3.5 83점
  *   · 학습지 오답유사 4학년 2학기 4단원 Lv3 100점
@@ -410,6 +412,30 @@ export function learningResult(a: {
   성취도꼬리?: (string | null | undefined)[]
   데일리점수?: number | null
   데일리범위?: string | null
+  /**
+   * 그날 친 코어테스트 — 회차(「예비 1회」·「본고사」)와 점수.
+   *
+   * 왜 여기냐 (원장님 2026-11-13 「코어테스트 점수는 학습지 자리에 올라가야지」)
+   *   코어테스트는 매달 예비 1·2회를 거쳐 본고사로 가는 학원의 큰 시험인데,
+   *   **매일 브리핑에 한 번도 안 나가고 있었다.** 학부모님은 월간 리포트에서
+   *   한 달에 한 번 몰아서 보셨다. 예비 1회를 낮게 받은 날 바로 알 길이 없었다.
+   *
+   * ★ 「▶ 학습 결과」는 **변수 칸**이라 안에 줄을 더해도 템플릿 재심사가 없다.
+   *   그래서 판을 새로 등록하지 않고 이 칸 안에서 푼다.
+   * ★ 그날 안 친 학생에게는 줄이 아예 안 생긴다 — 데일리테스트와 같은 규칙이다.
+   */
+  코어테스트?: { 회차?: string | null; 점수: number }[]
+  /**
+   * 그날 친 진단평가 — 주간평가·주말평가·주말복습 TEST 가 여기로 들어온다.
+   *
+   * 왜 (원장님 2026-11-13 「매쓰홀릭에서 긁어오는 점수는 모두 … 학습결과로」)
+   *   매쓰홀릭에서 긁어온 점수는 스터디체크 안에서 종류별로 **나뉘어** 저장된다 —
+   *   레벨·오답·쌍둥이는 student_worksheets, 주간·주말평가는 exams(진단평가),
+   *   데일리테스트는 class_sessions, 코어테스트는 exams(코어테스트).
+   *   학부모님께는 그 갈래가 의미 없으므로 **「▶ 학습 결과」 한 칸에 모아** 보낸다.
+   *   진단평가는 그중 유일하게 **아무 데도 안 나가고 있었다.**
+   */
+  진단평가?: { 단원?: string | null; 단계?: number | null; 점수: number }[]
   worksheets?: BriefingWorksheet[]
 }, budget: number = CAP.학습결과): string {
   if (a.결석) return '· 결석으로 수업에 참여하지 못했습니다'
@@ -418,6 +444,18 @@ export function learningResult(a: {
   if (a.성취도 != null) {
     head.push([`· 과제 성취도 ${a.성취도}%`,
       ...(a.성취도꼬리 ?? []).map((x) => String(x ?? '').trim()).filter(Boolean)].join(' · '))
+  }
+  // ★ 코어테스트는 성취도 다음, 데일리테스트 앞 — 「과제 → 시험 → 학습지」 차례로 읽히게.
+  //   같은 날 두 번 친 기록이 있으면(재시험) 두 줄 다 적는다. 고르면 안 된다.
+  for (const c of a.코어테스트 ?? []) {
+    const 회차 = (c.회차 ?? '').trim()
+    head.push(['· 코어테스트', 회차, `${c.점수}점`].filter(Boolean).join(' '))
+  }
+  // 진단평가 — 단원·단계를 적어 어느 범위를 봤는지 알 수 있게.
+  for (const d of a.진단평가 ?? []) {
+    const 단원 = unitText(((d.단원) ?? '').trim(), 26)
+    const 단계 = d.단계 != null ? `${lvText(d.단계)}단계` : ''
+    head.push(['· 진단평가', 단원, 단계, `${d.점수}점`].filter(Boolean).join(' '))
   }
   if (a.데일리점수 != null) {
     head.push([`· 데일리테스트 ${a.데일리점수}점`,
@@ -611,6 +649,16 @@ export function buildBriefing(args: {
   /** 그날 영상 과제 (편수·증명 편수). 부르는 쪽이 lesson_videos 를 보고 넣는다. */
   videos?: BriefingVideos
   /**
+   * 그날 친 코어테스트. 부르는 쪽이 exams(exam_type='코어테스트')에서 그날치를 넣는다.
+   * 「▶ 학습 결과」 칸에 한 줄로 들어간다 (원장님 2026-11-13).
+   */
+  coreTests?: { 회차?: string | null; 점수: number }[]
+  /**
+   * 그날 친 진단평가(주간·주말평가). 부르는 쪽이 exams(exam_type='진단평가')에서 넣는다.
+   * 코어테스트와 같이 「▶ 학습 결과」 칸으로 들어간다 (원장님 2026-11-13).
+   */
+  diagnostics?: { 단원?: string | null; 단계?: number | null; 점수: number }[]
+  /**
    * 그날 점수가 들어온 학습지. 부르는 쪽이 student_worksheets 에서
    * submitted_at 이 그날(한국시간)인 것을 넣는다. 없으면 아무것도 안 붙는다.
    */
@@ -724,6 +772,10 @@ export function buildBriefing(args: {
     성취도꼬리: 성취도단원,
     데일리점수: 데일리점수,
     데일리범위: ses.daily_test_unit ?? null,
+    // ★ 결석한 날은 시험을 볼 수 없다 — 위에서 '결석' 한 줄만 쓰므로 어차피 안 쓰이지만,
+    //   혹시 기록이 섞여 들어와도 결석 줄을 덮지 않게 여기서도 비운다.
+    코어테스트: 결석 ? [] : (args.coreTests ?? []),
+    진단평가: 결석 ? [] : (args.diagnostics ?? []),
     worksheets: args.worksheets ?? [],
   })
 

@@ -201,6 +201,37 @@ async function run(opts: {
     }
   }
 
+  // ★ 그날 친 코어테스트 — 「▶ 학습 결과」 칸에 한 줄로 들어간다
+  //   (원장님 2026-11-13 「코어테스트 점수는 학습지 자리에 올라가야지」).
+  //   exam_date 는 date 라 그날 글자와 바로 맞춘다(학습지의 submitted_at 과 달리 시각이 없다).
+  //   같은 날 두 번 친 기록(재시험)이 있으면 둘 다 넣는다 — 고르지 않는다.
+  //   in() 은 100개씩 끊는다.
+  //   진단평가(주간·주말평가)도 같은 칸으로 간다 — 매쓰홀릭에서 긁어온 점수는 스터디체크 안에서만
+  //   갈라져 저장되고, 학부모님께는 「▶ 학습 결과」 한 칸으로 모아 나간다 (원장님 2026-11-13).
+  //   두 종류를 **한 번에** 읽어 와서 갈라 담는다 (in() 을 두 번 돌지 않는다).
+  const coreBy = new Map<string, { 회차?: string | null; 점수: number }[]>()
+  const diagBy = new Map<string, { 단원?: string | null; 단계?: number | null; 점수: number }[]>()
+  for (let i = 0; i < studentIds.length; i += 100) {
+    const { data: cs } = await db.from('exams')
+      .select('student_id, exam_type, title, unit_name, level, score, created_at')
+      .in('exam_type', ['코어테스트', '진단평가'])
+      .eq('exam_date', date)
+      .in('student_id', studentIds.slice(i, i + 100))
+      .not('score', 'is', null)
+      .order('created_at', { ascending: true })
+    for (const c of (cs ?? []) as any[]) {
+      if (c.exam_type === '코어테스트') {
+        const list = coreBy.get(c.student_id) ?? []
+        list.push({ 회차: c.title ?? null, 점수: Number(c.score) })
+        coreBy.set(c.student_id, list)
+      } else {
+        const list = diagBy.get(c.student_id) ?? []
+        list.push({ 단원: c.unit_name ?? null, 단계: c.level == null ? null : Number(c.level), 점수: Number(c.score) })
+        diagBy.set(c.student_id, list)
+      }
+    }
+  }
+
   // ★ 영상 과제를 브리핑의 「다음 시간까지 과제」에 적으려면 **몇 편이고 그중 증명이 몇 편인지**를
   //   알아야 한다. 어떤 영상이 증명인지는 lesson_videos 만 안다 — 그날치를 한 번에 읽어 둔다
   //   (학생마다 부르면 60번 왕복한다).
@@ -296,6 +327,8 @@ async function run(opts: {
       studentName: student.name, studentGrade: student.grade, session: ses, note, feedbacks: dayFbs,
       videos: videosOf(ses),
       worksheets: wsBy.get(student.id) ?? [],
+      coreTests: coreBy.get(student.id) ?? [],
+      diagnostics: diagBy.get(student.id) ?? [],
       makeup: makeupFor(student),
       // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
       // ★ 「알림장 없는 판」은 **쓰는 판에 맞는 코드가 있을 때만** 쓴다.

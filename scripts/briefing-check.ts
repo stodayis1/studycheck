@@ -281,6 +281,43 @@ function matchesTemplate(body: string, which: 'full' | 'nonote' = 'full') {
   console.log('학습 결과 칸 자가확인 ✓ (장마다 한 줄 · 칸 모자라면 외 N장 · 결석엔 한 줄)')
 }
 
+// ★ 코어테스트·진단평가가 「▶ 학습 결과」 칸에 들어가는가 (원장님 2026-11-13
+//   「코어테스트 점수는 학습지 자리에 올라가야지」 · 「매쓰홀릭에서 긁어오는 점수는 모두 … 학습결과로」).
+{
+  const t = learningResult({
+    성취도: 90,
+    코어테스트: [{ 회차: '예비 1회', 점수: 72 }],
+    진단평가: [{ 단원: '기본도형', 단계: 1, 점수: 85 }],
+    데일리점수: 95, 데일리범위: '쎈 P.18~P.40',
+    worksheets: [{ unit_name: '4학년 2학기 4단원', current_level: 3.5, score: 83 } as any],
+  })
+  for (const 줄 of ['· 코어테스트 예비 1회 72점', '· 진단평가 기본도형 1단계 85점',
+    '· 데일리테스트 95점 · 쎈 P.18~P.40', '· 학습지 4학년 2학기 4단원 Lv3.5 83점']) {
+    if (!t.includes(줄)) { console.error(`✗ 학습 결과 칸에 「${줄}」이 없습니다.
+${t}`); process.exit(1) }
+  }
+  // 차례 — 과제 → 시험(코어·진단·데일리) → 학습지
+  const idx = (x: string) => t.indexOf(x)
+  if (!(idx('· 과제 성취도') < idx('· 코어테스트') && idx('· 코어테스트') < idx('· 진단평가')
+    && idx('· 진단평가') < idx('· 데일리테스트') && idx('· 데일리테스트') < idx('· 학습지'))) {
+    console.error(`✗ 학습 결과 칸의 차례가 어긋났습니다.
+${t}`); process.exit(1)
+  }
+  // 안 친 날엔 줄이 아예 없어야 한다 — 「해당 없음」 같은 빈말을 채우지 않는다.
+  const 없는날 = learningResult({ 성취도: 90, worksheets: [] })
+  if (없는날.includes('코어테스트') || 없는날.includes('진단평가')) {
+    console.error(`✗ 안 친 날에 시험 줄이 생겼습니다.
+${없는날}`); process.exit(1)
+  }
+  // 결석한 날은 한 줄만 — 점수를 볼 수 없다.
+  const 결석날 = learningResult({ 결석: true, 코어테스트: [{ 회차: '본고사', 점수: 80 }], 진단평가: [{ 점수: 70 }] })
+  if (결석날.includes('코어테스트') || 결석날.includes('진단평가')) {
+    console.error(`✗ 결석한 날에 시험 줄이 붙었습니다.
+${결석날}`); process.exit(1)
+  }
+  console.log('코어테스트·진단평가 자가확인 ✓ (학습 결과 칸에 · 차례대로 · 안 친 날엔 없음 · 결석엔 없음)')
+}
+
 // ★ 과제 배부의 학습지 줄 — **같은 말을 괄호로 또** 적은 꼬리를 떼는가 (원장님 2026-11-12).
 {
   const T = (name: string, got: string, want: string) => {

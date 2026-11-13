@@ -27,10 +27,14 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     useV2: !!tpl.v2,
     useV3: !!tpl.v3,
+    // ★ V4 가 빠져 있었다 (2026-11-13). 발송은 V4 로 나가는데 미리보기는 그걸 몰라
+    //   V3·V2 판으로 그리고 있었다 — 이 파일이 맨 위에서 경고하는 바로 그 어긋남이다.
+    useV4: !!tpl.v4,
+    noNoteTemplateV4: !!tpl.v4NoNote,
     // 「과제 성취도 판이 왜 안 잡히지?」를 화면에서 바로 알 수 있게 까닭을 같이 준다.
     why: auto.why?.v2 ?? auto.note ?? null,
     // 「알림장 없는 판」은 **지금 쓰는 판에 맞는 코드가 있을 때만** 쓴다.
-    noNoteTemplate: tpl.v2 ? !!tpl.v2NoNote : !!tpl.v1NoNote,
+    noNoteTemplate: tpl.v4 ? !!tpl.v4NoNote : tpl.v2 ? !!tpl.v2NoNote : !!tpl.v1NoNote,
     noNoteTemplateV3: !!tpl.v3NoNote,
   })
 }
