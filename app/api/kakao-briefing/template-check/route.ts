@@ -15,9 +15,10 @@ import {
   BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
   BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
   BRIEFING_TEMPLATE_V3, BRIEFING_TEMPLATE_V3_NONOTE,
+  BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE,
 } from '@/lib/briefing'
 import { aligoPost } from '@/lib/aligo'
-import { resolveBriefingTemplateCodes, pickCodes } from '@/lib/briefingTemplate'
+import { resolveBriefingTemplateCodes, pickCodes, V4_SCORE_BUTTON } from '@/lib/briefingTemplate'
 
 export const runtime = 'nodejs'
 
@@ -103,6 +104,11 @@ export async function GET(req: NextRequest) {
       ['알림장·사진 보기', `${APP_URL}/report/#{알림장토큰}`],
     ]
     const BTN2: [string, string][] = BTN3.slice(0, 2)
+    // ★ V4 는 **첫 버튼 이름이 다르다** —「레벨학습지 점수 현황」→「학습지·테스트 점수」
+    //   (원장님 2026-11-12, 고등부는 레벨학습지를 안 쓴다). 이름을 V4 것으로 안 바꾸면
+    //   승인이 멀쩡한데도 화면이 「버튼일치: false」라고 겁을 준다.
+    const BTN3_V4: [string, string][] = [[V4_SCORE_BUTTON, BTN3[0][1]], BTN3[1], BTN3[2]]
+    const BTN2_V4: [string, string][] = BTN3_V4.slice(0, 2)
 
     const tpl = list.find((t) => t.templtCode === tplCode)
     if (!tpl) {
@@ -152,9 +158,13 @@ export async function GET(req: NextRequest) {
         '② 과제 성취도 판 · 알림장 없는 날': inspect(used.v2NoNote ?? undefined, BRIEFING_TEMPLATE_V2_NONOTE, BTN2, 'v2NoNote'),
         '③ 데일리테스트 판 · 알림장 있는 날': inspect(used.v3 ?? undefined, BRIEFING_TEMPLATE_V3, BTN3, 'v3'),
         '③ 데일리테스트 판 · 알림장 없는 날': inspect(used.v3NoNote ?? undefined, BRIEFING_TEMPLATE_V3_NONOTE, BTN2, 'v3NoNote'),
+        // ★ V4 가 **지금 쓰는 판**이다(있으면 이것이 먼저 나간다). 그런데 이 화면에 없어서
+        //   승인이 떨어졌는지 여기서는 볼 수 없었다 (원장님 2026-11-13 「템플릿 승인됐어」).
+        '④ 학습 결과 한 칸 판 · 알림장 있는 날': inspect(used.v4 ?? undefined, BRIEFING_TEMPLATE_V4, BTN3_V4, 'v4'),
+        '④ 학습 결과 한 칸 판 · 알림장 없는 날': inspect(used.v4NoNote ?? undefined, BRIEFING_TEMPLATE_V4_NONOTE, BTN2_V4, 'v4NoNote'),
       },
       // 어디서 온 코드인지 — 「자동으로 찾음」인지 「Vercel 환경변수」인지
-      코드출처: Object.fromEntries((['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote'] as const)
+      코드출처: Object.fromEntries((['v1', 'v1NoNote', 'v2', 'v2NoNote', 'v3', 'v3NoNote', 'v4', 'v4NoNote'] as const)
         .map((k) => [k, used[k] ? (auto[k] ? `${used[k]} (알리고에서 자동으로 찾음)` : `${used[k]} (Vercel 환경변수)`) : '없음'])),
       못찾은까닭: auto.why ?? null,
       // 본문에 쓰인 변수 이름이 우리와 같은지(치환이 안 되면 #{...} 가 그대로 나간다)
