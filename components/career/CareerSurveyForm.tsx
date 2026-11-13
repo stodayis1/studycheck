@@ -14,7 +14,7 @@
 //   보내기가 실패하면 적은 내용을 그대로 두고 다시 누르게 한다.
 
 import { useEffect, useRef, useState } from 'react'
-import { roadmapSerif } from '@/lib/roadmapFont'
+import { roadmapSerif, RoadmapSerifLink } from '@/lib/roadmapFont'
 import { CONSENT_TEXT, FORMS, SECTIONS, questionsOf, type FormId, type Question } from '@/lib/careerSurvey'
 
 // ★ 색은 질문지마다 다르다 — 대표 썸네일과 같은 파스텔 (원장님 2026-11-07 「짙은 초록색 말고 파스텔 핑크·오렌지로
@@ -98,6 +98,7 @@ export default function CareerSurveyForm({
 
   const shell = (children: React.ReactNode) => (
     <div ref={root} className="min-h-screen" style={{ background: '#fff', ...(THEMES[form] as React.CSSProperties) }}>
+      <RoadmapSerifLink />
       <div className="px-5 pt-6 pb-6" style={{ background: PEACH, color: GREEN }}>
         {onBack && (
           <button onClick={onBack} className="mb-2 text-[12px] opacity-80">← 돌아가기</button>

@@ -556,6 +556,13 @@ export function isEnoughOne(row: { title?: string | null; kind?: string | null; 
  *
  * 새 제목 규칙으로는 「[코어테스트] 예비 1회 …」처럼 머리표와 회차를 같이 적는다.
  * 회차가 안 적혀 있으면 본고사로 본다 (TOMA 가 본고사라서).
+ *
+ * ★ **매쓰홀릭의 「연습N회」가 우리의 「예비 N회」다** (원장님 2026-11-13
+ *   「제목에 TOMA 경시 연습1회라고 쓰여있잖아. … 코어테스트 예비1회 점수로 들어가야돼」).
+ *   매쓰홀릭 제목은 「제6회 TOMA 수학경시대회 - 중1(2026.08) 연습1회」처럼 온다.
+ *   본고사는 한 달에 **하루**(`core_test_ranges.test_date`) 보는 것이라, 그 앞에 치르는
+ *   연습회가 본고사로 들어가면 한 달에 본고사가 여러 번 생긴다.
+ *   ※ 「제6회」의 「회」에는 걸리지 않는다 — 「연습」 바로 뒤의 숫자만 본다.
  */
 export function coreTestRound(row: { title?: string | null; kind?: string | null }): string | null {
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
@@ -567,8 +574,10 @@ export function coreTestRound(row: { title?: string | null; kind?: string | null
     if (/월간\s*평가|월간\s*테스트/.test(t)) return '월간평가'
     return null
   }
-  if (/예비\s*2/.test(t)) return '예비 2회'
-  if (/예비\s*1/.test(t)) return '예비 1회'
+  // 「연습1회」=「예비 1회」, 「연습2회」=「예비 2회」. 예비는 1·2회뿐이라 둘만 본다 —
+  // 「연습3회」 같은 것이 오면 아래 본고사로 떨어지므로 그때 원장님께 여쭌다.
+  if (/예비\s*2|연습\s*2/.test(t)) return '예비 2회'
+  if (/예비\s*1|연습\s*1/.test(t)) return '예비 1회'
   return '본고사'
 }
 
