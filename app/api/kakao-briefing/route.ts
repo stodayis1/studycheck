@@ -29,7 +29,7 @@ import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes, V4_SCORE_BUTTON } from '@/lib/briefingTemplate'
 import { attachPastExamMemos } from '@/lib/pastExamMemo'
 import { RESEND_KEY, pickResend, allDates, dropDates } from '@/lib/briefingResend'
-import { buildBriefing } from '@/lib/briefing'
+import { buildBriefing, diagnosticLabel } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
 import { isExamAbsence } from '@/lib/attendance'
@@ -210,10 +210,10 @@ async function run(opts: {
   //   갈라져 저장되고, 학부모님께는 「▶ 학습 결과」 한 칸으로 모아 나간다 (원장님 2026-11-13).
   //   두 종류를 **한 번에** 읽어 와서 갈라 담는다 (in() 을 두 번 돌지 않는다).
   const coreBy = new Map<string, { 회차?: string | null; 점수: number }[]>()
-  const diagBy = new Map<string, { 단원?: string | null; 단계?: number | null; 점수: number }[]>()
+  const diagBy = new Map<string, { 이름?: string | null; 단원?: string | null; 단계?: number | null; 점수: number }[]>()
   for (let i = 0; i < studentIds.length; i += 100) {
     const { data: cs } = await db.from('exams')
-      .select('student_id, exam_type, title, unit_name, level, score, created_at')
+      .select('student_id, exam_type, title, unit_name, level, score, memo, created_at')
       .in('exam_type', ['코어테스트', '진단평가'])
       .eq('exam_date', date)
       .in('student_id', studentIds.slice(i, i + 100))
@@ -226,7 +226,7 @@ async function run(opts: {
         coreBy.set(c.student_id, list)
       } else {
         const list = diagBy.get(c.student_id) ?? []
-        list.push({ 단원: c.unit_name ?? null, 단계: c.level == null ? null : Number(c.level), 점수: Number(c.score) })
+        list.push({ 이름: diagnosticLabel(c.memo), 단원: c.unit_name ?? null, 단계: c.level == null ? null : Number(c.level), 점수: Number(c.score) })
         diagBy.set(c.student_id, list)
       }
     }

@@ -18,7 +18,7 @@ import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 import { splitTeachers, teachersOf, teacherLabels } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
-import { buildBriefing, BODY_LIMIT } from '@/lib/briefing'
+import { buildBriefing, BODY_LIMIT, diagnosticLabel } from '@/lib/briefing'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { canAssignVideos } from '@/lib/videoAssign'
 import { youtubeId, lessonLabel, needsPhoto, photoUrlsOf, photoLabelOf, photoBrief, type LessonVideo } from '@/lib/lessonVideos'
@@ -1297,7 +1297,7 @@ export default function TeacherLearningNotesPage() {
     })
     // 코어테스트·진단평가 — 브리핑 미리보기의 「▶ 학습 결과」 칸에 들어간다.
     supabase.from('exams')
-      .select('student_id, exam_type, exam_date, title, unit_name, level, score, created_at')
+      .select('student_id, exam_type, exam_date, title, unit_name, level, score, memo, created_at')
       .eq('student_id', student.id).in('exam_type', ['코어테스트', '진단평가'])
       .not('score', 'is', null)
       .order('created_at', { ascending: true })
@@ -2002,7 +2002,7 @@ ${e?.message ?? '연결 실패'}
           .map((e) => ({ 회차: e.title ?? null, 점수: Number(e.score) })),
         diagnostics: noteExams
           .filter((e) => e.exam_type === '진단평가' && e.exam_date === day)
-          .map((e) => ({ 단원: e.unit_name ?? null, 단계: e.level == null ? null : Number(e.level), 점수: Number(e.score) })),
+          .map((e) => ({ 이름: diagnosticLabel(e.memo), 단원: e.unit_name ?? null, 단계: e.level == null ? null : Number(e.level), 점수: Number(e.score) })),
         noNoteTemplate: !!briefMode?.noNoteTemplate,
         noNoteTemplateV3: !!briefMode?.noNoteTemplateV3,
         useV2: !!briefMode?.useV2,

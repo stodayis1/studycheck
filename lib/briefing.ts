@@ -389,6 +389,30 @@ export function worksheetTail(rows: BriefingWorksheet[], budget = 60): string {
 }
 
 /**
+ * 진단평가 줄에 적을 **시험지 이름**을 고른다 (원장님 2026-11-13
+ * 「시험지 이름에 00평가 붙으면 그대로 붙여줘」).
+ *
+ *   「11월 주간평가(1) - 기본도형[1단계]」 → 주간평가
+ *   「6월 진단평가」                       → 진단평가
+ *   「단원평가」                           → 단원평가
+ *   「고1 A 주말복습 TEST 1107(lv1.5)」    → (평가라는 말이 없다) → 진단평가
+ *
+ * ★ memo 를 **그대로 믿으면 안 된다.** 그 칸은 매쓰홀릭에서 온 줄만 원제목을 담고,
+ *   선생님이 손으로 넣은 줄에는 **긴 소견**이 들어 있다
+ *   (실측: 「계산실수 및 개념정확한 암기안되어 있음.」 · 「검토 반드시 필.」).
+ *   그래서 ① 매쓰홀릭 꼴이면 원제목만 떼어 보고, ② 아니면 **짧은 memo 일 때만** 본다.
+ *   긴 소견에서 낱말을 주워 오면 엉뚱한 말이 학부모님께 나간다.
+ */
+export function diagnosticLabel(memo?: string | null): string {
+  const raw = (memo ?? '').trim()
+  // 매쓰홀릭에서 온 줄: 「매쓰홀릭 · 19/40 · 고1 A 주말복습 TEST 1107(lv1.5)」
+  const m = raw.match(/^매쓰홀릭\s*·[^·]*·\s*([\s\S]+)$/)
+  const 이름 = m ? m[1].trim() : (raw.length <= 20 && !raw.includes('\n') ? raw : '')
+  const 평가 = 이름.match(/([가-힣]{1,6}평가)/)
+  return 평가 ? 평가[1] : '진단평가'
+}
+
+/**
  * V4 의 「▶ 학습 결과」 칸을 **줄 단위로** 만든다 (원장님 2026-11-12).
  *
  *   · 과제 성취도 90%
@@ -435,7 +459,7 @@ export function learningResult(a: {
    *   학부모님께는 그 갈래가 의미 없으므로 **「▶ 학습 결과」 한 칸에 모아** 보낸다.
    *   진단평가는 그중 유일하게 **아무 데도 안 나가고 있었다.**
    */
-  진단평가?: { 단원?: string | null; 단계?: number | null; 점수: number }[]
+  진단평가?: { 이름?: string | null; 단원?: string | null; 단계?: number | null; 점수: number }[]
   worksheets?: BriefingWorksheet[]
 }, budget: number = CAP.학습결과): string {
   if (a.결석) return '· 결석으로 수업에 참여하지 못했습니다'
@@ -453,9 +477,11 @@ export function learningResult(a: {
   }
   // 진단평가 — 단원·단계를 적어 어느 범위를 봤는지 알 수 있게.
   for (const d of a.진단평가 ?? []) {
+    // 시험지 이름에 「○○평가」가 있으면 그 말을 그대로 쓴다 (원장님 2026-11-13).
+    const 이름 = (d.이름 ?? '').trim() || '진단평가'
     const 단원 = unitText(((d.단원) ?? '').trim(), 26)
     const 단계 = d.단계 != null ? `${lvText(d.단계)}단계` : ''
-    head.push(['· 진단평가', 단원, 단계, `${d.점수}점`].filter(Boolean).join(' '))
+    head.push([`· ${이름}`, 단원, 단계, `${d.점수}점`].filter(Boolean).join(' '))
   }
   if (a.데일리점수 != null) {
     head.push([`· 데일리테스트 ${a.데일리점수}점`,
@@ -657,7 +683,7 @@ export function buildBriefing(args: {
    * 그날 친 진단평가(주간·주말평가). 부르는 쪽이 exams(exam_type='진단평가')에서 넣는다.
    * 코어테스트와 같이 「▶ 학습 결과」 칸으로 들어간다 (원장님 2026-11-13).
    */
-  diagnostics?: { 단원?: string | null; 단계?: number | null; 점수: number }[]
+  diagnostics?: { 이름?: string | null; 단원?: string | null; 단계?: number | null; 점수: number }[]
   /**
    * 그날 점수가 들어온 학습지. 부르는 쪽이 student_worksheets 에서
    * submitted_at 이 그날(한국시간)인 것을 넣는다. 없으면 아무것도 안 붙는다.

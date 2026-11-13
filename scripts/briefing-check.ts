@@ -15,7 +15,7 @@ import { dropEchoParen } from '../lib/worksheetTitle.ts'
 import { buildBriefing, worksheetTail, learningResult, hwLines, BODY_LIMIT, BODY_BUDGET,
   BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
   BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
-  BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE } from '../lib/briefing.ts'
+  BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE, diagnosticLabel } from '../lib/briefing.ts'
 
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -287,19 +287,19 @@ function matchesTemplate(body: string, which: 'full' | 'nonote' = 'full') {
   const t = learningResult({
     성취도: 90,
     코어테스트: [{ 회차: '예비 1회', 점수: 72 }],
-    진단평가: [{ 단원: '기본도형', 단계: 1, 점수: 85 }],
+    진단평가: [{ 이름: diagnosticLabel('매쓰홀릭 · 17/20 · 11월 주간평가(1) - 기본도형[1단계]'), 단원: '기본도형', 단계: 1, 점수: 85 }],
     데일리점수: 95, 데일리범위: '쎈 P.18~P.40',
     worksheets: [{ unit_name: '4학년 2학기 4단원', current_level: 3.5, score: 83 } as any],
   })
-  for (const 줄 of ['· 코어테스트 예비 1회 72점', '· 진단평가 기본도형 1단계 85점',
+  for (const 줄 of ['· 코어테스트 예비 1회 72점', '· 주간평가 기본도형 1단계 85점',
     '· 데일리테스트 95점 · 쎈 P.18~P.40', '· 학습지 4학년 2학기 4단원 Lv3.5 83점']) {
     if (!t.includes(줄)) { console.error(`✗ 학습 결과 칸에 「${줄}」이 없습니다.
 ${t}`); process.exit(1) }
   }
   // 차례 — 과제 → 시험(코어·진단·데일리) → 학습지
   const idx = (x: string) => t.indexOf(x)
-  if (!(idx('· 과제 성취도') < idx('· 코어테스트') && idx('· 코어테스트') < idx('· 진단평가')
-    && idx('· 진단평가') < idx('· 데일리테스트') && idx('· 데일리테스트') < idx('· 학습지'))) {
+  if (!(idx('· 과제 성취도') < idx('· 코어테스트') && idx('· 코어테스트') < idx('· 주간평가')
+    && idx('· 주간평가') < idx('· 데일리테스트') && idx('· 데일리테스트') < idx('· 학습지'))) {
     console.error(`✗ 학습 결과 칸의 차례가 어긋났습니다.
 ${t}`); process.exit(1)
   }
@@ -316,6 +316,30 @@ ${없는날}`); process.exit(1)
 ${결석날}`); process.exit(1)
   }
   console.log('코어테스트·진단평가 자가확인 ✓ (학습 결과 칸에 · 차례대로 · 안 친 날엔 없음 · 결석엔 없음)')
+}
+
+// ★ 시험지 이름에 「○○평가」가 있으면 그대로 쓴다 (원장님 2026-11-13).
+//   ★ memo 는 선생님 소견이 들어오는 칸이기도 하다 — 긴 글에서 낱말을 주워 오면 안 된다.
+{
+  const 짝: [string, string][] = [
+    ['매쓰홀릭 · 17/20 · 11월 주간평가(1) - 기본도형[1단계]', '주간평가'],
+    ['매쓰홀릭 · 12/20 · 초6 월간평가 3회', '월간평가'],
+    ['6월 진단평가', '진단평가'],
+    ['단원평가', '단원평가'],
+    // 「평가」라는 말이 없으면 갈래 이름 그대로
+    ['매쓰홀릭 · 19/40 · 고1 A 주말복습 TEST 1107(lv1.5)', '진단평가'],
+    // ★ 선생님이 손으로 쓴 **긴 소견** — 여기서 낱말을 주워 오면 안 된다
+    ['삼각형의 성질 개념암기가 안 되어 있습니다. 다음 주 단원평가 전까지 백지테스트로 계속 확인하겠습니다~!', '진단평가'],
+    ['', '진단평가'],
+  ]
+  for (const [memo, want] of 짝) {
+    const got = diagnosticLabel(memo)
+    if (got !== want) {
+      console.error(`✗ 시험지 이름: 「${memo}」 → 「${got}」 (「${want}」 여야 합니다)`)
+      process.exit(1)
+    }
+  }
+  console.log('시험지 이름 자가확인 ✓ (○○평가는 그대로 · 없으면 진단평가 · 긴 소견에서는 안 주워 옴)')
 }
 
 // ★ 과제 배부의 학습지 줄 — **같은 말을 괄호로 또** 적은 꼬리를 떼는가 (원장님 2026-11-12).
