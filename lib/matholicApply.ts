@@ -64,10 +64,15 @@ export async function applyPlans(
         daily++
       } else if (p.mode === 'core' && p.studentId && p.coreRound) {
         // 평가관리의 코어테스트. 점수는 백분율로 적는다 (화면이 그렇게 쓰고 있다 — 만점 100).
+        // ★ **제목을 memo 에 남긴다** (진단평가와 같게). 2026-11-13 에 TOMA 「연습1회」가
+        //   본고사로 들어가 있던 것을 바로잡으려는데, 회차 말고는 아무 자취가 없어서
+        //   「이 줄이 어느 회차에서 왔나」를 알 길이 없었다. 11월에만 그런 줄이 40건이었다.
         const { error } = await db.from('exams').insert({
           student_id: p.studentId, exam_type: '코어테스트', exam_date: p.row.date,
           title: p.coreRound, score: p.row.score, total_score: 100,
           teacher_name: teacherName,
+          memo: ['매쓰홀릭', p.row.right != null ? `${p.row.right}/${p.row.total}` : '', p.row.title]
+            .filter(Boolean).join(' · '),
         })
         if (error) throw new Error(error.message)
         core++
