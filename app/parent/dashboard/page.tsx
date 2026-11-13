@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 import { loadHolidays, type Holiday } from '@/lib/holidays'
 import { stripRichTokens } from '@/lib/richContent'
-import { pickDisplayAnnouncements } from '@/lib/announcements'
+import { pickDisplayAnnouncements, visibleToFamily } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { ATT_EXAM, isExamAbsence } from '@/lib/attendance'
 import CareerBanner from '@/components/career/CareerBanner'
@@ -161,7 +161,7 @@ export default function ParentDashboardPage() {
           supabase.from('progress_checks').select('*').eq('student_id', session.id),
           supabase.from('feedbacks').select('*').eq('student_id', session.id).order('created_at', { ascending: false }).limit(80),
           // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
-          supabase.from('announcements').select('id, title, content, created_at, is_important').eq('is_active', true)
+          supabase.from('announcements').select('id, title, content, created_at, is_important, audience').eq('is_active', true)
             .or(`ends_at.is.null,ends_at.gte.${nowIso}`).order('created_at', { ascending: false }),
         ])
         if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
@@ -172,7 +172,7 @@ export default function ParentDashboardPage() {
         if (cData) setConcepts(cData)
         if (pcData) setProgressChecks(pcData)
         if (fbData) setFeedbacks(fbData)
-        if (anData) setAnnouncements(pickDisplayAnnouncements(anData))
+        if (anData) setAnnouncements(pickDisplayAnnouncements(anData.filter(visibleToFamily)))
 
         // 시험대비 - NULL이거나 4주 이내 시험
         const maxDate = new Date(Date.now() + 35*86400000).toISOString().split('T')[0]

@@ -7,7 +7,7 @@ import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { cx } from '@/lib/utils'
 import { stripRichTokens } from '@/lib/richContent'
-import { pickDisplayAnnouncements } from '@/lib/announcements'
+import { pickDisplayAnnouncements, visibleToFamily } from '@/lib/announcements'
 import PushSubscribeButton from '@/components/PushSubscribeButton'
 import { getSsenbSubChapterForConceptOrder, type SsenbProblem } from '@/lib/ssenbSteps'
 import { youtubeId, photoKindOf, askedSet, type LessonVideo } from '@/lib/lessonVideos'
@@ -226,9 +226,9 @@ export default function StudentDashboardPage() {
     // 학원 공지사항 - 지금 표시 대상인 것만(종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
     const nowIso = new Date().toISOString()
     const { data: anData } = await supabase.from('announcements')
-      .select('id, title, content, created_at, is_important').eq('is_active', true)
+      .select('id, title, content, created_at, is_important, audience').eq('is_active', true)
       .or(`ends_at.is.null,ends_at.gte.${nowIso}`).order('created_at', { ascending: false })
-    if (anData) setAnnouncements(pickDisplayAnnouncements(anData))
+    if (anData) setAnnouncements(pickDisplayAnnouncements(anData.filter(visibleToFamily)))
 
     // 시험대비 (이너프원) - 4주 이내 시험 있는 것만
     const today = new Date()

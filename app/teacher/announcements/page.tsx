@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 import { COLOR_PALETTE, SIZE_PALETTE, FONT_PALETTE, EMOJI_PICKS, renderRichContent, stripRichTokens } from '@/lib/richContent'
 import { reportPushResult, reportSendError } from '@/lib/reportSend'
+import { AUDIENCE_LABEL, AUDIENCE_PICKS, type Audience } from '@/lib/announcements'
 
 interface Announcement {
   id: string
@@ -18,6 +19,15 @@ interface Announcement {
   ends_at: string | null
   created_by: string | null
   created_at: string
+  audience?: Audience | null
+  needs_ack?: boolean | null
+}
+
+interface Ack {
+  announcement_id: string
+  user_id: string
+  user_name: string | null
+  acked_at: string
 }
 
 function fmtDate(iso: string) {
@@ -51,6 +61,12 @@ export default function TeacherAnnouncementsPage() {
   const [content, setContent] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [isImportant, setIsImportant] = useState(false)
+  // 누구에게 보일지와, 선생님께 「확인」을 받을지 (원장님 2026-11-13)
+  const [audience, setAudience] = useState<Audience>('all')
+  const [needsAck, setNeedsAck] = useState(false)
+  const [acks, setAcks] = useState<Ack[]>([])
+  const [staffCount, setStaffCount] = useState(0)
+  const [acking, setAcking] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -62,13 +78,21 @@ export default function TeacherAnnouncementsPage() {
 
   async function fetchData() {
     setLoading(true)
-    const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false })
+    const [{ data }, { data: ackRows }, { count }] = await Promise.all([
+      supabase.from('announcements').select('*').order('created_at', { ascending: false }),
+      supabase.from('announcement_acks').select('*'),
+      // 확인해야 할 사람 수 — 퇴사 처리된 계정은 뺀다
+      supabase.from('users').select('id', { count: 'exact', head: true }).eq('is_locked', false),
+    ])
     if (data) setItems(data)
+    setAcks(ackRows ?? [])
+    setStaffCount(count ?? 0)
     setLoading(false)
   }
 
   function resetForm() {
     setTitle(''); setContent(''); setEndsAt(''); setIsImportant(false); setEditingId(null); setShowForm(false); setShowEmojiPicker(false)
+    setAudience('all'); setNeedsAck(false)
   }
 
   function startEdit(a: Announcement) {
@@ -77,7 +101,32 @@ export default function TeacherAnnouncementsPage() {
     setContent(a.content)
     setEndsAt(a.ends_at ? a.ends_at.slice(0, 10) : '')
     setIsImportant(!!a.is_important)
+    setAudience((a.audience ?? 'all') as Audience)
+    setNeedsAck(!!a.needs_ack)
     setShowForm(true)
+  }
+
+  /** 이 공지를 확인한 사람들 */
+  function acksOf(id: string) {
+    return acks.filter((k) => k.announcement_id === id)
+      .sort((a, b) => (a.user_name ?? '').localeCompare(b.user_name ?? ''))
+  }
+  const myAck = (id: string) => acks.some((k) => k.announcement_id === id && k.user_id === currentUser?.id)
+
+  /** 「확인했습니다」 — 한 번 누르면 기록된다. 잘못 눌렀으면 다시 눌러 무른다. */
+  async function toggleAck(a: Announcement) {
+    if (!currentUser?.id) return
+    setAcking(a.id)
+    if (myAck(a.id)) {
+      await supabase.from('announcement_acks').delete()
+        .eq('announcement_id', a.id).eq('user_id', currentUser.id)
+    } else {
+      await supabase.from('announcement_acks')
+        .insert({ announcement_id: a.id, user_id: currentUser.id, user_name: currentUser.name ?? null })
+    }
+    const { data } = await supabase.from('announcement_acks').select('*')
+    setAcks(data ?? [])
+    setAcking(null)
   }
 
   // 커서 위치에 텍스트(이모지/이미지 태그)를 끼워넣는다. 커서 위치를 못 잡으면 그냥 맨 뒤에 붙인다.
@@ -145,6 +194,8 @@ export default function TeacherAnnouncementsPage() {
       content: content.trim(),
       ends_at: endsAt ? new Date(endsAt + 'T23:59:59').toISOString() : null,
       is_important: isImportant,
+      audience,
+      needs_ack: audience === 'teacher' ? needsAck : false,
       updated_at: new Date().toISOString(),
     }
     if (editingId) {
@@ -152,7 +203,9 @@ export default function TeacherAnnouncementsPage() {
     } else {
       await supabase.from('announcements').insert({ ...payload, created_by: currentUser?.name ?? '원장' })
       // 새 공지사항 등록 시 전체 구독자(학부모/학생/강사)에게 앱 푸시 알림 발송. 실패해도 공지 저장 자체는 이미 끝났으므로 조용히 무시.
-      apiFetch('/api/push/send', {
+      // ★ 선생님 전용 공지는 푸시를 보내지 않는다 — 푸시는 전체 발송만 되고(app/api/push/send),
+      //   그러면 학부모·학생 폰에 선생님께 할 말이 그대로 뜬다 (원장님 2026-11-13).
+      if (audience !== 'teacher') apiFetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -203,9 +256,26 @@ export default function TeacherAnnouncementsPage() {
           ) : (
             items.filter((a) => a.is_active).map((a) => (
               <div key={a.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                <p className="text-sm font-bold text-gray-900">{a.is_important && <i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} />}{a.title}</p>
+                <p className="text-sm font-bold text-gray-900">
+                  {a.is_important && <i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} />}
+                  {a.audience === 'teacher' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md mr-1.5 align-[0.1em]"
+                      style={{ background: '#D7F3E8', color: '#085041' }}>선생님</span>
+                  )}
+                  {a.title}
+                </p>
                 <div className="text-xs text-gray-600 mt-1.5" style={{ whiteSpace: 'pre-wrap' }}>{renderRichContent(a.content)}</div>
                 <p className="text-[10px] text-gray-400 mt-2">{fmtDate(a.created_at)}</p>
+                {/* 읽었다는 표시 — 원장님이 누가 확인했는지 보신다 */}
+                {a.needs_ack && (
+                  <button onClick={() => toggleAck(a)} disabled={acking === a.id}
+                    className={cx('mt-2.5 w-full py-2 text-xs font-bold rounded-xl border disabled:opacity-50',
+                      myAck(a.id) ? 'bg-green-50 text-green-700 border-green-200' : 'bg-green-600 text-white border-green-600')}>
+                    {acking === a.id ? '저장 중…'
+                      : myAck(a.id) ? <><i className="ti ti-circle-check align-[-0.125em] mr-0.5" /> 확인함 (다시 누르면 취소)</>
+                      : '읽었습니다 · 확인'}
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -376,12 +446,41 @@ export default function TeacherAnnouncementsPage() {
               <input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)}
                 className="px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
+            {/* 누구에게 보일지 — 「선생님만」이면 학생·학부모 화면에서 아예 안 보이고 푸시도 안 나간다 */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">누구에게 보일까요?</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {AUDIENCE_PICKS.map((p) => (
+                  <button key={p.key} type="button" onClick={() => setAudience(p.key)}
+                    title={p.hint}
+                    className={cx('px-3 py-1.5 text-xs font-bold rounded-xl border',
+                      audience === p.key ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200')}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">
+                {AUDIENCE_PICKS.find((p) => p.key === audience)?.hint}
+                {audience === 'teacher' && ' · 푸시 알림도 나가지 않아요'}
+              </p>
+            </div>
+
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={isImportant} onChange={(e) => setIsImportant(e.target.checked)}
                 className="w-4 h-4 accent-orange-500" />
               <span className="text-xs font-bold text-gray-700"><i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} /> 중요 공지로 표시</span>
               <span className="text-[10px] text-gray-400">(학부모/학생/강사 화면 상단에 우선 노출돼요)</span>
             </label>
+
+            {/* 확인 단추는 선생님 전용 공지에만 — 학부모께 「확인」을 받을 일은 없다 */}
+            {audience === 'teacher' && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={needsAck} onChange={(e) => setNeedsAck(e.target.checked)}
+                  className="w-4 h-4 accent-green-600" />
+                <span className="text-xs font-bold text-gray-700"><i className="ti ti-checkbox align-[-0.125em] mr-0.5" style={{ color: '#0F6E56' }} /> 읽고 「확인」 누르게 하기</span>
+                <span className="text-[10px] text-gray-400">(누가 확인했는지 여기서 보여요)</span>
+              </label>
+            )}
             <div className="flex gap-2">
               <button onClick={handleSave} disabled={!title.trim() || !content.trim() || saving}
                 className="flex-1 py-2.5 bg-green-600 text-white text-sm font-bold rounded-xl disabled:opacity-50">
@@ -427,6 +526,14 @@ export default function TeacherAnnouncementsPage() {
                       <span className="flex-1 min-w-0 flex items-center gap-1.5">
                         {a.is_important && <i className="ti ti-star-filled shrink-0" style={{ color: '#f59e0b' }} />}
                         {hasImage && <i className="ti ti-photo shrink-0 text-xs text-gray-400" />}
+                        {a.audience && a.audience !== 'all' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0"
+                            style={a.audience === 'teacher'
+                              ? { background: '#D7F3E8', color: '#085041' }
+                              : { background: '#FFF5F2', color: '#712B13' }}>
+                            {AUDIENCE_LABEL[a.audience]}
+                          </span>
+                        )}
                         <span className="text-sm font-semibold text-gray-800 truncate">{a.title}</span>
                       </span>
                       <span className="hidden sm:block w-20 shrink-0 text-center text-[11px] text-gray-400">{a.created_by ?? '-'}</span>
@@ -449,7 +556,29 @@ export default function TeacherAnnouncementsPage() {
                         </div>
                         <p className="text-[10px] text-gray-400 mt-2">
                           {a.ends_at ? `~${fmtDate(a.ends_at)}까지 노출` : '종료일 없음 (직접 종료할 때까지 계속 노출)'}
+                          {' · '}{AUDIENCE_LABEL[(a.audience ?? 'all') as Audience]}에게 보임
                         </p>
+
+                        {/* 누가 읽었는지 — 확인을 받기로 한 공지에만 */}
+                        {a.needs_ack && (() => {
+                          const done = acksOf(a.id)
+                          return (
+                            <div className="mt-2.5 rounded-xl p-2.5" style={{ background: '#F0FBF7', border: '1px solid #C7DED6' }}>
+                              <p className="text-[11px] font-bold" style={{ color: '#085041' }}>
+                                확인 {done.length}명 / {staffCount}명
+                              </p>
+                              <p className="text-[11px] text-gray-600 mt-1">
+                                {done.length ? done.map((k) => k.user_name ?? '이름 없음').join(' · ') : '아직 아무도 확인하지 않았어요'}
+                              </p>
+                              <button onClick={() => toggleAck(a)} disabled={acking === a.id}
+                                className={cx('mt-2 text-[10px] font-bold px-2.5 py-1 rounded-lg disabled:opacity-50',
+                                  myAck(a.id) ? 'bg-white text-green-700 border border-green-200' : 'bg-green-600 text-white')}>
+                                {myAck(a.id) ? '내 확인 취소' : '나도 확인'}
+                              </button>
+                            </div>
+                          )
+                        })()}
+
                         <div className="flex gap-2 mt-2.5">
                           <button onClick={() => startEdit(a)}
                             className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600">

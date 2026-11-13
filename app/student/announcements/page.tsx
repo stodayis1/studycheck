@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
+import { visibleToFamily } from '@/lib/announcements'
 import { renderRichContent } from '@/lib/richContent'
 
 interface Announcement {
@@ -31,11 +32,12 @@ export default function StudentAnnouncementsPage() {
       // 지금 표시 대상인 공지만 (종료일 지났거나 원장님이 종료 처리한 건 자동 제외)
       const nowIso = new Date().toISOString()
       const { data } = await supabase.from('announcements')
-        .select('id, title, content, created_at, is_important')
+        .select('id, title, content, created_at, is_important, audience')
         .eq('is_active', true)
         .or(`ends_at.is.null,ends_at.gte.${nowIso}`)
         .order('created_at', { ascending: false })
-      if (data) setItems(data)
+      // 선생님 전용 공지는 거른다 (진짜 차단은 RLS — docs/sql/공지_대상구분과_확인버튼.sql)
+      if (data) setItems(data.filter(visibleToFamily))
       setLoading(false)
     }
     init()
