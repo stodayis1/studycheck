@@ -31,6 +31,8 @@ interface Announcement {
   ends_at: string | null
   created_at: string
   is_important?: boolean
+  audience?: string | null
+  needs_ack?: boolean | null
 }
 
 interface FirstClassCheck {
@@ -95,6 +97,9 @@ export default function TeacherDashboardPage() {
   const [bulkProgressEnabled, setBulkProgressEnabled] = useState(false)
   const [togglingBulk, setTogglingBulk] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  // 내가 「확인」을 누른 공지들 (원장님 2026-11-13)
+  const [myAcks, setMyAcks] = useState<string[]>([])
+  const [acking, setAcking] = useState<string | null>(null)
   const [firstClassChecks, setFirstClassChecks] = useState<FirstClassCheck[]>([])
   const [overdueConsultNames, setOverdueConsultNames] = useState<string[]>([])
   // 강사가 올린 '원장님 상담 요청' (원장/직원 화면에만 뜬다)
@@ -271,12 +276,26 @@ export default function TeacherDashboardPage() {
   async function fetchAnnouncements() {
     const nowIso = new Date().toISOString()
     const { data } = await supabase.from('announcements')
-      .select('id, title, content, ends_at, created_at, is_important')
+      .select('id, title, content, ends_at, created_at, is_important, audience, needs_ack')
       .eq('is_active', true)
       .or(`ends_at.is.null,ends_at.gte.${nowIso}`)
       .order('created_at', { ascending: false })
     // 최신 2개, 중요 공지가 있으면 그걸 우선해서 최대 3개까지만 대시보드에 노출 (나머지는 공지사항 메뉴에서)
     if (data) setAnnouncements(pickDisplayAnnouncements(data))
+    const { data: mine } = await supabase.from('announcement_acks').select('announcement_id')
+      .eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '')
+    setMyAcks((mine ?? []).map((k: any) => k.announcement_id))
+  }
+
+  /** 공지를 읽었다고 눌러 둔다. 원장님 화면에 누가 확인했는지 뜬다. */
+  async function ackAnnouncement(id: string) {
+    const uid = (await supabase.auth.getUser()).data.user?.id
+    if (!uid) return
+    setAcking(id)
+    await supabase.from('announcement_acks')
+      .insert({ announcement_id: id, user_id: uid, user_name: currentUser?.name ?? null })
+    setMyAcks((v) => [...v, id])
+    setAcking(null)
   }
 
   async function fetchBulkSetting() {
@@ -489,10 +508,34 @@ export default function TeacherDashboardPage() {
             </div>
             <div className="divide-y" style={{ borderColor: '#F5C4B360' }}>
               {announcements.map((a) => (
-                <Link key={a.id} href="/teacher/announcements" className="block px-4 py-2.5">
-                  <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>{a.is_important && <i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} />}{a.title}</p>
-                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
-                </Link>
+                <div key={a.id} className="px-4 py-2.5 flex items-center gap-2">
+                  <Link href="/teacher/announcements" className="flex-1 min-w-0">
+                    <p className="text-xs font-bold truncate" style={{ color: '#712B13' }}>
+                      {a.is_important && <i className="ti ti-star-filled align-[-0.125em] mr-0.5" style={{ color: '#f59e0b' }} />}
+                      {a.audience === 'teacher' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md mr-1 align-[0.1em]"
+                          style={{ background: '#D7F3E8', color: '#085041' }}>선생님</span>
+                      )}
+                      {a.title}
+                    </p>
+                    <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: '#993C1D' }}>{stripRichTokens(a.content)}</p>
+                  </Link>
+                  {/* 확인을 받기로 한 공지 — 누르면 원장님 화면에 이름이 뜬다 */}
+                  {a.needs_ack && (
+                    myAcks.includes(a.id) ? (
+                      <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg"
+                        style={{ background: '#D7F3E8', color: '#085041' }}>
+                        <i className="ti ti-circle-check align-[-0.125em]" /> 확인함
+                      </span>
+                    ) : (
+                      <button onClick={() => ackAnnouncement(a.id)} disabled={acking === a.id}
+                        className="shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-white disabled:opacity-50"
+                        style={{ background: '#085041' }}>
+                        {acking === a.id ? '…' : '확인'}
+                      </button>
+                    )
+                  )}
+                </div>
               ))}
             </div>
           </div>
