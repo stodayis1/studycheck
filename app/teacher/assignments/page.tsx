@@ -614,10 +614,8 @@ export default function TeacherAssignmentsPage() {
       }
     }
     // ★ 점수가 들어왔으면 **그 자리에서 닫는다** (원장님 2026-11-14 「굳이 완료까지 눌러야
-    //   없어지거든 … 완료처리 되게 하면 어떨까」). 사람이 골라야 하는 자리만 열어 둔다 —
-    //   초등 본 학습지 70점 미만(위 규칙·DB 트리거가 막는 줄)과 초등 오답유사(바로 위에서
-    //   이미 재도전으로 빠진다). 규칙 한 벌은 lib/worksheetStatus.ts 에 있다.
-    if (statusAfterScore({ worksheet_type: scoreWS.worksheet_type, grade_level: scoreWS.grade_level, score, parentScore }) === 'passed') {
+    //   없어지거든 … 완료처리 되게 하면 어떨까」). 규칙 한 벌은 lib/worksheetStatus.ts.
+    if (statusAfterScore({ score }) === 'passed') {
       await closeWorksheet({ ...scoreWS, score, status: 'scored' }, 'auto_complete')
     }
     setSavingScore(false); setShowScoreModal(false); setInputScore(''); fetchData()

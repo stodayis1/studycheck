@@ -9,55 +9,37 @@
  *
  *   실측(최근 60일 worksheet_action_logs): 완료 1,647 · 오답유사 451 · 자동재도전 86 ·
  *   재도전 78 · **레벨업 49** · 레벨↓ 12. 사람이 누르는 것의 대부분이 「완료」다.
- *   그 한 번을 없앤다.
  *
- * ★ 두 자리는 **닫지 않는다.** 둘 다 「사람이 골라야 하는 자리」다 —
- *   애매해서가 아니라 **규칙이 정해 둔 갈림길**이다.
+ * ★ **70점 규칙의 강제는 걷었다** (원장님 2026-11-14 「70점 미만 재도전 레벨다운 오답유사도
+ *   그냥 안해도 될거 같아. 어차피 선생님들이 알아서 하시거든. 그럼 매쓰홀릭에 학습지 제목에
+ *   오답유사로 나오니까 그걸로 대체하는게 좋을듯해」).
  *
- *   ① 초등 본 학습지 70점 미만 — 재도전 · 레벨↓ 재도전 · 오답유사 중에 골라야 한다.
- *      DB 트리거(`docs/sql/초등학습지_70점_차단.sql`)도 같은 줄에서 막는다. 여기서 닫으려 들면
- *      update 가 **에러로 떨어져** 긁어 넣기가 통째로 멈춘다 — 막는 선을 트리거와 **글자까지** 맞춘다.
- *   ② 초등 오답유사 중 **원래 학습지가 70점 미만**이었던 것 — 점수와 상관없이 같은 레벨
- *      재도전이 따라와야 한다(오답유사는 틀린 것만 모아서 점수가 잘 나온다). 닫아 버리면
- *      목록에서 사라져 아무도 그걸 못 본다.
+ *   앱이 재도전을 **강제로 배정하던 길**이 사라졌다. 대신 선생님이 매쓰홀릭에서 오답유사를
+ *   내시면 제목에 「오답유사」가 찍혀 들어오고, 그게 그대로 학습지가 된다
+ *   (`worksheetTypeOf` → `similar`). 배정을 앱에서 또 하지 않는다.
  *
- * 기준 점수는 여기와 `app/teacher/assignments/page.tsx` 의 PASS_SCORE,
- * 그리고 DB 트리거 **세 곳**에 있다. 바꿀 때 셋 다 바꾼다.
+ *   ★ **보이는 것은 그대로 남는다.** 「멈춘 단원」 목록과 레벨 현황판은 status 가 아니라
+ *     **점수**로 판정한다(`getUnitPass` — 가장 최근 채점한 본 학습지가 70점 이상인가).
+ *     닫혀도 70점을 못 넘긴 단원은 계속 빨갛게 보인다. 막는 것만 없애고 보이는 것은 남겼다.
+ *
+ *   ★ DB 트리거도 같이 풀어야 한다 — `docs/sql/초등학습지_70점_차단_해제.sql`.
+ *     **그 SQL 을 먼저 적용하고 앱을 배포한다.** 거꾸로 하면 초등 70점 미만을 닫으려다
+ *     트리거에 막혀 update 가 에러로 떨어지고, **긁어 넣기가 통째로 멈춘다.**
  */
+
+/** 「멈춘 단원」 판정에 쓰는 기준선. 닫는 데는 더 이상 쓰지 않는다 (화면·DB와 같이 둔다). */
 export const WS_PASS_SCORE = 70
 
 export interface WorksheetForClose {
   worksheet_type?: string | null
   grade_level?: string | null
   score?: number | null
-  /** 오답유사일 때, 원래 학습지의 점수. 모르면 undefined 로 둔다 (그러면 안 닫는다). */
-  parentScore?: number | null
 }
 
-const 초등 = (g?: string | null) => (g ?? '').startsWith('초')
-
-/** 점수가 들어온 뒤 가야 할 상태 — 'passed'(닫음) 또는 'scored'(사람이 고를 자리로 남김). */
+/**
+ * 점수가 들어온 뒤 가야 할 상태.
+ * 점수가 있으면 닫는다. 점수가 없으면 아직 채점 전이므로 그대로 둔다.
+ */
 export function statusAfterScore(w: WorksheetForClose): 'passed' | 'scored' {
-  if (w.score == null) return 'scored'
-
-  // ① 초등 본 학습지 70점 미만 — DB 트리거가 막는 바로 그 줄
-  if (w.worksheet_type === 'main' && 초등(w.grade_level) && w.score < WS_PASS_SCORE) return 'scored'
-
-  // ② 초등 오답유사 — 원래 학습지가 70점 미만이었으면 재도전이 따라와야 한다.
-  //    원래 점수를 모르면(undefined) **닫지 않는다** — 모르는 채로 닫는 쪽이 위험하다.
-  if (w.worksheet_type === 'similar' && 초등(w.grade_level)) {
-    if (w.parentScore == null || w.parentScore < WS_PASS_SCORE) return 'scored'
-  }
-
-  return 'passed'
-}
-
-/** 닫지 않았다면 그 까닭 — 화면에 그대로 적어 준다. 닫았으면 null. */
-export function whyNotClosed(w: WorksheetForClose): string | null {
-  if (statusAfterScore(w) === 'passed') return null
-  if (w.score == null) return '점수가 없어요'
-  if (w.worksheet_type === 'main' && 초등(w.grade_level) && w.score < WS_PASS_SCORE) {
-    return `${WS_PASS_SCORE}점 미만 — 재도전·오답유사를 고르셔야 해요`
-  }
-  return '오답유사 — 원래 학습지가 70점 미만이라 재도전이 필요해요'
+  return w.score == null ? 'scored' : 'passed'
 }

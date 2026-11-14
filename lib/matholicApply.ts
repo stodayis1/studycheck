@@ -95,22 +95,11 @@ export async function applyPlans(
         exam++
       } else if (p.mode === 'fill' && p.wsId) {
         // ★ 점수가 들어오면 **그 자리에서 닫는다**(passed) — 선생님이 「완료」를 또 누르지
-        //   않게 (원장님 2026-11-14). 다만 **사람이 골라야 하는 두 자리는 열어 둔다**:
-        //   초등 본 학습지 70점 미만 · 초등 오답유사(원래가 70점 미만). statusAfterScore 참고.
-        //   ★ 초등 70점 미만을 passed 로 올리면 DB 트리거가 **에러로 막아** 긁어 넣기가
-        //     통째로 멈춘다. 그래서 막는 선을 트리거와 같은 줄로 맞췄다.
-        const { data: cur } = await db.from('student_worksheets')
-          .select('worksheet_type, grade_level, parent_worksheet_id').eq('id', p.wsId).maybeSingle()
-        let parentScore: number | null | undefined = undefined
-        if (cur?.worksheet_type === 'similar' && cur?.parent_worksheet_id) {
-          const { data: par } = await db.from('student_worksheets')
-            .select('score').eq('id', cur.parent_worksheet_id).maybeSingle()
-          parentScore = par?.score ?? null
-        }
-        const next = statusAfterScore({
-          worksheet_type: cur?.worksheet_type, grade_level: cur?.grade_level,
-          score: p.row.score, parentScore,
-        })
+        //   않게 (원장님 2026-11-14). 70점 규칙의 강제는 걷었다 — 재도전·오답유사는
+        //   선생님이 매쓰홀릭에서 내시고, 그 제목이 그대로 들어온다. statusAfterScore 참고.
+        //   ★ DB 트리거를 **먼저** 풀어야 한다(docs/sql/초등학습지_70점_차단_해제.sql).
+        //     안 풀면 초등 70점 미만에서 update 가 에러로 떨어져 긁어 넣기가 통째로 멈춘다.
+        const next = statusAfterScore({ score: p.row.score })
         const { error } = await db.from('student_worksheets')
           .update({
             score: p.row.score, status: next, submitted_at: `${p.row.date}T12:00:00+09:00`,
@@ -153,13 +142,8 @@ export async function applyPlans(
           // 레벨학습지(main) · 오답유사(similar) · 쌍둥이(twin).
           // 교재연계로 낸 것은 쌍둥이다 (원장님 2026-10-30).
           worksheet_type: worksheetTypeOf(p.row, books),
-          // 새로 만들며 점수까지 들어오는 줄 — 닫아도 되는 것은 바로 닫는다.
-          // ★ 오답유사는 원래 학습지를 모르므로 statusAfterScore 가 **안 닫는다**(열어 둔다).
-          status: statusAfterScore({
-            worksheet_type: worksheetTypeOf(p.row, books),
-            grade_level: t.gradeLevel ?? gradeFromCourse(p.row.course)?.grade ?? who?.grade ?? '미정',
-            score: p.row.score,
-          }),
+          // 새로 만들며 점수까지 들어오는 줄 — 점수가 있으면 바로 닫는다.
+          status: statusAfterScore({ score: p.row.score }),
           score: p.row.score,
           assigned_at: `${p.row.date}T12:00:00+09:00`,
           submitted_at: `${p.row.date}T12:00:00+09:00`,
