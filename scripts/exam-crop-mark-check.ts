@@ -16,10 +16,11 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, answerBelow, eqText } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, answerBelow, eqText, dotNumberOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
   eqText: (s: string) => string
+  dotNumberOf: (str: string, size: number, limit: number) => number | null
 }
 
 let pass = 0, all = 0
@@ -121,6 +122,26 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
   ok('맨 아래 「※ 확인사항」 은 문항에 안 넣는다', src.includes('/^※/.test(t.str)'))
   ok('정답표는 「1)」 과 「1.」 두 꼴을 다 읽는다', src.includes('[`${want})`, `${want}.`]'))
+}
+
+// ★ 「12.」 꼴 — 번호와 점이 한 덩어리로 그냥 글자인 작업본 (2026-11-14 지축중 중1 2025 2학기 기말).
+//   그 파일을 재 값을 그대로 쓴다 — 본문 11.04pt · 문항 번호 8.6pt · 정답표 쪽 「22.」 11.5pt.
+{
+  const B = 11.04, N = 8.6, A = 11.5
+  const lim = markLimit([B, B, B, N, B, B, B])
+  ok('지축중 꼴 「1.」 을 문항 번호로 읽는다', dotNumberOf('1.', N, lim) === 1, `한계 ${lim.toFixed(2)}pt`)
+  ok('두 자리 번호도 읽는다', dotNumberOf('23.', N, lim) === 23)
+  ok('본문 크기의 「22.」 는 문항 번호가 아니다(정답표 쪽)', dotNumberOf('22.', A, lim) === null)
+  ok('「1. ⑤」 처럼 뒷말이 붙으면 아니다', dotNumberOf('1. ⑤', N, lim) === null)
+  ok('미주 꼴 「1)」 은 여기서 안 읽는다', dotNumberOf('1)', N, lim) === null)
+  ok('네 자리 숫자는 문항 번호로 안 본다', dotNumberOf('2025.', N, lim) === null)
+}
+
+{
+  const src2 = fs.readFileSync(libPath, 'utf8')
+  ok('「1.」 꼴 가지가 수식 글꼴도 그냥 글자도 받는다', src2.includes('const 번호 = 번호수식 || 번호글자'))
+  ok('글자 번호는 크기로 가른다', src2.includes('dotNumberOf(t.str, t.size, limit)'))
+  ok('글자 번호는 번호 덩어리만 지운다', src2.includes('번호글자 ? [t.x, t.top, t.x1, t.bottom]'))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)

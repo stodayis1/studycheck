@@ -16,6 +16,24 @@ const MARK = /^(\d+)\)$/
 //      글자로 아예 안 읽힌다(사용자 영역 글자로 나온다). 그래서 번호는 나온 **차례대로** 매긴다.
 //      2026-11-10 신원중 중1 2025 2학기 기말이 이 꼴이었다(미주 0개 → 통째로 막혔다).
 const PUA = /^[\uE000-\uF8FF]+$/          // 수식 글꼴 글자 (글자로 옮길 수 없다)
+// 「1.」 꼴 중에서도 번호가 **그냥 글자로** 찍힌 작업본이 있다 — 번호와 점이 한 덩어리다.
+//   2026-11-14 지축중 중1 2025 2학기 기말이 이 꼴이었다. 수식 글꼴만 보던 탓에 13쪽 전부
+//   「문항 번호를 찾지 못했습니다」로 막혔다(실측: 1~23번이 8.6pt 로 멀정히 읽히고 있었다).
+const DOT_NUM = /^(\d{1,3})\.$/
+/**
+ * 「12.」 처럼 **번호와 점이 한 덩이로 그냥 글자인** 문항 번호인가. 맞으면 그 숫자.
+ *
+ * 가르는 것은 **크기**다 — 문항 번호는 본문보다 작다(미주와 같은 85% 규칙, `markLimit`).
+ * 실측 2026-11-14 지축중 중1 2025 2학기 기말: 본문 11.04pt · 번호 8.6pt · 한계 9.38pt.
+ * 마지막 정답표 쪽의 「22.」·「23.」 은 본문 크기(11.5pt)라 여기서 걸러진다.
+ *
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function dotNumberOf(str: string, size: number, limit: number): number | null {
+  const m = DOT_NUM.exec(str.trim())
+  if (!m || !(size < limit)) return null
+  return Number(m[1])
+}
 // 한글 수식 글꼴의 **숫자**는 사용자 영역 글자로 찍힌다 — 실측(2026-11-10 신원중)으로는
 //   E034~E03C = 1~9, E03D = 0 이다. 글꼴마다 다를 수 있으므로 **그 파일에서 맞는지 확인한 뒤에만** 쓴다:
 //   「1.」 꼴 문항 번호를 이 표로 읽어 1, 2, 3 … 으로 이어지면 맞는 표다(dotOk). 맞을 때만
@@ -339,19 +357,32 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         for (const t of cands) {
           const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 3)
           const next = same.filter((o) => o.x >= t.x1 - 1).sort((a, b) => a.x - b.x)[0]
-          const 번호 = PUA.test(t.str) && !!next && next.x < t.x1 + 8 && next.str.startsWith('.')
+          // ① 수식 글꼴 번호 + 따로 찍힌 「.」 (신원중 꼴)
+          const 번호수식 = PUA.test(t.str) && !!next && next.x < t.x1 + 8 && next.str.startsWith('.')
+          // ② 번호와 점이 **한 덩어리**로 그냥 글자인 꼴 (지축중 꼴). 본문 안에도 「12.」 같은
+          //    조각이 있을 수 있으니 **미주와 같은 85% 규칙**(limit)으로 가른다 —
+          //    이 파일의 번호는 8.6pt, 본문은 11.0pt 라 깨끗이 갈린다. 마지막 정답표 쪽의
+          //    「22.」·「23.」 은 본문 크기(11.5pt)여서 여기 안 걸린다.
+          const 글자번호 = dotNumberOf(t.str, t.size, limit)
+          const 번호글자 = 글자번호 !== null
+          const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
           if (!번호 && !논술) continue
           if (논술 && essayRun) continue          // 묶음에 딸린 물음 → 앞 문항에 이어 붙인다
           essayRun = 논술
           dotUsed = true
           // 번호 글자를 숫자표로 읽어 본다 — 차례와 다르면 그 표는 이 파일에 안 맞는 것이다
-          if (번호) { const read = eqText(t.str); if (read && read !== String(dotNo + 1)) dotOk = false }
+          if (번호수식) { const read = eqText(t.str); if (read && read !== String(dotNo + 1)) dotOk = false }
+          // 글자로 읽힌 번호는 **그 자리에서** 차례와 맞는지 본다 — 어긋나면 단을 잘못 읽은 것이다
+          if (번호글자 && 글자번호 !== dotNo + 1) dotOk = false
           const top = Math.min(t.top, ...same.map((o) => o.top)) - 2
           ms.push({
             no: ++dotNo, col: c, y0: t.top, y1: t.bottom, top,
             // 논술형 줄은 지우지 않는다 (「[논술형 1-1]」 이 문제의 일부다)
-            box: 번호 ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom] : undefined,
+            // 번호 글자만 하얀게 지운다. 수식 꼴은 「번호 + 따로 있는 점」, 글자 꼴은 한 덩어리다.
+            box: 번호수식 ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom]
+              : 번호글자 ? [t.x, t.top, t.x1, t.bottom]
+                : undefined,
           })
           if (논술) essayQ = dotNo
         }
