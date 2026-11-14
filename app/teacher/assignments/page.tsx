@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, formatConceptRangeLabel, fetchAllRows } from '@/lib/utils'
 import { splitTeachers } from '@/lib/teachers'
 import { unitNameBeside } from '@/lib/worksheetTitle'
+import { statusAfterScore } from '@/lib/worksheetStatus'
 
 interface Student {
   id: string
@@ -138,7 +139,7 @@ const GRADE_COUNT: Record<string, number> = { A: 3, B: 2, C: 1 }
 // 재도전이 자동 배정된다 (오답유사는 틀린 문제만 모은 거라 점수가 잘 나와서, 이걸로 통과시키면 실제로는
 // 그 레벨 전체를 통과한 적이 없는 채 다음 단원으로 넘어가게 됨). 꼭 넘겨야 하면 원장 승인을 받는다.
 // DB 트리거(worksheet_before_update)가 같은 규칙으로 막고 있으니 여기만 고쳐서 풀리지 않는다.
-const PASS_SCORE = 70
+const PASS_SCORE = 70   // ★ lib/worksheetStatus.ts 의 WS_PASS_SCORE · DB 트리거와 같이 둔다
 
 function isElemMain(w: { worksheet_type: string; grade_level: string }) {
   return w.worksheet_type === 'main' && (w.grade_level ?? '').startsWith('초')
@@ -599,8 +600,9 @@ export default function TeacherAssignmentsPage() {
     const { error } = await supabase.from('student_worksheets').update({ score, status: 'scored' }).eq('id', scoreWS.id)
     if (error) { setSavingScore(false); alert('점수 저장 실패: ' + error.message); return }
     // 초등 오답유사: 원래 학습지가 70점 미만이었다면 오답유사 점수와 상관없이 같은 레벨 재도전을 자동 배정
+    let parentScore: number | null | undefined = undefined
     if (scoreWS.worksheet_type === 'similar' && (scoreWS.grade_level ?? '').startsWith('초')) {
-      let parentScore: number | null = null
+      parentScore = null
       if (scoreWS.parent_worksheet_id) {
         const { data } = await supabase.from('student_worksheets').select('score').eq('id', scoreWS.parent_worksheet_id).maybeSingle()
         parentScore = data?.score ?? null
@@ -610,6 +612,13 @@ export default function TeacherAssignmentsPage() {
         setSavingScore(false); setShowScoreModal(false); setInputScore('')
         return
       }
+    }
+    // ★ 점수가 들어왔으면 **그 자리에서 닫는다** (원장님 2026-11-14 「굳이 완료까지 눌러야
+    //   없어지거든 … 완료처리 되게 하면 어떨까」). 사람이 골라야 하는 자리만 열어 둔다 —
+    //   초등 본 학습지 70점 미만(위 규칙·DB 트리거가 막는 줄)과 초등 오답유사(바로 위에서
+    //   이미 재도전으로 빠진다). 규칙 한 벌은 lib/worksheetStatus.ts 에 있다.
+    if (statusAfterScore({ worksheet_type: scoreWS.worksheet_type, grade_level: scoreWS.grade_level, score, parentScore }) === 'passed') {
+      await closeWorksheet({ ...scoreWS, score, status: 'scored' }, 'auto_complete')
     }
     setSavingScore(false); setShowScoreModal(false); setInputScore(''); fetchData()
   }

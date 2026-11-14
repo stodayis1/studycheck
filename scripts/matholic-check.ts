@@ -24,6 +24,7 @@ import { applyPlans } from '../lib/matholicApply.ts'
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
+const { statusAfterScore } = await import('../lib/worksheetStatus.ts')
 const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers, levelForInsert, DEFAULT_LEVEL, isDiagnostic, parseDiagnosticTitle } =
   await import(pathToFileURL(target).href)
 
@@ -707,6 +708,32 @@ T('TOMA 가 월간평가보다 먼저다 (매쓰홀릭이 TOMA 에도 월간평�
 
 T('월간평가도 TOMA 도 아니면 코어테스트가 아니다', () =>
   coreTestRound({ title: '초6-2 3단원 소수의 나눗셈', kind: '학습지' }) === null)
+
+// ★ 점수가 들어오면 그 자리에서 닫는다 — 사람이 골라야 하는 자리만 남긴다
+//   (원장님 2026-11-14 「굳이 완료까지 눌러야 없어지거든 … 완료처리 되게 하면 어떨까」).
+T('점수가 들어오면 닫는다 (레벨학습지·쌍둥이·중등)', () =>
+  statusAfterScore({ worksheet_type: 'main', grade_level: '초6', score: 70 }) === 'passed'
+  && statusAfterScore({ worksheet_type: 'main', grade_level: '초4', score: 100 }) === 'passed'
+  && statusAfterScore({ worksheet_type: 'twin', grade_level: '초5', score: 30 }) === 'passed'
+  && statusAfterScore({ worksheet_type: 'main', grade_level: '중2', score: 40 }) === 'passed')
+
+// ★ DB 트리거(docs/sql/초등학습지_70점_차단.sql)가 막는 **바로 그 줄**이다.
+//   여기서 닫으려 들면 update 가 에러로 떨어져 긁어 넣기가 통째로 멈춘다.
+T('초등 본 학습지 70점 미만은 안 닫는다 (DB 트리거와 같은 줄)', () =>
+  statusAfterScore({ worksheet_type: 'main', grade_level: '초6', score: 69 }) === 'scored'
+  && statusAfterScore({ worksheet_type: 'main', grade_level: '초1', score: 0 }) === 'scored')
+
+// ★ 오답유사는 틀린 것만 모아 점수가 잘 나온다 — 원래가 70점 미만이면 재도전이 따라와야 한다.
+//   원래 점수를 **모르면 닫지 않는다** (모르는 채로 닫는 쪽이 위험하다).
+T('초등 오답유사는 원래 점수를 알고 70점 이상일 때만 닫는다', () =>
+  statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95, parentScore: 60 }) === 'scored'
+  && statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95 }) === 'scored'
+  && statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95, parentScore: 80 }) === 'passed'
+  // 중등 오답유사는 규칙 대상이 아니다
+  && statusAfterScore({ worksheet_type: 'similar', grade_level: '중3', score: 50 }) === 'passed')
+
+T('점수가 없으면 안 닫는다', () =>
+  statusAfterScore({ worksheet_type: 'main', grade_level: '초6', score: null }) === 'scored')
 
 // ★ 매쓰홀릭의 「연습N회」가 우리 「예비 N회」다 (원장님 2026-11-13).
 //   제목에 「제6회」가 들어 있어도 「연습」 뒤의 숫자만 봐야 한다.
