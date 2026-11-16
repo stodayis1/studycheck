@@ -85,6 +85,7 @@ app/
   teacher/              선생님 화면 — layout.tsx가 사이드바를 붙인다
     dashboard students learning-notes assignments exams curriculum
     reports work-status exam-prep announcements settings
+    high-curriculum/    고등 커리큘럼 (고1·고2 반별 교재 흐름·내신 대비·단원별 차시) — 표: curriculum_plan_docs, 직원만
     exam-analysis/      시험지 분석 (학교별 수합·정답·총평·이너프원 매칭) + 기출문제 → 문제은행 반영
     worksheets/         학습지 출제 첫 화면 (교재연계/문제은행/목적별)  ※원장 전용
       books/            시중교재 고르기
