@@ -19,6 +19,7 @@ import { computeTextbookLevels } from '@/lib/progressLevel'
 import { splitTeachers, teachersOf, teacherLabels } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT, diagnosticLabel } from '@/lib/briefing'
+import { pickExamPrep, EXAM_PREP_TITLE } from '@/lib/examPrepResult'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
 import { canAssignVideos } from '@/lib/videoAssign'
 import { youtubeId, lessonLabel, needsPhoto, photoUrlsOf, photoLabelOf, photoBrief, type LessonVideo } from '@/lib/lessonVideos'
@@ -1297,7 +1298,7 @@ export default function TeacherLearningNotesPage() {
     })
     // 코어테스트·진단평가 — 브리핑 미리보기의 「▶ 학습 결과」 칸에 들어간다.
     supabase.from('exams')
-      .select('student_id, exam_type, exam_date, title, unit_name, level, score, memo, created_at')
+      .select('student_id, exam_type, exam_date, title, unit_name, level, score, total_score, memo, created_at')
       .eq('student_id', student.id).in('exam_type', ['코어테스트', '진단평가'])
       .not('score', 'is', null)
       .order('created_at', { ascending: true })
@@ -2001,8 +2002,17 @@ ${e?.message ?? '연결 실패'}
           .filter((e) => e.exam_type === '코어테스트' && e.exam_date === day)
           .map((e) => ({ 회차: e.title ?? null, 점수: Number(e.score) })),
         diagnostics: noteExams
-          .filter((e) => e.exam_type === '진단평가' && e.exam_date === day)
+          .filter((e) => e.exam_type === '진단평가' && e.exam_date === day
+            && !EXAM_PREP_TITLE.test(e.title ?? ''))
           .map((e) => ({ 이름: diagnosticLabel(e.memo), 단원: e.unit_name ?? null, 단계: e.level == null ? null : Number(e.level), 점수: Number(e.score) })),
+        // 기출(기출유사) — 그 시험 뒤 **첫 수업**에 한 번 실린다. 발송과 **같은 함수**로 고른다
+        //   (원장님 2026-11-16). 그래서 미리보기에 보이는 줄이 그대로 나간다.
+        examPrep: pickExamPrep({
+          date: day,
+          exams: noteExams.filter((e) => e.exam_type === '진단평가') as any,
+          sessionDates: sessions.filter((s) => s.student_id === noteStudent.id)
+            .map((s) => String(s.session_date).slice(0, 10)),
+        }),
         noNoteTemplate: !!briefMode?.noNoteTemplate,
         noNoteTemplateV3: !!briefMode?.noNoteTemplateV3,
         useV2: !!briefMode?.useV2,
