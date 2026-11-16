@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, fetchAllRows } from '@/lib/utils'
 import { apiFetch } from '@/lib/apiFetch'
 import { computeTextbookLevels } from '@/lib/progressLevel'
+import { isAutostepPilot, isAutostepOpen, AUTOSTEP_TEXTBOOK_NAMES, SSENB_TEXTBOOK_NAME } from '@/lib/autostep'
 
 // concepts.grade에 실제로 쓰이는 값 순서 (초/중은 학년 그대로, 고등은 2022개정 과목명으로 저장됨 - "고1/고2/고3"이 아님)
 const GRADE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '중3모의고사', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
@@ -89,22 +90,10 @@ const GRADE_GROUPS = ['전체', '초등', '중등', '고등']
 const HIGH_SUBJECTS = ['공통수학1', '공통수학2', '미적분1', '확률과통계', '대수', '기하']
 const TB_TYPES = ['개념서', '유형서', '심화서', '연산서']
 
-// 오토스텝 파일럿: 윤수지(중2, 윤지혜 담당) 학생 한 명에게만 우선 적용해보는 기능.
-// "개념유형 라이트" PDF 구조 분석(개념박스+STEP1+STEP2+STEP3)으로 구한 학년/학기별 총 항목수.
+// 오토스텝: "개념유형 라이트" PDF 구조 분석(개념박스+STEP1+STEP2+STEP3)으로 구한 학년/학기별 총 항목수.
 // 아직 다 분석 못한 학기는 표에서 빼뒀고, 그런 학기를 고르면 오토스텝 UI 자체가 안 뜬다.
-// 오토스텝 파일럿 학생 목록 - 한 명씩 늘려가며 검증 중. 새 학생을 추가할 땐 여기 한 줄만 더하면 됨.
-const AUTOSTEP_PILOT_STUDENT_IDS = new Set([
-  '3e50baff-4003-49be-b915-98e297bda726', // 윤수지(중2)
-  '4fec8d11-ccb5-4300-9e2e-7ca5dedc0ff7', // 유정환(초6, 개념유형 선행)
-  '07a66269-59ee-4675-96f9-fc79c8f2dfbc', // 안준혁(초6)
-  'fe87f1a6-9142-4e64-8cfa-2a9273e516cc', // 오현승(초6)
-  '06b4178f-0f71-48e6-bbfe-07f911acdf72', // 임지원(초6)
-])
-function isAutostepPilot(studentId: string | null | undefined) {
-  return !!studentId && AUTOSTEP_PILOT_STUDENT_IDS.has(studentId)
-}
-const AUTOSTEP_TEXTBOOK_NAMES = ['개념유형 라이트', '개념+유형라이트']
-const SSENB_TEXTBOOK_NAME = '쎈B' // 쎈B 오토스텝 파일럿 대상 교재명
+// 누구에게 켜 두는지(전원 공개 교재 · 파일럿 학생)는 lib/autostep.ts 한 곳에 있다 —
+// 이 화면과 학습일지 화면이 **같은 판단**을 써야 한다(한쪽만 열리면 알림이 조용히 안 생긴다).
 const AUTOSTEP_TOTAL_ITEMS: Record<string, Record<number, number>> = {
   '중1': { 1: 90, 2: 110 },
   '중2': { 1: 98, 2: 111 },
@@ -415,9 +404,11 @@ export default function TeacherCurriculumPage() {
       const savedGrade = mock ? mock.grade : tbGrade
       const savedSemester = mock ? mock.semester : tbSemester
 
-      // 오토스텝 파일럿: 지금은 윤수지 학생 + 개념유형 라이트 교재일 때만 저장 (다른 학생/교재는 항상 비활성)
-      const autostepOn = isAutostepPilot(sid) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
-      // 쎈B 오토스텝 파일럿: 윤수지 학생 + 쎈B 교재 + 스텝(1~4) 선택 시에만 저장
+      // 오토스텝: 전원 공개 교재(lib/autostep.ts 의 AUTOSTEP_OPEN_SEMESTERS — 지금은 개념유형 중1-2)이거나
+      // 파일럿 학생일 때 저장한다. 그 밖의 학생/교재는 항상 비활성.
+      const autostepOn = (isAutostepOpen(tbName, savedGrade, savedSemester) || isAutostepPilot(sid))
+        && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && tbAutostepLevel != null
+      // 쎈B 오토스텝 파일럿: 파일럿 학생 + 쎈B 교재 + 스텝(1~4) 선택 시에만 저장
       const ssenbOn = isAutostepPilot(sid) && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep != null
 
       await supabase.from('student_textbooks').insert({
@@ -1706,8 +1697,9 @@ export default function TeacherCurriculumPage() {
               </div>
             </div>
 
-            {/* 오토스텝 파일럿 - 지금은 윤수지 학생 + 개념유형 라이트 교재 배정 시에만 노출 */}
-            {isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) && (
+            {/* 오토스텝 - 전원 공개 교재(개념유형 중1-2)이거나 파일럿 학생일 때 노출.
+                여러 명 한꺼번에 배정(tbMultiMode)일 땐 tbStudent 가 없으므로 전원 공개 교재만 뜬다. */}
+            {(isAutostepOpen(tbName, tbGrade, tbSemester) || (isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName))) && (
               AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] ? (
                 <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
                   <p className="text-xs font-bold text-indigo-800"><i className="ti ti-bolt align-[-0.125em]" /> 오토스텝 · 하루 진도량(스텝)을 선택하세요</p>
@@ -1742,7 +1734,7 @@ export default function TeacherCurriculumPage() {
               )
             )}
 
-            {/* 쎈B 오토스텝 파일럿 - 지금은 윤수지 학생 + 쎈B 교재 배정 시에만 노출 */}
+            {/* 쎈B 오토스텝 파일럿 - 파일럿 학생 + 쎈B 교재 배정 시에만 노출 */}
             {isAutostepPilot(tbStudent?.id) && tbName === SSENB_TEXTBOOK_NAME && (
               <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 space-y-3">
                 <p className="text-xs font-bold text-indigo-800"><i className="ti ti-bolt align-[-0.125em]" /> 쎈B 오토스텝 · 소단원 완료 시 자동 배부할 스텝을 선택하세요</p>
@@ -1773,7 +1765,7 @@ export default function TeacherCurriculumPage() {
 
             <button onClick={handleTBAssign}
               disabled={(tbMultiMode ? tbStudentIds.length === 0 : !tbStudent) || !tbName || tbAssigning ||
-                (isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName) &&
+                ((isAutostepOpen(tbName, tbGrade, tbSemester) || (isAutostepPilot(tbStudent?.id) && AUTOSTEP_TEXTBOOK_NAMES.includes(tbName))) &&
                   !!AUTOSTEP_TOTAL_ITEMS[tbGrade]?.[tbSemester] && tbAutostepLevel == null) ||
                 (isAutostepPilot(tbStudent?.id) && tbName === SSENB_TEXTBOOK_NAME && tbSsenbStep == null)}
               className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
