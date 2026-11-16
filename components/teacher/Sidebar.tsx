@@ -26,6 +26,8 @@ const ITEM = {
   myRecords:     { href: '/teacher/my-records',     label: '내 기록',      icon: 'ti-history' },
   bulk:          { href: '/teacher/bulk-progress',  label: '진도일괄입력', icon: 'ti-list-check' },
   visualAids:    { href: '/teacher/visual-aids',    label: '수업 시각화',  icon: 'ti-cube' },
+  // 고1·고2 반별 교재 흐름·내신 대비·단원별 차시 (원장님 2026-11-16). 고등 선생님이 같이 고친다.
+  highCurriculum: { href: '/teacher/high-curriculum', label: '고등 커리큘럼', icon: 'ti-route' },
   students:      { href: '/teacher/students',       label: '학생관리',     icon: 'ti-users' },
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
@@ -75,7 +77,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
-      ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids] },
+      ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids, ITEM.highCurriculum] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.career, ITEM.schools] },
     // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
     // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
