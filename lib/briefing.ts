@@ -460,6 +460,16 @@ export function learningResult(a: {
    *   진단평가는 그중 유일하게 **아무 데도 안 나가고 있었다.**
    */
   진단평가?: { 이름?: string | null; 단원?: string | null; 단계?: number | null; 점수: number }[]
+  /**
+   * 그 시험 뒤 **첫 수업**에 실어 보내는 기출(기출유사) 결과 — lib/examPrepResult.ts 가 고른다.
+   *
+   * 왜 (원장님 2026-11-16)
+   *   「11월 14일은 수업이 없으니까 바로 다음 제일 가까운 수업 학습브리핑에 넣어줘야지.
+   *     [토요내신수업] 00중 기출유사 19/24 (83점) 이런식으로 써줘 학습결과칸에」
+   *   토요 내신대비는 시간표에 없는 날이라 그날 수업일지가 없다 — 시험일로는 보낼 자리가 없다.
+   *   예전에는 이 결과를 일지 memo 에 적어 **알림장 칸**으로 보냈다(「24문항 중 3개 틀렸습니다.」).
+   */
+  시험대비?: { 제목: string; 맞은: number; 총: number; 토요?: boolean }[]
   worksheets?: BriefingWorksheet[]
 }, budget: number = CAP.학습결과): string {
   if (a.결석) return '· 결석으로 수업에 참여하지 못했습니다'
@@ -474,6 +484,15 @@ export function learningResult(a: {
   for (const c of a.코어테스트 ?? []) {
     const 회차 = (c.회차 ?? '').trim()
     head.push(['· 코어테스트', 회차, `${c.점수}점`].filter(Boolean).join(' '))
+  }
+  // 기출(기출유사) — 「[토요내신수업] 2025 저동중 기출유사 19/23 (83점)」.
+  // ★ 100문항(=100점 만점)이면 환산할 것이 없으니 점수만 적는다.
+  for (const e of a.시험대비 ?? []) {
+    const 앞 = e.토요 ? '[토요내신수업] ' : ''
+    const 점수 = e.총 === 100
+      ? `${e.맞은}점`
+      : `${e.맞은}/${e.총} (${Math.round((e.맞은 / e.총) * 100)}점)`
+    head.push(`· ${앞}${e.제목} ${점수}`)
   }
   // 진단평가 — 단원·단계를 적어 어느 범위를 봤는지 알 수 있게.
   for (const d of a.진단평가 ?? []) {
@@ -685,6 +704,11 @@ export function buildBriefing(args: {
    */
   diagnostics?: { 이름?: string | null; 단원?: string | null; 단계?: number | null; 점수: number }[]
   /**
+   * 그 시험 뒤 **첫 수업**에 실을 기출 결과. 부르는 쪽이 lib/examPrepResult.ts 로 고른다.
+   * 「▶ 학습 결과」 칸으로 들어간다 (원장님 2026-11-16).
+   */
+  examPrep?: { 제목: string; 맞은: number; 총: number; 토요?: boolean }[]
+  /**
    * 그날 점수가 들어온 학습지. 부르는 쪽이 student_worksheets 에서
    * submitted_at 이 그날(한국시간)인 것을 넣는다. 없으면 아무것도 안 붙는다.
    */
@@ -801,6 +825,7 @@ export function buildBriefing(args: {
     // ★ 결석한 날은 시험을 볼 수 없다 — 위에서 '결석' 한 줄만 쓰므로 어차피 안 쓰이지만,
     //   혹시 기록이 섞여 들어와도 결석 줄을 덮지 않게 여기서도 비운다.
     코어테스트: 결석 ? [] : (args.coreTests ?? []),
+    시험대비: 결석 ? [] : (args.examPrep ?? []),
     진단평가: 결석 ? [] : (args.diagnostics ?? []),
     worksheets: args.worksheets ?? [],
   })

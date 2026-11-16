@@ -16,6 +16,7 @@ import { buildBriefing, worksheetTail, learningResult, hwLines, BODY_LIMIT, BODY
   BRIEFING_TEMPLATE, BRIEFING_TEMPLATE_NONOTE,
   BRIEFING_TEMPLATE_V2, BRIEFING_TEMPLATE_V2_NONOTE,
   BRIEFING_TEMPLATE_V4, BRIEFING_TEMPLATE_V4_NONOTE, diagnosticLabel } from '../lib/briefing.ts'
+import { pickExamPrep, isSaturday } from '../lib/examPrepResult.ts'
 
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -316,6 +317,82 @@ ${없는날}`); process.exit(1)
 ${결석날}`); process.exit(1)
   }
   console.log('코어테스트·진단평가 자가확인 ✓ (학습 결과 칸에 · 차례대로 · 안 친 날엔 없음 · 결석엔 없음)')
+}
+
+// ★ 기출(기출유사) 결과가 **그 시험 뒤 첫 수업** 브리핑의 「▶ 학습 결과」 칸에 한 번 실리는가
+//   (원장님 2026-11-16 「11월 14일은 수업이 없으니까 바로 다음 제일 가까운 수업 학습브리핑에
+//    넣어줘야지 … [토요내신수업] 00중 기출유사 19/24 (83점) 이런식으로 써줘 학습결과칸에」).
+{
+  const 토 = '2026-11-14'   // 토요일
+  if (!isSaturday(토)) { console.error(`✗ ${토} 를 토요일로 못 봅니다.`); process.exit(1) }
+  if (isSaturday('2026-11-16')) { console.error('✗ 2026-11-16(월) 을 토요일로 봤습니다.'); process.exit(1) }
+
+  const T = (name: string, got: string, want: string) => {
+    if (got !== want) {
+      console.error(`✗ 시험대비 줄 — ${name}\n   나온 것: ${got}\n   나와야 : ${want}`)
+      process.exit(1)
+    }
+  }
+  T('문항 수가 100이 아니면 맞은/총 과 환산 점수를 같이',
+    learningResult({ 시험대비: [{ 제목: '2025 저동중 기출유사', 맞은: 19, 총: 23, 토요: true }] }),
+    '· [토요내신수업] 2025 저동중 기출유사 19/23 (83점)')
+  T('100점 만점이면 점수만 — 97/100 (97점) 처럼 두 번 쓰지 않는다',
+    learningResult({ 시험대비: [{ 제목: '2025 고양중 기출', 맞은: 97, 총: 100, 토요: true }] }),
+    '· [토요내신수업] 2025 고양중 기출 97점')
+  T('토요일이 아니면 앞말을 붙이지 않는다',
+    learningResult({ 시험대비: [{ 제목: '서정중 기출유사', 맞은: 20, 총: 23, 토요: false }] }),
+    '· 서정중 기출유사 20/23 (87점)')
+
+  // 차례 — 과제 → 코어테스트 → 시험대비 → 진단평가 → 데일리 → 학습지
+  const 섞 = learningResult({
+    성취도: 90,
+    코어테스트: [{ 회차: '예비 1회', 점수: 72 }],
+    시험대비: [{ 제목: '2025 저동중 기출유사', 맞은: 19, 총: 23, 토요: true }],
+    진단평가: [{ 이름: '주간평가', 단원: '기본도형', 단계: 1, 점수: 85 }],
+    데일리점수: 95,
+    worksheets: [{ unit_name: '4단원', current_level: '3.0', score: 88 } as any],
+  })
+  const i = (x: string) => 섞.indexOf(x)
+  if (!(i('· 과제 성취도') < i('· 코어테스트') && i('· 코어테스트') < i('· [토요내신수업]')
+    && i('· [토요내신수업]') < i('· 주간평가') && i('· 주간평가') < i('· 데일리테스트')
+    && i('· 데일리테스트') < i('· 학습지'))) {
+    console.error(`✗ 시험대비 줄의 차례가 어긋났습니다.\n${섞}`); process.exit(1)
+  }
+  // 결석한 날은 한 줄만 — 시험을 볼 수 없다.
+  if (learningResult({ 결석: true, 시험대비: [{ 제목: '기출유사', 맞은: 1, 총: 2 }] }).includes('기출')) {
+    console.error('✗ 결석한 날에 기출 줄이 붙었습니다.'); process.exit(1)
+  }
+
+  // ── 고르는 규칙 (pickExamPrep) ─────────────────────────────────────────
+  const 기출 = { title: '2025 저동중 기출유사', score: 19, total_score: 23, exam_date: 토 }
+  const P = (name: string, got: number, want: number) => {
+    if (got !== want) { console.error(`✗ 기출 고르기 — ${name}: ${got}건 (나와야 ${want}건)`); process.exit(1) }
+  }
+  P('시험 뒤 첫 수업이면 싣는다',
+    pickExamPrep({ date: '2026-11-16', exams: [기출], sessionDates: ['2026-11-13'] }).length, 1)
+  P('그 사이에 수업이 있었으면 그때 실렸으므로 빼낸다',
+    pickExamPrep({ date: '2026-11-18', exams: [기출], sessionDates: ['2026-11-13', '2026-11-16'] }).length, 0)
+  P('시험 당일에 수업이 있으면 그날 싣는다',
+    pickExamPrep({ date: 토, exams: [기출], sessionDates: [토] }).length, 1)
+  P('아직 안 친 시험(앞날)은 싣지 않는다',
+    pickExamPrep({ date: '2026-11-13', exams: [기출], sessionDates: [] }).length, 0)
+  P('21일이 지나면 이제 와서 알리지 않는다',
+    pickExamPrep({ date: '2026-12-10', exams: [기출], sessionDates: [] }).length, 0)
+  P('제목에 「기출」이 없으면 시험대비가 아니다',
+    pickExamPrep({ date: '2026-11-16', exams: [{ ...기출, title: '11월 주간평가(1)' }], sessionDates: [] }).length, 0)
+  P('총 문항이 비어 있으면 환산할 수 없으니 싣지 않는다',
+    pickExamPrep({ date: '2026-11-16', exams: [{ ...기출, total_score: null }], sessionDates: [] }).length, 0)
+
+  // V4 본문에 **실제로** 실리는가 — 함수만 맞고 본문에 안 실리면 뜻이 없다.
+  const 본문 = buildBriefing({
+    studentName: '시험', studentGrade: '중2', session: { session_date: '2026-11-16' },
+    note: { attendance: '정시' }, useV4: true,
+    examPrep: [{ 제목: '2025 저동중 기출유사', 맞은: 19, 총: 23, 토요: true }],
+  }).body
+  if (!본문.includes('· [토요내신수업] 2025 저동중 기출유사 19/23 (83점)')) {
+    console.error(`✗ V4 본문에 기출 줄이 없습니다.\n${본문}`); process.exit(1)
+  }
+  console.log('기출 결과 자가확인 ✓ (뒤 첫 수업 한 번 · 토요 앞말 · 100점은 점수만 · 차례 · 결석엔 없음)')
 }
 
 // ★ 시험지 이름에 「○○평가」가 있으면 그대로 쓴다 (원장님 2026-11-13).

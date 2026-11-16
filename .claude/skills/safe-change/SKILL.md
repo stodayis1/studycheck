@@ -184,6 +184,28 @@ npx tsc --noEmit > /tmp/after.txt 2>&1; diff <(sed 's/([0-9,]*)//' /tmp/before.t
 git worktree remove /tmp/sc-base
 ```
 
+### 검사 스크립트를 돌리는 법 (2026-11-16)
+
+`scripts/*-check.ts` 는 **반드시 이 꼴로** 돌린다.
+
+```bash
+node --import ./scripts/ts-resolve.mjs scripts/briefing-check.ts
+```
+
+- `node scripts/briefing-check.ts` → `ERR_MODULE_NOT_FOUND: … lib/worksheetTitle`.
+  `lib/*.ts` 끼리는 **확장자 없이** 서로를 부르는데(`from './worksheetTitle'`) node 의 ESM 은
+  확장자를 붙여 주지 않는다. `scripts/ts-resolve.mjs` 가 그걸 메워 준다.
+- `npx tsx scripts/briefing-check.ts` → `Top-level await is currently not supported with the "cjs" output format`.
+  `package.json` 에 `"type": "module"` 이 없어서 tsx 가 cjs 로 바꾼다. **tsx 는 쓰지 않는다.**
+- 임시 확인 스크립트도 `scripts/_tmp-*.ts` 에 두고 같은 꼴로 돌린 뒤 **지운다** —
+  `lib/` 의 실제 모듈을 그대로 불러야 한다(베껴 쓴 사본으로 재면 안 된다).
+
+### `.env.local` 을 읽는 스크립트는 **Write 도구로** 만든다 (2026-11-16)
+
+검사 스크립트는 `.env.local` 에서 키를 직접 읽는다(`fs.readFileSync('.env.local')`).
+그 글자가 **Bash 명령문 안에** 들어가면(heredoc 포함) 하네스 훅이
+「비밀 파일 내용을 화면에」로 **막는다**. 파일을 Write 로 만들고, Bash 로는 **돌리기만** 한다.
+
 ## 8. 배포 전후 확인
 
 - [ ] 로컬에서 화면을 보려고 **git worktree 에 node_modules 를 연결(junction)** 했으면 Turbopack 이
@@ -812,3 +834,5 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-07 **칸 하나에 여러 줄을 담을 때는 빈 자리도 지킨다.** 학습일지의 「채점한 학습지」를 학습지 수만큼 늘리며 단원·레벨을 ` · ` 로 이어 담았는데, 레벨이 없는 줄을 빼면 되읽을 때 **그 레벨이 앞 줄(다른 학습지)에 붙는다.** 이어 붙인 글자를 **다시 읽어** 같은 줄이 나오는지 시험하고, **빈 값이 섞인 경우**를 꼭 넣는다 — 둘 다 채워진 자료로만 시험하면 이 구멍을 못 잡는다(실제로 망가뜨려 시험에서 드러났다)
 - 2026-11-09 **짐작해서 미리 채우는 칸은 「빈 칸」보다 「그럴듯하게 틀린 값」이 위험하다.** 사람은 빨간 칸만 본다 — 짐작 규칙은 **실제 파일명 꼴로 시험**을 만들어 못박고(일부러 망가뜨린 사본에서 실패하는지까지), 아는 목록에 없는 값은 **노란 칸으로 표시**한다(막지는 않는다 — 새 학교일 수도 있다). 학교 이름은 `normalizeSchool()` 을 거쳐도 「년고양중」처럼 **꼴이 맞는 틀린 이름**은 그대로 통과한다
 - 2026-11-09 **고칠 길을 같이 낸다.** 잘못 들어간 값을 고칠 화면이 없으면 결국 내가 SQL 로 고치게 된다(원장님 「내가 수정할 수 있게도 해야지. 강사들은 말고, 관리자는 수정가능」). 만들 때 ⓐ 화면에서 원장만(`data.me.isAdmin`), ⓑ API 도 `if (!isAdmin) return adminOnly()` 를 **case 첫 줄**에, ⓒ **딸린 것을 같이 고친다** — 시험지 열쇠(학교·학년·연도·학기·구분)를 바꾸면 파일 이름·문항 source_key·문제은행 출처·인쇄 학습지 제목이 전부 따라가야 한다(한쪽만 고치면 목록과 내려받는 파일이 달라진다). 열쇠를 바꾸는 칸은 **평소엔 글자로만** 두고 「바로잡기」를 눌러야 열리게 하고, 저장 전에 「무엇 → 무엇」을 확인시킨다. 강사 계정이 없어 눌러 볼 수 없는 가드는 **route.ts 를 그대로 불러** 토큰 없이 눌러 보고(401) 가드 줄을 글자로 확인한다(`scripts/exam-move-guard-check.ts`)
+- 2026-11-16 **검사 스크립트는 `node --import ./scripts/ts-resolve.mjs` 로 돌린다** — 맨 node 는 확장자 없는 lib 끼리의 import 를 못 찾고, `npx tsx` 는 top-level await 에서 막힌다. `.env.local` 을 읽는 스크립트는 Bash heredoc 이 아니라 **Write 도구로** 만든다(훅이 막는다)
+- 2026-11-16 **「다음 수업에 한 번만」은 기록이 아니라 날짜로 정한다** — 보냄 기록 표를 두지 않고 「시험일과 브리핑 날짜 **사이에 수업이 없다**」로 판정하면, 시험 뒤 첫 수업 하루만 조건이 참이라 저절로 한 번만 간다(`lib/examPrepResult.ts`). 발송 직전에 **DB 를 고쳐** 붙이는 방식은 예행(dryRun)에서 못 돌려 **미리보기에 그 줄이 안 보인다** — 읽기만 하는 함수로 바꾸면 미리보기와 나가는 글이 같아진다

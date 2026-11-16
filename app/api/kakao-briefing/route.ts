@@ -27,7 +27,7 @@ import { aligoConfig, sendAlimtalk, AligoError, type AligoConfig } from '@/lib/a
 import { randomBytes } from 'crypto'
 import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes, V4_SCORE_BUTTON } from '@/lib/briefingTemplate'
-import { attachPastExamMemos } from '@/lib/pastExamMemo'
+import { loadExamPrepResults, EXAM_PREP_TITLE } from '@/lib/examPrepResult'
 import { RESEND_KEY, pickResend, allDates, dropDates } from '@/lib/briefingResend'
 import { buildBriefing, diagnosticLabel } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
@@ -156,17 +156,23 @@ async function run(opts: {
   const studentIds = [...new Set(sessions.map((s: any) => s.student_id))]
   const sessionIds = sessions.map((s: any) => s.id)
 
-  // ★ 기출유사 결과를 **읽기 전에** 메모에 붙인다 (원장님 2026-11-02
-  //   「학습일지 나가기 전에 붙이면 됨」). 따로 돌리면 시각을 맞춰야 하고 그 사이에
-  //   선생님이 일지를 채우면 놓친다. 여기서 붙이면 **그 브리핑에 그대로 실린다.**
-  //   예행(dryRun)에서는 쓰지 않는다 — 미리보기가 DB 를 바꾸면 안 된다.
-  if (!dryRun) {
-    try {
-      const r = await attachPastExamMemos(db, date, studentIds)
-      if (r.attached) out.pastExam = { 붙임: r.attached, 보기: r.lines.slice(0, 5) }
-    } catch (e: any) {
-      out.errors.push({ name: '기출유사 메모', error: e?.message ?? '붙이지 못했어요' })
+  // ★ 기출(기출유사) 결과 — **그 시험 뒤 첫 수업** 브리핑의 「▶ 학습 결과」 칸에 싣는다
+  //   (원장님 2026-11-16 「바로 다음 제일 가까운 수업 학습브리핑에 넣어줘야지 … 학습결과칸에」).
+  //   예전에는 그날 일지의 memo 를 고쳐 **알림장 칸**으로 보냈다. 읽기만 하므로
+  //   **예행(dryRun)에서도 돌린다** — 그래야 미리보기와 나가는 글이 같다.
+  let examPrepBy = new Map<string, { 제목: string; 맞은: number; 총: number; 토요: boolean }[]>()
+  try {
+    examPrepBy = await loadExamPrepResults(db, date, studentIds)
+    const 줄수 = [...examPrepBy.values()].reduce((n, v) => n + v.length, 0)
+    if (줄수) {
+      out.pastExam = {
+        붙임: 줄수,
+        보기: [...examPrepBy.values()].flat().slice(0, 5)
+          .map((e) => `${e.토요 ? '[토요내신수업] ' : ''}${e.제목} ${e.맞은}/${e.총}`),
+      }
     }
+  } catch (e: any) {
+    out.errors.push({ name: '기출 결과', error: e?.message ?? '읽지 못했어요' })
   }
 
   const [{ data: students }, { data: notes }, { data: fbs }, { data: already }] = await Promise.all([
@@ -225,6 +231,9 @@ async function run(opts: {
         list.push({ 회차: c.title ?? null, 점수: Number(c.score) })
         coreBy.set(c.student_id, list)
       } else {
+        // ★ 기출(기출유사)은 **시험대비 줄**이 들고 간다 — 여기서 또 담으면
+        //   「· 진단평가 19점」 처럼 맞은 개수가 점수로 읽히는 줄이 하나 더 나간다.
+        if (EXAM_PREP_TITLE.test(c.title ?? '')) continue
         const list = diagBy.get(c.student_id) ?? []
         list.push({ 이름: diagnosticLabel(c.memo), 단원: c.unit_name ?? null, 단계: c.level == null ? null : Number(c.level), 점수: Number(c.score) })
         diagBy.set(c.student_id, list)
@@ -328,6 +337,7 @@ async function run(opts: {
       videos: videosOf(ses),
       worksheets: wsBy.get(student.id) ?? [],
       coreTests: coreBy.get(student.id) ?? [],
+      examPrep: examPrepBy.get(student.id) ?? [],
       diagnostics: diagBy.get(student.id) ?? [],
       makeup: makeupFor(student),
       // 「알림장 없는 판」은 심사를 통과해 코드가 들어와 있을 때만 쓴다.
