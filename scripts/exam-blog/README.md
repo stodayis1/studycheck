@@ -37,6 +37,7 @@ node scripts/exam-blog/queue.mjs list            # 기다리는 요청 (kind · 
    중1 → 기말 중1 상·중·하, 중2 → 기말 중2 상·중·하, 중3 신원중 → 기말 신원중3 상·중.
    묶음 그림은 `C:\Users\USER\문제은행\이너프원\2026-2학기기말\sheets\<교재>\NNN.png`, 낱장은 같은 폴더의 `crops\`.
    「기말 중1 상」의 마지막 두 세트는 신원중1 비상 교과서·익힘책 실력/심화, 「기말 중2 상·하」는 비상, 「기말 중2 중」은 천재(김동재) 교과서 대단원 마무리다.
+   중3 신원중 기말은 **「기말 중3 토요보강」**(10/24·10/31·11/7 토요보강 판서자료 48문항, 이너프원 아님)도 같이 본다 — `scripts/enough-one/crop_saturday.py` 로 잘라 넣었다.
    추가 교재가 오면 `scripts/enough-one/index.py` 의 BOOKS_FINAL 에 더하고 같은 순서(index → crop → sheets → upload)로 넣는다.
    결과는 `matches_A.json …` 로 받는다: `{"matches":[{"no","book","set","pno","level","memo"}]}`.
 4. **직접 확인한다.** 문항마다 상위 2개 매칭을 그림으로 나란히 놓고(기출 | 이너프원 crops) 정도를 고친다.
