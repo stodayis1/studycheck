@@ -29,7 +29,12 @@ const BOOK = {
   '타학교중3 1권': '이너프원 타학교 중3 1권', '타학교중3 2권': '이너프원 타학교 중3 2권',
   '고1 공수2 S반': '이너프원 고1 공수2 S반', '고1 미래엔 평가': '교과서 평가문제 미래엔 공통수학2', '고1 천재전 평가': '교과서 평가문제 천재(전) 공통수학2',
   '고1 미래엔 교과서': '교과서 문제 미래엔 공통수학2', '고1 천재전 교과서': '교과서 문제 천재(전) 공통수학2',
+  // 2학기 기말고사용 (판 2026-2학기기말)
+  '기말 중1 상': '이너프원 기말 중1 상', '기말 중1 중': '이너프원 기말 중1 중', '기말 중1 하': '이너프원 기말 중1 하',
+  '기말 중2 상': '이너프원 기말 중2 상', '기말 중2 중': '이너프원 기말 중2 중', '기말 중2 하': '이너프원 기말 중2 하',
+  '기말 신원중3 상': '이너프원 기말 신원중3 상', '기말 신원중3 중': '이너프원 기말 신원중3 중',
 }
+const editionOf = (book) => (book.startsWith('기말 ') ? '2026-2학기기말' : '2026-2학기')
 const LEVELS = ['쌍둥이', '매우 유사', '유형 유사', '참고']
 // 번호는 「09」처럼 적혀 와도 「9」로 맞춘다
 const matches = files.flatMap((f) => JSON.parse(fs.readFileSync(f, 'utf8')).matches).map((m) => ({ ...m, no: /^\d+$/.test(String(m.no)) ? String(Number(m.no)) : String(m.no) }))
@@ -46,7 +51,7 @@ const seen = new Set((had ?? []).map((h) => `${h.question_no}|${h.enough_problem
 const rows = []
 for (const m of matches) {
   const { data: p } = await supabase.from('enough_problems').select('id, unit')
-    .eq('edition', '2026-2학기').eq('book', BOOK[m.book]).eq('set_no', Number(m.set)).eq('problem_no', Number(m.pno)).maybeSingle()
+    .eq('edition', editionOf(m.book)).eq('book', BOOK[m.book]).eq('set_no', Number(m.set)).eq('problem_no', Number(m.pno)).maybeSingle()
   if (!p) { console.error(`이너프원 문항을 찾지 못했습니다: ${m.book} 세트 ${m.set} · ${m.pno}번`); process.exit(1) }
   if (!qid.has(String(m.no))) { console.error(`기출 ${m.no}번 문항이 없습니다.`); process.exit(1) }
   rows.push({ paper_id: paperId, question_id: qid.get(String(m.no)), question_no: String(m.no), enough_book: BOOK[m.book],

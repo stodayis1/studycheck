@@ -21,11 +21,19 @@ for (const f of ['.env.local', '.env']) {
   }
 }
 
-const ROOT = 'C:\\Users\\USER\\문제은행\\이너프원\\2026-2학기\\crops'
-const EDITION = '2026-2학기'
+// 판: EO_EDITION=2026-2학기기말 이면 기말고사용 8권 (index.py · crop.py · sheets.py 와 같은 값)
+const EDITION = process.env.EO_EDITION || '2026-2학기'
+const FINAL = EDITION === '2026-2학기기말'
+const ROOT = `C:\\Users\\USER\\문제은행\\이너프원\\${EDITION}\\crops`
+const STORE = FINAL ? 'enough-one/2026-2f' : 'enough-one/2026-2'      // 보관함 폴더
 const BUCKET = 'exam-analysis'
 // 자른 폴더 이름 → [보관함 폴더(영문), 화면에 보일 교재명]
-const BOOKS = {
+const BOOKS_FINAL = {
+  '기말 중1 상': ['m1-sang', '이너프원 기말 중1 상'], '기말 중1 중': ['m1-jung', '이너프원 기말 중1 중'], '기말 중1 하': ['m1-ha', '이너프원 기말 중1 하'],
+  '기말 중2 상': ['m2-sang', '이너프원 기말 중2 상'], '기말 중2 중': ['m2-jung', '이너프원 기말 중2 중'], '기말 중2 하': ['m2-ha', '이너프원 기말 중2 하'],
+  '기말 신원중3 상': ['sw3-sang', '이너프원 기말 신원중3 상'], '기말 신원중3 중': ['sw3-jung', '이너프원 기말 신원중3 중'],
+}
+const BOOKS_MID = {
   '중2 상': ['m2-sang', '이너프원 중2 상'],
   '중2 중': ['m2-jung', '이너프원 중2 중'],
   '중2 하': ['m2-ha', '이너프원 중2 하'],
@@ -43,13 +51,14 @@ const BOOKS = {
   '고1 미래엔 교과서': ['h1-mirae-tb', '교과서 문제 미래엔 공통수학2'],
   '고1 천재전 교과서': ['h1-chunjae-tb', '교과서 문제 천재(전) 공통수학2'],
 }
+const BOOKS = FINAL ? BOOKS_FINAL : BOOKS_MID
 const unitOf = (title) => String(title ?? '').replace(/\s*-\s*(\d회차)/, ' $1').replace(/\s+/g, ' ').trim()
-const pathOf = (x) => `enough-one/2026-2/${BOOKS[x.book][0]}/${String(x.set).padStart(2, '0')}_${String(x.no).padStart(2, '0')}.png`
+const pathOf = (x) => `${STORE}/${BOOKS[x.book][0]}/${String(x.set).padStart(2, '0')}_${String(x.no).padStart(2, '0')}.png`
 
 const mode = process.argv[2]
 // manifest.json (중등 9권) + manifest_<책>.json (나중에 더한 책). 이 파일의 BOOKS 에 적힌 책만 올린다
 const manifest = [
-  ...JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')),
+  ...(fs.existsSync(path.join(ROOT, 'manifest.json')) ? JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')) : []),
   ...fs.readdirSync(ROOT).filter((f) => /^manifest_.+\.json$/.test(f)).flatMap((f) => JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'))),
 ].filter((x) => BOOKS[x.book])
   .filter((x, i, all) => all.findIndex((y) => y.book === x.book && y.set === x.set && y.no === x.no) === i)      // 두 파일에 같이 든 책(중2 하)은 한 번만
@@ -115,7 +124,7 @@ if (mode === 'sheets') {
   for (const [folder, [code]] of Object.entries(BOOKS)) {
     const dir = path.join(SHEETS, folder)
     if (!fs.existsSync(dir)) { console.error('묶음 그림 폴더가 없습니다:', dir); continue }
-    for (const f of fs.readdirSync(dir).filter((x) => /^\d{3}\.png$/.test(x))) jobs.push([path.join(dir, f), `enough-one/2026-2/sheets/${code}/${f}`])
+    for (const f of fs.readdirSync(dir).filter((x) => /^\d{3}\.png$/.test(x))) jobs.push([path.join(dir, f), `${STORE}/sheets/${code}/${f}`])
   }
   let up = 0, skip = 0, fail = 0
   async function worker() {

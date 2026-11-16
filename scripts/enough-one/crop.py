@@ -10,7 +10,7 @@ import json, os, sys
 import pymupdf
 
 sys.stdout.reconfigure(encoding="utf-8")
-W = r"C:\Users\USER\문제은행\이너프원\2026-2학기"
+W = os.path.join(r"C:\Users\USER\문제은행\이너프원", os.environ.get("EO_EDITION", "2026-2학기"))   # 판: index.py 와 같은 EO_EDITION
 DPI = 200
 Z = DPI / 72
 COLS = [(18, 298), (303, 580)]      # 두 단의 가로 범위 (pt)
