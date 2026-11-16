@@ -309,7 +309,8 @@ export default function TeacherAssignmentsPage() {
   const [actionLogRequests, setActionLogRequests] = useState<OverrideRequest[]>([])
   const [actionLogsLoading, setActionLogsLoading] = useState(false)
 
-  // 오토스텝 파일럿: 소단원 완료 시 학습일지에서 자동 생성되는 유형편 숙제 알림 (지금은 윤수지 전용)
+  // 오토스텝: 학습일지에서 진도를 체크할 때 자동으로 생기는 유형편 숙제 알림.
+  // 누구에게 도는지는 lib/autostep.ts (전원 공개 교재 — 개념유형 중1-2 · 그 밖에 파일럿 학생).
   const [autostepAlerts, setAutostepAlerts] = useState<any[]>([])
   async function fetchAutostepAlerts() {
     const { data } = await supabase.from('autostep_homework_alerts').select('*')
