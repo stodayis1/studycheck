@@ -8,7 +8,7 @@ import json, os, sys
 from PIL import Image, ImageDraw, ImageFont
 
 sys.stdout.reconfigure(encoding="utf-8")
-W = r"C:\Users\USER\문제은행\이너프원\2026-2학기"
+W = os.path.join(r"C:\Users\USER\문제은행\이너프원", os.environ.get("EO_EDITION", "2026-2학기"))   # 판: index.py 와 같은 EO_EDITION
 CW, PAD, LAB = 400, 6, 30          # 칸 폭 · 안쪽 여백 · 표시 줄 높이
 font = ImageFont.truetype("malgunbd.ttf", 22)
 
