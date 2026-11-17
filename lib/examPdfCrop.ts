@@ -77,7 +77,24 @@ export function pointsOf(text: string): number | null {
   return Number.isFinite(n) && n > 0 && n <= 100 ? n : null
 }
 
-const ESSAY_HEAD = /^\[\s*(논술|서술)형/   // 「[논술형 1-1]」
+// 「[논술형 1-1]」 · 「[서술형 2]」 · 「[단답형1]」 · 「[서답형 3]」
+// ★ 「단답형·서답형」을 안 보면 그 문항이 통째로 빠진다 — 2026-11-17 일산동고는 서답형 3문항의
+//   머리가 「[단답형1]」 이고 번호(19·20·21)는 **들여 써서** 단 맨 왼쪽에 없다. 그 바람에
+//   18번 그림이 4,359px 로 늘어나 서답형 셋을 삼켰다(문항 18 · 정답 21).
+const ESSAY_HEAD = /^\[\s*(논술|서술|단답|서답)형/
+// 머리의 **큰 번호** — 「[논술형 1-1]」 은 1, 「[단답형2]」 는 2.
+// 큰 번호가 **같으면** 한 문항에 딸린 물음(1-1 · 1-2 · 1-3)이고, **다르면** 다른 문항이다.
+// 전에는 「머리가 두 번 나오면 무조건 앞 문항에 붙인다」였다 — 그래서 일산동고의
+// 「[단답형1]」·「[단답형2]」·「[단답형3]」 세 문항이 **하나로 뭉쳤다**(19문항, 머리말은 21).
+const ESSAY_NO = /^\[\s*(?:논술|서술|단답|서답)형\s*(\d+)/
+
+/** 그 조각이 논술·서술·단답·서답형 머리인가 (「[단답형1]」·「[논술형 1-1]」). 시험: scripts/exam-crop-mark-check.ts */
+export function isEssayHead(str: string): boolean { return ESSAY_HEAD.test(str.trim()) }
+/** 그 머리의 **큰 번호** (「[논술형 1-1]」 → 1). 번호가 없으면 null. */
+export function essayMainOf(str: string): number | null {
+  const m = ESSAY_NO.exec(str.trim())
+  return m ? Number(m[1]) : null
+}
 
 // 미주 번호는 **본문보다 작다**. 전에는 「8.5pt 보다 작으면」으로 봤는데, 한글에서 본문을 크게
 // (11.5pt) 잡아 만든 파일은 미주가 8.63pt 로 찍혀 **한 끗 차이로 안 걸렸다** — 2026-11-09
@@ -105,6 +122,75 @@ export function bigLimit(sizes: number[]): number {
   return s[Math.floor(s.length / 2)] * 1.15
 }
 
+/** 첫 훑기에서 모은 「단 맨 왼쪽의 `N.`·`N)` 조각」 하나 */
+export type NumCand = { page: number; col: number; base: number; no: number; size: number; fn: string }
+
+/**
+ * 문항 번호의 **크기·글꼴을 문서 한 번으로** 정한다. 못 정하면 null.
+ *
+ * 왜 쪽마다가 아니라 문서 한 번인가 (2026-11-17 능곡고)
+ *   능곡고는 번호가 1~23번 **모두 11.03pt · 같은 글꼴**로 일정한데, 쪽마다 본문 크기가
+ *   11.03 → 9.95 → 8.99 로 달라진다. 그래서 「본문보다 작거나 크다」는 **쪽마다 뒤집혀**
+ *   4쪽에서만 걸렸다(문항 23개 중 4개). 번호 쪽은 가만히 있는데 자가 흔들린 것이다.
+ *
+ * 고르는 법 — (크기, 글꼴) 묶음 가운데 번호가 **1부터 빠짐없이 이어지는** 것. 다섯 개 넘어야 한다.
+ * 같은 길이면 **먼저 나온 것**(= 앞쪽 쪽)을 쓴다. 해설 쪽 번호가 끼어들지 않게, 부르는 쪽에서
+ * 「정답 및 해설」 머리 **앞쪽 후보만** 넘긴다.
+ *
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function numberStyleOf(cands: NumCand[]): { size: number; fn: string } | null {
+  const byKey = new Map<string, NumCand[]>()
+  for (const c of cands) {
+    const key = `${c.size.toFixed(1)}|${c.fn}`
+    const list = byKey.get(key)
+    if (list) list.push(c)
+    else byKey.set(key, [c])
+  }
+  let best: { size: number; fn: string; n: number } | null = null
+  for (const list of byKey.values()) {
+    const nos = list.slice()
+      .sort((a, b) => a.page - b.page || a.col - b.col || a.base - b.base)
+      .map((c) => c.no)
+    if (nos.length < 5 || nos[0] !== 1) continue
+    if (!nos.every((n, i) => i === 0 || n === nos[i - 1] + 1)) continue
+    if (!best || nos.length > best.n) best = { size: list[0].size, fn: list[0].fn, n: nos.length }
+  }
+  return best ? { size: best.size, fn: best.fn } : null
+}
+
+/**
+ * 그 조각이 **문서에서 정한 번호 꼴**인가. 맞으면 그 숫자.
+ * 크기·글꼴이 둘 다 같아야 한다 — 크기만 보면 본문 속 「12.」 가 걸린다.
+ */
+export function styleNumberOf(str: string, size: number, fn: string,
+  style: { size: number; fn: string } | null): number | null {
+  if (!style) return null
+  const m = DOT_NUM.exec(str.trim())
+  if (!m) return null
+  if (Math.abs(size - style.size) > 0.15 || fn !== style.fn) return null
+  return Number(m[1])
+}
+
+/**
+ * 「정답 및 해설」 머리가 몇 쪽에 있나 (0부터). 없으면 null.
+ *
+ * 이 머리가 있으면 **그 쪽부터가 정답·해설**이고, 어림짐작(「번호 줄이 5개 넘으면 정답표」)은
+ * 쓰지 않는다. 어림짐작은 문항 번호가 **본문보다 작은** 파일에서 문제 쪽을 정답표로 오판한다 —
+ * 2026-11-17 고양시 고1 25개교 중 능곡고·백마고가 **1쪽부터** 정답으로 읽혀 문항이 0이었다.
+ * (머리말은 25개교 전부에 있었고, 그중 23개교는 어림짐작과 같은 쪽을 가리켰다.)
+ *
+ * 「정답과 해설」·「정답해설」·띄어쓰기가 다른 꼴도 받는다. 문제 쪽에 「정답을 쓰시오」 처럼
+ * 「정답」만 있는 것은 걸리지 않는다 — 「해설」이 같이 있어야 한다.
+ *
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function answerHeadPageOf(pageTexts: string[]): number | null {
+  const HEAD = /정\s*답\s*(및|과)?\s*해\s*설/
+  for (let i = 0; i < pageTexts.length; i++) if (HEAD.test(pageTexts[i] ?? '')) return i
+  return null
+}
+
 // 정답표에서 정답이 번호 **아랫줄**부터 적혀 있는가. 같은 줄에 적힌 정답(「18) 가 × 나」)의
 // 위·아래 첨자는 밑줄이 몇 pt 어긋날 뿐이므로, **한 줄 높이(글자 크기의 1.3배)** 를 넘어야 아랫줄로 본다.
 // 2026-11-09 고양중 중1 — 18)은 같은 줄(어긋남 6.4pt < 11.7), 19)·20)은 아랫줄(14.7pt).
@@ -128,7 +214,7 @@ export type CroppedProblem = {
 }
 export type CropResult = { pages: number; problems: CroppedProblem[]; answersFound: number; warnings: string[] }
 
-type Item = { str: string; x: number; x1: number; base: number; top: number; bottom: number; size: number }
+type Item = { str: string; x: number; x1: number; base: number; top: number; bottom: number; size: number; fn: string }
 
 function inkRows(ctx: CanvasRenderingContext2D, w: number, h: number): [number, number] | null {
   if (w < 1 || h < 1) return null
@@ -200,6 +286,8 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   let inAnswers = false, lastAnswerNo = 0
   let dotNo = 0                         // 「1.」 꼴에서 매긴 마지막 번호 (쪽을 넘어서도 이어진다)
   let essayRun = false                  // 논술형 묶음 안인가 (딸린 물음은 같은 문항으로 붙인다)
+  let essayMain = NaN                   // 그 묶음의 큰 번호 (「[논술형 1-1]」 → 1). 바뀌면 다른 문항이다
+  let essayTop: number | null = null    // 바로 위에 있던 논술형 이름표의 윗선 (뒤따르는 번호 그림을 여기서부터 자른다)
   let dotUsed = false                   // 「1.」 꼴로 읽었나
   let dotOk = true                      // 수식 글꼴 숫자표가 이 파일에 맞나 (번호가 1,2,3… 으로 읽히나)
   let essayQ = 0                        // 논술형 묶음에 매긴 문항 번호 (정답 그림을 여기에 붙인다)
@@ -217,17 +305,50 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$|^[-‐‑‒–—－]\s*\d{1,3}\s*[-‐‑‒–—－]$/
   const seen = new Map<string, number>()
   const seenNum = new Map<string, number>()
+  // ── 정답·해설이 몇 쪽부터인가 ──────────────────────────────────────────────
+  // 「정답 및 해설」 머리가 있으면 **그 쪽부터가 정답**이다. 어림짐작(아래 lineStarts)보다 이것이 먼저다 —
+  //   2026-11-17 고양시 고1 25개교 중 **능곡고·백마고는 1쪽이 정답표로 오판**돼 그때부터 전부
+  //   정답으로 읽혔다(문항 0 · 정답 21~23). 두 파일은 문항 번호가 작아서(8.27pt) 번호가
+  //   lineStarts 로 세어진 탓이다. 머리말은 25개교 **전부**에 있었고 23개교에서 어림짐작과 같았다.
+  // 머리가 없는 파일(신원중 꼴)은 전처럼 어림짐작으로 간다.
+  const pageTexts: string[] = []
+  const numCands: NumCand[] = []
   for (let pi = 0; pi < doc.numPages; pi++) {
     const pg = await doc.getPage(pi + 1)
     const vp = pg.getViewport({ scale: 1 })
+    const strs: string[] = []
+    const pageItems: { str: string; x: number; x1: number; base: number; size: number; fn: string }[] = []
     for (const it of (await pg.getTextContent()).items as any[]) {
       const str = String(it.str ?? '').trim()
       if (!str) continue
+      strs.push(str)
       const t = pdfjs.Util.transform(vp.transform, it.transform)
       seen.set(sigOf(t[4], t[5], str), (seen.get(sigOf(t[4], t[5], str)) ?? 0) + 1)
       if (PAGE_NO.test(str)) seenNum.set(numSig(t[4], t[5]), (seenNum.get(numSig(t[4], t[5])) ?? 0) + 1)
+      pageItems.push({ str, x: t[4], x1: t[4] + it.width, base: t[5], size: Math.hypot(t[2], t[3]), fn: String(it.fontName ?? '') })
+    }
+    pageTexts.push(strs.join(' '))
+    // 단 맨 왼쪽의 「N.」 조각을 모아 둔다 — 번호 꼴을 **문서 한 번**으로 정하려고 (numberStyleOf).
+    // 단 자리는 아래 본 돌기와 같은 셈으로 잡는다 (머리말을 아직 못 가려 조금 넓게 나올 수 있다).
+    if (pageItems.length) {
+      const mid = vp.width / 2
+      const ls = pageItems.filter((t) => t.x < mid).map((t) => t.x)
+      const rs = pageItems.filter((t) => t.x > mid).map((t) => t.x1)
+      const l = (ls.length ? Math.min(...ls) : 40) - 3
+      const r = (rs.length ? Math.max(...rs) : vp.width - 40) + 3
+      const cc: [number, number][] = [[l, mid - 4], [mid + 5, Math.max(r, mid + 5)]]
+      for (const t of pageItems) {
+        const col = t.x < cc[1][0] - 5 ? 0 : 1
+        if (Math.abs(t.x - cc[col][0]) >= 12) continue
+        const m = DOT_NUM.exec(t.str)
+        if (!m) continue
+        numCands.push({ page: pi, col, base: t.base, no: Number(m[1]), size: t.size, fn: t.fn })
+      }
     }
   }
+  const answerHeadPage = answerHeadPageOf(pageTexts)
+  // 해설 쪽 번호가 끼어들지 않게 **정답 머리 앞쪽** 후보만 본다
+  const numStyle = numberStyleOf(numCands.filter((c) => answerHeadPage === null || c.page < answerHeadPage))
   // 쪽이 셋 이상일 때만 본다 (두 쪽짜리에서 우연히 같은 자리에 같은 글자가 올 수 있다)
   const REPEAT = doc.numPages >= 3 ? Math.max(3, Math.ceil(doc.numPages * 0.6)) : doc.numPages + 1
   const isRunning = (t: Item) =>
@@ -252,7 +373,12 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       if (!it.str || !it.str.trim()) continue
       const t = pdfjs.Util.transform(vp1.transform, it.transform)
       const size = Math.hypot(t[2], t[3])
-      raw.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size })
+      // ★ **안 보이는 글자**는 아예 빼 둔다. 한글에서 변환한 파일에 0.72pt 짜리 「19.」 가
+      //   박혀 있는 것이 있다 — 2026-11-17 향동고. 사람 눈에는 없는데 번호로 읽혀서
+      //   17px 짜리 빈 문항이 셋 생기고 번호가 20, 19, 22, 21, 24, 23 으로 엉켰다.
+      //   본문이 9pt 대인 파일에서 2pt 아래는 글자가 아니다(가운데값을 끌어내려 한계도 흐트린다).
+      if (size < 2) continue
+      raw.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size, fn: String(it.fontName ?? '') })
     }
     // 되풀이되는 글자가 있는 **띠 전체**를 뺀다 — 쪽 번호처럼 쪽마다 글자가 달라지는 것도
     // 같은 띠 안에 있으면 머리말이다 (안 빼면 그 글자 때문에 본문 위끝이 머리말까지 올라간다)
@@ -287,6 +413,14 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     const right = (rights.length ? Math.max(...rights) : vp1.width - 40) + 3
     const cols: [number, number][] = [[left, mid - 4], [mid + 5, Math.max(right, mid + 5 + (mid - 4 - left))]]
     const colOf = (x: number) => (x < cols[1][0] - 5 ? 0 : 1)
+    // ★ 단의 **왼쪽 끝은 그 단 글자에서 잰다.** 오른단은 「쪽 가운데 + 5」 로 어림잡고 있었는데,
+    //   쪽마다 15pt 까지 어긋난다 — 2026-11-17 백석고는 정답 쪽 오른단이 x=383 이고 어림값은 369 라
+    //   14pt 막이를 아슬하게 넘겨 **오른단을 통째로 못 읽었다**(문항 24개에 정답 9개).
+    //   왼단은 전부터 글자에서 재고 있었다(left) — 오른단만 어림이었다.
+    const colX: [number, number] = [0, 1].map((c) => {
+      const xs = items.filter((t) => colOf(t.x) === c).map((t) => t.x)
+      return xs.length ? Math.min(...xs) : cols[c][0]
+    }) as [number, number]
 
     // 작은 미주 번호 = 문항 시작
     // 번호가 문제 첫 줄과 같은 줄에 찍힌 파일도 있다 (「10) 다음 중 옳지 않은 것은?」).
@@ -296,7 +430,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     markShaped += items.filter((t) => MARK.test(t.str)).length
     type Mark = { no: number; col: number; y0: number; y1: number; top: number | null; box?: [number, number, number, number] }
     const ms: Mark[] = items
-      .filter((t) => MARK.test(t.str) && t.size < limit && Math.abs(t.x - cols[colOf(t.x)][0]) < 12)
+      .filter((t) => MARK.test(t.str) && t.size < limit && Math.abs(t.x - colX[colOf(t.x)]) < 12)
       .map((t): Mark => {
         const col = colOf(t.x)
         const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 4 && o.x >= t.x1 - 1 && o.x < cols[col][1])
@@ -313,10 +447,16 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     //   2026-11-17 고양시 고1 25개교: 문제 1쪽의 「1.」「2.」「3.」(15.0pt)이 여섯 개 걸려
     //   그 쪽이 통째로 「정답표」로 판정됐고, inAnswers 가 거기서 켜져 **그 뒤 쪽이 모두 정답**이 됐다
     //   (문항 0 · 정답 21). 정답표의 번호는 본문보다 작다(해설 쪽 8.75pt).
-    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14 && !(t.size > big))
+    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14 && !(t.size > big))
     const nMark = items.filter((t) => MARK.test(t.str)).length
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
-    if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
+    // ★ 「정답 및 해설」 머리가 있는 파일은 **그 머리가 정한다** — 어림짐작은 쓰지 않는다.
+    //   어림짐작은 그 머리가 없는 파일(신원중 꼴)에만 쓴다. 섞어 쓰면 머리보다 앞쪽에서
+    //   잘못 켜질 수 있다(능곡고·백마고가 1쪽에서 켜졌다).
+    const 머리로정답 = answerHeadPage !== null && pi >= answerHeadPage
+    const 어림짐작정답 = answerHeadPage === null
+      && ((nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5))
+    if (inAnswers || 머리로정답 || 어림짐작정답) {
       inAnswers = true
       const marks: { no: number; c: number; y0: number; yb: number; base: number; h: number; xr: number }[] = []
       let want = lastAnswerNo + 1
@@ -388,7 +528,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       // 「[논술형 1-1] …」 처럼 번호가 안 붙은 정답은 **그림 한 장**으로 모아 그 문항에 붙인다
       // (원장님 2026-11-10 「논술형은 21번 한 문항으로 통째」)
       if (essayQ && !answerImages[essayQ]) {
-        const es = items.filter((t) => ESSAY_HEAD.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
+        const es = items.filter((t) => ESSAY_HEAD.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14)
         if (es.length) {
           const c0 = colOf(es[0].x)
           const ey = Math.min(...es.map((t) => t.top)) - 2
@@ -411,7 +551,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     if (!ms.length) {
       for (const c of [0, 1]) {
         const cands = items
-          .filter((t) => colOf(t.x) === c && Math.abs(t.x - cols[c][0]) < 12 && t.base > 100)
+          .filter((t) => colOf(t.x) === c && Math.abs(t.x - colX[c]) < 12 && t.base > 100)
           .sort((a, b) => a.base - b.base)
         for (const t of cands) {
           const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 3)
@@ -429,12 +569,40 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           //    「22.」·「23.」 은 본문 크기(11.5pt)여서 여기 안 걸린다.
           // ③ 번호가 본문보다 **큰** 꼴도 있다 (고양시 고1 — 번호 15.0pt · 본문 11.0pt).
           //    작은 쪽만 보면 하나도 안 걸린다. 같은 크기만 아니면 되므로 limit · big 양쪽으로 가른다.
-          const 글자번호 = dotNumberOf(t.str, t.size, limit, big)
+          //    ④ 쪽마다 본문 크기가 달라져 ②·③ 이 뒤집히는 파일이 있다 (능곡고 — 번호는
+          //       1~23번 모두 11.03pt 로 일정한데 본문이 11.03 → 9.95 → 8.99 로 바뀐다).
+          //       그래서 **문서 한 번으로 정한 번호 꼴**(numStyle)도 같이 본다.
+          //    ⑤ 숫자와 점이 **따로** 찍힌 꼴도 있다 — 2026-11-17 덕이고 3번은 「3」(14.03pt) +
+          //       「.」(12.95pt) 두 조각이라 「N.」 꼴에 안 걸려 **그 문항이 통째로 빠졌다**
+          //       (문항 20 · 정답 21 · 번호가 1, 2, 4, 5 … 로 매겨졌다). 수식 글꼴 꼴(번호수식)과
+          //       같은 모양인데 숫자가 그냥 글자인 것이다. 점을 붙여 같은 크기 규칙으로 다시 본다.
+          const 쪼갠점 = !!next && next.x < t.x1 + 8 && next.str.startsWith('.') && /^[0-9]{1,3}$/.test(t.str)
+          const 글자번호 = dotNumberOf(t.str, t.size, limit, big) ?? styleNumberOf(t.str, t.size, t.fn, numStyle)
+            ?? (쪼갠점 ? (dotNumberOf(t.str + '.', t.size, limit, big) ?? styleNumberOf(t.str + '.', t.size, t.fn, numStyle)) : null)
           const 번호글자 = 글자번호 !== null
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
           if (!번호 && !논술) continue
-          if (논술 && essayRun) continue          // 묶음에 딸린 물음 → 앞 문항에 이어 붙인다
+          // 머리가 「[논술형」 + 「2]」 **두 조각으로 쪼개져** 오는 파일이 있다 (2026-11-17 향동고).
+          //   한 조각만 보면 번호가 없는 것으로 읽혀 앞 문항에 붙고, 그 문항이 통째로 사라진다.
+          const 머리글 = 논술 ? t.str + ' ' + (next?.str ?? '') : ''
+          const 머리번호 = 논술
+            ? Number(ESSAY_NO.exec(t.str)?.[1] ?? ESSAY_NO.exec(머리글)?.[1] ?? NaN)
+            : NaN
+          // 묶음에 딸린 물음(큰 번호가 같거나 번호가 없는 머리) → 앞 문항에 이어 붙인다
+          if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue
+          if (논술) essayMain = 머리번호
+          // ★ 「[논술형 1]」 **바로 아래에 번호가 또 있는** 파일이 있다
+          //   (2026-11-17 도래울고 · 백신고 · 세원고 · 향동고 — 「[논술형 1]」 다음 줄에 「19.」).
+          //   그때 논술형 머리는 **이름표**이고 문항 시작은 번호다. 둘 다 세면 한 문항이 둘이 되어
+          //   **번호가 두 칸씩 뛰고**(…18, 20, 22) 앞의 것은 「내용이 없습니다」로 버려진다.
+          //   그래서 머리는 세지 않고, 뒤따르는 번호의 그림을 **머리 위부터** 자른다
+          //   (이름표가 문제의 일부라서 그림에 들어가야 한다).
+          if (논술) {
+            const 뒤에번호 = cands.some((o) => o.base > t.base && o.base < t.base + t.size * 5
+              && (dotNumberOf(o.str, o.size, limit, big) !== null || styleNumberOf(o.str, o.size, o.fn, numStyle) !== null))
+            if (뒤에번호) { essayTop = t.top - 2; continue }
+          }
           essayRun = 논술
           dotUsed = true
           // 번호 글자를 숫자표로 읽어 본다 — 차례와 다르면 그 표는 이 파일에 안 맞는 것이다
@@ -447,18 +615,24 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           //   그래서 번호 오른쪽에서 **번호 줄에 걸쳐 있는 글자**도 같이 보고 가장 위를 잡는다.
           //   올라가는 높이는 번호 글자의 2.5배까지만 — 앞 문항 끝줄을 삼키지 않게 한다.
           const ceiling = t.top - t.size * 2.5
-          const tall = items.filter((o) => o !== t && colOf(o.x) === c && o.x >= t.x
+          //   ★ 번호 **오른쪽**만 본다(o.x >= t.x1). 번호와 같은 자리에서 시작하는 윗줄은
+          //     그 문항의 것이 아니다 — 2026-11-17 능곡고·무원고는 1번 번호 15pt 위에
+          //     「범위 : 명제 - 무리함수」 안내 줄이 있어서 **1번 그림에 딸려 들어갔다.**
+          const tall = items.filter((o) => o !== t && colOf(o.x) === c && o.x >= t.x1 - 1
             && o.top < t.bottom && o.bottom > ceiling && o.base <= t.base + t.size * 0.6)
-          const top = Math.max(ceiling, Math.min(t.top, ...same.map((o) => o.top), ...tall.map((o) => o.top))) - 2
+          let top = Math.max(ceiling, Math.min(t.top, ...same.map((o) => o.top), ...tall.map((o) => o.top))) - 2
+          // 바로 위에 논술형 이름표가 있었으면 거기서부터 자른다 (ceiling 막이를 넘어서라도)
+          const 쌓인논술 = essayTop !== null && 번호
+          if (essayTop !== null && 번호) { top = Math.min(top, essayTop); essayTop = null }
           ms.push({
             no: ++dotNo, col: c, y0: t.top, y1: t.bottom, top,
             // 논술형 줄은 지우지 않는다 (「[논술형 1-1]」 이 문제의 일부다)
             // 번호 글자만 하얀게 지운다. 수식 꼴은 「번호 + 따로 있는 점」, 글자 꼴은 한 덩어리다.
-            box: 번호수식 ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom]
+            box: (번호수식 || (번호글자 && 쪼갠점)) ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom]
               : 번호글자 ? [t.x, t.top, t.x1, t.bottom]
                 : undefined,
           })
-          if (논술) essayQ = dotNo
+          if (논술 || 쌓인논술) essayQ = dotNo
         }
       }
       ms.sort((a, b) => a.col - b.col || a.y0 - b.y0)

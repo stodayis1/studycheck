@@ -16,13 +16,18 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerHeadPageOf, numberStyleOf, styleNumberOf, isEssayHead, essayMainOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
   eqText: (s: string) => string
   dotNumberOf: (str: string, size: number, limit: number, big?: number) => number | null
   pointsOf: (text: string) => number | null
+  answerHeadPageOf: (pageTexts: string[]) => number | null
+  numberStyleOf: (c: { page: number; col: number; base: number; no: number; size: number; fn: string }[]) => { size: number; fn: string } | null
+  styleNumberOf: (str: string, size: number, fn: string, style: { size: number; fn: string } | null) => number | null
+  isEssayHead: (str: string) => boolean
+  essayMainOf: (str: string) => number | null
 }
 
 let pass = 0, all = 0
@@ -153,7 +158,7 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('숫자표는 맞을 때만 쓴다', src.includes('dotUsed && dotOk ? eqText(t) : t'))
   // 배점 규칙은 **한 함수**로 둔다 — 자르는 자리에 정규식을 또 적으면 crop.py 와 어긋난다
   ok('배점은 pointsOf 한 곳에서 읽는다', src.includes('const pts = pointsOf(text)'))
-  ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun) continue'))
+  ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue'))
   ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
   ok('맨 아래 「※ 확인사항」 은 문항에 안 넣는다', src.includes('/^※/.test(t.str)'))
   ok('정답표는 「1)」 과 「1.」 두 꼴을 다 읽는다', src.includes('[`${want})`, `${want}.`]'))
@@ -192,6 +197,167 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   // 문제 쪽이 「정답표 쪽」으로 걸리면 그 뒤가 통째로 정답이 된다 — 큰 번호는 정답표 줄로 세지 않는다
   ok('큰 번호는 정답표 줄로 세지 않는다', src2.includes('const lineStarts = items.filter') && src2.includes('&& !(t.size > big))'))
   ok('글자 번호는 번호 덩어리만 지운다', src2.includes('번호글자 ? [t.x, t.top, t.x1, t.bottom]'))
+}
+
+// 「정답 및 해설」 머리가 정답 시작을 정한다 (2026-11-17 능곡고 · 백마고).
+//   두 파일은 문항 번호가 본문보다 작아(8.27pt) 문제 1쪽이 「정답표」로 오판됐고,
+//   거기서 inAnswers 가 켜져 **문항이 0** 이었다. 머리말은 25개교 전부에 있었다.
+{
+  const 문제쪽 = '능곡고등학교 2025년 1학년 2학기 기말고사 1. 다음 명제의 역이 참일 때'
+  const 해설쪽 = '능곡고등학교 1학년 정답 및 해설 1. 정답 ④ 는 항등함수이므로'
+  ok('「정답 및 해설」 머리가 있는 쪽을 찾는다', answerHeadPageOf([문제쪽, 문제쪽, 해설쪽, 해설쪽]) === 2)
+  ok('머리가 없으면 null (신원중 꼴은 전처럼 어림짐작)', answerHeadPageOf([문제쪽, 문제쪽]) === null)
+  ok('「정답과 해설」 도 받는다', answerHeadPageOf([문제쪽, '정답과 해설']) === 1)
+  ok('「정답해설」 처럼 붙여 쓴 것도 받는다', answerHeadPageOf(['정답해설']) === 0)
+  ok('띄어 쓴 「정 답  및  해 설」 도 받는다', answerHeadPageOf(['정 답  및  해 설']) === 0)
+  ok('문제 쪽의 「정답을 쓰시오」 는 안 걸린다', answerHeadPageOf(['다음 물음에 답하고 정답을 쓰시오']) === null)
+  ok('「해설」만 있는 쪽도 안 걸린다', answerHeadPageOf(['해설 강의 안내']) === null)
+  ok('첫 쪽에 머리가 있으면 0 (0 과 null 을 섞지 않는다)', answerHeadPageOf(['정답 및 해설', '뒷쪽']) === 0)
+}
+
+{
+  const src3 = fs.readFileSync(libPath, 'utf8')
+  ok('머리가 있으면 그 쪽부터 정답으로 본다', src3.includes('const 머리로정답 = answerHeadPage !== null && pi >= answerHeadPage'))
+  // 머리와 어림짐작을 **섞어** 쓰면 머리보다 앞쪽에서 잘못 켜진다 — 머리가 없을 때만 어림짐작이다
+  ok('어림짐작은 머리가 없을 때만 쓴다', src3.includes('const 어림짐작정답 = answerHeadPage === null'))
+  ok('정답 시작 판정에 둘 다 들어간다', src3.includes('if (inAnswers || 머리로정답 || 어림짐작정답) {'))
+}
+
+// 번호 꼴은 **문서 한 번**으로 정한다 (2026-11-17 능곡고 · 무원고).
+//   능곡고는 번호가 1~23번 모두 11.03pt 로 일정한데 본문이 쪽마다 11.03 → 9.95 → 8.99 로
+//   바뀌어, 「본문보다 작거나 크다」 규칙이 쪽마다 뒤집혔다 (23개 중 4개만 걸렸다).
+{
+  const 번호 = (page: number, col: number, base: number, no: number, size: number, fn: string) =>
+    ({ page, col, base, no, size, fn })
+  // 능곡고 꼴 — 1쪽 왼단 1,2,3 · 오른단 4,5,6 · 2쪽 왼단 7,8,9 …
+  const 능곡: any[] = []
+  let n = 0
+  for (let p = 0; p < 4; p++) for (const c of [0, 1]) for (let k = 0; k < 3; k++) 능곡.push(번호(p, c, 100 + k * 50, ++n, 11.03, 'g_d0_f3'))
+  const st = numberStyleOf(능곡)
+  ok('이어지는 묶음을 번호 꼴로 고른다', !!st && Math.abs(st.size - 11.03) < 0.01 && st.fn === 'g_d0_f3', String(st && st.size))
+  ok('그 꼴이면 본문과 같은 크기여도 번호로 읽는다', styleNumberOf('7.', 11.03, 'g_d0_f3', st) === 7)
+  ok('글꼴이 다르면 번호가 아니다 (본문 속 「12.」)', styleNumberOf('12.', 11.03, 'g_d0_f2', st) === null)
+  ok('크기가 다르면 번호가 아니다', styleNumberOf('7.', 9.95, 'g_d0_f3', st) === null)
+  ok('꼴을 못 정했으면(null) 아무것도 읽지 않는다', styleNumberOf('7.', 11.03, 'g_d0_f3', null) === null)
+  ok('「7)」 꼴은 이 가지로 안 읽는다', styleNumberOf('7)', 11.03, 'g_d0_f3', st) === null)
+
+  // 1 부터 시작하지 않으면 번호 꼴이 아니다 (해설 쪽의 중간 번호 묶음)
+  ok('1 부터가 아니면 안 고른다', numberStyleOf(능곡.slice(3)) === null)
+  // 끊기면 안 고른다
+  const 끊김 = 능곡.filter((c) => c.no !== 5)
+  ok('번호가 끊기면 안 고른다', numberStyleOf(끊김) === null)
+  // 다섯 개 아래면 안 고른다 (우연히 이어진 「1. 2. 3.」 목록)
+  ok('넷뿐이면 안 고른다', numberStyleOf(능곡.slice(0, 4)) === null)
+  // 두 묶음이 다 이어지면 **긴 쪽**을 쓴다
+  const 짧은묶음 = Array.from({ length: 6 }, (_, i) => 번호(9, 0, 100 + i * 20, i + 1, 8.75, 'g_d0_f9'))
+  const 고름 = numberStyleOf([...짧은묶음, ...능곡])
+  ok('두 묶음이 다 이어지면 긴 쪽을 쓴다', !!고름 && 고름.fn === 'g_d0_f3')
+  ok('빈 목록이면 null', numberStyleOf([]) === null)
+}
+
+{
+  const src4 = fs.readFileSync(libPath, 'utf8')
+  ok('번호 꼴을 정답 머리 앞쪽 후보로만 정한다', src4.includes('numCands.filter((c) => answerHeadPage === null || c.page < answerHeadPage)'))
+  ok('크기 규칙으로 못 읽은 번호를 문서 꼴로 다시 읽는다', src4.includes('?? styleNumberOf(t.str, t.size, t.fn, numStyle)'))
+  ok('글자 조각이 글꼴 이름을 들고 다닌다', src4.includes('fn: String(it.fontName'))
+}
+
+// 「[논술형 1]」 바로 아래에 번호가 또 있으면 **한 문항**이다
+//   (2026-11-17 도래울고 · 백신고 · 세원고 — 번호가 …18, 20, 22 로 두 칸씩 뛰고
+//    사이 번호는 「내용이 없습니다」로 버려졌다. 서술형 문항이 통째로 사라진 것이다.)
+{
+  const src5 = fs.readFileSync(libPath, 'utf8')
+  ok('논술형 머리 뒤에 번호가 있으면 머리를 세지 않는다', src5.includes('if (뒤에번호) { essayTop = t.top - 2; continue }'))
+  ok('뒤를 다섯 줄 높이까지만 본다', src5.includes('o.base < t.base + t.size * 5'))
+  ok('그 번호 그림은 이름표 위부터 자른다', src5.includes('top = Math.min(top, essayTop); essayTop = null'))
+  ok('이름표가 붙은 문항도 서술형으로 센다', src5.includes('if (논술 || 쌓인논술) essayQ = dotNo'))
+  // 머리가 혼자 있는 파일(번호 없는 묶음)은 전처럼 머리가 문항 시작이다
+  ok('번호 없는 논술형 묶음은 전처럼 머리가 문항 시작', src5.includes('Number.isNaN(머리번호) || 머리번호 === essayMain'))
+}
+
+// 서답형 머리 — 「단답형·서답형」도 문항 머리다 (2026-11-17 일산동고).
+//   일산동고의 서답형 3문항은 머리가 「[단답형1]」 이고 번호(19·20·21)는 들여 써서
+//   단 맨 왼쪽에 없다. 머리를 못 보면 18번 그림이 4,359px 로 늘어나 셋을 삼킨다.
+{
+  ok('「[논술형 1-1]」 은 머리다', isEssayHead('[논술형 1-1]'))
+  ok('「[서술형 2]」 는 머리다', isEssayHead('[서술형 2]'))
+  ok('「[단답형1]」 도 머리다', isEssayHead('[단답형1]'))
+  ok('「[서답형 3]」 도 머리다', isEssayHead('[서답형 3]'))
+  ok('「[총 7.0점]」 은 머리가 아니다', !isEssayHead('[총 7.0점]'))
+  ok('「[3.0점]」 은 머리가 아니다', !isEssayHead('[3.0점]'))
+  ok('글 가운데의 「논술형」 은 머리가 아니다', !isEssayHead('다음은 논술형 문제이다'))
+
+  // 큰 번호가 같으면 한 문항(1-1 · 1-2 · 1-3), 다르면 다른 문항(단답형1 · 2 · 3)
+  ok('「[논술형 1-1]」 의 큰 번호는 1', essayMainOf('[논술형 1-1]') === 1)
+  ok('「[논술형 1]」 도 1 — 1-1 과 한 문항으로 묶인다', essayMainOf('[논술형 1]') === 1)
+  ok('「[단답형2]」 의 큰 번호는 2 — 1 과 다른 문항', essayMainOf('[단답형2]') === 2)
+  ok('「[단답형 10]」 처럼 두 자리도 읽는다', essayMainOf('[단답형 10]') === 10)
+  ok('번호 없는 머리는 null (전처럼 앞 문항에 붙는다)', essayMainOf('[서술형]') === null)
+}
+
+{
+  const src6 = fs.readFileSync(libPath, 'utf8')
+  ok('큰 번호가 같을 때만 앞 문항에 붙인다', src6.includes('if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue'))
+  ok('머리를 만나면 큰 번호를 기억한다', src6.includes('if (논술) essayMain = 머리번호'))
+}
+
+// 단의 왼쪽 끝은 **그 단 글자에서** 잰다 (2026-11-17 백석고).
+//   오른단을 「쪽 가운데 + 5」 로 어림잡고 있었다. 백석고 정답 쪽 오른단은 x=383 이고
+//   어림값은 369 라 14pt 막이를 넘겨 **오른단을 통째로 못 읽었다**(문항 24에 정답 9).
+{
+  const src7 = fs.readFileSync(libPath, 'utf8')
+  ok('단마다 왼쪽 끝을 재 둔다', src7.includes('const colX: [number, number] = [0, 1].map((c) => {'))
+  for (const [무엇, 꼴] of [
+    ['미주 번호', 'MARK.test(t.str) && t.size < limit && Math.abs(t.x - colX[colOf(t.x)]) < 12'],
+    ['정답표 줄', '.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14 && !(t.size > big))'],
+    ['논술형 머리', 'ESSAY_HEAD.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14'],
+    ['「1.」 꼴 번호', 'colOf(t.x) === c && Math.abs(t.x - colX[c]) < 12'],
+  ]) ok(`${무엇}도 잰 값으로 가른다`, src7.includes(꼴), 꼴.slice(0, 28))
+  ok('오른단을 쪽 가운데로 어림잡는 자리가 남아 있지 않다',
+    !/Math\.abs\(t\.x - cols\[/.test(src7))
+}
+
+// 안 보이는 글자 · 쪼개진 머리 (2026-11-17 향동고)
+//   향동고에는 **0.72pt 짜리 「19.」** 가 박혀 있어 17px 짜리 빈 문항이 셋 생기고
+//   번호가 20, 19, 22, 21, 24, 23 으로 엉켰다. 머리도 「[논술형」 + 「2]」 로 쪼개져 와서
+//   번호 없는 머리로 읽혀 그 문항이 앞 문항에 붙어 사라졌다.
+{
+  const src8 = fs.readFileSync(libPath, 'utf8')
+  ok('2pt 아래 글자는 글자로 세지 않는다', src8.includes('if (size < 2) continue'))
+  ok('쪼개진 머리는 뒤 조각까지 붙여 번호를 읽는다', src8.includes("const 머리글 = 논술 ? t.str + ' ' + (next?.str ?? '') : ''"))
+  ok('한 조각으로 온 머리를 먼저 보고, 안 되면 붙여 본다',
+    src8.includes('ESSAY_NO.exec(t.str)?.[1] ?? ESSAY_NO.exec(머리글)?.[1]'))
+  // 붙여 읽는 값이 맞나 — 그 파일에서 본 두 조각 그대로
+  ok('「[논술형」 + 「2]」 를 붙이면 2 로 읽힌다', essayMainOf('[논술형' + ' ' + '2]') === 2)
+  ok('쪼개진 조각 하나만으로는 번호가 없다', essayMainOf('[논술형') === null)
+  ok('머리에 글이 이어 붙어 와도 번호를 읽는다', essayMainOf('[논술형 1] 전체집합') === 1)
+}
+
+// 숫자와 점이 **따로** 찍힌 번호 (2026-11-17 덕이고 3번 · 화수고)
+//   「3」(14.03pt) + 「.」(12.95pt) 두 조각이라 「N.」 꼴에 안 걸려 그 문항이 통째로 빠졌고,
+//   번호가 1, 2, 4, 5 … 로 매겨져 마지막 문항이 밀려 사라졌다(문항 20 · 정답 21).
+{
+  const src9 = fs.readFileSync(libPath, 'utf8')
+  ok('숫자 조각 뒤에 점이 따로 오면 쪼갠 번호로 본다',
+    src9.includes("const 쪼갠점 = !!next && next.x < t.x1 + 8 && next.str.startsWith('.')"))
+  ok('쪼갠 번호도 같은 크기 규칙을 거친다',
+    src9.includes("(쪼갠점 ? (dotNumberOf(t.str + '.', t.size, limit, big) ?? styleNumberOf(t.str + '.', t.size, t.fn, numStyle)) : null)"))
+  ok('쪼갠 번호는 점까지 지운다', src9.includes('box: (번호수식 || (번호글자 && 쪼갠점))'))
+  // 점을 붙여 보면 같은 규칙으로 읽힌다 — 덕이고에서 잰 값 그대로
+  const sizes = [9.95, 9.95, 9.95, 9.95, 14.03, 12.95, 9.95, 9.95]
+  const lim = markLimit(sizes), bg = bigLimit(sizes)
+  ok('「3」 + 「.」 를 붙이면 큰 번호 규칙으로 3 이 된다', dotNumberOf('3' + '.', 14.03, lim, bg) === 3)
+  ok('점을 안 붙이면 아무것도 아니다', dotNumberOf('3', 14.03, lim, bg) === null)
+}
+
+// 키 큰 수식은 **번호 오른쪽**만 본다 (2026-11-17 능곡고 · 무원고)
+//   번호 15pt 위에 「범위 : 명제 - 무리함수」 안내 줄이 있는 시험지가 있다. 번호와 같은
+//   x 에서 시작해서, 「번호 줄에 걸친 키 큰 글자」로 읽혀 **1번 그림에 딸려 들어갔다.**
+{
+  const srcA = fs.readFileSync(libPath, 'utf8')
+  ok('키 큰 수식은 번호 오른쪽만 본다', srcA.includes('colOf(o.x) === c && o.x >= t.x1 - 1'))
+  ok('번호와 같은 자리에서 시작하는 것은 안 본다', !/o\.x >= t\.x$/m.test(srcA))
+  ok('천장 막이는 그대로 (앞 문항 끝줄을 안 삼킨다)', srcA.includes('const ceiling = t.top - t.size * 2.5'))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)
