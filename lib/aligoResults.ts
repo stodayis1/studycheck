@@ -28,6 +28,45 @@ export interface AligoSummary {
   사유별: Record<string, number>
   /** 날짜(YYYY-MM-DD) → 실패 건수 */
   실패날짜별: Record<string, number>
+  /**
+   * 사유 → 거절된 **번호**들.
+   *
+   * 왜 (원장님 2026-11-17 「1번 고쳐줘」)
+   *   2026-11-17 밤 9시 30분 점검이 「1건 — 스팸」만 알려 왔다. 건수만으로는
+   *   **누구에게 안 갔는지 알 수 없어** 다시 보내 드릴 수도, 번호를 고쳐 드릴 수도 없다.
+   *   번호를 들고 있다가 이름을 붙여 알린다.
+   */
+  실패번호별: Record<string, string[]>
+}
+
+/** 번호를 가린다 — 이름을 못 찾았을 때만 쓴다. */
+export function maskPhone(phone: string): string {
+  const d = String(phone ?? '').replace(/[^0-9]/g, '')
+  return d.length >= 7 ? `${d.slice(0, 3)}****${d.slice(-4)}` : (d || '번호 모름')
+}
+
+/** 번호 비교용 — 숫자만 남긴다(「010-1234-5678」과 「01012345678」이 같게). */
+export const phoneKey = (phone: string) => String(phone ?? '').replace(/[^0-9]/g, '')
+
+/**
+ * 거절된 사람을 글로. 이름을 못 찾으면 번호를 가려서 적는다.
+ * 문자 한 통에 들어가야 하므로 기본 세 명까지만 적고 나머지는 「외 N명」.
+ */
+export function whoText(
+  phones: string[], nameOf?: (phone: string) => string | null | undefined, max = 3,
+): string {
+  const 이름 = phones.map((p) => nameOf?.(p) || maskPhone(p))
+  const 앞 = 이름.slice(0, max).join(', ')
+  return 이름.length > max ? `${앞} 외 ${이름.length - max}명` : 앞
+}
+
+/**
+ * 알림 한 줄. 감시(문자)와 대시보드 띠가 **같은 글**을 쓰게 여기 한 곳에 둔다.
+ * 대시보드는 cron_runs 에 적힌 값으로 이 함수를 다시 불러 같은 줄을 만든다.
+ */
+export function aligoDetail(사유: string, 건수: number, 누구?: string | null): string {
+  const 뒤 = 누구 ? ` · ${누구}` : ''
+  return `${건수}건 — ${사유}${뒤} (우리 기록에는 「나감」으로 남습니다)`
 }
 
 /** 묶음 목록 → 수신자별 결과. 여덟 개씩 나눠 부른다(60초 한도 안에 끝나야 한다). */
@@ -62,12 +101,16 @@ export async function fetchAligoRows(
 
 /** 성공·실패를 센다. rslt 가 '0' 이면 성공이다. */
 export function summarize(rows: AligoRow[]): AligoSummary {
-  const out: AligoSummary = { 전체: rows.length, 성공: 0, 실패: 0, 사유별: {}, 실패날짜별: {} }
+  const out: AligoSummary = { 전체: rows.length, 성공: 0, 실패: 0, 사유별: {}, 실패날짜별: {}, 실패번호별: {} }
   for (const r of rows) {
     if (r.rslt === '0') { out.성공++; continue }
     out.실패++
     const 사유 = r.msg || '(사유 없음)'
     out.사유별[사유] = (out.사유별[사유] ?? 0) + 1
+    // ★ 번호는 **사유마다 20개까지만** 들고 있는다. 2026-10-20 처럼 1,074건이 거절되면
+    //   cron_runs 한 줄이 터무니없이 커진다. 건수는 위에서 다 센다.
+    const 번호 = (out.실패번호별[사유] ??= [])
+    if (번호.length < 20) 번호.push(r.phone)
     const d = r.when.slice(0, 10)
     if (d) out.실패날짜별[d] = (out.실패날짜별[d] ?? 0) + 1
   }
@@ -80,7 +123,9 @@ export function summarize(rows: AligoRow[]): AligoSummary {
  *
  * key 는 「사유 + 날짜」로 만든다. 같은 사유를 날마다 한 번만 알린다.
  */
-export function aligoProblems(s: AligoSummary, date: string): CronProblem[] {
+export function aligoProblems(
+  s: AligoSummary, date: string, nameOf?: (phone: string) => string | null | undefined,
+): CronProblem[] {
   if (!s.실패) return []
   return Object.entries(s.사유별)
     .sort((a, b) => b[1] - a[1])
@@ -90,6 +135,35 @@ export function aligoProblems(s: AligoSummary, date: string): CronProblem[] {
       label: '알림톡 거절',
       date,
       kind: '오류',
-      detail: `${건수}건 — ${사유} (우리 기록에는 「나감」으로 남습니다)`,
+      detail: aligoDetail(사유, 건수, whoText(s.실패번호별[사유] ?? [], nameOf)),
+    }))
+}
+
+/**
+ * cron_runs 에 적어 둘 꼴. 대시보드가 이것만 보고 같은 줄을 다시 만든다.
+ * ★ **번호는 안 적는다** — 이름을 못 찾은 것만 가린 번호로 남는다.
+ */
+export function aligoRecord(
+  s: AligoSummary, nameOf?: (phone: string) => string | null | undefined,
+): { 본것: number; 성공: number; 실패: number; 사유: Record<string, number>; 누구: Record<string, string> } {
+  const 누구: Record<string, string> = {}
+  for (const [사유, phones] of Object.entries(s.실패번호별)) 누구[사유] = whoText(phones, nameOf)
+  return { 본것: s.전체, 성공: s.성공, 실패: s.실패, 사유: s.사유별, 누구 }
+}
+
+/** cron_runs 에 적힌 값 → 알림 줄. 감시가 보낸 문자와 **글자까지 같아야** 한다. */
+export function aligoProblemsFromRecord(rec: any, date: string): CronProblem[] {
+  const 사유별 = rec?.사유
+  if (!사유별 || typeof 사유별 !== 'object') return []
+  return Object.entries(사유별 as Record<string, number>)
+    .filter(([, n]) => Number(n) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .map(([사유, 건수]): CronProblem => ({
+      key: `aligo|${date}|${사유}`,
+      phase: 'aligo',
+      label: '알림톡 거절',
+      date,
+      kind: '오류',
+      detail: aligoDetail(사유, Number(건수), rec?.누구?.[사유]),
     }))
 }

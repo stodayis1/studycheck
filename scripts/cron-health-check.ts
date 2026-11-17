@@ -16,14 +16,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createClient } from '@supabase/supabase-js'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
 const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
 const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
 const { leaveDiff, leaveLine } = await import(pathToFileURL(path.resolve('lib/opsLeave.ts')).href)
 const { chooseApproved, buttonsMatch } = await import(pathToFileURL(path.resolve('lib/briefingTemplate.ts')).href)
-const { fetchAligoRows, summarize, aligoProblems } = await import(pathToFileURL(path.resolve('lib/aligoResults.ts')).href)
+const { fetchAligoRows, summarize, aligoProblems, aligoRecord, aligoProblemsFromRecord, whoText, maskPhone, phoneKey } = await import(pathToFileURL(path.resolve('lib/aligoResults.ts')).href)
 const { RESEND_KEY, pickResend, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
+const { phoneNames } = await import(pathToFileURL(path.resolve('lib/cronBriefing.ts')).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
 const plus = (iso: string, min: number) => new Date(Date.parse(iso) + min * 60_000).toISOString()
@@ -421,6 +423,128 @@ T('버튼 개수가 다르거나 없으면 맞다고 하지 않는다', () =>
   buttonsMatch(템플릿('x', 'APR', ['레벨학습지 점수 현황']), 바른버튼) === false
   && buttonsMatch({ inspStatus: 'APR' }, 바른버튼) === false)
 
+// ── 거절된 사람이 **누구인지** 적는다 (원장님 2026-11-17 「1번 고쳐줘」) ──────────
+//   그날 밤 9시 30분 점검이 「1건 — 스팸」만 알려 왔다. 건수만으로는 누구에게 안 갔는지
+//   알 수 없어 다시 보낼 수도, 번호를 고쳐 드릴 수도 없었다.
+const 줄n = (phone: string, rslt = 'U', msg = '스팸') =>
+  ({ phone, rslt, msg, tpl: 'UM_0000', when: '2026-11-17 20:00:47' })
+const 이름표 = (m: Record<string, string>) => (p: string) => m[phoneKey(p)] ?? null
+
+T('번호 비교는 하이픈을 무시한다', () =>
+  phoneKey('010-1234-5678') === '01012345678' && phoneKey(' 010 1234 5678 ') === '01012345678')
+
+T('이름을 못 찾으면 번호를 가려서 적는다', () =>
+  maskPhone('010-1234-5678') === '010****5678' && maskPhone('') === '번호 모름')
+
+T('거절된 사람 이름이 알림에 적힌다', () => {
+  const s = summarize([줄n('01012345678'), 줄n('01000000000', '0', '성공')])
+  const p = aligoProblems(s, '2026-11-17', 이름표({ '01012345678': '이온유(초2) 학부모님' }))
+  return p.length === 1 && p[0].detail.includes('이온유(초2) 학부모님') && p[0].detail.includes('1건')
+})
+
+T('이름을 못 찾은 번호는 가린 채로 적힌다', () => {
+  const p = aligoProblems(summarize([줄n('01098765432')]), '2026-11-17', 이름표({}))
+  return p[0].detail.includes('010****5432') && !p[0].detail.includes('01098765432')
+})
+
+T('이름 함수를 아예 안 주던 옛 부름도 그대로 돈다', () => {
+  const p = aligoProblems(summarize([줄n('01098765432')]), '2026-11-17')
+  return p.length === 1 && p[0].detail.includes('010****5432')
+})
+
+T('네 명이 넘으면 셋만 적고 「외 N명」', () =>
+  whoText(['1', '2', '3', '4', '5'], (x: string) => '김' + x).endsWith('외 2명')
+  && whoText(['1', '2'], (x: string) => '김' + x) === '김1, 김2')
+
+// ★ 번호를 다 들고 있으면 1,074건 거절 때 cron_runs 한 줄이 터무니없이 커진다.
+T('번호는 사유마다 20개까지만 들고 있는다 (건수는 다 센다)', () => {
+  const many = Array.from({ length: 30 }, (_, i) => 줄n('0101111' + String(1000 + i)))
+  const s = summarize(many)
+  return s.실패 === 30 && s.실패번호별['스팸'].length === 20
+})
+
+// ★★ 대시보드와 문자가 **같은 글·같은 열쇠**여야 한다. 다르면 어제 문자로 알린 것을
+//    대시보드가 새 문제로 보거나, 감시가 같은 것을 또 문자로 보낸다.
+T('cron_runs 에 적어 둔 값으로 문자와 똑같은 줄이 나온다', () => {
+  const nameOf = 이름표({ '01012345678': '이온유(초2) 학부모님' })
+  const s = summarize([줄n('01012345678'), 줄n('01000000000', '0', '성공')])
+  const 문자 = aligoProblems(s, '2026-11-17', nameOf)[0]
+  const 대시 = aligoProblemsFromRecord(aligoRecord(s, nameOf), '2026-11-17')[0]
+  return 문자.key === 대시.key && 문자.detail === 대시.detail && 문자.label === 대시.label
+})
+
+T('거절이 없으면 적어 둘 것도 알릴 것도 없다', () => {
+  const rec = aligoRecord(summarize([줄n('01000000000', '0', '성공')]))
+  return rec.실패 === 0 && aligoProblemsFromRecord(rec, '2026-11-17').length === 0
+})
+
+T('감시 기록에 거절이 있으면 대시보드 띠에 뜬다', () => {
+  const rows = healthy(['2026-11-16', '2026-11-17'], at('2026-11-17', '22:00'))
+  find(rows, 'watch-night', '2026-11-17').result = { ...okResult(),
+    aligo: aligoRecord(summarize([줄n('01012345678')]), 이름표({ '01012345678': '이온유(초2) 학부모님' })) }
+  const ps = checkCronRuns(rows, Date.parse(at('2026-11-17', '22:00')))
+  const a = ps.filter((p: any) => p.phase === 'aligo')
+  return a.length === 1 && a[0].key === 'aligo|2026-11-17|스팸' && a[0].detail.includes('이온유(초2) 학부모님')
+})
+
+T('낮·밤 점검이 둘 다 같은 거절을 적어도 한 번만 뜬다', () => {
+  const rows = healthy(['2026-11-16', '2026-11-17'], at('2026-11-17', '22:00'))
+  const rec = aligoRecord(summarize([줄n('01012345678')]), 이름표({}))
+  find(rows, 'watch-noon', '2026-11-17').result = { ...okResult(), aligo: rec }
+  find(rows, 'watch-night', '2026-11-17').result = { ...okResult(), aligo: rec }
+  return checkCronRuns(rows, Date.parse(at('2026-11-17', '22:00')))
+    .filter((p: any) => p.phase === 'aligo').length === 1
+})
+
+// 번호 → 누구 것인가. 학생 표를 그대로 읽는 함수(lib/cronBriefing.ts)를 **그 파일 그대로** 부른다.
+const 가짜db = (rows: any[]) => ({
+  from: () => ({ select: () => ({ order: () => ({ range: async () => ({ data: rows, error: null as any }) }) }) }),
+})
+await (async () => {
+  const m = await phoneNames(가짜db([
+    { name: '이온유', grade: '초2', parent_phone: '010-1234-5678', student_phone: null },
+    { name: '이온서', grade: '초5', parent_phone: '01012345678', student_phone: null },   // 형제 — 같은 번호, 적는 꼴만 다름
+    { name: '김하늘', grade: '중1', parent_phone: '010-9999-0000', student_phone: '010-8888-0000' },
+  ]))
+  T('하이픈이 있든 없든 같은 번호로 묶인다', () => m.get('01012345678') != null)
+  T('형제가 번호를 같이 쓰면 이름이 둘 다 나온다', () =>
+    m.get('01012345678') === '이온유(초2) 학부모님·이온서(초5) 학부모님')
+  T('학생 본인 번호도 누구 것인지 안다', () => m.get('01088880000') === '김하늘(중1) 학생')
+  T('없는 번호는 모른다고 한다', () => m.get('01000000000') === undefined)
+})()
+
+T('거절이 없는 날은 띠가 조용하다', () => {
+  const rows = healthy(['2026-11-16', '2026-11-17'], at('2026-11-17', '22:00'))
+  find(rows, 'watch-night', '2026-11-17').result = {
+    ...okResult(), aligo: aligoRecord(summarize([줄n('01000000000', '0', '성공')])) }
+  return checkCronRuns(rows, Date.parse(at('2026-11-17', '22:00'))).length === 0
+})
+
+// ── 운영 데이터로 한 번 더 (.env.local 이 있을 때만 · 읽기만 한다) ──────────────
+//   ★ 왜 꼭 필요한가 — 가짜 db 로는 **칸 이름이 틀린 것을 못 잡는다.**
+//     실제로 students 에 `phone` 칸이 없는데 그렇게 적었다. 그러면 질의가 통째로 실패해
+//     이름이 **하나도** 안 붙는데, 가짜 db 시험은 전부 통과한다(2026-11-17 에 이렇게 잡았다).
+for (const f of ['.env.local', '.env']) {
+  if (!fs.existsSync(f)) continue
+  for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  }
+}
+const dbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const dbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!dbUrl || !dbKey) {
+  console.log('(운영 데이터 확인은 건너뜀 — .env.local 이 없다)')
+} else {
+  const 운영 = await phoneNames(createClient(dbUrl, dbKey, { auth: { persistSession: false } }))
+  T('운영 학생 표에서 번호 → 이름이 실제로 읽힌다 (칸 이름이 맞다)', () => 운영.size > 50)
+  T('읽어 온 이름이 「이름(학년) 학부모님」 꼴이다', () =>
+    /\(.+\) (학부모님|학생)$/.test([...운영.values()][0] ?? ''))
+}
+
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)
 console.log(`통과 ${pass} / 전체 ${total}`)
-process.exit(pass === total ? 0 : 1)
+// ★ process.exit() 로 끊으면 Supabase 클라이언트가 정리되는 중에 Windows 에서
+//   「Assertion failed … uv async.c」 로 죽어 **다 통과해도 종료코드가 127** 이 된다.
+//   exitCode 만 적고 node 가 스스로 끝나게 둔다.
+process.exitCode = pass === total ? 0 : 1

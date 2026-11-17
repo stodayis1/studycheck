@@ -5,7 +5,7 @@
 //   ③ 담당 강사 알림        (그때까지 수업일지가 덜 된 건을 선생님별로 묶어 문자로)
 //
 // 시각 (원장님 지시 2026-10-12)
-//   · 밤 8시(11:00 UTC)        phase=1 — 그날 수업 중 **작성이 끝난 것**을 보낸다(학년 구분 없음)
+//   · 밤 9시(12:00 UTC)        phase=1 — 그날 수업 중 **작성이 끝난 것**을 보낸다(학년 구분 없음)
 //   · 다음 날 오전 11시(02:00 UTC) phase=2 — 전날 수업 중 **그때 못 보낸 나머지**를 보낸다
 //
 // 중복은 briefing_sends 가 막는다 — 같은 학생·같은 수업일은 두 번 나가지 않는다.
@@ -26,10 +26,11 @@ import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
 import { syncLeaveFromOps } from '@/lib/opsLeave'
 import { checkCronRuns, loadRecentCronRuns, type CronProblem } from '@/lib/cronHealth'
-import { fetchAligoRows, summarize, aligoProblems } from '@/lib/aligoResults'
+import { fetchAligoRows, summarize, aligoProblems, aligoRecord, phoneKey } from '@/lib/aligoResults'
 import { aligoPost } from '@/lib/aligo'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 import { sendSmsViaOps } from '@/lib/opsSms'
+import { fetchAllRows } from '@/lib/utils'
 
 /** 한국 시각 'HH:MM'. 서버는 UTC 로 돈다. */
 function kstHhmm() {
@@ -45,11 +46,22 @@ function kstDow() {
 /**
  * 그날 저녁 발송을 **언제부터** 해도 되나.
  *
- * 토요일은 오전에 수업을 시작해 오전에 끝난다. 평일처럼 저녁 8시까지 기다리면
+ * 토요일은 오전에 수업을 시작해 오전에 끝난다. 평일처럼 밤까지 기다리면
  * 수업이 끝나고 한참 뒤에야 브리핑이 간다(원장님 2026-10-17). 그래서 토요일만 오후 6시.
+ *
+ * ★ 평일은 2026-11-17 에 **저녁 8시 → 밤 9시**로 늦췄다 (원장님).
+ *   왜 — 초등 선생님들이 매쓰홀릭 점수를 붙여넣는 것이 8시 발송보다 늦어, 그날 친
+ *   코어테스트·학습지 점수가 **학부모님께 영영 안 나가는** 일이 있었다
+ *   (11-17 이온유: 20:00:47 발송 → 20:11:15 점수 입력. 「▶ 학습 결과」가 비어서 나갔다).
+ *   선생님들이 8시에 퇴근하시므로 9시면 그날 것이 다 차 있다.
+ *
+ * ★★ 이 시각을 또 옮길 때는 **pg_cron 의 깨우는 창**(docs/sql/제시간_자동발송_pgcron.sql)
+ *    도 같이 옮겨야 한다. 깨움이 20:50 에 끝나는데 여기만 21:00 으로 미루면
+ *    **그날 저녁 발송이 통째로 안 나간다** — 에러도 안 난다.
+ *    scripts/briefing-time-check.ts 가 그 어긋남을 잡는다.
  */
 function eveningNotBefore() {
-  return kstDow() === 6 ? '18:00' : '20:00'
+  return kstDow() === 6 ? '18:00' : '21:00'
 }
 
 function kstDate(offsetDays = 0) {
@@ -65,7 +77,7 @@ function admin() {
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycheck-five.vercel.app'
 
 /**
- * @param phaseFixed 1 = 저녁 8시 · 2 = 다음 날 오전 11시.
+ * @param phaseFixed 1 = 밤 9시(토 오후 6시) · 2 = 다음 날 오전 11시.
  *   주지 않으면 `?phase=` 를 읽는다(원장님이 직접 부를 때 쓴다).
  */
 export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
@@ -194,7 +206,7 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
   //   그래서 2차(오전 11시)에는 안 보낸다. 대신 11시 **30분 전**에 따로 보낸다
   //   (runRemindCron · /api/cron/briefing/remind).
   //
-  // ★ 저녁 8시 알림은 **초등만** 간다 (원장님 2026-10-22). 중·고등은 수업이 늦게
+  // ★ 밤 9시 알림은 **초등만** 간다 (원장님 2026-10-22). 중·고등은 수업이 늦게
   //   끝나 그 시각에 덜 쓴 것이 당연하고 브리핑도 다음 날 11시에 나간다. 전원을
   //   보내던 때는 김은수 선생님이 매일 15~20건짜리 문자를 받으셔서, 정작 진짜로
   //   빠진 한 건(10/21 장서윤)이 그 속에 묻혔다.
@@ -254,7 +266,7 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
  *     학습브리핑 발송 직전에 혹시 놓친 학습일지가 있더라도 얼렁 작성할 수 있잖아.」
  *
  * 그래서 알림은 두 번으로 나뉜다.
- *   · 저녁 8시 — 그날 브리핑이 나가는 **초등만**
+ *   · 밤 9시 — 그날 브리핑이 나가는 **초등만**
  *   · 오전 10시 — 전날 것 중 아직 빈 것 **전부** (11시 발송 1시간 전)
  *
  * ★ 예약은 늦게 깨울 수 있으므로 10분마다 깨우고 여기서 10:00 전과 「오늘 이미 돎」을 막는다.
@@ -375,8 +387,13 @@ export async function runWatchCron(req: NextRequest) {
       const 어제 = kstDate(-1)
       const 오늘 = kstDate(0)
       const 결과 = summarize(await fetchAligoRows(aligoCall, 어제, 오늘))
-      out.aligo = { 본것: 결과.전체, 성공: 결과.성공, 실패: 결과.실패, 사유: 결과.사유별 }
-      problems.push(...aligoProblems(결과, 오늘))
+      // 거절된 **번호에 이름을 붙인다** (원장님 2026-11-17).
+      //   건수만 알려 주면 누구에게 안 갔는지 알 수 없어 다시 보낼 수도 없다.
+      //   ★ 이름을 못 찾아도 점검은 그대로 간다 — 그때는 가린 번호로 적힌다.
+      const nameOf = await phoneNames(db).catch(() => new Map<string, string>())
+      const 누구 = (phone: string) => nameOf.get(phoneKey(phone)) ?? null
+      out.aligo = aligoRecord(결과, 누구)
+      problems.push(...aligoProblems(결과, 오늘, 누구))
     } catch (e: any) {
       out.aligo = { error: e?.message ?? '알리고에 물어보지 못했어요' }
     }
@@ -416,6 +433,38 @@ async function aligoCall(path: string, params: Record<string, string>) {
   const userid = process.env.ALIGO_USER_ID
   if (!apikey || !userid) throw new Error('알리고 설정값이 없어요')
   return aligoPost(path, new URLSearchParams({ apikey, userid, ...params }).toString())
+}
+
+/**
+ * 번호 → 누구 것인가. 알림톡이 거절됐을 때 **이름을 붙여** 알리려고 쓴다.
+ *
+ * ★ 형제가 보호자 번호를 같이 쓰는 집이 있다 — 한 번호에 이름이 여럿이면 가운뎃점으로 잇는다.
+ *   (한 명만 적으면 동생 브리핑이 거절됐는데 형 이름이 나온다.)
+ * ★ 퇴원·휴원한 학생도 넣는다. 「누구 것인지」를 알아야 하는 것이지 재원 여부를 묻는 것이 아니다.
+ */
+export async function phoneNames(db: any): Promise<Map<string, string>> {
+  // ★ 칸 이름은 parent_phone · student_phone 이다. students 에 `phone` 은 **없다** —
+  //   없는 칸을 적으면 질의 하나가 통째로 실패해 이름이 **하나도** 안 붙는다(조용히).
+  const rows = await fetchAllRows<any>(() =>
+    db.from('students').select('name, grade, parent_phone, student_phone').order('id'))
+  const 모음 = new Map<string, string[]>()
+  const put = (phone: any, who: string) => {
+    const k = phoneKey(String(phone ?? ''))
+    if (!k) return
+    const list = 모음.get(k) ?? []
+    if (!list.includes(who)) list.push(who)
+    모음.set(k, list)
+  }
+  for (const s of rows) {
+    const 이름 = `${s.name}(${s.grade})`
+    put(s.parent_phone, `${이름} 학부모님`)
+    put(s.student_phone, `${이름} 학생`)
+  }
+  // 선생님 샘플도 알림톡으로 나간다 — 거절되면 선생님 이름이 나와야 한다.
+  try {
+    for (const [name, phone] of await fetchOpsTeacherPhones()) put(phone, `${name} 선생님`)
+  } catch { /* OPS 를 못 불러도 학생 이름은 붙는다 */ }
+  return new Map([...모음].map(([k, v]) => [k, v.join('·')]))
 }
 
 /** 원장(users.role=admin) 이름으로 수학OPS 번호를 찾는다. 선생님 번호는 쓰지 않는다. */

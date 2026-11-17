@@ -66,9 +66,15 @@ revoke all on function public.wake_briefing(text) from service_role;
 commit;
 
 -- ③ 일정 — pg_cron 은 **UTC** 로 돈다 (한국시간 = UTC + 9)
---    저녁: 한국 17:00~21:00 (토 18시·평일 20시 둘 다 덮는다) = UTC 08:00~12:00
+--    저녁: 한국 17:00~21:50 (토 18시·평일 21시 둘 다 덮는다) = UTC 08:00~12:50
 --    오전: 한국 11:00~11:59                                  = UTC 02:00~02:59
-select cron.schedule('briefing-evening', '*/10 8-11 * * *', $$select public.wake_briefing('evening')$$);
+--
+-- ★ 끝 시각이 **발송 시각보다 뒤**여야 한다. 라우트의 eveningNotBefore()(lib/cronBriefing.ts)
+--   가 평일 21:00 인데 깨움이 20:50 에 끝나면, 깨우는 쪽이 전부 「아직 21:00 전」으로
+--   돌아가 **그날 저녁 발송이 통째로 안 나간다**. 에러도 안 나고 조용히 빈다.
+--   2026-11-17 에 평일을 20:00 → 21:00 으로 늦히면서 8-11 → 8-12 로 같이 넓혔다.
+--   scripts/briefing-time-check.ts 가 이 어긋남을 잡는다.
+select cron.schedule('briefing-evening', '*/10 8-12 * * *', $$select public.wake_briefing('evening')$$);
 select cron.schedule('briefing-morning', '*/10 2 * * *',    $$select public.wake_briefing('morning')$$);
 
 -- 확인

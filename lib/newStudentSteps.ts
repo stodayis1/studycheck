@@ -69,7 +69,7 @@ export function buildSteps(c: StepCounts): Step[] {
     {
       no: 5, title: '학부모 브리핑', where: '저절로 나가요', href: null,
       done: c.briefings > 0,
-      hint: '학습일지를 쓰면 그날 저녁 8시(또는 다음 날 오전 11시)에 저절로 나가요.',
+      hint: '학습일지를 쓰면 그날 밤 9시(또는 다음 날 오전 11시)에 저절로 나가요.',
     },
   ]
   const 할차례 = raw.find((s) => !s.done)?.no ?? null
