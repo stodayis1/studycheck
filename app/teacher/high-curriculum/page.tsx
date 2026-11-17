@@ -5,11 +5,14 @@
 // 원장님과 고등 담당 강사가 같이 보고 고친다. 저장소: curriculum_plan_docs (docs/sql/고등커리큘럼_표_추가.sql)
 // 칸을 벗어나면 그 문서 한 줄만 저장한다 — 단원 한 줄을 고쳐도 다른 줄은 건드리지 않는다.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { fetchAllRows } from '@/lib/utils'
+import { Field } from '@/components/teacher/highCurriculum/Field'
+import { ClassRoster } from '@/components/teacher/highCurriculum/ClassRoster'
+import { LessonPlan } from '@/components/teacher/highCurriculum/LessonPlan'
 import {
   CLASSES, EXAM_ROWS, GRADES, UNIT_COLS, unitDocId,
   type ClassKey, type GradeKey, type PlanRow,
@@ -34,6 +37,8 @@ export default function HighCurriculumPage() {
   const [edit, setEdit] = useState<Record<TableKey, boolean>>({ books: false, exam: false })
   const [tab, setTab] = useState<'common' | ClassKey>('common')
   const [armed, setArmed] = useState<string | null>(null)
+  // 반마다 학생 수 (반 편성에서 받아 탭에 보여 준다)
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const queues = useRef<Record<string, Promise<unknown>>>({})
   const pending = useRef(0)
   // 원장님과 고등 강사만 (원장님 2026-11-16). 진짜 차단은 RLS — docs/sql/고등커리큘럼_고등강사만.sql
@@ -200,6 +205,8 @@ export default function HighCurriculumPage() {
           칸을 눌러 적고 벗어나면 저장됩니다. 다른 선생님이 고친 내용은 이 창으로 돌아올 때 새로 불러옵니다.
         </p>
 
+        <ClassRoster key={grade} grade={grade} gradeLabel={cfg.label} owner={owner} onCounts={setCounts} />
+
         <PlanTable title="반별 교재 흐름" t="books" rows={tables.books} editing={owner && edit.books} disabled={busy}
           lockStructure={!owner}
           lead={owner
@@ -233,7 +240,7 @@ export default function HighCurriculumPage() {
                 <button key={t.key} type="button" role="tab" aria-selected={on} onClick={() => pickTab(t.key)}
                   className="text-left px-3.5 py-2 rounded-lg border text-sm font-bold leading-tight"
                   style={on ? { color: c?.color ?? '#1b2230', background: c?.bg ?? '#eef1f5', borderColor: c?.color ?? '#1b2230' } : { color: '#5d6676', background: '#fff', borderColor: '#dde1e8' }}>
-                  {t.label}<span className="block text-xs font-normal text-gray-500 mt-0.5">{sub || ' '}</span>
+                  {t.label}{counts[t.key] ? <span className="font-normal text-gray-500"> · {counts[t.key]}명</span> : null}<span className="block text-xs font-normal text-gray-500 mt-0.5">{sub || ' '}</span>
                 </button>
               )
             })}
@@ -305,6 +312,10 @@ export default function HighCurriculumPage() {
             </table>
           </div>
         </section>
+
+        <LessonPlan key={grade + tab} tab={tab} tabLabel={TABS.find((x) => x.key === tab)?.label === '공통' ? '공통 (반편성 전)' : (TABS.find((x) => x.key === tab)?.label ?? '')}
+          stages={lr} bookName={bookName} courses={cfg.courses} docs={docs} saveDoc={saveDoc} disabled={busy}
+          studentCount={counts[tab]} />
       </div>
     </div>
   )
@@ -472,38 +483,5 @@ function Suggestions({ rows, items, owner, disabled, onAdd, onStatus }: {
         </ul>
       )}
     </section>
-  )
-}
-
-/* ---------- 칸 하나: 적는 동안은 내 글자를 지키고, 벗어날 때만 저장 ---------- */
-function Field({ value, onCommit, placeholder, disabled, className = '', color, plain, singleLine, input }: {
-  value?: string; onCommit: (v: string) => void; placeholder?: string; disabled?: boolean
-  className?: string; color?: string; plain?: boolean; singleLine?: boolean; input?: boolean
-}) {
-  const [v, setV] = useState(value ?? '')
-  const focused = useRef(false)
-  const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { if (!focused.current) setV(value ?? '') }, [value])
-  useLayoutEffect(() => { const el = ref.current; if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' } }, [v])
-  const commit = () => {
-    focused.current = false
-    const out = singleLine || input ? v.replace(/\s*\n\s*/g, ' ').trim() : v.trim()
-    if (out !== v) setV(out)
-    if (out !== (value ?? '')) onCommit(out)
-  }
-  const base = plain
-    ? 'w-full bg-transparent border border-dashed border-transparent hover:border-gray-300 focus:bg-white focus:outline-2 focus:outline-[#2f4bb5] rounded px-1.5 py-0.5 -mx-1.5'
-    : 'w-full bg-white border border-gray-200 focus:outline-2 focus:outline-[#2f4bb5] rounded-md px-2 py-1.5 text-sm disabled:bg-transparent disabled:border-dashed'
-  if (input) return (
-    <input value={v} placeholder={placeholder} disabled={disabled} className={`${base} ${className} placeholder:text-gray-300`}
-      onFocus={() => { focused.current = true }} onChange={(e) => setV(e.target.value)} onBlur={commit}
-      onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) (e.target as HTMLInputElement).blur() }} />
-  )
-  return (
-    <textarea ref={ref} rows={1} value={v} placeholder={placeholder} disabled={disabled}
-      className={`${base} ${className} block resize-none overflow-hidden leading-snug placeholder:text-gray-300 placeholder:font-normal`}
-      style={color ? { color } : undefined}
-      onFocus={() => { focused.current = true }} onChange={(e) => setV(e.target.value)} onBlur={commit}
-      onKeyDown={(e) => { if (singleLine && e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }} />
   )
 }
