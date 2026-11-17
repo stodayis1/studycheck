@@ -260,5 +260,18 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('글자 조각이 글꼴 이름을 들고 다닌다', src4.includes('fn: String(it.fontName'))
 }
 
+// 「[논술형 1]」 바로 아래에 번호가 또 있으면 **한 문항**이다
+//   (2026-11-17 도래울고 · 백신고 · 세원고 — 번호가 …18, 20, 22 로 두 칸씩 뛰고
+//    사이 번호는 「내용이 없습니다」로 버려졌다. 서술형 문항이 통째로 사라진 것이다.)
+{
+  const src5 = fs.readFileSync(libPath, 'utf8')
+  ok('논술형 머리 뒤에 번호가 있으면 머리를 세지 않는다', src5.includes('if (뒤에번호) { essayTop = t.top - 2; continue }'))
+  ok('뒤를 다섯 줄 높이까지만 본다', src5.includes('o.base < t.base + t.size * 5'))
+  ok('그 번호 그림은 이름표 위부터 자른다', src5.includes('top = Math.min(top, essayTop); essayTop = null'))
+  ok('이름표가 붙은 문항도 서술형으로 센다', src5.includes('if (논술 || 쌓인논술) essayQ = dotNo'))
+  // 머리가 혼자 있는 파일(번호 없는 묶음)은 전처럼 머리가 문항 시작이다
+  ok('번호 없는 논술형 묶음은 전처럼 머리가 문항 시작', src5.includes('if (논술 && essayRun) continue'))
+}
+
 console.log(`\n통과 ${pass} / 전체 ${all}`)
 process.exitCode = pass === all ? 0 : 1

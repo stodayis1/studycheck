@@ -269,6 +269,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   let inAnswers = false, lastAnswerNo = 0
   let dotNo = 0                         // 「1.」 꼴에서 매긴 마지막 번호 (쪽을 넘어서도 이어진다)
   let essayRun = false                  // 논술형 묶음 안인가 (딸린 물음은 같은 문항으로 붙인다)
+  let essayTop: number | null = null    // 바로 위에 있던 논술형 이름표의 윗선 (뒤따르는 번호 그림을 여기서부터 자른다)
   let dotUsed = false                   // 「1.」 꼴로 읽었나
   let dotOk = true                      // 수식 글꼴 숫자표가 이 파일에 맞나 (번호가 1,2,3… 으로 읽히나)
   let essayQ = 0                        // 논술형 묶음에 매긴 문항 번호 (정답 그림을 여기에 붙인다)
@@ -546,6 +547,17 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           const 논술 = ESSAY_HEAD.test(t.str)
           if (!번호 && !논술) continue
           if (논술 && essayRun) continue          // 묶음에 딸린 물음 → 앞 문항에 이어 붙인다
+          // ★ 「[논술형 1]」 **바로 아래에 번호가 또 있는** 파일이 있다
+          //   (2026-11-17 도래울고 · 백신고 · 세원고 · 향동고 — 「[논술형 1]」 다음 줄에 「19.」).
+          //   그때 논술형 머리는 **이름표**이고 문항 시작은 번호다. 둘 다 세면 한 문항이 둘이 되어
+          //   **번호가 두 칸씩 뛰고**(…18, 20, 22) 앞의 것은 「내용이 없습니다」로 버려진다.
+          //   그래서 머리는 세지 않고, 뒤따르는 번호의 그림을 **머리 위부터** 자른다
+          //   (이름표가 문제의 일부라서 그림에 들어가야 한다).
+          if (논술) {
+            const 뒤에번호 = cands.some((o) => o.base > t.base && o.base < t.base + t.size * 5
+              && (dotNumberOf(o.str, o.size, limit, big) !== null || styleNumberOf(o.str, o.size, o.fn, numStyle) !== null))
+            if (뒤에번호) { essayTop = t.top - 2; continue }
+          }
           essayRun = 논술
           dotUsed = true
           // 번호 글자를 숫자표로 읽어 본다 — 차례와 다르면 그 표는 이 파일에 안 맞는 것이다
@@ -560,7 +572,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           const ceiling = t.top - t.size * 2.5
           const tall = items.filter((o) => o !== t && colOf(o.x) === c && o.x >= t.x
             && o.top < t.bottom && o.bottom > ceiling && o.base <= t.base + t.size * 0.6)
-          const top = Math.max(ceiling, Math.min(t.top, ...same.map((o) => o.top), ...tall.map((o) => o.top))) - 2
+          let top = Math.max(ceiling, Math.min(t.top, ...same.map((o) => o.top), ...tall.map((o) => o.top))) - 2
+          // 바로 위에 논술형 이름표가 있었으면 거기서부터 자른다 (ceiling 막이를 넘어서라도)
+          const 쌓인논술 = essayTop !== null && 번호
+          if (essayTop !== null && 번호) { top = Math.min(top, essayTop); essayTop = null }
           ms.push({
             no: ++dotNo, col: c, y0: t.top, y1: t.bottom, top,
             // 논술형 줄은 지우지 않는다 (「[논술형 1-1]」 이 문제의 일부다)
@@ -569,7 +584,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
               : 번호글자 ? [t.x, t.top, t.x1, t.bottom]
                 : undefined,
           })
-          if (논술) essayQ = dotNo
+          if (논술 || 쌓인논술) essayQ = dotNo
         }
       }
       ms.sort((a, b) => a.col - b.col || a.y0 - b.y0)
