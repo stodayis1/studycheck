@@ -105,6 +105,25 @@ export function bigLimit(sizes: number[]): number {
   return s[Math.floor(s.length / 2)] * 1.15
 }
 
+/**
+ * 「정답 및 해설」 머리가 몇 쪽에 있나 (0부터). 없으면 null.
+ *
+ * 이 머리가 있으면 **그 쪽부터가 정답·해설**이고, 어림짐작(「번호 줄이 5개 넘으면 정답표」)은
+ * 쓰지 않는다. 어림짐작은 문항 번호가 **본문보다 작은** 파일에서 문제 쪽을 정답표로 오판한다 —
+ * 2026-11-17 고양시 고1 25개교 중 능곡고·백마고가 **1쪽부터** 정답으로 읽혀 문항이 0이었다.
+ * (머리말은 25개교 전부에 있었고, 그중 23개교는 어림짐작과 같은 쪽을 가리켰다.)
+ *
+ * 「정답과 해설」·「정답해설」·띄어쓰기가 다른 꼴도 받는다. 문제 쪽에 「정답을 쓰시오」 처럼
+ * 「정답」만 있는 것은 걸리지 않는다 — 「해설」이 같이 있어야 한다.
+ *
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function answerHeadPageOf(pageTexts: string[]): number | null {
+  const HEAD = /정\s*답\s*(및|과)?\s*해\s*설/
+  for (let i = 0; i < pageTexts.length; i++) if (HEAD.test(pageTexts[i] ?? '')) return i
+  return null
+}
+
 // 정답표에서 정답이 번호 **아랫줄**부터 적혀 있는가. 같은 줄에 적힌 정답(「18) 가 × 나」)의
 // 위·아래 첨자는 밑줄이 몇 pt 어긋날 뿐이므로, **한 줄 높이(글자 크기의 1.3배)** 를 넘어야 아랫줄로 본다.
 // 2026-11-09 고양중 중1 — 18)은 같은 줄(어긋남 6.4pt < 11.7), 19)·20)은 아랫줄(14.7pt).
@@ -217,17 +236,28 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$|^[-‐‑‒–—－]\s*\d{1,3}\s*[-‐‑‒–—－]$/
   const seen = new Map<string, number>()
   const seenNum = new Map<string, number>()
+  // ── 정답·해설이 몇 쪽부터인가 ──────────────────────────────────────────────
+  // 「정답 및 해설」 머리가 있으면 **그 쪽부터가 정답**이다. 어림짐작(아래 lineStarts)보다 이것이 먼저다 —
+  //   2026-11-17 고양시 고1 25개교 중 **능곡고·백마고는 1쪽이 정답표로 오판**돼 그때부터 전부
+  //   정답으로 읽혔다(문항 0 · 정답 21~23). 두 파일은 문항 번호가 작아서(8.27pt) 번호가
+  //   lineStarts 로 세어진 탓이다. 머리말은 25개교 **전부**에 있었고 23개교에서 어림짐작과 같았다.
+  // 머리가 없는 파일(신원중 꼴)은 전처럼 어림짐작으로 간다.
+  const pageTexts: string[] = []
   for (let pi = 0; pi < doc.numPages; pi++) {
     const pg = await doc.getPage(pi + 1)
     const vp = pg.getViewport({ scale: 1 })
+    const strs: string[] = []
     for (const it of (await pg.getTextContent()).items as any[]) {
       const str = String(it.str ?? '').trim()
       if (!str) continue
+      strs.push(str)
       const t = pdfjs.Util.transform(vp.transform, it.transform)
       seen.set(sigOf(t[4], t[5], str), (seen.get(sigOf(t[4], t[5], str)) ?? 0) + 1)
       if (PAGE_NO.test(str)) seenNum.set(numSig(t[4], t[5]), (seenNum.get(numSig(t[4], t[5])) ?? 0) + 1)
     }
+    pageTexts.push(strs.join(' '))
   }
+  const answerHeadPage = answerHeadPageOf(pageTexts)
   // 쪽이 셋 이상일 때만 본다 (두 쪽짜리에서 우연히 같은 자리에 같은 글자가 올 수 있다)
   const REPEAT = doc.numPages >= 3 ? Math.max(3, Math.ceil(doc.numPages * 0.6)) : doc.numPages + 1
   const isRunning = (t: Item) =>
@@ -316,7 +346,13 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14 && !(t.size > big))
     const nMark = items.filter((t) => MARK.test(t.str)).length
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
-    if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
+    // ★ 「정답 및 해설」 머리가 있는 파일은 **그 머리가 정한다** — 어림짐작은 쓰지 않는다.
+    //   어림짐작은 그 머리가 없는 파일(신원중 꼴)에만 쓴다. 섞어 쓰면 머리보다 앞쪽에서
+    //   잘못 켜질 수 있다(능곡고·백마고가 1쪽에서 켜졌다).
+    const 머리로정답 = answerHeadPage !== null && pi >= answerHeadPage
+    const 어림짐작정답 = answerHeadPage === null
+      && ((nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5))
+    if (inAnswers || 머리로정답 || 어림짐작정답) {
       inAnswers = true
       const marks: { no: number; c: number; y0: number; yb: number; base: number; h: number; xr: number }[] = []
       let want = lastAnswerNo + 1

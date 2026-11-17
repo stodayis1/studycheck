@@ -16,13 +16,14 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerHeadPageOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
   eqText: (s: string) => string
   dotNumberOf: (str: string, size: number, limit: number, big?: number) => number | null
   pointsOf: (text: string) => number | null
+  answerHeadPageOf: (pageTexts: string[]) => number | null
 }
 
 let pass = 0, all = 0
@@ -192,6 +193,30 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   // 문제 쪽이 「정답표 쪽」으로 걸리면 그 뒤가 통째로 정답이 된다 — 큰 번호는 정답표 줄로 세지 않는다
   ok('큰 번호는 정답표 줄로 세지 않는다', src2.includes('const lineStarts = items.filter') && src2.includes('&& !(t.size > big))'))
   ok('글자 번호는 번호 덩어리만 지운다', src2.includes('번호글자 ? [t.x, t.top, t.x1, t.bottom]'))
+}
+
+// 「정답 및 해설」 머리가 정답 시작을 정한다 (2026-11-17 능곡고 · 백마고).
+//   두 파일은 문항 번호가 본문보다 작아(8.27pt) 문제 1쪽이 「정답표」로 오판됐고,
+//   거기서 inAnswers 가 켜져 **문항이 0** 이었다. 머리말은 25개교 전부에 있었다.
+{
+  const 문제쪽 = '능곡고등학교 2025년 1학년 2학기 기말고사 1. 다음 명제의 역이 참일 때'
+  const 해설쪽 = '능곡고등학교 1학년 정답 및 해설 1. 정답 ④ 는 항등함수이므로'
+  ok('「정답 및 해설」 머리가 있는 쪽을 찾는다', answerHeadPageOf([문제쪽, 문제쪽, 해설쪽, 해설쪽]) === 2)
+  ok('머리가 없으면 null (신원중 꼴은 전처럼 어림짐작)', answerHeadPageOf([문제쪽, 문제쪽]) === null)
+  ok('「정답과 해설」 도 받는다', answerHeadPageOf([문제쪽, '정답과 해설']) === 1)
+  ok('「정답해설」 처럼 붙여 쓴 것도 받는다', answerHeadPageOf(['정답해설']) === 0)
+  ok('띄어 쓴 「정 답  및  해 설」 도 받는다', answerHeadPageOf(['정 답  및  해 설']) === 0)
+  ok('문제 쪽의 「정답을 쓰시오」 는 안 걸린다', answerHeadPageOf(['다음 물음에 답하고 정답을 쓰시오']) === null)
+  ok('「해설」만 있는 쪽도 안 걸린다', answerHeadPageOf(['해설 강의 안내']) === null)
+  ok('첫 쪽에 머리가 있으면 0 (0 과 null 을 섞지 않는다)', answerHeadPageOf(['정답 및 해설', '뒷쪽']) === 0)
+}
+
+{
+  const src3 = fs.readFileSync(libPath, 'utf8')
+  ok('머리가 있으면 그 쪽부터 정답으로 본다', src3.includes('const 머리로정답 = answerHeadPage !== null && pi >= answerHeadPage'))
+  // 머리와 어림짐작을 **섞어** 쓰면 머리보다 앞쪽에서 잘못 켜진다 — 머리가 없을 때만 어림짐작이다
+  ok('어림짐작은 머리가 없을 때만 쓴다', src3.includes('const 어림짐작정답 = answerHeadPage === null'))
+  ok('정답 시작 판정에 둘 다 들어간다', src3.includes('if (inAnswers || 머리로정답 || 어림짐작정답) {'))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)
