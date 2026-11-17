@@ -1,0 +1,104 @@
+{
+ "id": "풀이_0515",
+ "kind": "풀이",
+ "label": "쎈 515번",
+ "title": "직각삼각형의 닮음; 한 예각의 크기가 같은 경우",
+ "type_code": "중2-2-05-12",
+ "local_no": "0515",
+ "concept_no": 5,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 100,
+ "problem": {"image": "0515.png"},
+ "board": {"image": "0515.png", "crop": [398, 0, 680, 195], "width": 500},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 515번!",
+   "say": "오늘 볼 문제는 이거야. 문제부터 천천히 읽어 볼게. // 각 비가 직각인 직각삼각형 에이비씨가 있고, 꼭짓점 에이와 꼭짓점 씨에서 점 비를 지나는 직선에 수선을 내렸어. // 수선의 발이 디와 이야. // 선분 에이디는 삼, 선분 비이는 육, 선분 씨이는 팔 센티미터일 때 선분 비디의 길이를 구하는 거야.",
+   "write": [],
+   "marks": [
+    {"cue": "각 비가 직각인", "type": "angle", "pts": [[448, 108], [513, 157], [610, 26]], "color": "orange"},
+    {"cue": "직각삼각형 에이비씨가", "type": "poly", "pts": [[448, 108], [513, 157], [610, 26]], "color": "blue"},
+    {"cue": "꼭짓점 에이와", "type": "point", "pts": [[448, 108]]},
+    {"cue": "꼭짓점 씨에서", "type": "point", "pts": [[610, 26]]},
+    {"cue": "점 비를 지나는 직선에", "type": "line", "pts": [[448, 157], [611, 157]], "color": "ink"},
+    {"cue": "디와 이야", "type": "point", "pts": [[448, 157]], "color": "green"},
+    {"cue": "이야.", "type": "point", "pts": [[611, 157]], "color": "green"},
+    {"cue": "선분 에이디는", "type": "seg", "pts": [[448, 108], [448, 157]]},
+    {"cue": "선분 비이는", "type": "seg", "pts": [[513, 157], [611, 157]]},
+    {"cue": "선분 씨이는", "type": "seg", "pts": [[610, 26], [611, 157]]},
+    {"cue": "선분 비디의", "type": "seg", "pts": [[513, 157], [448, 157]], "color": "green"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "연필 들었지?",
+   "say": "연필 들었지? 먼저 풀고 답 맞춰 보자. // 직각이 세 개나 있어. 크기가 같은 예각 하나만 찾으면 닮음이 보여.",
+   "write": []
+  },
+  {
+   "pose": "D",
+   "bubble": "같은 예각 찾기",
+   "say": "자, 점 비에서 직선 위의 각을 보자. // 각 에이비디, 직각, 각 씨비이를 다 더하면 일직선이니까 백팔십 도죠. 그래서 각 에이비디와 각 씨비이의 합은 구십 도야. // 그런데 삼각형 에이디비에서도 각 디에이비와 각 에이비디의 합이 구십 도야. // {강조 그러니까 각 디에이비와 각 씨비이는 크기가 같은 거다.}",
+   "write": [
+    {"cue": "합은 구십 도야", "tex": "$\\angle ABD+\\angle CBE=90^\\circ$"},
+    {"cue": "합이 구십 도야", "tex": "$\\angle DAB+\\angle ABD=90^\\circ$"},
+    {"cue": "크기가 같은 거다", "tex": "$\\therefore\\ \\angle DAB=\\angle CBE$", "color": "blue"}
+   ],
+   "marks": [
+    {"cue": "점 비에서", "type": "point", "pts": [[513, 157]]},
+    {"cue": "각 에이비디,", "type": "angle", "pts": [[448, 108], [513, 157], [448, 157]], "color": "green"},
+    {"cue": "직각,", "type": "angle", "pts": [[448, 108], [513, 157], [610, 26]], "color": "ink"},
+    {"cue": "각 씨비이를", "type": "angle", "pts": [[610, 26], [513, 157], [611, 157]], "color": "orange"},
+    {"cue": "삼각형 에이디비에서도", "type": "poly", "pts": [[448, 108], [448, 157], [513, 157]], "color": "green"},
+    {"cue": "각 디에이비와 각 에이비디의", "type": "angle", "pts": [[448, 157], [448, 108], [513, 157]], "color": "orange"},
+    {"cue": "각 디에이비와 각 씨비이는", "type": "angle", "pts": [[448, 157], [448, 108], [513, 157]], "color": "orange", "keep": true},
+    {"cue": "각 씨비이는", "type": "angle", "pts": [[610, 26], [513, 157], [611, 157]], "color": "orange", "keep": true}
+   ]
+  },
+  {
+   "pose": "B",
+   "bubble": "닮음과 짝",
+   "say": "그래서 삼각형 에이디비와 삼각형 비이씨는 직각 하나와 예각 하나가 같으니까 {강조 에이에이 닮음이 되는 거다.} // 짝을 보면 꼭짓점 에이는 비와, 디는 이와, 비는 씨와 짝이야. // 그러니까 선분 에이디는 선분 비이와, 선분 디비는 선분 이씨와 짝이 되죠.",
+   "write": [
+    {"cue": "에이에이 닮음이 되는", "tex": "$\\triangle ADB\\backsim\\triangle BEC$", "color": "red"},
+    {"cue": "에이에이 닮음이 되는", "tex": "(AA 닮음)", "color": "red", "indent": 1}
+   ],
+   "marks": [
+    {"cue": "삼각형 에이디비와", "type": "poly", "pts": [[448, 108], [448, 157], [513, 157]], "color": "green"},
+    {"cue": "삼각형 비이씨는", "type": "poly", "pts": [[513, 157], [611, 157], [610, 26]], "color": "blue"},
+    {"cue": "선분 에이디는", "type": "seg", "pts": [[448, 108], [448, 157]], "color": "orange"},
+    {"cue": "선분 비이와", "type": "seg", "pts": [[513, 157], [611, 157]], "color": "orange"},
+    {"cue": "선분 디비는", "type": "seg", "pts": [[448, 157], [513, 157]], "color": "blue"},
+    {"cue": "선분 이씨와", "type": "seg", "pts": [[611, 157], [610, 26]], "color": "blue"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "비례식 세우기",
+   "say": "이제 비례식을 세우면 삼 대 육은 선분 비디 대 팔과 같아. 계산은 쭉 정리해서 써 볼게. [[쓰기]] {강조 선분 비디는 사 센티미터가 되는 거다.} 맞았지?",
+   "write": [
+    {"cue": "비례식을 세우면", "tex": "$\\overline{AD}:\\overline{BE}=\\overline{DB}:\\overline{EC}$", "color": "blue"},
+    {"cue": "삼 대 육은", "tex": "$3:6=\\overline{BD}:8$"},
+    {"quiet": true, "tex": "$6\\,\\overline{BD}=24$", "indent": 1},
+    {"cue": "사 센티미터가 되는", "tex": "$\\therefore\\ \\overline{BD}=4\\,\\mathrm{cm}$", "color": "red", "box": true}
+   ],
+   "marks": [
+    {"cue": "삼 대 육은", "type": "seg", "pts": [[448, 108], [448, 157]], "color": "orange"},
+    {"cue": "선분 비디 대 팔과", "type": "seg", "pts": [[448, 157], [513, 157]], "color": "green", "keep": true},
+    {"cue": "사 센티미터가 되는", "type": "label", "pts": [[480, 143]], "label": "4", "color": "red", "size": 28, "keep": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "합이 90°인 두 각",
+   "say": "자, 이 유형 정리하자. 직각이 이렇게 한 줄로 서 있으면 합이 구십 도인 각을 두 번 써서 {강조 크기가 같은 예각을 찾는 게 핵심이야.} // 이거 하나만 조심하면 돼. 선분 에이디는 선분 비이와 짝이야. 선분 씨이와 짝지으면 틀려. // 이제 비슷한 문제 나와도 바로 풀 수 있겠죠? 잘했어.",
+   "write": [
+    {"cue": "합이 구십 도인 각을", "tex": "합이 $90^\\circ$ 두 번", "color": "red", "underline": true},
+    {"cue": "크기가 같은 예각을", "tex": "$\\rightarrow$ 같은 예각 $\\rightarrow$ 닮음", "color": "red", "underline": true, "indent": 1}
+   ]
+  }
+ ],
+ "quiz": {"answer": "4 cm", "wrong": ["3 cm", "5 cm", "6 cm"]}
+}

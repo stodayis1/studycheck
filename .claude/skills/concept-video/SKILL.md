@@ -171,3 +171,4 @@ node scripts/lesson-video/sync_lesson_videos.mjs "<영상폴더>" --grade 공통
 - 2026-11-06 원장님: 도형 풀이는 말로만 하지 말고 그림 위에서 짚는다 — 꼭짓점은 꼭짓점을, 모서리·직선은 그 선을, 보조선은 직접 긋기 → `board.py`(그림판·marks: point·seg·path·line·ray·aux·angle·poly·circle·label), 좌표는 `board_grid.py`, 확인은 proof_validate --sheet 의 `<id>_그림판.png`. 그림판은 둘레에 흰 여백(꼭짓점이 그림 끝에 붙으면 동그라미가 잘림)
 - 2026-11-06 중1-1: 맑은 고딕(그림판 label·말풍선 글꼴)엔 빼기표 U+2212 「−」 가 없어 □ 로 깨진다 → board.py label·proof_video 말풍선은 그릴 때 「–」(U+2013)로 바꾼다. 노트 손글씨 글꼴에선 × 가 x 와 똑같이 보여 틀린 보기 표시는 「(틀림)」 으로 쓴다. 문제은행 standard_types 제목에 분수가 빠진 것(「y=a x」 = y=a/x)이 있어 대본 title 은 바로잡아 쓴다(파일 이름은 / 를 못 써서 그대로). 셸 heredoc 안 파이썬으로 대본 JSON 을 고치면 `\` 가 하나로 줄어 `\rightarrow` 가 제어 문자로 깨진다 → Write 도구로
 - 2026-11-10 쎈 풀이영상 앱 연결은 sync_lesson_videos 대신 ssen_solution_sql/apply 로(개념·증명 덮어쓰기·교재명 오류 방지). 중1-2 165편 넣음
+- 2026-11-17 중2-2 대본 157편: 노트 수식에 \square 안 그려짐(「사각형」·□ 글자로), 손글씨 ㅁ·ㅂ 깨짐, 그림판 있으면 board width 440~560, 뒤 단원 성질 끌어다 쓰지 않기(404번). 자세한 건 docs/대본/중2-2/풀이/_대본쓰기_지침.md 끝

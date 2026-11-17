@@ -1,0 +1,104 @@
+{
+ "id": "풀이_0501",
+ "kind": "풀이",
+ "label": "쎈 501번",
+ "title": "변의 길이 구하기; AA 닮음",
+ "type_code": "중2-2-05-09",
+ "local_no": "0501",
+ "concept_no": 5,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 97,
+ "problem": {"image": "0501.png", "crop": [0, 0, 415, 206]},
+ "board": {"image": "0501.png", "crop": [420, 0, 680, 206], "width": 520},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 501번!",
+   "say": "자, 이번 문제는 개념만 알면 금방 풀려. // 삼각형 에이비씨에서 각 씨와 각 에이디이의 크기가 같대. // 그리고 선분 에이디는 칠 센티미터, 선분 에이이는 육 센티미터, 선분 씨이는 팔 센티미터야. // 이때 선분 디비의 길이를 구하는 문제야.",
+   "write": [],
+   "marks": [
+    {"cue": "삼각형 에이비씨에서", "type": "poly", "pts": [[522, 28], [456, 190], [643, 190]], "color": "blue"},
+    {"cue": "각 씨와", "type": "angle", "pts": [[522, 28], [643, 190], [456, 190]], "color": "orange"},
+    {"cue": "각 에이디이의", "type": "angle", "pts": [[522, 28], [484, 121], [574, 98]], "color": "orange"},
+    {"cue": "선분 에이디는", "type": "seg", "pts": [[522, 28], [484, 121]]},
+    {"cue": "선분 에이이는", "type": "seg", "pts": [[522, 28], [574, 98]]},
+    {"cue": "선분 씨이는", "type": "seg", "pts": [[643, 190], [574, 98]]},
+    {"cue": "선분 디비의", "type": "seg", "pts": [[484, 121], [456, 190]], "color": "green"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "먼저 풀어 보기",
+   "say": "바로 보지 말고 일단 네가 먼저 풀어 봐. 다 풀면 다시 틀어. // 크기가 같은 각이 두 쌍인 삼각형 두 개를 찾으면 길이 보여.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "닮은 삼각형 찾기",
+   "say": "자, 작은 삼각형 에이디이와 큰 삼각형 에이비씨를 같이 보자. // 각 에이는 두 삼각형에 똑같이 들어 있죠. 공통인 각이야. // 그리고 각 에이디이와 각 씨가 같다고 했어. // {강조 각이 두 쌍 같으니까 에이에이 닮음이 되는 거다.}",
+   "write": [
+    {"cue": "공통인 각이야", "tex": "$\\angle A$ 는 공통", "color": "blue"},
+    {"cue": "각 씨가 같다고", "tex": "$\\angle ADE=\\angle C$", "color": "blue"},
+    {"cue": "에이에이 닮음이 되는", "tex": "$\\triangle ADE\\backsim\\triangle ACB$", "color": "red"},
+    {"cue": "에이에이 닮음이 되는", "tex": "(AA 닮음)", "color": "red", "indent": 1}
+   ],
+   "marks": [
+    {"cue": "작은 삼각형 에이디이와", "type": "poly", "pts": [[522, 28], [484, 121], [574, 98]], "color": "green"},
+    {"cue": "큰 삼각형 에이비씨를", "type": "poly", "pts": [[522, 28], [456, 190], [643, 190]], "color": "blue"},
+    {"cue": "각 에이는", "type": "angle", "pts": [[484, 121], [522, 28], [574, 98]], "keep": true},
+    {"cue": "각 에이디이와 각", "type": "angle", "pts": [[522, 28], [484, 121], [574, 98]], "color": "orange", "keep": true},
+    {"cue": "각 씨가 같다고", "type": "angle", "pts": [[522, 28], [643, 190], [456, 190]], "color": "orange", "keep": true}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "짝을 맞춰서!",
+   "say": "시험에서 이거 놓치면 바로 틀린다. 짝을 잘 맞춰야 돼. // 같은 각끼리 짝이니까 꼭짓점 디는 꼭짓점 씨와 짝이고, 꼭짓점 이는 꼭짓점 비와 짝이야. // 그래서 선분 에이디에 대응하는 변은 선분 에이씨, 선분 에이이에 대응하는 변은 선분 에이비가 되죠.",
+   "write": [
+    {"cue": "선분 에이비가 되죠", "tex": "$\\overline{AD}:\\overline{AC}$", "color": "blue"},
+    {"cue": "선분 에이비가 되죠", "tex": "$=\\overline{AE}:\\overline{AB}$", "color": "blue", "indent": 1}
+   ],
+   "marks": [
+    {"cue": "꼭짓점 디는", "type": "point", "pts": [[484, 121]], "color": "orange"},
+    {"cue": "꼭짓점 씨와", "type": "point", "pts": [[643, 190]], "color": "orange"},
+    {"cue": "꼭짓점 이는", "type": "point", "pts": [[574, 98]], "color": "blue"},
+    {"cue": "꼭짓점 비와", "type": "point", "pts": [[456, 190]], "color": "blue"},
+    {"cue": "선분 에이디에", "type": "seg", "pts": [[522, 28], [484, 121]], "color": "orange"},
+    {"cue": "선분 에이씨,", "type": "seg", "pts": [[522, 28], [643, 190]], "color": "orange"},
+    {"cue": "선분 에이이에", "type": "seg", "pts": [[522, 28], [574, 98]], "color": "blue"},
+    {"cue": "선분 에이비가", "type": "seg", "pts": [[522, 28], [456, 190]], "color": "blue"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "비례식 세우기",
+   "say": "선분 에이씨는 육 더하기 팔, 십사 센티미터죠. // 그러면 칠 대 십사는 육 대 선분 에이비라는 식이 나와. 계산은 화면 보면서 따라와. [[쓰기]] 선분 에이비가 십이 센티미터로 나왔으니까 선분 디비는 여기서 칠을 빼면 되죠. // {강조 그래서 답은 오 센티미터가 되는 거다.}",
+   "write": [
+    {"cue": "십사 센티미터죠", "tex": "$\\overline{AC}=6+8=14$"},
+    {"cue": "칠 대 십사는", "tex": "$7:14=6:\\overline{AB}$"},
+    {"quiet": true, "tex": "$7\\,\\overline{AB}=84$", "indent": 1},
+    {"quiet": true, "tex": "$\\overline{AB}=12$", "indent": 1},
+    {"cue": "선분 디비는", "tex": "$\\overline{DB}=12-7$"},
+    {"cue": "답은 오 센티미터가", "tex": "$\\therefore\\ \\overline{DB}=5\\,\\mathrm{cm}$", "color": "red", "box": true}
+   ],
+   "marks": [
+    {"cue": "선분 에이씨는", "type": "seg", "pts": [[522, 28], [643, 190]], "color": "orange"},
+    {"cue": "십사 센티미터죠", "type": "label", "pts": [[566, 128]], "label": "14", "color": "orange", "size": 26, "keep": true},
+    {"cue": "십이 센티미터로", "type": "label", "pts": [[470, 92]], "label": "12", "color": "blue", "size": 26, "keep": true},
+    {"cue": "선분 디비는", "type": "seg", "pts": [[484, 121], [456, 190]], "color": "green", "keep": true},
+    {"cue": "답은 오 센티미터가", "type": "label", "pts": [[455, 150]], "label": "5", "color": "red", "size": 28, "keep": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "같은 각 → 닮음",
+   "say": "자, 정리해 볼게. // {강조 이 유형은 크기가 같은 각 두 쌍으로 닮은 삼각형을 찾고, 짝이 되는 꼭짓점 순서대로 비례식을 세우면 돼.} // 선분 에이디와 선분 에이비를 짝지으면 틀려. 짝은 꼭 같은 각으로 정해. // 오늘 거 기억해 놔. 수고했어.",
+   "write": [
+    {"cue": "크기가 같은 각 두 쌍으로", "tex": "같은 각 두 쌍 $\\rightarrow$ 닮음", "color": "red", "underline": true},
+    {"cue": "비례식을 세우면", "tex": "$\\rightarrow$ 짝 맞춰 비례식", "color": "red", "underline": true, "indent": 1}
+   ]
+  }
+ ],
+ "quiz": {"answer": "5 cm", "wrong": ["4 cm", "6 cm", "7 cm"]}
+}

@@ -1,0 +1,107 @@
+{
+ "id": "풀이_0506",
+ "kind": "풀이",
+ "label": "쎈 506번",
+ "title": "삼각형의 닮음의 응용",
+ "type_code": "중2-2-05-10",
+ "local_no": "0506",
+ "concept_no": 5,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 98,
+ "problem": {"image": "0506.png", "crop": [0, 0, 405, 341]},
+ "board": {"image": "0506.png", "crop": [412, 0, 680, 215], "width": 490},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 506번!",
+   "say": "자, 문제 먼저 보자. 뭘 구하라는 건지부터 찾아 봐. // 선분 에이비와 선분 디이가 평행하고, 선분 에이디와 선분 비씨도 평행해. // 길이는 에이디랑 에이이가 둘 다 사 센티미터, 비씨가 팔 센티미터야. // 이때 선분 이씨의 길이를 구하는 문제야.",
+   "write": [],
+   "marks": [
+    {"cue": "선분 에이비와", "type": "seg", "pts": [[523, 28], [452, 176]], "color": "blue"},
+    {"cue": "선분 디이가 평행하고", "type": "seg", "pts": [[619, 27], [584, 101]], "color": "blue"},
+    {"cue": "선분 에이디와", "type": "seg", "pts": [[523, 28], [619, 27]], "color": "orange"},
+    {"cue": "선분 비씨도", "type": "seg", "pts": [[452, 176], [644, 174]], "color": "orange"},
+    {"cue": "에이디랑", "type": "seg", "pts": [[523, 28], [619, 27]]},
+    {"cue": "에이이가 둘 다", "type": "seg", "pts": [[523, 28], [584, 101]]},
+    {"cue": "비씨가 팔", "type": "seg", "pts": [[452, 176], [644, 174]]},
+    {"cue": "선분 이씨의", "type": "seg", "pts": [[584, 101], [644, 174]], "color": "green"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "손으로 먼저!",
+   "say": "손으로 먼저 풀어 보고 와. 기다릴게. // 평행선이 두 쌍이나 있으면 그 안에 크기가 같은 엇각이 숨어 있어.",
+   "write": []
+  },
+  {
+   "pose": "D",
+   "bubble": "엇각 두 쌍 찾기",
+   "say": "자, 선분 에이디와 선분 비씨가 평행하니까 엇각의 크기가 같아. // 그래서 각 디에이이와 각 비씨에이가 같죠. // 또 선분 에이비와 선분 디이가 평행하니까 각 에이이디와 각 비에이씨도 엇각으로 같은 거야.",
+   "write": [
+    {"cue": "각 비씨에이가 같죠", "tex": "$\\angle DAE=\\angle BCA$ (엇각)", "color": "blue"},
+    {"cue": "각 비에이씨도", "tex": "$\\angle AED=\\angle BAC$ (엇각)", "color": "blue"}
+   ],
+   "marks": [
+    {"cue": "선분 에이디와", "type": "seg", "pts": [[523, 28], [619, 27]], "color": "orange"},
+    {"cue": "선분 비씨가", "type": "seg", "pts": [[452, 176], [644, 174]], "color": "orange"},
+    {"cue": "각 디에이이와", "type": "angle", "pts": [[619, 27], [523, 28], [584, 101]], "color": "orange", "keep": true},
+    {"cue": "각 비씨에이가", "type": "angle", "pts": [[452, 176], [644, 174], [523, 28]], "color": "orange", "keep": true},
+    {"cue": "선분 에이비와", "type": "seg", "pts": [[523, 28], [452, 176]], "color": "green"},
+    {"cue": "선분 디이가", "type": "seg", "pts": [[619, 27], [584, 101]], "color": "green"},
+    {"cue": "각 에이이디와", "type": "angle", "pts": [[523, 28], [584, 101], [619, 27]], "color": "green", "keep": true},
+    {"cue": "각 비에이씨도", "type": "angle", "pts": [[452, 176], [523, 28], [584, 101]], "color": "green", "keep": true}
+   ]
+  },
+  {
+   "pose": "B",
+   "bubble": "순서 맞춰 닮음",
+   "say": "각이 두 쌍 같으니까 {강조 삼각형 에이디이와 삼각형 씨비에이는 에이에이 닮음이 되는 거다.} // 순서가 진짜 중요해. 꼭짓점 에이는 씨와, 디는 비와, 이는 에이와 짝이야. // 같은 색 각끼리 짝을 지으면 헷갈리지 않아.",
+   "write": [
+    {"cue": "에이에이 닮음이 되는", "tex": "$\\triangle ADE\\backsim\\triangle CBA$", "color": "red"},
+    {"cue": "에이에이 닮음이 되는", "tex": "(AA 닮음)", "color": "red", "indent": 1}
+   ],
+   "marks": [
+    {"cue": "삼각형 에이디이와", "type": "poly", "pts": [[523, 28], [619, 27], [584, 101]], "color": "green"},
+    {"cue": "삼각형 씨비에이는", "type": "poly", "pts": [[644, 174], [452, 176], [523, 28]], "color": "blue"},
+    {"cue": "꼭짓점 에이는", "type": "point", "pts": [[523, 28]], "color": "orange"},
+    {"cue": "씨와,", "type": "point", "pts": [[644, 174]], "color": "orange"},
+    {"cue": "디는 비와", "type": "point", "pts": [[619, 27]], "color": "blue"},
+    {"cue": "비와,", "type": "point", "pts": [[452, 176]], "color": "blue"},
+    {"cue": "이는 에이와", "type": "point", "pts": [[584, 101]], "color": "green"},
+    {"cue": "에이와 짝이야", "type": "point", "pts": [[523, 28]], "color": "green"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "비례식으로 마무리",
+   "say": "그래서 선분 에이디에 대응하는 변은 선분 씨비, 선분 에이이에 대응하는 변은 선분 씨에이죠. // 사 대 팔은 사 대 선분 씨에이라는 식이 나와. [[쓰기]] 선분 씨에이는 팔 센티미터로 나오니까 선분 이씨는 여기서 사를 빼면 되죠. // {강조 답은 사 센티미터, 보기로는 이번이 답이야.}",
+   "write": [
+    {"cue": "선분 씨에이죠", "tex": "$\\overline{AD}:\\overline{CB}=\\overline{AE}:\\overline{CA}$", "color": "blue"},
+    {"cue": "사 대 팔은", "tex": "$4:8=4:\\overline{CA}$"},
+    {"quiet": true, "tex": "$\\overline{CA}=8$", "indent": 1},
+    {"cue": "선분 이씨는", "tex": "$\\overline{EC}=8-4$"},
+    {"cue": "보기로는 이번이", "tex": "$\\therefore\\ 4\\,\\mathrm{cm}$   $②$", "color": "red", "box": true}
+   ],
+   "marks": [
+    {"cue": "선분 에이디에", "type": "seg", "pts": [[523, 28], [619, 27]], "color": "orange"},
+    {"cue": "선분 씨비,", "type": "seg", "pts": [[644, 174], [452, 176]], "color": "orange"},
+    {"cue": "선분 에이이에", "type": "seg", "pts": [[523, 28], [584, 101]], "color": "blue"},
+    {"cue": "선분 씨에이죠", "type": "seg", "pts": [[644, 174], [523, 28]], "color": "blue"},
+    {"cue": "팔 센티미터로", "type": "label", "pts": [[572, 140]], "label": "8", "color": "blue", "size": 28, "keep": true},
+    {"cue": "선분 이씨는", "type": "seg", "pts": [[584, 101], [644, 174]], "color": "green", "keep": true},
+    {"cue": "답은 사 센티미터", "type": "label", "pts": [[632, 128]], "label": "4", "color": "red", "size": 28, "keep": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "평행선 → 엇각 → 닮음",
+   "say": "자, 정리하자. 이 유형은 평행선에서 엇각이나 동위각으로 같은 각 두 쌍을 찾아서 {강조 닮은 삼각형을 만들면 되는 거다.} // 이거 하나만 조심하면 돼. 닮음을 쓸 때 꼭짓점 순서를 짝에 맞춰 써야 비례식이 맞아. // 자, 이 유형은 이제 끝. 유제로 한 번 더 풀어 봐.",
+   "write": [
+    {"cue": "평행선에서 엇각이나", "tex": "평행선 $\\rightarrow$ 엇각, 동위각", "color": "red", "underline": true},
+    {"cue": "닮은 삼각형을 만들면", "tex": "$\\rightarrow$ 닮은 삼각형", "color": "red", "underline": true, "indent": 1}
+   ]
+  }
+ ],
+ "quiz": {"answer": "② 4 cm", "wrong": ["① 3 cm", "③ 5 cm", "④ 6 cm"]}
+}

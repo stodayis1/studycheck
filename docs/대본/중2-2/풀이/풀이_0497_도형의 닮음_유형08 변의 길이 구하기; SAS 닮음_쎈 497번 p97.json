@@ -1,0 +1,102 @@
+{
+ "id": "풀이_0497",
+ "kind": "풀이",
+ "label": "쎈 497번",
+ "title": "변의 길이 구하기; SAS 닮음",
+ "type_code": "중2-2-05-08",
+ "local_no": "0497",
+ "concept_no": 5,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 97,
+ "problem": {"image": "0497.png", "crop": [0, 0, 420, 238]},
+ "board": {"image": "0497.png", "crop": [420, 0, 680, 238], "width": 440},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 497번!",
+   "say": "자, 쎈 사백구십칠번 같이 풀어 보자. // 삼각형 에이비씨에서 선분 에이디는 십이, 선분 디비는 삼, 선분 에이이는 십, 선분 이씨는 팔이야. // 그리고 선분 비씨는 십오 센티미터야. 이때 선분 디이의 길이를 구하는 문제야.",
+   "write": [],
+   "marks": [
+    {"cue": "삼각형 에이비씨에서", "type": "poly", "pts": [[519, 28], [473, 187], [637, 187]], "color": "blue"},
+    {"cue": "선분 에이디는", "type": "seg", "pts": [[519, 28], [482, 155]]},
+    {"cue": "선분 디비는", "type": "seg", "pts": [[482, 155], [473, 187]], "color": "green"},
+    {"cue": "선분 에이이는", "type": "seg", "pts": [[519, 28], [585, 117]]},
+    {"cue": "선분 이씨는", "type": "seg", "pts": [[585, 117], [637, 187]], "color": "green"},
+    {"cue": "선분 비씨는", "type": "seg", "pts": [[473, 187], [637, 187]], "color": "blue"},
+    {"cue": "선분 디이의", "type": "seg", "pts": [[482, 155], [585, 117]], "color": "orange"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "연필 들었지?",
+   "say": "연필 들었지? 먼저 풀고 답 맞춰 보자. // 작은 삼각형 하나를 큰 삼각형과 비교해 보면 길이 보여.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "작은 △ vs 큰 △",
+   "say": "자, 삼각형 에이이디와 삼각형 에이비씨를 비교해 보자. // 먼저 선분 에이비는 십이 더하기 삼, 십오이고 선분 에이씨는 십 더하기 팔, 십팔이죠.",
+   "write": [
+    {"cue": "선분 에이비는", "tex": "$\\overline{AB}=12+3=15$"},
+    {"cue": "선분 에이씨는", "tex": "$\\overline{AC}=10+8=18$"}
+   ],
+   "marks": [
+    {"cue": "삼각형 에이이디와", "type": "poly", "pts": [[519, 28], [585, 117], [482, 155]], "color": "orange"},
+    {"cue": "삼각형 에이비씨를", "type": "poly", "pts": [[519, 28], [473, 187], [637, 187]], "color": "blue"},
+    {"cue": "선분 에이비는", "type": "seg", "pts": [[519, 28], [473, 187]]},
+    {"cue": "선분 에이씨는", "type": "seg", "pts": [[519, 28], [637, 187]]}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "SAS 닮음!",
+   "say": "그다음 짝을 맞춰 볼게. // 선분 에이이와 선분 에이비, 선분 에이디와 선분 에이씨를 각각 짝지어 비를 구해 보자. [[쓰기]] {강조 둘 다 이 대 삼으로 같죠.} // 그리고 두 변 사이에 낀 각 에이는 두 삼각형이 같이 쓰는 각이야. // {강조 그래서 삼각형 에이이디와 삼각형 에이비씨는 에스에이에스 닮음이 되는 거다.}",
+   "write": [
+    {"quiet": true, "tex": "$\\overline{AE}:\\overline{AB}=10:15=2:3$"},
+    {"quiet": true, "tex": "$\\overline{AD}:\\overline{AC}=12:18=2:3$"},
+    {"cue": "같이 쓰는 각이야", "tex": "$\\angle A$ 는 공통"},
+    {"cue": "삼각형 에이이디와 삼각형 에이비씨는", "tex": "$\\triangle AED\\backsim\\triangle ABC$", "color": "blue"},
+    {"cue": "에스에이에스 닮음이", "tex": "(SAS 닮음)", "color": "blue", "indent": 1}
+   ],
+   "marks": [
+    {"cue": "선분 에이이와 선분 에이비", "type": "seg", "pts": [[519, 28], [585, 117]], "color": "green"},
+    {"cue": "선분 에이이와 선분 에이비", "type": "seg", "pts": [[519, 28], [473, 187]], "color": "green"},
+    {"cue": "선분 에이디와 선분 에이씨를", "type": "seg", "pts": [[519, 28], [482, 155]], "color": "blue"},
+    {"cue": "선분 에이디와 선분 에이씨를", "type": "seg", "pts": [[519, 28], [637, 187]], "color": "blue"},
+    {"cue": "낀 각 에이는", "type": "angle", "pts": [[473, 187], [519, 28], [637, 187]], "color": "orange", "keep": true}
+   ]
+  },
+  {
+   "pose": "A",
+   "bubble": "DE의 짝은 BC",
+   "say": "자, 이제 선분 디이의 대응변을 찾자. // 이는 비, 디는 씨와 대응하니까 선분 디이의 짝은 선분 비씨야. [[쓰기]] {강조 그래서 선분 디이는 십 센티미터, 답은 일번이 되는 거다.}",
+   "write": [
+    {"cue": "짝은 선분 비씨야", "tex": "$\\overline{ED}:\\overline{BC}=2:3$"},
+    {"quiet": true, "tex": "$\\overline{DE}:15=2:3$", "indent": 1},
+    {"quiet": true, "tex": "$3\\overline{DE}=30$", "indent": 1},
+    {"cue": "디이는 십", "tex": "$\\overline{DE}=10$ (cm)", "color": "red", "box": true, "indent": 1},
+    {"cue": "답은 일번이", "tex": "답 $①$", "color": "red", "box": true, "indent": 1}
+   ],
+   "marks": [
+    {"cue": "선분 디이의 대응변을", "type": "seg", "pts": [[482, 155], [585, 117]], "color": "orange"},
+    {"cue": "이는 비,", "type": "point", "pts": [[585, 117]], "color": "green"},
+    {"cue": "이는 비,", "type": "point", "pts": [[473, 187]], "color": "green"},
+    {"cue": "디는 씨와", "type": "point", "pts": [[482, 155]], "color": "blue"},
+    {"cue": "디는 씨와", "type": "point", "pts": [[637, 187]], "color": "blue"},
+    {"cue": "짝은 선분 비씨야", "type": "seg", "pts": [[473, 187], [637, 187]], "color": "orange"},
+    {"cue": "디이는 십", "type": "label", "pts": [[540, 152]], "label": "10 cm", "keep": true, "size": 20}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "공통인 각 + 두 변",
+   "say": "자, 정리해 볼게. // {강조 이 유형은 한 각을 같이 쓰는 두 삼각형을 찾고, 그 각을 끼는 두 변의 길이의 비가 같은지 확인하면 돼.} // 별표 빡 쳐 놔. 선분 에이이의 짝은 바로 옆 선분 에이씨가 아니라 선분 에이비야. 길이의 비를 직접 맞춰 봐야 해. // 오케이, 여기까지. 틀렸으면 한 번 더 보고 와.",
+   "write": [
+    {"cue": "한 각을 같이 쓰는", "tex": "공통인 각 $+$ 끼인 두 변의 비", "color": "red"},
+    {"cue": "같은지 확인하면", "tex": "$\\rightarrow$ SAS 닮음", "color": "red", "underline": true, "indent": 1}
+   ]
+  }
+ ],
+ "quiz": {"answer": "① 10 cm", "wrong": ["② 11 cm", "③ 12 cm", "④ 13 cm"]}
+}

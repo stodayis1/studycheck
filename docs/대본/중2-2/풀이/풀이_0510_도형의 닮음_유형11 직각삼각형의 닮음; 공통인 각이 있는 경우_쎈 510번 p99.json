@@ -1,0 +1,103 @@
+{
+ "id": "풀이_0510",
+ "kind": "풀이",
+ "label": "쎈 510번",
+ "title": "직각삼각형의 닮음; 공통인 각이 있는 경우",
+ "type_code": "중2-2-05-11",
+ "local_no": "0510",
+ "concept_no": 5,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 99,
+ "problem": {"image": "0510.png", "crop": [0, 0, 388, 226]},
+ "board": {"image": "0510.png", "crop": [395, 0, 680, 170], "width": 500},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 510번!",
+   "say": "자, 쎈 오백십 번 같이 풀어 보자. // 삼각형 에이비씨에서 각 에이와 각 이디씨가 모두 직각이야. // 선분 비디는 십이 센티미터, 선분 씨디는 팔 센티미터, 선분 씨이는 십 센티미터일 때 선분 에이이의 길이를 구하는 문제야.",
+   "write": [],
+   "marks": [
+    {"cue": "삼각형 에이비씨에서", "type": "poly", "pts": [[508, 29], [424, 136], [643, 136]], "color": "blue"},
+    {"cue": "각 에이와", "type": "angle", "pts": [[424, 136], [508, 29], [643, 136]], "color": "orange"},
+    {"cue": "각 이디씨가", "type": "angle", "pts": [[556, 66], [556, 136], [643, 136]], "color": "orange"},
+    {"cue": "선분 비디는", "type": "seg", "pts": [[424, 136], [556, 136]]},
+    {"cue": "선분 씨디는", "type": "seg", "pts": [[643, 136], [556, 136]]},
+    {"cue": "선분 씨이는", "type": "seg", "pts": [[643, 136], [556, 66]]},
+    {"cue": "선분 에이이의", "type": "seg", "pts": [[508, 29], [556, 66]], "color": "green"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "일 분만 고민!",
+   "say": "일 분만 고민해 봐. 막히면 그때 다시 틀어도 돼. // 직각이 두 개 보이면 나머지 하나 같은 각만 찾으면 닮음이 돼.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "공통인 각 찾기",
+   "say": "자, 큰 삼각형 에이비씨와 작은 삼각형 디이씨를 보자. // 각 에이와 각 이디씨는 둘 다 직각이죠. // 그리고 꼭짓점 씨에 있는 각은 두 삼각형에 똑같이 들어 있어. 공통인 각이야. // {강조 그래서 두 삼각형은 에이에이 닮음이 되는 거다.}",
+   "write": [
+    {"cue": "둘 다 직각이죠", "tex": "$\\angle A=\\angle EDC=90^\\circ$", "color": "blue"},
+    {"cue": "공통인 각이야", "tex": "$\\angle C$ 는 공통", "color": "blue"},
+    {"cue": "에이에이 닮음이 되는", "tex": "$\\triangle ABC\\backsim\\triangle DEC$", "color": "red"},
+    {"cue": "에이에이 닮음이 되는", "tex": "(AA 닮음)", "color": "red", "indent": 1}
+   ],
+   "marks": [
+    {"cue": "큰 삼각형 에이비씨와", "type": "poly", "pts": [[508, 29], [424, 136], [643, 136]], "color": "blue"},
+    {"cue": "작은 삼각형 디이씨를", "type": "poly", "pts": [[556, 136], [556, 66], [643, 136]], "color": "green"},
+    {"cue": "각 에이와 각", "type": "angle", "pts": [[424, 136], [508, 29], [643, 136]], "color": "orange", "keep": true},
+    {"cue": "각 이디씨는", "type": "angle", "pts": [[556, 66], [556, 136], [643, 136]], "color": "orange", "keep": true},
+    {"cue": "꼭짓점 씨에", "type": "angle", "pts": [[556, 66], [643, 136], [424, 136]], "keep": true}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "짝 맞추기",
+   "say": "여기서 진짜 많이 틀려. // 직각끼리 짝이니까 꼭짓점 에이는 꼭짓점 디와 짝이고, 꼭짓점 비는 꼭짓점 이와 짝이야. // 그래서 선분 씨에이에 대응하는 변은 선분 씨디, 선분 씨비에 대응하는 변은 선분 씨이가 되죠.",
+   "write": [
+    {"cue": "선분 씨이가 되죠", "tex": "$\\overline{CA}:\\overline{CD}=\\overline{CB}:\\overline{CE}$", "color": "blue"}
+   ],
+   "marks": [
+    {"cue": "꼭짓점 에이는", "type": "point", "pts": [[508, 29]], "color": "orange"},
+    {"cue": "꼭짓점 디와", "type": "point", "pts": [[556, 136]], "color": "orange"},
+    {"cue": "꼭짓점 비는", "type": "point", "pts": [[424, 136]], "color": "blue"},
+    {"cue": "꼭짓점 이와", "type": "point", "pts": [[556, 66]], "color": "blue"},
+    {"cue": "선분 씨에이에", "type": "seg", "pts": [[643, 136], [508, 29]], "color": "orange"},
+    {"cue": "선분 씨디,", "type": "seg", "pts": [[643, 136], [556, 136]], "color": "orange"},
+    {"cue": "선분 씨비에", "type": "seg", "pts": [[643, 136], [424, 136]], "color": "blue"},
+    {"cue": "선분 씨이가", "type": "seg", "pts": [[643, 136], [556, 66]], "color": "blue"}
+   ]
+  },
+  {
+   "pose": "A",
+   "bubble": "비례식 계산",
+   "say": "선분 씨비는 십이 더하기 팔, 이십 센티미터죠. // 그러면 선분 씨에이 대 팔은 이십 대 십과 같다는 식이 나와. 여기는 어렵지 않으니까 쭉 써 볼게. [[쓰기]] 선분 씨에이가 십육 센티미터로 나오니까 선분 에이이는 여기서 선분 씨이를 빼면 되죠. // {강조 십육 빼기 십, 그래서 답은 육 센티미터.} 육 나왔죠? 오케이.",
+   "write": [
+    {"cue": "이십 센티미터죠", "tex": "$\\overline{CB}=12+8=20$"},
+    {"cue": "이십 대 십과 같다는", "tex": "$\\overline{CA}:8=20:10$"},
+    {"quiet": true, "tex": "$10\\,\\overline{CA}=160$", "indent": 1},
+    {"quiet": true, "tex": "$\\overline{CA}=16$", "indent": 1},
+    {"cue": "선분 씨이를 빼면", "tex": "$\\overline{AE}=16-10$"},
+    {"cue": "답은 육 센티미터", "tex": "$\\therefore\\ \\overline{AE}=6\\,\\mathrm{cm}$", "color": "red", "box": true}
+   ],
+   "marks": [
+    {"cue": "선분 씨비는", "type": "seg", "pts": [[643, 136], [424, 136]], "color": "blue"},
+    {"cue": "이십 센티미터죠", "type": "label", "pts": [[480, 124]], "label": "20", "color": "blue", "size": 24, "keep": true},
+    {"cue": "십육 센티미터로", "type": "label", "pts": [[576, 58]], "label": "16", "color": "orange", "size": 24, "keep": true},
+    {"cue": "선분 에이이는", "type": "seg", "pts": [[508, 29], [556, 66]], "color": "green", "keep": true},
+    {"cue": "답은 육 센티미터", "type": "label", "pts": [[540, 34]], "label": "6", "color": "red", "size": 28, "keep": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "직각 + 공통인 각",
+   "say": "자, 정리해 볼게. 이 유형은 직각 하나에 공통인 각 하나를 찾으면 {강조 바로 에이에이 닮음이 되는 거다.} // 별표 빡 쳐 놔. 선분 씨에이의 짝은 선분 씨이가 아니라 선분 씨디야. 직각끼리 짝지어서 확인해. // 오케이, 잘했어. 다음 문제에서 보자.",
+   "write": [
+    {"cue": "직각 하나에 공통인 각", "tex": "직각 $+$ 공통인 각", "color": "red", "underline": true},
+    {"cue": "바로 에이에이 닮음이", "tex": "$\\rightarrow$ AA 닮음", "color": "red", "underline": true, "indent": 1}
+   ]
+  }
+ ],
+ "quiz": {"answer": "6 cm", "wrong": ["4 cm", "5 cm", "8 cm"]}
+}

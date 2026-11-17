@@ -1,0 +1,96 @@
+{
+ "id": "풀이_0520",
+ "kind": "풀이",
+ "label": "쎈 520번",
+ "title": "직각삼각형의 닮음의 응용",
+ "type_code": "중2-2-05-13",
+ "local_no": "0520",
+ "concept_no": 5,
+ "chapter": "도형의 닮음",
+ "sub_chapter": "도형의 닮음",
+ "book_page": 100,
+ "problem": {"image": "0520.png"},
+ "board": {"image": "0520.png", "crop": [405, 0, 680, 160], "width": 500},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 520번!",
+   "say": "자, 이 문제 시험에 진짜 잘 나와. 같이 보자. // 각 에이가 직각인 직각삼각형 에이비씨에서 꼭짓점 에이에서 선분 비씨에 수선을 내렸고, 그 발이 점 에이치야. // 선분 에이비는 십 센티미터, 선분 비에이치는 팔 센티미터일 때 선분 씨에이치의 길이를 구하는 문제야.",
+   "write": [],
+   "marks": [
+    {"cue": "각 에이가 직각인", "type": "angle", "pts": [[437, 126], [569, 27], [644, 126]], "color": "orange"},
+    {"cue": "직각삼각형 에이비씨에서", "type": "poly", "pts": [[569, 27], [437, 126], [644, 126]], "color": "blue"},
+    {"cue": "꼭짓점 에이에서", "type": "point", "pts": [[569, 27]]},
+    {"cue": "선분 비씨에 수선을", "type": "seg", "pts": [[569, 27], [569, 127]]},
+    {"cue": "점 에이치야", "type": "point", "pts": [[569, 127]], "color": "green"},
+    {"cue": "선분 에이비는", "type": "seg", "pts": [[569, 27], [437, 126]]},
+    {"cue": "선분 비에이치는", "type": "seg", "pts": [[437, 126], [569, 127]]},
+    {"cue": "선분 씨에이치의", "type": "seg", "pts": [[569, 127], [644, 126]], "color": "green"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "먼저 혼자 풀어 봐",
+   "say": "자, 여기서 잠깐. {강조 영상 멈추고 먼저 혼자 풀어 봐.} // 큰 삼각형과 왼쪽 작은 삼각형이 닮았는지부터 살펴봐.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "공통인 각 + 직각",
+   "say": "자, 큰 삼각형 에이비씨와 왼쪽 작은 삼각형 에이치비에이를 보자. // 각 비에이씨와 각 비에이치에이는 둘 다 직각이고, 각 비는 두 삼각형에 공통이죠. // {강조 그래서 두 삼각형은 에이에이 닮음이 되는 거다.}",
+   "write": [
+    {"cue": "둘 다 직각이고", "tex": "$\\angle BAC=\\angle BHA=90^\\circ$", "color": "blue"},
+    {"cue": "두 삼각형에 공통이죠", "tex": "$\\angle B$ 는 공통", "color": "blue"},
+    {"cue": "에이에이 닮음이 되는", "tex": "$\\triangle ABC\\backsim\\triangle HBA$", "color": "red"}
+   ],
+   "marks": [
+    {"cue": "큰 삼각형 에이비씨와", "type": "poly", "pts": [[569, 27], [437, 126], [644, 126]], "color": "blue"},
+    {"cue": "작은 삼각형 에이치비에이를", "type": "poly", "pts": [[569, 127], [437, 126], [569, 27]], "color": "green"},
+    {"cue": "각 비에이씨와", "type": "angle", "pts": [[437, 126], [569, 27], [644, 126]], "color": "orange", "keep": true},
+    {"cue": "각 비에이치에이는", "type": "angle", "pts": [[437, 126], [569, 127], [569, 27]], "color": "orange", "keep": true},
+    {"cue": "각 비는", "type": "angle", "pts": [[569, 27], [437, 126], [644, 126]], "keep": true}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "짝 맞춰 비례식",
+   "say": "짝을 맞춰 보면 선분 에이비는 선분 에이치비와, 선분 비씨는 선분 비에이와 짝이야. // 그래서 비례식을 세우면 이런 식이 나오죠. [[쓰기]] 이 모양은 너무 자주 나와서 {강조 선분 에이비의 제곱은 선분 비에이치 곱하기 선분 비씨}라고 외워 두기도 해.",
+   "write": [
+    {"cue": "이런 식이 나오죠", "tex": "$\\overline{AB}:\\overline{HB}=\\overline{BC}:\\overline{BA}$", "color": "blue"},
+    {"quiet": true, "tex": "$\\overline{AB}^2=\\overline{BH}\\times\\overline{BC}$", "color": "red", "underline": true}
+   ],
+   "marks": [
+    {"cue": "선분 에이비는", "type": "seg", "pts": [[569, 27], [437, 126]], "color": "orange"},
+    {"cue": "선분 에이치비와", "type": "seg", "pts": [[569, 127], [437, 126]], "color": "orange"},
+    {"cue": "선분 비씨는", "type": "seg", "pts": [[437, 126], [644, 126]], "color": "blue"},
+    {"cue": "선분 비에이와", "type": "seg", "pts": [[437, 126], [569, 27]], "color": "blue"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "값 넣기",
+   "say": "그러면 십의 제곱은 팔 곱하기 선분 비씨가 되죠. [[쓰기]] 선분 비씨가 이분의 이십오 센티미터로 나오니까 선분 씨에이치는 여기서 팔을 빼면 돼. // {강조 그러면 이분의 구 센티미터, 이게 답이야.}",
+   "write": [
+    {"cue": "십의 제곱은", "tex": "$10^2=8\\times\\overline{BC}$"},
+    {"quiet": true, "tex": "$\\overline{BC}=\\frac{100}{8}=\\frac{25}{2}$", "indent": 1},
+    {"cue": "팔을 빼면", "tex": "$\\overline{CH}=\\frac{25}{2}-8$"},
+    {"cue": "이게 답이야", "tex": "$\\therefore\\ \\overline{CH}=\\frac{9}{2}\\,\\mathrm{cm}$", "color": "red", "box": true}
+   ],
+   "marks": [
+    {"cue": "이분의 이십오 센티미터로", "type": "seg", "pts": [[437, 126], [644, 126]], "color": "blue"},
+    {"cue": "선분 씨에이치는", "type": "seg", "pts": [[569, 127], [644, 126]], "color": "green", "keep": true},
+    {"cue": "이분의 구 센티미터", "type": "label", "pts": [[606, 112]], "label": "9/2", "color": "red", "size": 24, "keep": true}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "AB² = BH × BC",
+   "say": "자, 이 유형은 직각삼각형에서 직각인 꼭짓점에서 빗변에 수선을 내린 모양이야. {강조 닮은 삼각형을 찾아 비례식을 세우거나, 제곱 공식을 바로 쓰면 돼.} // 여기서 진짜 많이 틀려. 선분 비씨는 선분 씨에이치가 아니라 전체 길이야. 마지막에 팔을 빼는 걸 잊지 마. // 오케이, 여기까지. 틀렸으면 한 번 더 보고 와.",
+   "write": [
+    {"cue": "제곱 공식을 바로", "tex": "$\\overline{AB}^2=\\overline{BH}\\times\\overline{BC}$", "color": "red", "underline": true},
+    {"cue": "마지막에 팔을 빼는", "tex": "$\\overline{CH}=\\overline{BC}-\\overline{BH}$", "color": "blue"}
+   ]
+  }
+ ],
+ "quiz": {"answer": "9/2 cm", "wrong": ["4 cm", "5 cm", "25/2 cm"]}
+}

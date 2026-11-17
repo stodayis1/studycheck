@@ -1,0 +1,103 @@
+{
+ "id": "풀이_0878",
+ "kind": "풀이",
+ "label": "쎈 878번",
+ "title": "피타고라스 정리를 이용한 직각삼각형의 성질",
+ "type_code": "중2-2-09-16",
+ "local_no": "0878",
+ "concept_no": 9,
+ "chapter": "피타고라스 정리",
+ "sub_chapter": "피타고라스 정리",
+ "book_page": 166,
+ "problem": {"image": "0878.png", "crop": [0, 0, 395, 227]},
+ "board": {"image": "0878.png", "crop": [402, 0, 670, 162]},
+ "steps": [
+  {
+   "pose": "A",
+   "bubble": "쎈 878번!",
+   "say": "자, 문제 먼저 보자. 뭘 구하라는 건지부터 찾아 봐. // 각 에이가 직각인 직각삼각형 에이비씨에서, 점 디는 변 에이비 위에, 점 이는 변 에이씨 위에 있어. // 선분 비씨의 길이는 구, 선분 비이의 길이는 팔, 선분 씨디의 길이는 육으로 주어졌어. // 이때 선분 디이의 길이의 제곱을 구하는 거야.",
+   "write": [],
+   "marks": [
+    {"cue": "각 에이가 직각인", "type": "angle", "pts": [[433, 126], [576, 27], [643, 126]], "r": 16},
+    {"cue": "점 디는", "type": "point", "pts": [[518, 67]]},
+    {"cue": "점 이는", "type": "point", "pts": [[615, 84]]},
+    {"cue": "선분 비씨의", "type": "seg", "pts": [[433, 126], [643, 126]], "color": "red"},
+    {"cue": "선분 비이의", "type": "seg", "pts": [[433, 126], [615, 84]], "color": "blue"},
+    {"cue": "선분 씨디의", "type": "seg", "pts": [[643, 126], [518, 67]], "color": "blue"},
+    {"cue": "선분 디이의", "type": "seg", "pts": [[518, 67], [615, 84]], "color": "orange"}
+   ]
+  },
+  {
+   "pose": "C",
+   "bubble": "손으로 먼저!",
+   "say": "손으로 먼저 풀어 보고 와. 기다릴게. // 그림 안에 직각삼각형이 몇 개 숨어 있는지 찾아보는 게 힌트야.",
+   "write": []
+  },
+  {
+   "pose": "B",
+   "bubble": "직각삼각형 찾기",
+   "say": "자, 꼭짓점 에이를 직각으로 하는 직각삼각형을 하나씩 찾아볼게. // 삼각형 에이비이에서 비이 제곱은 에이비 제곱 더하기 에이이 제곱이죠. // 삼각형 에이디씨에서 씨디 제곱은 에이디 제곱 더하기 에이씨 제곱이야.",
+   "write": [
+    {"cue": "비이 제곱은", "tex": "$\\overline{BE}^2=\\overline{AB}^2+\\overline{AE}^2$", "color": "blue"},
+    {"cue": "씨디 제곱은", "tex": "$\\overline{CD}^2=\\overline{AD}^2+\\overline{AC}^2$", "color": "blue"}
+   ],
+   "marks": [
+    {"cue": "꼭짓점 에이를", "type": "point", "pts": [[576, 27]]},
+    {"cue": "삼각형 에이비이에서", "type": "poly", "pts": [[576, 27], [433, 126], [615, 84]], "color": "green"},
+    {"cue": "비이 제곱은", "type": "seg", "pts": [[433, 126], [615, 84]], "color": "blue"},
+    {"cue": "삼각형 에이디씨에서", "type": "poly", "pts": [[576, 27], [518, 67], [643, 126]], "color": "green"},
+    {"cue": "씨디 제곱은", "type": "seg", "pts": [[643, 126], [518, 67]], "color": "blue"}
+   ]
+  },
+  {
+   "pose": "D",
+   "bubble": "네 식을 비교!",
+   "say": "이번에는 삼각형 에이디이와 삼각형 에이비씨를 보자. // 디이 제곱은 에이디 제곱 더하기 에이이 제곱, 비씨 제곱은 에이비 제곱 더하기 에이씨 제곱이죠. // {강조 두 식씩 더해 보면 양쪽에 똑같은 네 개의 제곱이 들어 있어.} [[쓰기]] 그래서 디이 제곱 더하기 비씨 제곱은 비이 제곱 더하기 씨디 제곱과 같은 거야.",
+   "write": [
+    {"cue": "디이 제곱은", "tex": "$\\overline{DE}^2=\\overline{AD}^2+\\overline{AE}^2$", "color": "red"},
+    {"cue": "비씨 제곱은", "tex": "$\\overline{BC}^2=\\overline{AB}^2+\\overline{AC}^2$", "color": "red"},
+    {"quiet": true, "tex": "양쪽 모두 $\\overline{AB}^2+\\overline{AC}^2$"},
+    {"quiet": true, "tex": "$+\\overline{AD}^2+\\overline{AE}^2$", "indent": 1},
+    {"cue": "디이 제곱 더하기 비씨", "tex": "$\\overline{DE}^2+\\overline{BC}^2$", "color": "red", "underline": true},
+    {"cue": "씨디 제곱과 같은", "tex": "$=\\overline{BE}^2+\\overline{CD}^2$", "color": "red", "underline": true, "indent": 1}
+   ],
+   "marks": [
+    {"cue": "삼각형 에이디이와", "type": "poly", "pts": [[576, 27], [518, 67], [615, 84]], "color": "green"},
+    {"cue": "삼각형 에이비씨를", "type": "poly", "pts": [[576, 27], [433, 126], [643, 126]], "color": "green"},
+    {"cue": "디이 제곱은", "type": "seg", "pts": [[518, 67], [615, 84]], "color": "red"},
+    {"cue": "비씨 제곱은", "type": "seg", "pts": [[433, 126], [643, 126]], "color": "red"},
+    {"cue": "디이 제곱 더하기", "type": "seg", "pts": [[518, 67], [615, 84]], "color": "red", "keep": true},
+    {"cue": "비씨 제곱은 비이", "type": "seg", "pts": [[433, 126], [643, 126]], "color": "red", "keep": true},
+    {"cue": "비이 제곱 더하기", "type": "seg", "pts": [[433, 126], [615, 84]], "color": "blue", "keep": true},
+    {"cue": "씨디 제곱과", "type": "seg", "pts": [[643, 126], [518, 67]], "color": "blue", "keep": true}
+   ]
+  },
+  {
+   "pose": "A",
+   "bubble": "숫자만 넣으면 끝",
+   "say": "자, 이제 숫자를 넣기만 하면 돼. // 디이 제곱 더하기 구의 제곱이 팔의 제곱 더하기 육의 제곱과 같아. [[쓰기]] {강조 그래서 디이 제곱은 십구가 되는 거다.} 너도 맞았지?",
+   "write": [
+    {"cue": "구의 제곱이", "tex": "$\\overline{DE}^2+9^2=8^2+6^2$"},
+    {"quiet": true, "tex": "$\\overline{DE}^2=64+36-81$", "indent": 1},
+    {"cue": "십구가 되는", "tex": "$\\therefore\\ \\overline{DE}^2=19$", "color": "red", "box": true}
+   ],
+   "marks": [
+    {"cue": "디이 제곱 더하기", "type": "seg", "pts": [[518, 67], [615, 84]], "color": "orange"},
+    {"cue": "구의 제곱이", "type": "seg", "pts": [[433, 126], [643, 126]], "color": "red"},
+    {"cue": "팔의 제곱", "type": "seg", "pts": [[433, 126], [615, 84]], "color": "blue"},
+    {"cue": "육의 제곱과", "type": "seg", "pts": [[643, 126], [518, 67]], "color": "blue"},
+    {"cue": "십구가 되는", "type": "label", "pts": [[566, 58]], "label": "DE² = 19", "keep": true, "size": 22}
+   ]
+  },
+  {
+   "pose": "E",
+   "bubble": "엇갈린 두 쌍의 제곱",
+   "say": "자, 이 유형 정리하자. // {강조 직각삼각형의 두 변 위에 점 두 개를 잡으면, 디이와 비씨의 제곱의 합이 엇갈려 이은 두 선분의 제곱의 합과 같다.} // 공식만 외우지 말고, 직각삼각형 네 개로 왜 그런지 떠올려 봐. // 시험에서 이거 놓치면 바로 틀린다. 짝을 잘못 맞추는 실수가 제일 많아. // 이제 비슷한 문제 나와도 바로 풀 수 있겠죠? 잘했어.",
+   "write": [
+    {"cue": "디이와 비씨의", "tex": "$\\overline{DE}^2+\\overline{BC}^2$", "color": "red", "underline": true},
+    {"cue": "엇갈려 이은", "tex": "$=\\overline{BE}^2+\\overline{CD}^2$", "color": "red", "underline": true, "indent": 1}
+   ]
+  }
+ ],
+ "quiz": {"answer": "19", "wrong": ["17", "21", "15"]}
+}
