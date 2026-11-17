@@ -638,6 +638,14 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       ms.sort((a, b) => a.col - b.col || a.y0 - b.y0)
     }
 
+    // ★ **첫 쪽에서 첫 문항 번호보다 위는 시험지 머리띠다** (학교 이름 · 「1학년 2학기 기말고사」 ·
+    //   「선택형20문항」 표). 쪽마다 되풀이되는 머리말은 isRunning 이 걸러내지만, **첫 쪽에만**
+    //   머리를 찍는 학교가 있다 — 2026-11-17 성사고 · 향동고. 그러면 한 번만 나오므로 안 걸리고,
+    //   오른단 맨 위의 「앞 문항의 이어지는 부분」 조각이 그 띠를 떠 가서
+    //   **앞 문항 그림 아래에 머리띠가 붙는다** (성사고 3번 — 조각 2개).
+    //   첫 쪽에는 이어 붙일 앞 문항이 아예 없으므로 첫 번호 위는 잘라 낸다.
+    const firstMarkTop = pi === 0 && ms.length ? Math.min(...ms.map((m) => m.top ?? m.y0)) - 2 : -Infinity
+
     // 쪽·단 순서대로 「번호 자리」와 「단 끝」을 한 줄로 늘어놓는다
     const pageRows = inkRows(ctx, canvas.width, canvas.height)
     const bottom = Math.min(vp1.height, (pageRows ? pageRows[1] / Z : vp1.height) + 4, bodyBottom)
@@ -670,7 +678,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       }
       if (!cur || s.y1! - s.y0 < 3) continue
       const [x0, x1] = cols[s.c]
-      const y0 = Math.max(s.y0, bodyTop)
+      const y0 = Math.max(s.y0, bodyTop, firstMarkTop)
       cur.text += ' ' + textIn(items, x0, y0, x1, s.y1!)
       const part = clip(canvas, x0, y0, x1, s.y1!)
       if (part) cur.parts.push(part)
