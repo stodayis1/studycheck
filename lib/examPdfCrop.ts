@@ -312,6 +312,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         let text = dec(textIn(items, cols[m.c][0] - 1, m.y0 - 1, x1, y1)).replace(/[-]/g, '').replace(/\s+/g, ' ').trim()
         text = text.replace(new RegExp(`(^|\\s)${m.no}[).]\\s*`), ' ').trim().replace(/^(논술|서술)형?\s*\d+\s*[.)]\s*/, '')
         if (/^[①②③④⑤,\s]+$/.test(text.replace(/[^\p{L}\p{N}①②③④⑤,]/gu, '') || ' ')) text = text.replace(/[^①②③④⑤,]/g, '')   // 빈 수식 틀 같은 찌꺼기는 버린다
+        // 「1. 정답 ④ 의 값을 …」 처럼 **「정답」이라고 적고** 해설이 이어지는 꼴 (2026-11-17 백양고).
+        // 이 말을 떼야 아래 `lead` 가 동그라미만 남긴다 — 안 떼면 해설이 통째로 정답으로 들어가
+        // QR 자동 채점이 안 된다.
+        text = text.replace(/^(정답|답)\s*[:：)]?\s*/, '')
         const lead = text.match(/^[①②③④⑤](\s*,\s*[①②③④⑤])*/)
         if (lead && text.length > lead[0].length) text = lead[0]          // 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
         if (text) answers[m.no] = text
@@ -381,6 +385,11 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         for (const t of cands) {
           const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 3)
           const next = same.filter((o) => o.x >= t.x1 - 1).sort((a, b) => a.x - b.x)[0]
+          // ★ 문항 번호는 **그 줄의 맨 앞**에 있다. 왼쪽에 무언가 있으면 번호가 아니다 —
+          //   2026-11-17 백양고: 배점 「[4.9점]」이 줄바꿈으로 「[」 만 앞줄에 남고 수식 글꼴 숫자가
+          //   단 맨 왼쪽으로 내려와 **9번 문항 번호로 읽혔다.** 그 바람에 8번이 한 줄(39px)로 잘리고,
+          //   번호가 차례와 안 맞아(4 ≠ 9) dotOk 가 꺼져 **배점을 하나도 못 읽었다.**
+          if (same.some((o) => o.x < t.x - 1 && o.x1 > cols[c][0] - 2)) continue
           // ① 수식 글꼴 번호 + 따로 찍힌 「.」 (신원중 꼴)
           const 번호수식 = PUA.test(t.str) && !!next && next.x < t.x1 + 8 && next.str.startsWith('.')
           // ② 번호와 점이 **한 덩어리**로 그냥 글자인 꼴 (지축중 꼴). 본문 안에도 「12.」 같은
