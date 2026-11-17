@@ -40,10 +40,10 @@ alter table public.class_move_assign enable row level security;
 -- 또는 app_settings 'high_curriculum_teachers' 에 넣어 둔 강사
 -- (docs/sql/고등커리큘럼_고등강사만.sql · 고등커리큘럼_볼사람_추가.sql).
 --
--- ★ 초6 → 중등 판은 중등 선생님들(김은수·박경미·신애진)이 보셔야 하는데, 그분들은 이 함수에
---   걸리지 않는다. 지금은 **원장님이 혼자 맞추고 결과를 알려 주시는 방식**이라 그대로 두었다.
---   중등 선생님께 열려면 app_settings 'high_curriculum_teachers' 에 그분들 users.id 를 더하거나
---   (그러면 고등 커리큘럼도 같이 보인다) 이 표만 보는 함수를 따로 만들어야 한다. 원장님 결정 사항.
+-- ★ 초6 → 중등 판은 중등 선생님들(김은수·박경미·신애진)이 보셔야 한다. 그분들은 이 함수의
+--   「고등학생을 맡은 강사」에 걸리지 않으므로, 2026-11-17 에 app_settings 명단에 더했다
+--   (docs/sql/진급배정판_중등선생님_추가.sql — 원장님 「권한 명단에 세분 더해줘」).
+--   그 명단은 고등 커리큘럼과 **한 명단**이라 세 분께 고등 커리큘럼도 같이 보인다.
 --
 -- ★ (select ...) 로 감싼다 — 맨몸으로 두면 행마다 호출돼 느려진다.
 drop policy if exists class_move_assign_read on public.class_move_assign;
