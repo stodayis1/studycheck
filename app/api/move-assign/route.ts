@@ -16,21 +16,25 @@
 //   (규칙을 TS 로 베껴 쓰지 않는다).
 //
 // ★ 두 갈래다 (원장님 2026-11-17 「전체 인원을 볼 필요가 없어」)
-//   · 전체 — can_see_high_curriculum() 도 참인 사람. 두 탭 모두, 고등부 학생까지 본다.
-//   · 중등만 — 진급 배정판 명단에만 든 사람(초6 담당 조윤희·윤주희). 「초6 → 중등」 탭만이고,
-//     **고1·고2 는 아예 안 내려 준다.** 초등 선생님이 고등부 명단을 볼 까닭이 없다.
+//   · 전체 — can_see_high_curriculum() 도 참인 사람. 세 탭 모두, 고등부 학생까지 본다.
+//   · 고등 빼고 — 진급 배정판 명단에만 든 사람(초6 담당 조윤희·윤주희). 「초6 → 중등」과
+//     「초등 진급」 탭만이고, **고1·고2 는 아예 안 내려 준다.** 그분들이 고등부 명단을 볼 까닭이 없다.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { staffOrDeny } from '@/lib/apiAuth'
-import { WD, WE, EXTRA } from '@/lib/moveAssign'
+import { WD, WE, EXTRA, GRADES_ELEM } from '@/lib/moveAssign'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-/** 이 판이 보는 학년 — 「초6 → 중등」만 보는 사람에게는 고등부를 뺀다 */
-const GRADES_ALL = ['초6', '중1', '중2', '중3', '고1', '고2']
-const GRADES_MID = ['초6', '중1', '중2', '중3']
+/**
+ * 이 판이 보는 학년 — 고등 권한이 없는 사람에게는 고1·고2 를 뺀다.
+ * ★ 초1~초5 는 「초등 진급」 탭이 쓴다 (원장님 2026-11-17). 학생 정책으로는 초등 선생님도
+ *   남의 반 초등을 못 읽으므로 여기서 service_role 로 내려 준다.
+ */
+const GRADES_BASE = [...GRADES_ELEM, '초6', '중1', '중2', '중3']
+const GRADES_ALL = [...GRADES_BASE, '고1', '고2']
 
 function admin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -82,7 +86,7 @@ export async function GET(req: Request) {
   const { deny, full } = await allow(req)
   if (deny) return deny
   const db = admin()
-  const GRADES = full ? GRADES_ALL : GRADES_MID
+  const GRADES = full ? GRADES_ALL : GRADES_BASE
   try {
     const students = (await all(() => db.from('students')
       .select('id, name, grade, teacher_name, is_test')
@@ -101,8 +105,8 @@ export async function GET(req: Request) {
 
     let rows = await all(() => db.from('class_move_assign')
       .select('student_id, track, teacher_name, weekday_slot, weekend_slot, extra_slot').order('student_id'))
-    // 「초6 → 중등」만 보는 사람에게는 고등 판 줄도 내려 주지 않는다
-    if (!full) rows = rows.filter((r: any) => r.track === '중등')
+    // 고등 권한이 없는 사람에게는 고등 판 줄도 내려 주지 않는다
+    if (!full) rows = rows.filter((r: any) => r.track === '중등' || r.track === '초등')
 
     return NextResponse.json({ students, schedules, rows, full })
   } catch (e: any) {
@@ -123,14 +127,18 @@ export async function POST(req: Request) {
   const weekend = String(body?.weekend ?? '')
   const extra = String(body?.extra ?? '')
   if (!studentId) return NextResponse.json({ error: '학생을 알 수 없어요.' }, { status: 400 })
-  if (track !== '고등' && track !== '중등') return NextResponse.json({ error: '판을 알 수 없어요.' }, { status: 400 })
-  // 「초6 → 중등」만 보는 사람은 고등 판을 고칠 수 없다 (화면에도 그 탭이 안 뜬다)
+  if (track !== '고등' && track !== '중등' && track !== '초등')
+    return NextResponse.json({ error: '판을 알 수 없어요.' }, { status: 400 })
+  // 고등 권한이 없는 사람은 고등 판을 고칠 수 없다 (화면에도 그 탭이 안 뜬다)
   if (track === '고등' && !full)
     return NextResponse.json({ error: '「중3 → 고등」은 고등 선생님만 고칠 수 있어요.' }, { status: 403 })
   // 없는 타임 열쇠가 들어오면 화면에서 그 학생이 아무 칸에도 안 그려진다 — 여기서 막는다.
   if (weekday && !WD[weekday]) return NextResponse.json({ error: '없는 평일 타임이에요.' }, { status: 400 })
   if (weekend && !WE[weekend]) return NextResponse.json({ error: '없는 토·일 타임이에요.' }, { status: 400 })
   if (extra && !EXTRA[extra]) return NextResponse.json({ error: '없는 추가 클리닉이에요.' }, { status: 400 })
+  // 중등·초등 판은 **선생님만** 고른다. 타임이 섞여 들어오면 그 학생이 고등 판 칸에 그려진다.
+  if (track !== '고등' && (weekday || weekend || extra))
+    return NextResponse.json({ error: '이 판은 선생님만 고릅니다.' }, { status: 400 })
 
   const db = admin()
   const { error } = await db.from('class_move_assign').upsert({
