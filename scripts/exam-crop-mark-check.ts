@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerHeadPageOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerHeadPageOf, numberStyleOf, styleNumberOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
@@ -24,6 +24,8 @@ const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerH
   dotNumberOf: (str: string, size: number, limit: number, big?: number) => number | null
   pointsOf: (text: string) => number | null
   answerHeadPageOf: (pageTexts: string[]) => number | null
+  numberStyleOf: (c: { page: number; col: number; base: number; no: number; size: number; fn: string }[]) => { size: number; fn: string } | null
+  styleNumberOf: (str: string, size: number, fn: string, style: { size: number; fn: string } | null) => number | null
 }
 
 let pass = 0, all = 0
@@ -217,6 +219,45 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   // 머리와 어림짐작을 **섞어** 쓰면 머리보다 앞쪽에서 잘못 켜진다 — 머리가 없을 때만 어림짐작이다
   ok('어림짐작은 머리가 없을 때만 쓴다', src3.includes('const 어림짐작정답 = answerHeadPage === null'))
   ok('정답 시작 판정에 둘 다 들어간다', src3.includes('if (inAnswers || 머리로정답 || 어림짐작정답) {'))
+}
+
+// 번호 꼴은 **문서 한 번**으로 정한다 (2026-11-17 능곡고 · 무원고).
+//   능곡고는 번호가 1~23번 모두 11.03pt 로 일정한데 본문이 쪽마다 11.03 → 9.95 → 8.99 로
+//   바뀌어, 「본문보다 작거나 크다」 규칙이 쪽마다 뒤집혔다 (23개 중 4개만 걸렸다).
+{
+  const 번호 = (page: number, col: number, base: number, no: number, size: number, fn: string) =>
+    ({ page, col, base, no, size, fn })
+  // 능곡고 꼴 — 1쪽 왼단 1,2,3 · 오른단 4,5,6 · 2쪽 왼단 7,8,9 …
+  const 능곡: any[] = []
+  let n = 0
+  for (let p = 0; p < 4; p++) for (const c of [0, 1]) for (let k = 0; k < 3; k++) 능곡.push(번호(p, c, 100 + k * 50, ++n, 11.03, 'g_d0_f3'))
+  const st = numberStyleOf(능곡)
+  ok('이어지는 묶음을 번호 꼴로 고른다', !!st && Math.abs(st.size - 11.03) < 0.01 && st.fn === 'g_d0_f3', String(st && st.size))
+  ok('그 꼴이면 본문과 같은 크기여도 번호로 읽는다', styleNumberOf('7.', 11.03, 'g_d0_f3', st) === 7)
+  ok('글꼴이 다르면 번호가 아니다 (본문 속 「12.」)', styleNumberOf('12.', 11.03, 'g_d0_f2', st) === null)
+  ok('크기가 다르면 번호가 아니다', styleNumberOf('7.', 9.95, 'g_d0_f3', st) === null)
+  ok('꼴을 못 정했으면(null) 아무것도 읽지 않는다', styleNumberOf('7.', 11.03, 'g_d0_f3', null) === null)
+  ok('「7)」 꼴은 이 가지로 안 읽는다', styleNumberOf('7)', 11.03, 'g_d0_f3', st) === null)
+
+  // 1 부터 시작하지 않으면 번호 꼴이 아니다 (해설 쪽의 중간 번호 묶음)
+  ok('1 부터가 아니면 안 고른다', numberStyleOf(능곡.slice(3)) === null)
+  // 끊기면 안 고른다
+  const 끊김 = 능곡.filter((c) => c.no !== 5)
+  ok('번호가 끊기면 안 고른다', numberStyleOf(끊김) === null)
+  // 다섯 개 아래면 안 고른다 (우연히 이어진 「1. 2. 3.」 목록)
+  ok('넷뿐이면 안 고른다', numberStyleOf(능곡.slice(0, 4)) === null)
+  // 두 묶음이 다 이어지면 **긴 쪽**을 쓴다
+  const 짧은묶음 = Array.from({ length: 6 }, (_, i) => 번호(9, 0, 100 + i * 20, i + 1, 8.75, 'g_d0_f9'))
+  const 고름 = numberStyleOf([...짧은묶음, ...능곡])
+  ok('두 묶음이 다 이어지면 긴 쪽을 쓴다', !!고름 && 고름.fn === 'g_d0_f3')
+  ok('빈 목록이면 null', numberStyleOf([]) === null)
+}
+
+{
+  const src4 = fs.readFileSync(libPath, 'utf8')
+  ok('번호 꼴을 정답 머리 앞쪽 후보로만 정한다', src4.includes('numCands.filter((c) => answerHeadPage === null || c.page < answerHeadPage)'))
+  ok('크기 규칙으로 못 읽은 번호를 문서 꼴로 다시 읽는다', src4.includes('?? styleNumberOf(t.str, t.size, t.fn, numStyle)'))
+  ok('글자 조각이 글꼴 이름을 들고 다닌다', src4.includes('fn: String(it.fontName'))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)

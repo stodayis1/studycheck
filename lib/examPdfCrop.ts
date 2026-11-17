@@ -105,6 +105,56 @@ export function bigLimit(sizes: number[]): number {
   return s[Math.floor(s.length / 2)] * 1.15
 }
 
+/** 첫 훑기에서 모은 「단 맨 왼쪽의 `N.`·`N)` 조각」 하나 */
+export type NumCand = { page: number; col: number; base: number; no: number; size: number; fn: string }
+
+/**
+ * 문항 번호의 **크기·글꼴을 문서 한 번으로** 정한다. 못 정하면 null.
+ *
+ * 왜 쪽마다가 아니라 문서 한 번인가 (2026-11-17 능곡고)
+ *   능곡고는 번호가 1~23번 **모두 11.03pt · 같은 글꼴**로 일정한데, 쪽마다 본문 크기가
+ *   11.03 → 9.95 → 8.99 로 달라진다. 그래서 「본문보다 작거나 크다」는 **쪽마다 뒤집혀**
+ *   4쪽에서만 걸렸다(문항 23개 중 4개). 번호 쪽은 가만히 있는데 자가 흔들린 것이다.
+ *
+ * 고르는 법 — (크기, 글꼴) 묶음 가운데 번호가 **1부터 빠짐없이 이어지는** 것. 다섯 개 넘어야 한다.
+ * 같은 길이면 **먼저 나온 것**(= 앞쪽 쪽)을 쓴다. 해설 쪽 번호가 끼어들지 않게, 부르는 쪽에서
+ * 「정답 및 해설」 머리 **앞쪽 후보만** 넘긴다.
+ *
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function numberStyleOf(cands: NumCand[]): { size: number; fn: string } | null {
+  const byKey = new Map<string, NumCand[]>()
+  for (const c of cands) {
+    const key = `${c.size.toFixed(1)}|${c.fn}`
+    const list = byKey.get(key)
+    if (list) list.push(c)
+    else byKey.set(key, [c])
+  }
+  let best: { size: number; fn: string; n: number } | null = null
+  for (const list of byKey.values()) {
+    const nos = list.slice()
+      .sort((a, b) => a.page - b.page || a.col - b.col || a.base - b.base)
+      .map((c) => c.no)
+    if (nos.length < 5 || nos[0] !== 1) continue
+    if (!nos.every((n, i) => i === 0 || n === nos[i - 1] + 1)) continue
+    if (!best || nos.length > best.n) best = { size: list[0].size, fn: list[0].fn, n: nos.length }
+  }
+  return best ? { size: best.size, fn: best.fn } : null
+}
+
+/**
+ * 그 조각이 **문서에서 정한 번호 꼴**인가. 맞으면 그 숫자.
+ * 크기·글꼴이 둘 다 같아야 한다 — 크기만 보면 본문 속 「12.」 가 걸린다.
+ */
+export function styleNumberOf(str: string, size: number, fn: string,
+  style: { size: number; fn: string } | null): number | null {
+  if (!style) return null
+  const m = DOT_NUM.exec(str.trim())
+  if (!m) return null
+  if (Math.abs(size - style.size) > 0.15 || fn !== style.fn) return null
+  return Number(m[1])
+}
+
 /**
  * 「정답 및 해설」 머리가 몇 쪽에 있나 (0부터). 없으면 null.
  *
@@ -147,7 +197,7 @@ export type CroppedProblem = {
 }
 export type CropResult = { pages: number; problems: CroppedProblem[]; answersFound: number; warnings: string[] }
 
-type Item = { str: string; x: number; x1: number; base: number; top: number; bottom: number; size: number }
+type Item = { str: string; x: number; x1: number; base: number; top: number; bottom: number; size: number; fn: string }
 
 function inkRows(ctx: CanvasRenderingContext2D, w: number, h: number): [number, number] | null {
   if (w < 1 || h < 1) return null
@@ -243,10 +293,12 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   //   lineStarts 로 세어진 탓이다. 머리말은 25개교 **전부**에 있었고 23개교에서 어림짐작과 같았다.
   // 머리가 없는 파일(신원중 꼴)은 전처럼 어림짐작으로 간다.
   const pageTexts: string[] = []
+  const numCands: NumCand[] = []
   for (let pi = 0; pi < doc.numPages; pi++) {
     const pg = await doc.getPage(pi + 1)
     const vp = pg.getViewport({ scale: 1 })
     const strs: string[] = []
+    const pageItems: { str: string; x: number; x1: number; base: number; size: number; fn: string }[] = []
     for (const it of (await pg.getTextContent()).items as any[]) {
       const str = String(it.str ?? '').trim()
       if (!str) continue
@@ -254,10 +306,30 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       const t = pdfjs.Util.transform(vp.transform, it.transform)
       seen.set(sigOf(t[4], t[5], str), (seen.get(sigOf(t[4], t[5], str)) ?? 0) + 1)
       if (PAGE_NO.test(str)) seenNum.set(numSig(t[4], t[5]), (seenNum.get(numSig(t[4], t[5])) ?? 0) + 1)
+      pageItems.push({ str, x: t[4], x1: t[4] + it.width, base: t[5], size: Math.hypot(t[2], t[3]), fn: String(it.fontName ?? '') })
     }
     pageTexts.push(strs.join(' '))
+    // 단 맨 왼쪽의 「N.」 조각을 모아 둔다 — 번호 꼴을 **문서 한 번**으로 정하려고 (numberStyleOf).
+    // 단 자리는 아래 본 돌기와 같은 셈으로 잡는다 (머리말을 아직 못 가려 조금 넓게 나올 수 있다).
+    if (pageItems.length) {
+      const mid = vp.width / 2
+      const ls = pageItems.filter((t) => t.x < mid).map((t) => t.x)
+      const rs = pageItems.filter((t) => t.x > mid).map((t) => t.x1)
+      const l = (ls.length ? Math.min(...ls) : 40) - 3
+      const r = (rs.length ? Math.max(...rs) : vp.width - 40) + 3
+      const cc: [number, number][] = [[l, mid - 4], [mid + 5, Math.max(r, mid + 5)]]
+      for (const t of pageItems) {
+        const col = t.x < cc[1][0] - 5 ? 0 : 1
+        if (Math.abs(t.x - cc[col][0]) >= 12) continue
+        const m = DOT_NUM.exec(t.str)
+        if (!m) continue
+        numCands.push({ page: pi, col, base: t.base, no: Number(m[1]), size: t.size, fn: t.fn })
+      }
+    }
   }
   const answerHeadPage = answerHeadPageOf(pageTexts)
+  // 해설 쪽 번호가 끼어들지 않게 **정답 머리 앞쪽** 후보만 본다
+  const numStyle = numberStyleOf(numCands.filter((c) => answerHeadPage === null || c.page < answerHeadPage))
   // 쪽이 셋 이상일 때만 본다 (두 쪽짜리에서 우연히 같은 자리에 같은 글자가 올 수 있다)
   const REPEAT = doc.numPages >= 3 ? Math.max(3, Math.ceil(doc.numPages * 0.6)) : doc.numPages + 1
   const isRunning = (t: Item) =>
@@ -282,7 +354,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       if (!it.str || !it.str.trim()) continue
       const t = pdfjs.Util.transform(vp1.transform, it.transform)
       const size = Math.hypot(t[2], t[3])
-      raw.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size })
+      raw.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size, fn: String(it.fontName ?? '') })
     }
     // 되풀이되는 글자가 있는 **띠 전체**를 뺀다 — 쪽 번호처럼 쪽마다 글자가 달라지는 것도
     // 같은 띠 안에 있으면 머리말이다 (안 빼면 그 글자 때문에 본문 위끝이 머리말까지 올라간다)
@@ -465,7 +537,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           //    「22.」·「23.」 은 본문 크기(11.5pt)여서 여기 안 걸린다.
           // ③ 번호가 본문보다 **큰** 꼴도 있다 (고양시 고1 — 번호 15.0pt · 본문 11.0pt).
           //    작은 쪽만 보면 하나도 안 걸린다. 같은 크기만 아니면 되므로 limit · big 양쪽으로 가른다.
-          const 글자번호 = dotNumberOf(t.str, t.size, limit, big)
+          //    ④ 쪽마다 본문 크기가 달라져 ②·③ 이 뒤집히는 파일이 있다 (능곡고 — 번호는
+          //       1~23번 모두 11.03pt 로 일정한데 본문이 11.03 → 9.95 → 8.99 로 바뀐다).
+          //       그래서 **문서 한 번으로 정한 번호 꼴**(numStyle)도 같이 본다.
+          const 글자번호 = dotNumberOf(t.str, t.size, limit, big) ?? styleNumberOf(t.str, t.size, t.fn, numStyle)
           const 번호글자 = 글자번호 !== null
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
