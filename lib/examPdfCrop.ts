@@ -315,7 +315,8 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         // 「1. 정답 ④ 의 값을 …」 처럼 **「정답」이라고 적고** 해설이 이어지는 꼴 (2026-11-17 백양고).
         // 이 말을 떼야 아래 `lead` 가 동그라미만 남긴다 — 안 떼면 해설이 통째로 정답으로 들어가
         // QR 자동 채점이 안 된다.
-        text = text.replace(/^(정답|답)\s*[:：)]?\s*/, '')
+        // 「[정답] ④ …」(풍동고) · 「정답 ④ …」(백양고) · 「정답: ④」 — 괄호·쉼표를 가리지 않는다
+        text = text.replace(/^[[【〔<(]?\s*(정답|답)\s*[\]】〕>)]?\s*[:：)]?\s*/, '')
         const lead = text.match(/^[①②③④⑤](\s*,\s*[①②③④⑤])*/)
         if (lead && text.length > lead[0].length) text = lead[0]          // 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
         if (text) answers[m.no] = text
