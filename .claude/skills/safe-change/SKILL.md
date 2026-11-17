@@ -242,6 +242,14 @@ node --import ./scripts/ts-resolve.mjs scripts/briefing-check.ts
 - [ ] `main`에 push하면 Vercel이 자동 배포한다. **DB 변경이 앱보다 먼저인지 나중인지** 순서를 정해 두고 지킨다.
 - [ ] 환경변수만 바꿨으면 push가 없으니 Vercel **Redeploy**. 새 변수는 Production and Preview 둘 다 체크.
 - [ ] `vercel.json`의 `"regions": ["icn1"]`은 건드리지 않는다(DB가 서울).
+- [ ] **자동 발송 시각을 옮기면 「깨우는 쪽」도 같이 옮긴다.** 라우트는 정해진 시각 전이면 그냥 돌아가고
+      (`eveningNotBefore()` · `lib/cronBriefing.ts`), 깨우는 것은 **Supabase pg_cron 의 창**이다
+      (`docs/sql/제시간_자동발송_pgcron.sql`). 창이 끝난 뒤로 발송 시각을 미루면 **그날 발송이 통째로
+      안 나간다 — 에러도 안 난다.** `vercel.json` 의 예약은 보험이라 역시 발송 시각 뒤여야 한다.
+      차례는 **SQL 먼저 → 배포**, 되돌릴 때는 **코드 먼저 → SQL**. 검사:
+      ```bash
+      node --import ./scripts/ts-resolve.mjs scripts/briefing-time-check.ts
+      ```
 - [ ] 배포 뒤 바뀐 화면을 **역할별로** 눈으로 연다: 원장 / 강사 / 학생 / 학부모. 최소한 학생 로그인 · 선생님 학생관리 ·
       바꾼 화면. 막아야 할 것이 실제로 막히는지도 본다(81cb573은 익명 세션으로 막히는 것과,
       일부러 망가뜨린 사본에서 열리는 것을 둘 다 확인했다).
@@ -921,3 +929,4 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-17 남의 학년을 보는 화면은 **서버 API 로** 읽는다 — 학생 정책은 담당 학생+주임 학년만 열려 있어 브라우저에서 직접 읽으면 조용히 0명이 된다(신애진 선생님 화면의 초6)
 - 2026-11-17 「원장 + 고등 담당」 가드는 `highOrDeny`(lib/apiAuth.ts) 한 곳 — 명단을 route 에 베껴 적지 않는다. 다만 **권한이 두 갈래**면(move-assign 처럼) 그 화면이 자기 `allow()` 를 둔다. 강사가 **본인 담당 학생에게만** 하는 저장은 service_role 로 쓰기 전에 **그 사람 토큰으로 students 를 되읽어** 가린다(걸러진 수를 화면에 알린다)
 - 2026-11-17 지우는 단추는 **FK 부터 뽑아 본다** — `exam_sheets` 를 지우면 `gradings`(학생 채점 기록)가 CASCADE 로 같이 날아간다. 막는 쪽(NO ACTION)은 미리 골라 남기고, 차례는 그림 → 자식 → 부모, 확인창에 숫자와 「되돌릴 수 없다」를 적는다
+- 2026-11-17 자동 발송 시각을 옮길 때는 **pg_cron 깨움 창**(docs/sql/제시간_자동발송_pgcron.sql)과 vercel.json 도 같이 — 창 밖으로 미루면 그날 발송이 통째로 조용히 빈다. SQL 먼저, 배포 나중. scripts/briefing-time-check.ts 가 본다

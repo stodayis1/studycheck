@@ -351,7 +351,7 @@ export default function TeacherLearningNotesPage() {
   const [briefPreview, setBriefPreview] = useState<any>(null)
   const [briefResult, setBriefResult] = useState<any>(null)
   const [tplCheck, setTplCheck] = useState<any>(null)
-  // 누구에게 보낼지 — 원장님이 초등(저녁 8시)과 중·고등(다음 날 11시)을 나눠 보내신다.
+  // 누구에게 보낼지 — 원장님이 초등(밤 9시)과 중·고등(다음 날 11시)을 나눠 보내신다.
   const [briefOnly, setBriefOnly] = useState<'' | 'elementary' | 'secondary'>('')
   // 학습일지 미작성자 — 원장님이 발송 전에 바로 볼 수 있어야 한다(브리핑에서 빠지는 학생들이다).
   const [missing, setMissing] = useState<{ name: string; grade: string; teacher: string | null; why: string }[] | null>(null)
@@ -2918,11 +2918,11 @@ ${e?.message ?? '연결 실패'}
               <span className="text-sm font-bold" style={{ color: '#3C1E1E' }}>카톡 수업 브리핑</span>
               <span className="text-[11px] font-bold ml-auto px-2 py-0.5 rounded-md"
                 style={{ background: '#EAF3DE', color: '#27500A' }}>
-                자동 발송 켜짐 — 저녁 8시 · 다음 날 오전 11시
+                자동 발송 켜짐 — 밤 9시 · 다음 날 오전 11시
               </span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
-              <b>저녁 8시</b>에 그날 기록이 끝난 학생에게 자동으로 나가고, <b>다음 날 오전 11시</b>에
+              <b>밤 9시</b>에 그날 기록이 끝난 학생에게 자동으로 나가고, <b>다음 날 오전 11시</b>에
               그때 못 나간 나머지가 나갑니다. 같은 날은 두 번 가지 않아요.
               보내기 직전에 오타·문장을 자동으로 다듬고(교재명·숫자는 건드리지 않습니다),
               그 시각에도 덜 채워진 수업일지는 담당 선생님께 문자로 알립니다.
@@ -3201,14 +3201,14 @@ ${e?.message ?? '연결 실패'}
                     보호자 번호 없음 {briefPreview.skippedNoPhone.length}명 — {briefPreview.skippedNoPhone.map((x: any) => x.name).join(', ')}
                   </div>
                 )}
-                {/* 출결만 찍힌 건 — 저녁 8시 자동 발송에서는 미뤄진다 (원장님 2026-10-22) */}
+                {/* 출결만 찍힌 건 — 밤 9시 자동 발송에서는 미뤄진다 (원장님 2026-10-22) */}
                 {(() => {
                   const thin = (briefPreview.previews ?? []).filter((p: any) => p.thin && !p.alreadySent)
                   if (!thin.length) return null
                   return (
                     <div style={{ color: '#92400E' }}>
                       아직 출결만 적힌 {thin.length}명 — {thin.map((x: any) => x.name).join(', ')}
-                      <span className="text-gray-500"> (저녁 8시 자동 발송에서 빠지고 다음 날 오전 11시로 미뤄져요)</span>
+                      <span className="text-gray-500"> (밤 9시 자동 발송에서 빠지고 다음 날 오전 11시로 미뤄져요)</span>
                     </div>
                   )
                 })()}
@@ -3266,10 +3266,10 @@ ${e?.message ?? '연결 실패'}
                               <span className="px-1.5 py-0.5 rounded-md font-bold"
                                 style={{ background: '#EAF3DE', color: '#27500A' }}>이미 보냄</span>
                             )}
-                            {/* 출결만 찍혀 있으면 저녁 8시 자동 발송에서 다음 날로 미뤄진다 */}
+                            {/* 출결만 찍혀 있으면 밤 9시 자동 발송에서 다음 날로 미뤄진다 */}
                             {p.thin && (
                               <span className="px-1.5 py-0.5 rounded-md font-bold"
-                                title="진도·과제·알림장이 하나도 없어요. 저녁 8시 자동 발송에서는 빠지고 다음 날 오전 11시로 미뤄집니다."
+                                title="진도·과제·알림장이 하나도 없어요. 밤 9시 자동 발송에서는 빠지고 다음 날 오전 11시로 미뤄집니다."
                                 style={{ background: '#FEF3C7', color: '#92400E' }}>출결만 적힘</span>
                             )}
                             {/* ★ 글을 보고 바로 고칠 수 있어야 한다 (원장님 2026-10-22 「내가 첨삭할 필요있을 때」).
