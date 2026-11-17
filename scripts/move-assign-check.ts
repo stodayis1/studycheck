@@ -11,7 +11,7 @@ import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import {
   WD, WE, DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID,
-  HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID, NO_SHOW,
+  EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID, NO_SHOW,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff, toMin,
 } from '../lib/moveAssign.ts'
 
@@ -87,6 +87,25 @@ for (const [k, t] of Object.entries(DRAFT_MID)) {
   ok(k.endsWith('|초6'), `${k} 는 초6 이어야 한다`)
 }
 ok(keyOf(' 홍채은 ', '초6') === '홍채은|초6', '이름·학년 열쇠는 앞뒤 공백을 떼고 만든다')
+
+// ⑥-2 따로 부르는 추가 클리닉 (원장님 2026-11-17 — 채움쌤 근무가 9시까지)
+ok(Object.keys(EXTRA).length >= 1, '추가 클리닉 자리가 있어야 한다')
+for (const [k, g] of Object.entries(EXTRA)) {
+  ok(g.pieces.every(([who]) => who === '이규숙'), `${k} 는 채움쌤(이규숙) 자리여야 한다`)
+  ok(g.pieces.every(([, , a, b]) => a === toMin('20:00') && b === toMin('21:00')), `${k} 는 20:00~21:00 이어야 한다`)
+  ok(g.pieces.every(([, d]) => ['월', '수', '금'].includes(d)), `${k} 는 월·수·금 안에 있어야 한다`)
+  ok(!WD[k] && !WE[k], `${k} 가 평일·주말 열쇠와 겹친다`)
+}
+ok(isAt('이규숙', '월', '20:00', 30, '', '', 'c-mwf'), '추가 클리닉을 고르면 월요일 8시 칸에 선다')
+ok(isAt('이규숙', '수', '20:30', 30, '', '', 'c-mwf'), '8시 반 칸도 같은 타임이다')
+ok(!isAt('이규숙', '화', '20:00', 30, '', '', 'c-mwf'), '화요일에는 없다')
+ok(!isAt('이규숙', '월', '21:00', 30, '', '', 'c-mwf'), '9시에는 끝나 있다')
+ok(!isAt('이규숙', '수', '20:00', 30, '', '', 'c-mf'), '월·금만 고른 학생은 수요일에 없다')
+ok(isAt('이규숙', '수', '20:00', 30, '', '', 'c-w'), '수만 고른 학생은 수요일에 있다')
+// 반(평일 타임)과 **같이** 설 수 있어야 한다 — 추가로 부르는 자리이기 때문
+ok(isAt('이규숙', '월', '18:00', 30, 'at1', '', 'c-mwf') && isAt('이규숙', '월', '20:00', 30, 'at1', '', 'c-mwf'),
+  '반 클리닉과 추가 클리닉이 같이 선다')
+ok(ROWS_WD.includes('20:00') && ROWS_WD.includes('20:30'), '평일 격자에 8시·8시 반 칸이 있다')
 
 // ⑦ 격자
 ok(ROWS_WD[0] === '16:00' && ROWS_WD[ROWS_WD.length - 1] === '21:30', '고등 평일 격자는 16:00~21:30')
