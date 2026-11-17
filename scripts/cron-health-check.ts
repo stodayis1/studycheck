@@ -553,12 +553,16 @@ T('거절이 없는 날은 띠가 조용하다', () => {
 //   ★ 왜 꼭 필요한가 — 가짜 db 로는 **칸 이름이 틀린 것을 못 잡는다.**
 //     실제로 students 에 `phone` 칸이 없는데 그렇게 적었다. 그러면 질의가 통째로 실패해
 //     이름이 **하나도** 안 붙는데, 가짜 db 시험은 전부 통과한다(2026-11-17 에 이렇게 잡았다).
-for (const f of ['.env.local', '.env']) {
+// ★ 워크트리에는 .env.local 이 없다 — 본 저장소에서도 찾는다. 안 그러면 「운영 표로 한 번 더」가
+//   **일하는 자리에서는 한 번도 안 돈다**(작업은 거의 워크트리에서 한다). 값은 어디에도 찍지 않는다.
+for (const dir of [process.cwd(), path.resolve(process.cwd(), '../../..')]) {
+  const f = path.join(dir, '.env.local')
   if (!fs.existsSync(f)) continue
-  for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+  for (const line of fs.readFileSync(f, 'utf8').split(/\r?\n/)) {
+    const m = /^([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line.trim())
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
   }
+  break
 }
 const dbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const dbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -569,6 +573,30 @@ if (!dbUrl || !dbKey) {
   T('운영 학생 표에서 번호 → 이름이 실제로 읽힌다 (칸 이름이 맞다)', () => 운영.size > 50)
   T('읽어 온 이름이 「이름(학년) 학부모님」 꼴이다', () =>
     /\(.+\) (학부모님|학생)$/.test([...운영.values()][0] ?? ''))
+}
+
+// ── 「진짜 도착했나 확인」 길 (2026-11-17) ──────────────────────────────────
+//   밤 점검은 **돈 뒤**에만 안다. 원장님이 궁금한 그때 보려면 길이 따로 있어야 한다
+//   (11-17 밤 그 1건도, 이름 붙이기가 그 뒤에 배포돼 기록에는 이름이 없었다).
+//   ★ 베껴 쓴 사본이 아니라 route.ts 를 **그대로 불러** GET 을 돌린다.
+{
+  const ROUTE = 'app/api/briefing-aligo/route.ts'
+  const { GET: 물어보기 } = await import(pathToFileURL(path.resolve(ROUTE)).href)
+  const r = await 물어보기(new Request('http://x/api/briefing-aligo'))
+  // 설정값이 없는 데서 돌리면 401 대신 500(서버 설정 오류)이다. 어느 쪽이든 **열리지는 않는다**.
+  T('토큰 없이 부르면 막힌다 (DB·알리고에 닿지 않는다)', () => r.status === 401 || r.status === 500)
+
+  const src = fs.readFileSync(path.resolve(ROUTE), 'utf8')
+  T('원장 전용이다 — 학부모 이름·번호가 나가는 길이라 강사에게도 열지 않는다', () =>
+    /adminOnly:\s*true/.test(src))
+  T('기간을 7일로 막는다 (넓게 물으면 60초를 넘겨 통째로 실패한다)', () => /일수 > 7/.test(src))
+  T('번호는 가린 채로 내보낸다', () =>
+    /maskPhone\(r\.phone\)/.test(src) && !/번호: r\.phone/.test(src))
+  T('이름은 점검과 **같은 함수**로 붙인다 (규칙을 베껴 적지 않는다)', () =>
+    /import \{ phoneNames \} from '@\/lib\/cronBriefing'/.test(src)
+    && !/from\('students'\)/.test(src))
+  T('읽기만 한다 — 보내거나 고치는 줄이 없다', () =>
+    !/sendAlimtalk|sendSmsViaOps|\.insert\(|\.update\(|\.delete\(/.test(src))
 }
 
 console.log(`\n대상: ${path.relative(process.cwd(), target)}`)

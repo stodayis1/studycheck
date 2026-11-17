@@ -351,6 +351,8 @@ export default function TeacherLearningNotesPage() {
   const [briefPreview, setBriefPreview] = useState<any>(null)
   const [briefResult, setBriefResult] = useState<any>(null)
   const [tplCheck, setTplCheck] = useState<any>(null)
+  // 알리고에 **실제로** 도착했는지 (원장님 2026-11-17 「누구지? 차단해놓은 사람이」)
+  const [aligo, setAligo] = useState<any>(null)
   // 누구에게 보낼지 — 원장님이 초등(밤 9시)과 중·고등(다음 날 11시)을 나눠 보내신다.
   const [briefOnly, setBriefOnly] = useState<'' | 'elementary' | 'secondary'>('')
   // 학습일지 미작성자 — 원장님이 발송 전에 바로 볼 수 있어야 한다(브리핑에서 빠지는 학생들이다).
@@ -536,6 +538,29 @@ export default function TeacherLearningNotesPage() {
 
   // ★ 알리고는 변수를 채워 주지 않는다. 우리가 만든 본문이 **승인된 템플릿과 글자 단위로
   //   같아야** 전송된다. 안 맞으면 에러도 없이 그냥 안 간다. 보내기 전에 꼭 눌러 볼 것.
+  /**
+   * 알리고에 **실제 전송 결과**를 물어본다 — 거절된 건이 **누구 것인지**까지.
+   *
+   * ★ 우리 표(briefing_sends)는 「알리고가 접수했다」까지만 안다. 카카오가 그 뒤에 거절하면
+   *   우리 쪽에는 그대로 「나감」으로 남는다. 2026-10-20 ~ 10-31 에 1,074건이 그렇게 사라졌다.
+   * ★ 밤 점검도 같은 것을 보지만 **점검이 돈 뒤**에만 안다. 이 단추는 지금 바로 본다.
+   *   읽기만 하고 아무것도 보내지 않는다.
+   */
+  async function checkAligo() {
+    setBriefBusy(true); setAligo(null)
+    try {
+      // 고른 수업일과 그 다음 날까지 본다 — 2차 발송은 다음 날 오전에 나간다.
+      const 오늘 = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+      const 다음날 = new Date(Date.parse(briefDate) + 86400_000).toISOString().slice(0, 10)
+      const res = await apiFetch(`/api/briefing-aligo?from=${briefDate}&to=${다음날 > 오늘 ? 오늘 : 다음날}`)
+      setAligo(await res.json())
+    } catch (e: any) {
+      setAligo({ error: e?.message ?? '연결 실패' })
+    } finally {
+      setBriefBusy(false)
+    }
+  }
+
   async function checkTemplate() {
     setBriefBusy(true); setTplCheck(null)
     try {
@@ -2957,6 +2982,12 @@ ${e?.message ?? '연결 실패'}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                 템플릿 맞는지 확인
               </button>
+              {/* ★ 우리 기록은 「접수됨」까지만 안다 — 카카오 거절은 알리고에 물어봐야 보인다. */}
+              <button onClick={checkAligo} disabled={briefBusy}
+                title="알리고에 실제 결과를 물어봐요. 거절된 건이 어느 학부모님인지 이름으로 보여드립니다."
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
+                진짜 도착했나 확인
+              </button>
               <button onClick={sendTeacherSample} disabled={briefBusy}
                 title="담당 강사 한 분당 한 통 — 본인이 쓴 글이 학부모님께 어떻게 가는지 보시라는 용도"
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
@@ -3016,6 +3047,53 @@ ${e?.message ?? '연결 실패'}
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {aligo && (
+              <div className="mt-3 text-[11px]">
+                {aligo.error ? (
+                  <div style={{ color: '#991b1b' }}>✗ {aligo.error}</div>
+                ) : (
+                  <div className="rounded-lg border p-2.5"
+                    style={aligo.실패
+                      ? { borderColor: '#F5C4B3', background: '#FFF5F2' }
+                      : { borderColor: '#CFE3B5', background: '#F6FBF0' }}>
+                    <div className="font-bold" style={{ color: aligo.실패 ? '#991b1b' : '#27500A' }}>
+                      {aligo.실패
+                        ? `✗ ${aligo.기간} — ${aligo.본것}건 가운데 ${aligo.실패}건이 거절됐어요`
+                        : `✓ ${aligo.기간} — ${aligo.본것}건 모두 도착했어요`}
+                    </div>
+                    {aligo.끊겼을수있음 && (
+                      <div className="mt-1 text-gray-500">
+                        ※ 한 번에 400통까지만 봅니다. 기간을 좁혀 한 번 더 확인해 주세요.
+                      </div>
+                    )}
+                    {!!aligo.실패 && (
+                      <>
+                        <div className="mt-1.5 text-gray-600">
+                          우리 기록에는 <b>「나감」으로 남아 있습니다</b> — 카카오가 접수한 뒤에 거절한 것이라서요.
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          {(aligo.거절 ?? []).map((f: any, i: number) => (
+                            <div key={i} className="flex items-baseline gap-1.5 flex-wrap">
+                              <b style={{ color: '#3C1E1E' }}>{f.누구 || '누구 것인지 모름'}</b>
+                              <span className="text-gray-400 font-mono text-[10px]">{f.번호}</span>
+                              <span className="px-1.5 py-0.5 rounded font-bold"
+                                style={{ background: '#FFE4DC', color: '#991b1b' }}>{f.사유}</span>
+                              <span className="text-gray-400">{f.시각}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-gray-600">
+                          「스팸」은 <b>받는 분 쪽에서 막힌 것</b>입니다 — 그 번호가 카카오톡에서 채널을 차단했거나
+                          스팸으로 신고된 상태일 수 있어요. 같은 글이 나머지 분께 갔다면 글 문제가 아닙니다.
+                          <b> 다시 보내도 또 거절됩니다</b> — 문자나 전화로 알려 주셔야 해요.
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
