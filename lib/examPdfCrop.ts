@@ -440,7 +440,15 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           if (번호수식) { const read = eqText(t.str); if (read && read !== String(dotNo + 1)) dotOk = false }
           // 글자로 읽힌 번호는 **그 자리에서** 차례와 맞는지 본다 — 어긋나면 단을 잘못 읽은 것이다
           if (번호글자 && 글자번호 !== dotNo + 1) dotOk = false
-          const top = Math.min(t.top, ...same.map((o) => o.top)) - 2
+          // ★ 문항 첫 줄에 **키 큰 수식**(분수·중괄호 묶음)이 오면 그 수식은 번호보다 위로 올라간다.
+          //   같은 밑줄(same)만 보면 그 윗부분이 **앞 문항 그림 끝에 붙고 이 문항에서는 잘린다**
+          //   (2026-11-17 백양고 9↔10번 — 10번의 「{ √kx … 」 첫 줄이 9번 끝에 붙어 있었다).
+          //   그래서 번호 오른쪽에서 **번호 줄에 걸쳐 있는 글자**도 같이 보고 가장 위를 잡는다.
+          //   올라가는 높이는 번호 글자의 2.5배까지만 — 앞 문항 끝줄을 삼키지 않게 한다.
+          const ceiling = t.top - t.size * 2.5
+          const tall = items.filter((o) => o !== t && colOf(o.x) === c && o.x >= t.x
+            && o.top < t.bottom && o.bottom > ceiling && o.base <= t.base + t.size * 0.6)
+          const top = Math.max(ceiling, Math.min(t.top, ...same.map((o) => o.top), ...tall.map((o) => o.top))) - 2
           ms.push({
             no: ++dotNo, col: c, y0: t.top, y1: t.bottom, top,
             // 논술형 줄은 지우지 않는다 (「[논술형 1-1]」 이 문제의 일부다)
