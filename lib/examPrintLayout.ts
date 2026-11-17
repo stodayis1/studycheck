@@ -19,6 +19,17 @@ export const COL_MM = (PAGE_W - PAD_X * 2 - GAP_MM) / 2                    // 90
 export const NUM_MM = 6.5            // 문항 번호 자리
 export const IMG_MM = COL_MM - NUM_MM                                      // 그림이 쓸 수 있는 폭
 const MIN_SOLVE_MM = 12       // 문항 아래 최소 풀이 여백
+/**
+ * 문항 아래 **최대** 풀이 여백. 남는 자리는 단 아래에 그대로 둔다.
+ *
+ * 원장님 2026-11-17 「문제가 짧으면 한단에 문제더 넣어서 최대한 문제의 간격을 효율적으로 짜줄래」.
+ * 전에는 남는 자리를 **전부** 문항 수로 나눠 가져서, 한 단에 문항이 적게 들어간 단(대개 마지막 단)은
+ * 한 문항 아래가 170~190mm 씩 비었다. 실측 2026-11-17 —
+ *   · 25년 신원고 기말(3문항/단): 평균 40.0mm 인데 **가장 큰 단이 173.2mm**
+ *   · 교과서 119문항(자동): 평균 23.9mm 인데 **가장 큰 단이 183.4mm**
+ * 멀쩡한 단은 건드리지 않을 값으로 잡았다 — 같은 날 백양고 기말(3문항/단)의 가장 큰 여백이 57.6mm 다.
+ */
+const MAX_SOLVE_MM = 60
 const DPI = 200
 
 // ── 빠른 정답 (선생님이 손으로 채점할 때 쓰는 번호·정답 한 장)
@@ -51,6 +62,7 @@ export function answerPages<T>(items: T[], weight: (x: T) => number = () => 1, p
 
 export type Sized = PrintItem & { wmm: number; hmm: number }
 export type Placed = Sized & { slotMm: number }      // slotMm = 그림 + 풀이 여백 (단 안에서 이 문항이 차지하는 높이)
+export { MIN_SOLVE_MM, MAX_SOLVE_MM }
 
 // 그림 크기(px) → 찍힐 크기(mm). 단보다 넓으면 폭에 맞춰 줄이고, 한 단보다 길면 높이에 맞춰 줄인다
 export function sizeOf(wpx: number, hpx: number, zoom: number) {
@@ -62,8 +74,18 @@ export function sizeOf(wpx: number, hpx: number, zoom: number) {
   return { wmm, hmm }
 }
 
-// 쪽 > 단 > 문항. 왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어간다
+/**
+ * 쪽 > 단 > 문항. 왼쪽 단을 위에서부터 채우고 오른쪽 단으로 넘어간다.
+ *
+ * `perCol` 은 **한 단에 넣을 문항 수의 상한**이다. `0`(또는 음수)이면 상한 없이 **높이가 되는 데까지**
+ * 채운다 — 화면의 「자동」이다. 짧은 문항이 많은 자료(교과서 · 단계별 학습지)는 이쪽이 훨씬 빽빽하다
+ * (실측 2026-11-17 교과서 119문항: 3문항/단 22쪽 → 자동 17쪽, 평균 여백 44.5mm → 23.9mm).
+ *
+ * 남는 자리는 그 단의 문항들이 나눠 갖되 **한 문항당 MAX_SOLVE_MM 까지만** 가져간다.
+ * 그래서 한 단의 높이 합은 BODY_MM **이하**다(전에는 언제나 BODY_MM 과 같았다).
+ */
 export function layout(items: Sized[], perCol: number): Placed[][][] {
+  const cap = perCol > 0 ? perCol : Infinity
   const pages: Placed[][][] = []
   let i = 0
   while (i < items.length) {
@@ -71,15 +93,15 @@ export function layout(items: Sized[], perCol: number): Placed[][][] {
     for (let c = 0; c < 2 && i < items.length; c++) {
       const col: Sized[] = []
       let used = 0
-      while (i < items.length && col.length < perCol) {
+      while (i < items.length && col.length < cap) {
         const need = items[i].hmm + MIN_SOLVE_MM
         if (col.length && used + need > BODY_MM) break
         used += need
         col.push(items[i])
         i++
       }
-      // 남는 자리를 고르게 나눈다 → 합이 정확히 BODY_MM
-      const extra = (BODY_MM - col.reduce((a, p) => a + p.hmm, 0)) / col.length
+      // 남는 자리를 고르게 나누되 너무 벌어지지 않게 자른다 → 합이 BODY_MM 이하
+      const extra = Math.min((BODY_MM - col.reduce((a, p) => a + p.hmm, 0)) / col.length, MAX_SOLVE_MM)
       page.push(col.map((p) => ({ ...p, slotMm: p.hmm + extra })))
     }
     pages.push(page)

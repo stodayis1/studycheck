@@ -52,5 +52,7 @@ export default function PdfWorksheetPrintPage() {
     // 오른쪽 상자 — 종류가 있으면 종류, 없으면 난이도 (상자가 좁아 둘 다는 안 들어간다)
     right: kind || (level ? `난이도 ${level}` : '수학의지혜'),
   }
-  return <ExamPaperPrint problems={data.problems} initial={what} heading={heading} />
+  // 짧은 문항이 많은 자료(교과서 · 단계별 학습지)라 한 단을 **되는 데까지** 채운다
+  // (원장님 2026-11-17 「문제가 짧으면 한단에 문제더 넣어서 최대한 효율적으로」)
+  return <ExamPaperPrint problems={data.problems} initial={what} heading={heading} defaultPerCol={0} />
 }
