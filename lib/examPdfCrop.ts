@@ -373,6 +373,11 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       if (!it.str || !it.str.trim()) continue
       const t = pdfjs.Util.transform(vp1.transform, it.transform)
       const size = Math.hypot(t[2], t[3])
+      // ★ **안 보이는 글자**는 아예 빼 둔다. 한글에서 변환한 파일에 0.72pt 짜리 「19.」 가
+      //   박혀 있는 것이 있다 — 2026-11-17 향동고. 사람 눈에는 없는데 번호로 읽혀서
+      //   17px 짜리 빈 문항이 셋 생기고 번호가 20, 19, 22, 21, 24, 23 으로 엉켰다.
+      //   본문이 9pt 대인 파일에서 2pt 아래는 글자가 아니다(가운데값을 끌어내려 한계도 흐트린다).
+      if (size < 2) continue
       raw.push({ str: it.str.trim(), x: t[4], x1: t[4] + it.width, base: t[5], top: t[5] - size * 0.8, bottom: t[5] + size * 0.2, size, fn: String(it.fontName ?? '') })
     }
     // 되풀이되는 글자가 있는 **띠 전체**를 뺀다 — 쪽 번호처럼 쪽마다 글자가 달라지는 것도
@@ -572,7 +577,12 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
           if (!번호 && !논술) continue
-          const 머리번호 = 논술 ? Number(ESSAY_NO.exec(t.str)?.[1] ?? NaN) : NaN
+          // 머리가 「[논술형」 + 「2]」 **두 조각으로 쪼개져** 오는 파일이 있다 (2026-11-17 향동고).
+          //   한 조각만 보면 번호가 없는 것으로 읽혀 앞 문항에 붙고, 그 문항이 통째로 사라진다.
+          const 머리글 = 논술 ? t.str + ' ' + (next?.str ?? '') : ''
+          const 머리번호 = 논술
+            ? Number(ESSAY_NO.exec(t.str)?.[1] ?? ESSAY_NO.exec(머리글)?.[1] ?? NaN)
+            : NaN
           // 묶음에 딸린 물음(큰 번호가 같거나 번호가 없는 머리) → 앞 문항에 이어 붙인다
           if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue
           if (논술) essayMain = 머리번호

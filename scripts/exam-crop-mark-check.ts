@@ -317,5 +317,21 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
     !/Math\.abs\(t\.x - cols\[/.test(src7))
 }
 
+// 안 보이는 글자 · 쪼개진 머리 (2026-11-17 향동고)
+//   향동고에는 **0.72pt 짜리 「19.」** 가 박혀 있어 17px 짜리 빈 문항이 셋 생기고
+//   번호가 20, 19, 22, 21, 24, 23 으로 엉켰다. 머리도 「[논술형」 + 「2]」 로 쪼개져 와서
+//   번호 없는 머리로 읽혀 그 문항이 앞 문항에 붙어 사라졌다.
+{
+  const src8 = fs.readFileSync(libPath, 'utf8')
+  ok('2pt 아래 글자는 글자로 세지 않는다', src8.includes('if (size < 2) continue'))
+  ok('쪼개진 머리는 뒤 조각까지 붙여 번호를 읽는다', src8.includes("const 머리글 = 논술 ? t.str + ' ' + (next?.str ?? '') : ''"))
+  ok('한 조각으로 온 머리를 먼저 보고, 안 되면 붙여 본다',
+    src8.includes('ESSAY_NO.exec(t.str)?.[1] ?? ESSAY_NO.exec(머리글)?.[1]'))
+  // 붙여 읽는 값이 맞나 — 그 파일에서 본 두 조각 그대로
+  ok('「[논술형」 + 「2]」 를 붙이면 2 로 읽힌다', essayMainOf('[논술형' + ' ' + '2]') === 2)
+  ok('쪼개진 조각 하나만으로는 번호가 없다', essayMainOf('[논술형') === null)
+  ok('머리에 글이 이어 붙어 와도 번호를 읽는다', essayMainOf('[논술형 1] 전체집합') === 1)
+}
+
 console.log(`\n통과 ${pass} / 전체 ${all}`)
 process.exitCode = pass === all ? 0 : 1
