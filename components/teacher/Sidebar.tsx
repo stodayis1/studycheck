@@ -28,6 +28,9 @@ const ITEM = {
   visualAids:    { href: '/teacher/visual-aids',    label: '수업 시각화',  icon: 'ti-cube' },
   // 고1·고2 반별 교재 흐름·내신 대비·단원별 차시 (원장님 2026-11-16). 고등 선생님이 같이 고친다.
   highCurriculum: { href: '/teacher/high-curriculum', label: '고등 커리큘럼', icon: 'ti-route' },
+  // 학년이 올라갈 때 누가 어느 선생님·타임으로 가는지 맞춰 보는 판 (원장님 2026-11-17).
+  // 중3 → 고등 · 초6 → 중등 두 장이 한 메뉴 안에 있다. 보이는 사람은 고등 커리큘럼과 같다.
+  moveAssign:    { href: '/teacher/move-assign',    label: '진급 배정판',  icon: 'ti-arrow-ramp-right' },
   students:      { href: '/teacher/students',       label: '학생관리',     icon: 'ti-users' },
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
@@ -79,7 +82,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
       ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids,
       // 고등 커리큘럼은 원장님과 고등 강사에게만 (원장님 2026-11-16). DB 함수 can_see_high_curriculum 이 정한다.
-      ...(고등커리큘럼 ? [ITEM.highCurriculum] : [])] },
+      ...(고등커리큘럼 ? [ITEM.highCurriculum, ITEM.moveAssign] : [])] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.career, ITEM.schools] },
     // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
     // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
