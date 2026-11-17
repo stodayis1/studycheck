@@ -408,6 +408,14 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     const right = (rights.length ? Math.max(...rights) : vp1.width - 40) + 3
     const cols: [number, number][] = [[left, mid - 4], [mid + 5, Math.max(right, mid + 5 + (mid - 4 - left))]]
     const colOf = (x: number) => (x < cols[1][0] - 5 ? 0 : 1)
+    // ★ 단의 **왼쪽 끝은 그 단 글자에서 잰다.** 오른단은 「쪽 가운데 + 5」 로 어림잡고 있었는데,
+    //   쪽마다 15pt 까지 어긋난다 — 2026-11-17 백석고는 정답 쪽 오른단이 x=383 이고 어림값은 369 라
+    //   14pt 막이를 아슬하게 넘겨 **오른단을 통째로 못 읽었다**(문항 24개에 정답 9개).
+    //   왼단은 전부터 글자에서 재고 있었다(left) — 오른단만 어림이었다.
+    const colX: [number, number] = [0, 1].map((c) => {
+      const xs = items.filter((t) => colOf(t.x) === c).map((t) => t.x)
+      return xs.length ? Math.min(...xs) : cols[c][0]
+    }) as [number, number]
 
     // 작은 미주 번호 = 문항 시작
     // 번호가 문제 첫 줄과 같은 줄에 찍힌 파일도 있다 (「10) 다음 중 옳지 않은 것은?」).
@@ -417,7 +425,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     markShaped += items.filter((t) => MARK.test(t.str)).length
     type Mark = { no: number; col: number; y0: number; y1: number; top: number | null; box?: [number, number, number, number] }
     const ms: Mark[] = items
-      .filter((t) => MARK.test(t.str) && t.size < limit && Math.abs(t.x - cols[colOf(t.x)][0]) < 12)
+      .filter((t) => MARK.test(t.str) && t.size < limit && Math.abs(t.x - colX[colOf(t.x)]) < 12)
       .map((t): Mark => {
         const col = colOf(t.x)
         const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 4 && o.x >= t.x1 - 1 && o.x < cols[col][1])
@@ -434,7 +442,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     //   2026-11-17 고양시 고1 25개교: 문제 1쪽의 「1.」「2.」「3.」(15.0pt)이 여섯 개 걸려
     //   그 쪽이 통째로 「정답표」로 판정됐고, inAnswers 가 거기서 켜져 **그 뒤 쪽이 모두 정답**이 됐다
     //   (문항 0 · 정답 21). 정답표의 번호는 본문보다 작다(해설 쪽 8.75pt).
-    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14 && !(t.size > big))
+    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14 && !(t.size > big))
     const nMark = items.filter((t) => MARK.test(t.str)).length
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
     // ★ 「정답 및 해설」 머리가 있는 파일은 **그 머리가 정한다** — 어림짐작은 쓰지 않는다.
@@ -515,7 +523,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
       // 「[논술형 1-1] …」 처럼 번호가 안 붙은 정답은 **그림 한 장**으로 모아 그 문항에 붙인다
       // (원장님 2026-11-10 「논술형은 21번 한 문항으로 통째」)
       if (essayQ && !answerImages[essayQ]) {
-        const es = items.filter((t) => ESSAY_HEAD.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
+        const es = items.filter((t) => ESSAY_HEAD.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14)
         if (es.length) {
           const c0 = colOf(es[0].x)
           const ey = Math.min(...es.map((t) => t.top)) - 2
@@ -538,7 +546,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     if (!ms.length) {
       for (const c of [0, 1]) {
         const cands = items
-          .filter((t) => colOf(t.x) === c && Math.abs(t.x - cols[c][0]) < 12 && t.base > 100)
+          .filter((t) => colOf(t.x) === c && Math.abs(t.x - colX[c]) < 12 && t.base > 100)
           .sort((a, b) => a.base - b.base)
         for (const t of cands) {
           const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 3)

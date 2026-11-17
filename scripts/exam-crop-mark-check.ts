@@ -301,5 +301,21 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('머리를 만나면 큰 번호를 기억한다', src6.includes('if (논술) essayMain = 머리번호'))
 }
 
+// 단의 왼쪽 끝은 **그 단 글자에서** 잰다 (2026-11-17 백석고).
+//   오른단을 「쪽 가운데 + 5」 로 어림잡고 있었다. 백석고 정답 쪽 오른단은 x=383 이고
+//   어림값은 369 라 14pt 막이를 넘겨 **오른단을 통째로 못 읽었다**(문항 24에 정답 9).
+{
+  const src7 = fs.readFileSync(libPath, 'utf8')
+  ok('단마다 왼쪽 끝을 재 둔다', src7.includes('const colX: [number, number] = [0, 1].map((c) => {'))
+  for (const [무엇, 꼴] of [
+    ['미주 번호', 'MARK.test(t.str) && t.size < limit && Math.abs(t.x - colX[colOf(t.x)]) < 12'],
+    ['정답표 줄', '.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14 && !(t.size > big))'],
+    ['논술형 머리', 'ESSAY_HEAD.test(t.str) && Math.abs(t.x - colX[colOf(t.x)]) < 14'],
+    ['「1.」 꼴 번호', 'colOf(t.x) === c && Math.abs(t.x - colX[c]) < 12'],
+  ]) ok(`${무엇}도 잰 값으로 가른다`, src7.includes(꼴), 꼴.slice(0, 28))
+  ok('오른단을 쪽 가운데로 어림잡는 자리가 남아 있지 않다',
+    !/Math\.abs\(t\.x - cols\[/.test(src7))
+}
+
 console.log(`\n통과 ${pass} / 전체 ${all}`)
 process.exitCode = pass === all ? 0 : 1
