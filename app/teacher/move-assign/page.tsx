@@ -28,16 +28,16 @@ import { cx } from '@/lib/utils'
 import { apiFetch } from '@/lib/apiFetch'
 import {
   DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID,
-  WD, WE, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID,
+  WD, WE, EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff,
   toMin, type Track,
 } from '@/lib/moveAssign'
 
 interface Student { id: string; name: string; grade: string | null; teacher_name: string | null }
 interface Sched { student_id: string; day_of_week: string; start_time: string; periods: number }
-interface Row { student_id: string; track: Track; teacher_name: string | null; weekday_slot: string | null; weekend_slot: string | null }
+interface Row { student_id: string; track: Track; teacher_name: string | null; weekday_slot: string | null; weekend_slot: string | null; extra_slot: string | null }
 /** 화면에서 들고 다니는 한 학생의 배정 */
-type Pick3 = { t: string; wd: string; we: string }
+type Pick3 = { t: string; wd: string; we: string; ex: string }
 
 const GRADES = ['초6', '중1', '중2', '중3', '고1', '고2']
 const DAY_ORDER = ['월', '화', '수', '목', '금', '토', '일']
@@ -97,9 +97,9 @@ export default function MoveAssignPage() {
       for (const st of real) {
         const k = keyOf(st.name, st.grade)
         const d = st.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
-        if (d) next[st.id] = { t: d[0], wd: d[1], we: d[2] }
+        if (d) next[st.id] = { t: d[0], wd: d[1], we: d[2], ex: '' }
       }
-      for (const r of rows) next[r.student_id] = { t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '' }
+      for (const r of rows) next[r.student_id] = { t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '', ex: r.extra_slot ?? '' }
       setAssign(next)
       setHint(rows.length ? `저장된 배정 ${rows.length}건을 읽었어요. 고르면 바로 저장됩니다.` : '고르면 바로 저장됩니다.')
     } catch (e: any) {
@@ -115,7 +115,7 @@ export default function MoveAssignPage() {
       const res = await apiFetch('/api/move-assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: st.id, track, teacher: p.t, weekday: p.wd, weekend: p.we }),
+        body: JSON.stringify({ studentId: st.id, track, teacher: p.t, weekday: p.wd, weekend: p.we, extra: p.ex }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error ?? '저장하지 못했어요')
@@ -125,11 +125,11 @@ export default function MoveAssignPage() {
     }
   }
 
-  function setOne(st: Student, track: Track, part: 't' | 'wd' | 'we', value: string) {
-    const cur = assign[st.id] ?? { t: '', wd: '', we: '' }
+  function setOne(st: Student, track: Track, part: 't' | 'wd' | 'we' | 'ex', value: string) {
+    const cur = assign[st.id] ?? { t: '', wd: '', we: '', ex: '' }
     const p: Pick3 = { ...cur, [part]: value }
     // 선생님을 바꾸면 반과 토·일을 비운다 — 다른 선생님 타임이 남으면 엉뚱한 칸에 그려진다.
-    if (part === 't') { p.wd = ''; p.we = '' }
+    if (part === 't') { p.wd = ''; p.we = ''; p.ex = '' }
     save(st, p, track)
   }
 
@@ -229,10 +229,10 @@ export default function MoveAssignPage() {
 function HighBoard({ m3, others, assign, nowText, onPick }: {
   m3: Student[]; others: Student[]
   assign: Record<string, Pick3>; nowText: Record<string, string>
-  onPick: (st: Student, part: 't' | 'wd' | 'we', v: string) => void
+  onPick: (st: Student, part: 't' | 'wd' | 'we' | 'ex', v: string) => void
 }) {
   const all = [...m3, ...others]
-  const got = (s: Student) => assign[s.id] ?? { t: '', wd: '', we: '' }
+  const got = (s: Student) => assign[s.id] ?? { t: '', wd: '', we: '', ex: '' }
   /** 그 묶음 인원 — 새 중3 + 지금 다니는 학생 */
   const cnt = (key: string, 평일: boolean) => {
     const f = (s: Student) => (평일 ? got(s).wd : got(s).we) === key
@@ -266,6 +266,14 @@ function HighBoard({ m3, others, assign, nowText, onPick }: {
             <b>토 · 일</b> — {Object.keys(WE).filter((k) => cnt(k, false).m3 + cnt(k, false).old > 0)
               .map((k) => `${WE[k].label} ${cnt(k, false).m3 + cnt(k, false).old}명`).join(' · ') || '아직 없음'}
           </li>
+          {(() => {
+            const 부름 = Object.entries(EXTRA)
+              .map(([k, g]) => [g.label, all.filter((s) => got(s).ex === k)] as [string, Student[]])
+              .filter(([, v]) => v.length > 0)
+            return 부름.length > 0
+              ? <li key="extra"><b>추가 클리닉</b> — {부름.map(([label, v]) => `${label} ${v.length}명 (${v.map((s) => s.name).join(' · ')})`).join(' / ')}</li>
+              : null
+          })()}
           {(() => {
             const stay = m3.filter((s) => got(s).t === '김은수')
             return stay.length > 0 ? <li key="stay"><b>올라가지 않는 학생 {stay.length}명</b> — {stay.map((s) => s.name).join(' · ')}</li> : null
@@ -340,11 +348,12 @@ function HighBoard({ m3, others, assign, nowText, onPick }: {
                 <th className="text-left px-3 py-2 font-medium">선생님</th>
                 <th className="text-left px-3 py-2 font-medium">반</th>
                 <th className="text-left px-3 py-2 font-medium">토 · 일</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">추가 클리닉</th>
               </tr>
             </thead>
             <tbody>
               {m3.map((s) => {
-                const p = assign[s.id] ?? { t: '', wd: '', we: '' }
+                const p = assign[s.id] ?? { t: '', wd: '', we: '', ex: '' }
                 const stay = p.t === '김은수'
                 const 반후보 = Object.entries(WD).filter(([, g]) => g.t === p.t && !g.solo)
                 const 주말후보 = Object.entries(WE).filter(([k]) => weekendPickable(k, p.t))
@@ -367,6 +376,11 @@ function HighBoard({ m3, others, assign, nowText, onPick }: {
                     <td className="px-3 py-2">
                       <Sel value={p.we} unset={!p.we} disabled={!p.t || stay} onChange={(v) => onPick(s, 'we', v)}
                         options={[['', 빈칸말], ...주말후보.map(([k, g]) => [k, g.label] as [string, string])]} />
+                    </td>
+                    <td className="px-3 py-2">
+                      {/* 따로 부르는 자리 — 비워 두면 안 부른다 (원장님 2026-11-17) */}
+                      <Sel value={p.ex} unset={!p.ex} disabled={stay} onChange={(v) => onPick(s, 'ex', v)}
+                        options={[['', '— 안 부름'], ...Object.entries(EXTRA).map(([k, g]) => [k, g.label] as [string, string])]} />
                     </td>
                   </tr>
                 )
@@ -398,8 +412,8 @@ function HighBoard({ m3, others, assign, nowText, onPick }: {
                     <div className="overflow-x-auto border border-gray-100 rounded-xl">
                       <Grid who={name} days={days as unknown as string[]} rows={rows} span={span}
                         cell={(day, row) => ({
-                          old: others.filter((s) => isAt(name, day, row, span, assign[s.id]?.wd, assign[s.id]?.we)),
-                          m3: m3.filter((s) => isAt(name, day, row, span, assign[s.id]?.wd, assign[s.id]?.we)),
+                          old: others.filter((s) => isAt(name, day, row, span, assign[s.id]?.wd, assign[s.id]?.we, assign[s.id]?.ex)),
+                          m3: m3.filter((s) => isAt(name, day, row, span, assign[s.id]?.wd, assign[s.id]?.we, assign[s.id]?.ex)),
                         })} />
                     </div>
                   </div>
