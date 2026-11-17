@@ -43,8 +43,38 @@ export function dotNumberOf(str: string, size: number, limit: number, big = Infi
 //   배점 「[3점]」 과 숫자 정답을 되살려 읽는다. 안 맞으면 전처럼 그냥 버린다.
 const EQ_FROM = 0xe034
 const EQ_DIGITS = '1234567890'
+// 숫자뿐 아니라 **구두점**도 사용자 영역 글자로 찍힌다 — 실측 2026-11-17 (정발고 · 풍동고 · 저동고 · 서정고):
+//   E052 = ',' · E053 = '.'
+// 배점 「[4.4점]」 을 「4 ⟪E053⟫ 4 점]」 로 찍는 작업본이 있다. 마침표를 안 되살리면 숫자가 이어지지 않아
+// **그 파일 배점을 하나도 못 읽는다**(네 학교가 합계 0점이었다). 맞는지는 **배점 합이 100점인가**로 가린다.
+const EQ_PUNCT: Record<string, string> = { '': ',', '': '.' }
 export function eqText(s: string): string {
-  return s.replace(/[-]/g, (c) => EQ_DIGITS[c.codePointAt(0)! - EQ_FROM] ?? '')
+  return s.replace(/[-]/g,
+    (c) => EQ_PUNCT[c] ?? EQ_DIGITS[c.codePointAt(0)! - EQ_FROM] ?? '')
+}
+
+/**
+ * 「[4점]」 · 「(4점)」 · 「[4.6점]」 에서 배점을 읽는다. 없으면 null.
+ *
+ * ★ 숫자 사이에 **빈칸이 들어와도** 읽는다. 한글에서 배점을 수식으로 넣으면 PDF 에
+ *   「[」 「4」 「.」 「6」 「점]」 **다섯 조각**으로 쪼개져 찍히고, 한 줄로 이어 붙일 때
+ *   조각 사이에 빈칸이 하나씩 들어가 「[ 4 . 6 점]」 이 된다. 빈칸을 안 봐주면
+ *   `\d+(?:\.\d+)?` 가 「4」 까지만 먹고 「점」 앞에서 어긋나 **하나도 못 읽는다.**
+ *   2026-11-17 백양고 2025 2학기 기말이 그랬다 — 21문항 배점 합계가 0점으로 나왔다
+ *   (수식 글꼴 숫자 자체는 eqText 로 이미 제대로 되살아나고 있었다).
+ *
+ * ★ **닫는 괄호는 너그럽게 본다.** 한글 작업본에 「[5.0점[」 처럼 닫는 쪽을 잘못 친 것이 있다
+ *   (2026-11-17 백양고 12번). 한 글자 오타로 그 문항 배점이 통째로 빠지고, 합계가 95점으로
+ *   나와도 **어느 문항인지 알 수 없다.** 여는 괄호는 그대로 보고 닫는 쪽만 괄호 아무거나 받는다.
+ *   배점은 0 < n ≤ 100 인 것만 — 엉뚱한 숫자가 걸리는 것을 막는다.
+ *
+ * 시험: scripts/exam-crop-mark-check.ts   (scripts/exam-paper/crop.py 에도 같은 규칙이 있다)
+ */
+export function pointsOf(text: string): number | null {
+  const m = /[\[(]\s*(\d+(?:\s*\.\s*\d+)?)\s*점\s*[\])\[(]/.exec(text)
+  if (!m) return null
+  const n = Number(m[1].replace(/\s+/g, ''))
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : null
 }
 
 const ESSAY_HEAD = /^\[\s*(논술|서술)형/   // 「[논술형 1-1]」
@@ -478,13 +508,13 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     let y = 0
     for (const c of p.parts) { g.drawImage(c, 0, y); y += c.height + 10 }
     const text = dec(p.text).replace(/\s+/g, ' ').trim()
-    const pts = text.match(/[\[(]\s*(\d+(?:\.\d+)?)\s*점\s*[\])]/)          // [4점] 또는 (4점)
+    const pts = pointsOf(text)                                              // [4점] · (4점) · [ 4 . 6 점]
     // 「[논술형17~20]」 같은 묶음 표시는 그 문항이 아니라 뒤 문항들의 것이다 → 떼고 본다
     const own = text.replace(/\[\s*(논술|서술)형\s*\d+\s*[~∼-]\s*\d+\s*\]/g, '')
     for (const r of text.matchAll(/(논술|서술)형\s*(\d+)\s*[~∼-]\s*(\d+)/g)) essayRanges.push([Number(r[2]), Number(r[3])])
     out.push({
       no: p.no, page: p.page, w, h, parts: p.parts.length,
-      points: pts ? Number(pts[1]) : null,
+      points: pts,
       essay: /서술|논술|풀이 과정|물음에 답하시오|\[\s*총/.test(own),
       choices: Array.from('①②③④⑤').filter((c) => text.includes(c)).length,
       answer: answers[p.no] ?? null,

@@ -16,12 +16,13 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
   eqText: (s: string) => string
   dotNumberOf: (str: string, size: number, limit: number, big?: number) => number | null
+  pointsOf: (text: string) => number | null
 }
 
 let pass = 0, all = 0
@@ -113,6 +114,28 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('배점 「[3점]」 을 읽는다', eqText('[' + D(2) + '점]') === '[3점]')
   ok('한글·보기 글자는 그대로 둔다', eqText('① 가나 ≡ △') === '① 가나 ≡ △')
   ok('표에 없는 수식 글자는 손대지 않는다', eqText('') === '')
+  // ★ 구두점도 수식 글꼴로 찍힌다 — 2026-11-17 정발고 · 풍동고 · 저동고가 「4 ⟪E053⟫ 4 점]」 꼴이었다.
+  //   마침표를 안 되살리면 숫자가 이어지지 않아 **그 파일 배점을 하나도 못 읽는다**(세 곳 다 합계 0점이었다).
+  //   표가 맞는지는 **배점 합이 100점인가**로 가렸다 — 세 곳 모두 정확히 100점이 됐다.
+  ok('E053 이 마침표', eqText(String.fromCharCode(0xe053)) === '.')
+  ok('E052 가 쉼표', eqText(String.fromCharCode(0xe052)) === ',')
+  ok('정발고 꼴 배점 「4.4점」', eqText('[' + D(3) + String.fromCharCode(0xe053) + D(3) + '점]') === '[4.4점]')
+}
+
+// ── 배점 읽기 (pointsOf) ───────────────────────────────────────────────────
+// 2026-11-17 백양고: 배점이 조각 다섯 개(「[」「4」「.」「6」「점]」)로 쪼개져 들어와 한 줄로 이어 붙일 때
+// 「[ 4 . 6 점]」 처럼 **점 둘레에 빈칸**이 생겼다. 빈칸을 안 봐주면 21문항 배점 합계가 0점이 된다.
+// 닫는 괄호를 잘못 친 작업본(「[5.0점[」 — 백양고 12번)도 있어서 닫는 쪽은 너그럽게 본다.
+{
+  ok('「[3점]」', pointsOf('앞 [3점] 뒤') === 3)
+  ok('「(4점)」', pointsOf('앞 (4점) 뒤') === 4)
+  ok('「[4.6점]」', pointsOf('앞 [4.6점] 뒤') === 4.6)
+  ok('★ 「[ 4 . 6 점]」 — 조각으로 쪼개져 빈칸이 낀 것', pointsOf('의 값은? [ 4 . 6 점]') === 4.6)
+  ok('★ 「[ 5 . 0 점[」 — 닫는 괄호를 잘못 친 것', pointsOf('의 값은? [ 5 . 0 점[') === 5)
+  ok('배점이 없으면 null', pointsOf('① 3 ② 4 ③ 5') === null)
+  ok('「점근선」 처럼 괄호 밖의 「점」 은 안 읽는다', pointsOf('의 그래프의 점근선이다.') === null)
+  ok('100점이 넘는 숫자는 배점이 아니다', pointsOf('[120점]') === null)
+  ok('0점은 배점이 아니다', pointsOf('[0점]') === null)
 }
 {
   const src = fs.readFileSync(libPath, 'utf8')
@@ -124,6 +147,8 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   // 「1. 정답 ④ 해설…」 에서 정답만 남긴다 (백양고). 안 떼면 해설이 통째로 정답이 된다
   ok('「정답」이라고 적힌 말을 떼고 동그라미만 남긴다', src.includes('/^(정답|답)'))
   ok('숫자표는 맞을 때만 쓴다', src.includes('dotUsed && dotOk ? eqText(t) : t'))
+  // 배점 규칙은 **한 함수**로 둔다 — 자르는 자리에 정규식을 또 적으면 crop.py 와 어긋난다
+  ok('배점은 pointsOf 한 곳에서 읽는다', src.includes('const pts = pointsOf(text)'))
   ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun) continue'))
   ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
   ok('맨 아래 「※ 확인사항」 은 문항에 안 넣는다', src.includes('/^※/.test(t.str)'))
