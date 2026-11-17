@@ -11,6 +11,7 @@
 //   POST { action: 'question' } → 문항 하나 (그림 base64) → problems · 보관함
 //   POST { action: 'finish'   } → 번호 순서로 학습지 문항 목록을 짠다
 //   POST { action: 'assign'   } → 학생에게 배정 (exam_sheet_targets)
+//   POST { action: 'delete'   } → 자료 통째로 지우기 (★원장만, 푼 기록이 있으면 거절)
 //
 // ★ 누가 쓰나 — 원장님과 **고등 담당 선생님** (원장님 2026-11-17 「고등 강사까지 열기」).
 //   판단은 DB 함수 can_see_high_curriculum() 한 곳에만 있고 lib/apiAuth.ts 의 highOrDeny 가 그대로 따른다.
@@ -297,6 +298,58 @@ export async function POST(req: Request) {
         if (ins.error) return bad(`문항 넣기 실패: ${ins.error.message}`, 500)
         const chk = tutorCheck(rows.map((r: any) => ({ no: r.no, w: 1, h: 1 })))
         return NextResponse.json({ ok: true, code: sheet.code, count: rows.length, warns: chk.warns })
+      }
+
+      // ── 원장만: 올린 자료를 통째로 지운다 (원장님 2026-11-17 「목록 삭제 할수 잇는 기능 넣어줘 관리자한테만」)
+      //
+      // ★★ exam_sheets 를 지우면 **gradings 가 CASCADE 로 같이 날아간다.** 학생이 푼 기록이 사라진다는 뜻이다.
+      //    그래서 푼 기록이 하나라도 있으면 **지우지 않는다.** (exam_sheet_problems · exam_sheet_targets 도 CASCADE)
+      // ★  문제은행 문항(problems)은 **여기서만 쓰인 것**만 지운다. 다른 학습지 · 기출 문항 · 학생 풀이 기록 ·
+      //    쌍둥이가 걸린 문항은 남긴다(FK 가 NO ACTION 이라 지우려 들면 23503 으로 막힌다 — 미리 골라낸다).
+      case 'delete': {
+        if (who.role !== 'admin') return bad('원장님만 지울 수 있습니다.', 403)
+        const sheet = await myTutorSheet(supabase, String(b.code ?? ''), who)
+        if (!sheet) return bad('그런 자료가 없습니다.', 404)
+
+        const { count: solved } = await supabase.from('gradings')
+          .select('id', { count: 'exact', head: true }).eq('sheet_id', sheet.id)
+        if (solved)
+          return bad(`학생이 이미 푼 기록이 ${solved}건 있어 지울 수 없습니다. 지우면 그 기록도 같이 사라집니다.`, 409)
+
+        // 이 학습지가 쓰는 문항
+        const { data: mine } = await supabase.from('exam_sheet_problems').select('problem_id').eq('sheet_id', sheet.id)
+        const ids = [...new Set((mine ?? []).map((r: any) => Number(r.problem_id)).filter(Boolean))]
+
+        // 다른 데서도 쓰는 문항은 남긴다
+        const keep = new Set<number>()
+        const mark = async (table: string, col: string, extra?: (q: any) => any) => {
+          for (const part of chunk(ids)) {
+            let q = supabase.from(table).select(col).in(col, part)
+            if (extra) q = extra(q)
+            const { data } = await q
+            for (const r of data ?? []) keep.add(Number((r as any)[col]))
+          }
+        }
+        await mark('exam_sheet_problems', 'problem_id', (q: any) => q.neq('sheet_id', sheet.id))
+        await mark('exam_questions', 'problem_id')
+        await mark('learning_attempts', 'problem_id')
+        await mark('problems', 'twin_id')
+        const drop = ids.filter((id) => !keep.has(id))
+
+        // 보관함 그림부터 (줄이 사라지면 어느 그림이었는지 알 길이 없다)
+        const { data: files } = await supabase.storage.from(PROBLEM_BUCKET).list(`tutor/${sheet.id}`, { limit: 1000 })
+        const paths = (files ?? []).map((f: any) => `tutor/${sheet.id}/${f.name}`)
+        if (paths.length) await supabase.storage.from(PROBLEM_BUCKET).remove(paths)
+
+        for (const part of chunk(drop)) {
+          const { error } = await supabase.from('problems').delete().in('id', part)
+          if (error) return bad(`문제은행 문항을 지우지 못했습니다: ${error.message}`, 500)
+        }
+        // exam_sheet_problems · exam_sheet_targets 는 CASCADE 로 같이 지워진다
+        const { error } = await supabase.from('exam_sheets').delete().eq('id', sheet.id)
+        if (error) return bad(`자료를 지우지 못했습니다: ${error.message}`, 500)
+
+        return NextResponse.json({ ok: true, deleted: drop.length, kept: ids.length - drop.length, images: paths.length })
       }
 
       // ── 학생에게 배정. ★ 강사는 본인 담당 학생만 — 규칙을 베껴 쓰지 않고 그 사람 토큰으로 읽어 본다

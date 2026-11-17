@@ -47,6 +47,8 @@ export default function PdfWorksheetsPage() {
   const [err, setErr] = useState('')
   const [building, setBuilding] = useState(false)
   const [assign, setAssign] = useState<{ code: string; title: string } | null>(null)
+  const [busy, setBusy] = useState('')          // 지우는 중인 자료의 코드
+  const [note, setNote] = useState('')          // 지운 뒤 알림
 
   useEffect(() => {
     if (!currentUser) return
@@ -56,6 +58,40 @@ export default function PdfWorksheetsPage() {
   }, [currentUser])
 
   useEffect(() => { if (allowed) load() }, [allowed])
+
+  /**
+   * 원장만: 올린 자료를 통째로 지운다 (원장님 2026-11-17 「목록 삭제 할수 잇는 기능 넣어줘 관리자한테만」).
+   *
+   * ★ 되돌릴 수 없다. 그래서 **무엇이 같이 지워지는지 숫자로 적어** 확인받는다.
+   * ★ 학생이 푼 기록이 있으면 서버가 거절한다 — exam_sheets 를 지우면 gradings 가 CASCADE 로 같이 날아간다.
+   *   (화면에서도 「푼 사람」이 있으면 단추를 막아 두지만, 진짜 막는 것은 서버다)
+   */
+  async function remove(s: Sheet) {
+    if (s.solved) { alert(`「${s.title}」 은 학생이 푼 기록이 ${s.solved}건 있어 지울 수 없습니다.`); return }
+    const 적을말 = [
+      `「${s.title}」 을 지웁니다.`,
+      '',
+      `· 문제은행 문항 ${s.problems}개 (다른 학습지에도 쓰인 문항은 남습니다)`,
+      `· 학생 배정 ${s.targets}명`,
+      '· 잘라 둔 문항 그림',
+      '',
+      '되돌릴 수 없습니다. 지울까요?',
+    ].join('\n')
+    if (!confirm(적을말)) return
+    setErr('')
+    setBusy(s.code)
+    try {
+      const r = await apiFetch('/api/pdf-worksheets', { method: 'POST', body: JSON.stringify({ action: 'delete', code: s.code }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j?.error ?? '지우지 못했습니다.')
+      setNote(`「${s.title}」 을 지웠습니다 — 문항 ${j.deleted}개 지움`
+        + (j.kept ? ` · ${j.kept}개는 다른 곳에도 쓰여 남겼습니다` : ''))
+      await load()
+    } catch (e: any) {
+      setErr(e?.message ?? '지우지 못했습니다.')
+    }
+    setBusy('')
+  }
 
   async function load() {
     setLoading(true)
@@ -108,11 +144,13 @@ export default function PdfWorksheetsPage() {
           </p>
           <p className="mt-2 text-gray-500">
             넣은 문항은 <b>자동 출제에 섞이지 않습니다</b>(유형 · 레벨을 붙이지 않습니다).
-            지운 적 없는 자료는 계속 남습니다 — 이미 학습지에 쓰였을 수 있어 지우는 길은 두지 않았습니다.
+            <b>지우기는 원장님만</b> 할 수 있고 <b>되돌릴 수 없습니다</b>. 학생이 푼 기록이 있으면 지워지지 않습니다
+            (지우면 그 기록도 같이 사라지기 때문입니다). 다른 학습지에도 쓰인 문항은 남습니다.
           </p>
         </div>
 
         {err && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"><i className="ti ti-alert-triangle mr-1" />{err}</p>}
+        {note && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm" style={{ color: GREEN }}><i className="ti ti-circle-check mr-1" />{note}</p>}
 
         {loading ? <p className="p-10 text-center text-sm text-gray-400"><i className="ti ti-loader-2 mr-1 animate-spin" />불러오는 중…</p>
           : !sheets.length ? (
@@ -157,6 +195,16 @@ export default function PdfWorksheetsPage() {
                           className="rounded-lg border px-2.5 py-1.5 text-xs">
                           <i className="ti ti-send mr-1" />배정
                         </button>
+                        {/* 지우기는 **원장님만** (원장님 2026-11-17 「관리자한테만」).
+                            푼 사람이 있으면 막는다 — 지우면 채점 기록이 같이 사라진다. 진짜 차단은 서버. */}
+                        {isAdmin && (
+                          <button onClick={() => remove(s)} disabled={!!busy || !!s.solved}
+                            title={s.solved ? `학생이 푼 기록이 ${s.solved}건 있어 지울 수 없습니다` : '되돌릴 수 없습니다'}
+                            className="ml-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 disabled:opacity-40">
+                            <i className={`ti mr-1 ${busy === s.code ? 'ti-loader-2 animate-spin' : 'ti-trash'}`} />
+                            {busy === s.code ? '지우는 중' : '지우기'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

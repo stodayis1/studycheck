@@ -45,7 +45,7 @@ for (const q of ['?list=1', '?print=ABC123', '?assign=ABC123']) {
   const r = await call(GET, `http://x/api/pdf-worksheets${q}`)
   ok(r.status === 401, `GET ${q} → 401`, r)
 }
-for (const action of ['start', 'question', 'finish', 'assign']) {
+for (const action of ['start', 'question', 'finish', 'assign', 'delete']) {
   const r = await call(POST, 'http://x/api/pdf-worksheets', { action, code: 'ABC123', no: 1, image: 'x' })
   ok(r.status === 401, `POST action=${action} → 401 (DB 에 닿지 않는다)`, r)
 }
@@ -56,6 +56,24 @@ ok((src.match(/await highOrDeny\(req\)/g) ?? []).length === 2, 'GET · POST 둘 
 ok(/if \(who\.deny\) return who\.deny/.test(src), 'deny 를 그대로 돌려준다')
 ok(!/denyIfNotStaff/.test(src), 'denyIfNotStaff 로 넓게 열어 두지 않았다')
 ok(/asUser\(req\)\.from\('students'\)/.test(src), '배정은 **그 사람 토큰으로** students 를 되읽어 가린다')
+
+console.log('\n■ 지우기는 **원장만** 이고, 푼 기록이 있으면 지우지 않는다 (원장님 2026-11-17 「관리자한테만」)')
+{
+  // ★ exam_sheets 를 지우면 gradings · exam_sheet_problems · exam_sheet_targets 가 **CASCADE 로 같이 날아간다**.
+  //   그래서 푼 기록이 하나라도 있으면 막아야 한다 — 막는 줄이 사라지면 학생 채점 기록이 조용히 사라진다.
+  const d = src.slice(src.indexOf("case 'delete'"), src.indexOf("case 'assign'"))
+  ok(d.length > 100, '지우기 가지가 있다')
+  ok(/who\.role !== 'admin'/.test(d), '원장이 아니면 막는다 (role !== admin → 403)')
+  ok(/from\('gradings'\)[\s\S]{0,200}eq\('sheet_id'/.test(d), '푼 기록을 센다')
+  ok(/이미 푼 기록이/.test(d), '푼 기록이 있으면 사람 말로 거절한다')
+  ok(/neq\('sheet_id', sheet\.id\)/.test(d), '다른 학습지에도 쓰인 문항은 남긴다')
+  for (const t of ['exam_questions', 'learning_attempts', 'twin_id'])
+    ok(d.includes(t), `${t} 에 걸린 문항도 남긴다`)
+  ok(/storage\.from\(PROBLEM_BUCKET\)\.remove/.test(d), '보관함 그림도 지운다')
+  // 지우는 차례 — 그림을 먼저 지워야 어느 그림이었는지 알 수 있다
+  ok(d.indexOf('.remove(') < d.indexOf("from('problems').delete()"), '그림을 문항 줄보다 **먼저** 지운다')
+  ok(d.indexOf("from('problems').delete()") < d.indexOf("from('exam_sheets').delete()"), '문항을 학습지보다 먼저 지운다')
+}
 
 console.log('\n■ PDF 학습지는 권한 규칙을 베껴 적지 않는다 — lib/apiAuth.ts 의 highOrDeny 한 곳만 본다')
 {

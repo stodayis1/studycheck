@@ -569,6 +569,28 @@ select u.name, public._probe(u.id) from users u;   -- 끝나면 drop function
 누를 때 실제로 바뀌고 ④ 결과를 올린 선생님께 알린다. 한 학생에 열린 요청은 한 건까지 둔다 —
 두 건이 쌓이면 원장님은 무엇을 반영할지 알 수 없다.
 
+### 지우는 단추를 만들 때는 **딸려 지워지는 것부터 센다** (2026-11-17)
+
+「목록에서 지우게 해줘」는 자주 온다. 그런데 한 줄을 지우면 **FK 가 CASCADE 인 것들이 소리 없이 같이 날아간다.**
+
+- [ ] **먼저 FK 를 뽑아 본다.** 무엇이 CASCADE 인지 모르고 만들면 안 된다.
+      ```sql
+      select tc.table_name as child, kcu.column_name as col, ccu.table_name as parent, rc.delete_rule
+      from information_schema.table_constraints tc
+      join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+      join information_schema.constraint_column_usage ccu on ccu.constraint_name = tc.constraint_name
+      join information_schema.referential_constraints rc on rc.constraint_name = tc.constraint_name
+      where tc.constraint_type='FOREIGN KEY' and tc.table_schema='public' and ccu.table_name='지울표';
+      ```
+      실제로 걸렸다 — `exam_sheets` 를 지우면 **`gradings`(학생 채점 기록)가 CASCADE** 로 같이 사라진다.
+      그래서 「푼 기록이 있으면 아예 못 지운다」를 **서버에** 뒀다(화면 단추 막기는 한 겹일 뿐이다).
+- [ ] **딸린 줄이 있으면 막는 쪽(NO ACTION)은 미리 골라낸다.** 그냥 지우려 들면 `23503` 이 나고
+      어느 줄 때문인지 사람이 모른다. 쓰이는 데를 먼저 세어 **남길 것과 지울 것을 가르고 숫자로 알린다.**
+- [ ] **지우는 차례**: 보관함 그림 → 자식 줄 → 부모 줄. 줄이 먼저 사라지면 어느 그림이었는지 알 길이 없다.
+- [ ] 확인창에 **무엇이 몇 개 지워지는지**와 **되돌릴 수 없다**를 적는다. 끝난 뒤 몇 개를 지우고
+      몇 개를 남겼는지 보여 준다.
+- [ ] 검사에 **막는 줄이 사라지면 실패하도록** 박아 둔다(`scripts/pdf-worksheet-guard-check.ts` 의 지우기 가지).
+
 ## 자주 하는 실수 (실제 있었던 일)
 
 - **학생이 주소창으로 선생님 화면에 들어왔다** (2026-10-27, 81cb573). `useAuth`가 `users`에 없는 익명 세션을
@@ -898,3 +920,4 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-17 아티팩트 판을 앱으로 옮길 때 — 명단은 DB 에서 읽고, 처음 제안은 「이름|학년」으로 붙이고 동명이인이면 안 붙인다. 아티팩트에 저장된 값을 먼저 읽어 초안으로 삼는다(보기 권한으로는 아티팩트 저장이 아예 안 된다)
 - 2026-11-17 남의 학년을 보는 화면은 **서버 API 로** 읽는다 — 학생 정책은 담당 학생+주임 학년만 열려 있어 브라우저에서 직접 읽으면 조용히 0명이 된다(신애진 선생님 화면의 초6)
 - 2026-11-17 「원장 + 고등 담당」 가드는 `highOrDeny`(lib/apiAuth.ts) 한 곳 — 명단을 route 에 베껴 적지 않는다. 다만 **권한이 두 갈래**면(move-assign 처럼) 그 화면이 자기 `allow()` 를 둔다. 강사가 **본인 담당 학생에게만** 하는 저장은 service_role 로 쓰기 전에 **그 사람 토큰으로 students 를 되읽어** 가린다(걸러진 수를 화면에 알린다)
+- 2026-11-17 지우는 단추는 **FK 부터 뽑아 본다** — `exam_sheets` 를 지우면 `gradings`(학생 채점 기록)가 CASCADE 로 같이 날아간다. 막는 쪽(NO ACTION)은 미리 골라 남기고, 차례는 그림 → 자식 → 부모, 확인창에 숫자와 「되돌릴 수 없다」를 적는다
