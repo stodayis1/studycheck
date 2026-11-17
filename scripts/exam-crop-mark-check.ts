@@ -16,11 +16,12 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, answerBelow, eqText, dotNumberOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
+  bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
   eqText: (s: string) => string
-  dotNumberOf: (str: string, size: number, limit: number) => number | null
+  dotNumberOf: (str: string, size: number, limit: number, big?: number) => number | null
 }
 
 let pass = 0, all = 0
@@ -137,10 +138,25 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('네 자리 숫자는 문항 번호로 안 본다', dotNumberOf('2025.', N, lim) === null)
 }
 
+// ★ 번호가 본문보다 **큰** 작업본 (2026-11-17 고양시 고1 공통수학2 25개교).
+//   그 파일을 재 값 그대로 — 본문 11.03pt · 문항 번호 14.99pt · 해설 쪽 번호 8.75pt.
+{
+  const B = 11.03, N = 14.99, H = 8.75
+  const sizes = [B, B, B, B, N, H, B, B]
+  const lim = markLimit(sizes), big = bigLimit(sizes)
+  ok('고양시 꼴 — 본문보다 큰 「1.」 을 문항 번호로 읽는다', dotNumberOf('1.', N, lim, big) === 1, `작은한계 ${lim.toFixed(2)} · 큰한계 ${big.toFixed(2)}pt`)
+  ok('해설 쪽의 작은 「1.」 도 (작은 쪽 규칙으로) 읽힌다', dotNumberOf('1.', H, lim, big) === 1)
+  ok('본문과 같은 크기의 「12.」 는 문항 번호가 아니다', dotNumberOf('12.', B, lim, big) === null)
+  ok('큰한계를 안 주면 큰 번호는 안 읽힌다(옛 규칙 그대로)', dotNumberOf('1.', N, lim) === null)
+  ok('지축중 꼴(작은 번호)은 큰한계가 있어도 그대로 읽힌다', dotNumberOf('1.', 8.6, markLimit([11.04, 11.04, 8.6, 11.04]), bigLimit([11.04, 11.04, 8.6, 11.04])) === 1)
+}
+
 {
   const src2 = fs.readFileSync(libPath, 'utf8')
   ok('「1.」 꼴 가지가 수식 글꼴도 그냥 글자도 받는다', src2.includes('const 번호 = 번호수식 || 번호글자'))
-  ok('글자 번호는 크기로 가른다', src2.includes('dotNumberOf(t.str, t.size, limit)'))
+  ok('글자 번호는 크기로 가른다(작은 쪽·큰 쪽 둘 다)', src2.includes('dotNumberOf(t.str, t.size, limit, big)'))
+  // 문제 쪽이 「정답표 쪽」으로 걸리면 그 뒤가 통째로 정답이 된다 — 큰 번호는 정답표 줄로 세지 않는다
+  ok('큰 번호는 정답표 줄로 세지 않는다', src2.includes('const lineStarts = items.filter') && src2.includes('&& !(t.size > big))'))
   ok('글자 번호는 번호 덩어리만 지운다', src2.includes('번호글자 ? [t.x, t.top, t.x1, t.bottom]'))
 }
 

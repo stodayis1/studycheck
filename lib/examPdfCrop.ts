@@ -29,9 +29,12 @@ const DOT_NUM = /^(\d{1,3})\.$/
  *
  * 시험: scripts/exam-crop-mark-check.ts
  */
-export function dotNumberOf(str: string, size: number, limit: number): number | null {
+export function dotNumberOf(str: string, size: number, limit: number, big = Infinity): number | null {
   const m = DOT_NUM.exec(str.trim())
-  if (!m || !(size < limit)) return null
+  if (!m) return null
+  // 번호는 본문보다 **작거나**(미주·지축중 꼴) **크다**(고양시 고1 꼴). 본문과 같은 크기면
+  // 문항 번호가 아니라 글 속의 「12.」 다 — 그건 걸리면 안 된다.
+  if (!(size < limit || size > big)) return null
   return Number(m[1])
 }
 // 한글 수식 글꼴의 **숫자**는 사용자 영역 글자로 찍힌다 — 실측(2026-11-10 신원중)으로는
@@ -56,6 +59,20 @@ export function markLimit(sizes: number[]): number {
   const s = sizes.filter((v) => v > 0).sort((a, b) => a - b)
   if (!s.length) return 8.5                      // 글자가 없으면 옛 기준
   return s[Math.floor(s.length / 2)] * 0.85
+}
+
+/**
+ * 번호가 본문보다 **큰** 꼴도 있다 — 2026-11-17 고양시 고1 공통수학2 25개교가 그랬다.
+ * 번호 14.99pt · 본문 11.03pt (1.36배)라 「작은 것만 번호」 규칙에 하나도 안 걸려
+ * 25개 파일이 모두 「문항 번호를 찾지 못했습니다」였다.
+ * 본문 가운데값의 1.15배보다 큰 것만 번호로 본다 — 머리말(「2025년」·「1학년」)은 `숫자.` 꼴이
+ * 아니라 안 걸리고, 해설 쪽의 작은 번호는 정답표로 따로 걸러진다(inAnswers).
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function bigLimit(sizes: number[]): number {
+  const s = sizes.filter((v) => v > 0).sort((a, b) => a - b)
+  if (!s.length) return Infinity
+  return s[Math.floor(s.length / 2)] * 1.15
 }
 
 // 정답표에서 정답이 번호 **아랫줄**부터 적혀 있는가. 같은 줄에 적힌 정답(「18) 가 × 나」)의
@@ -243,6 +260,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     // 번호가 문제 첫 줄과 같은 줄에 찍힌 파일도 있다 (「10) 다음 중 옳지 않은 것은?」).
     // 그때는 번호 줄 아래부터 자르면 첫 줄이 날아간다 → 그 줄 위에서부터 자르고 번호 글자만 지운다 (top · box)
     const limit = markLimit(items.map((t) => t.size))
+    const big = bigLimit(items.map((t) => t.size))
     markShaped += items.filter((t) => MARK.test(t.str)).length
     type Mark = { no: number; col: number; y0: number; y1: number; top: number | null; box?: [number, number, number, number] }
     const ms: Mark[] = items
@@ -259,7 +277,11 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
 
     // 정답표 쪽: 번호만 줄줄이 있거나, 작은 미주 번호 없이 「1) ③」 줄이 5개 넘게 있는 쪽
     // 정답표는 「1) ③」 과 「1. ④」 두 꼴이 다 있다
-    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
+    // ★ 본문보다 **큰** 번호는 문항 번호다 — 정답표 줄로 세면 안 된다.
+    //   2026-11-17 고양시 고1 25개교: 문제 1쪽의 「1.」「2.」「3.」(15.0pt)이 여섯 개 걸려
+    //   그 쪽이 통째로 「정답표」로 판정됐고, inAnswers 가 거기서 켜져 **그 뒤 쪽이 모두 정답**이 됐다
+    //   (문항 0 · 정답 21). 정답표의 번호는 본문보다 작다(해설 쪽 8.75pt).
+    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14 && !(t.size > big))
     const nMark = items.filter((t) => MARK.test(t.str)).length
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
     if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
@@ -363,7 +385,9 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           //    조각이 있을 수 있으니 **미주와 같은 85% 규칙**(limit)으로 가른다 —
           //    이 파일의 번호는 8.6pt, 본문은 11.0pt 라 깨끗이 갈린다. 마지막 정답표 쪽의
           //    「22.」·「23.」 은 본문 크기(11.5pt)여서 여기 안 걸린다.
-          const 글자번호 = dotNumberOf(t.str, t.size, limit)
+          // ③ 번호가 본문보다 **큰** 꼴도 있다 (고양시 고1 — 번호 15.0pt · 본문 11.0pt).
+          //    작은 쪽만 보면 하나도 안 걸린다. 같은 크기만 아니면 되므로 limit · big 양쪽으로 가른다.
+          const 글자번호 = dotNumberOf(t.str, t.size, limit, big)
           const 번호글자 = 글자번호 !== null
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
