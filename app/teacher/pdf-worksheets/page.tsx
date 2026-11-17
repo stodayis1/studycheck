@@ -34,7 +34,7 @@ const GREEN = '#0f7b6c'
 
 type Sheet = {
   code: string; title: string; course: string | null; createdAt: string
-  by: string | null; mine: boolean; pdfName: string | null
+  by: string | null; mine: boolean; pdfName: string | null; kind: string | null
   problems: number; targets: number; solved: number
 }
 
@@ -96,7 +96,8 @@ export default function PdfWorksheetsPage() {
           <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
             <li><b>PDF 올리기</b> — 모의고사 · 오답 모음 · 이전 학원에서 만든 자료.</li>
             <li>한글 2단 작업본이면 문항을 <b>자동</b>으로 찾고, 아니면 쪽 그림 위에 <b>네모를 그려</b> 문항을 만듭니다.</li>
-            <li>제목을 <b>과정 - 단원명 - 난이도</b>(상 · 중 · 하)로 적습니다. 예) <b>공통수학2-삼각함수-중</b></li>
+            <li>제목을 <b>과정 - 단원명 - 학습지 종류 - 난이도</b>로 적습니다. 예) <b>공통수학2-집합과 명제-교과서-중</b>
+              <br />종류는 <b>적는 칸</b>입니다 — 교과서 · 단계별 학습지처럼 쓰시는 말을 그대로 적거나 비워 두셔도 됩니다.</li>
             <li><b>인쇄</b>는 수학의지혜 시험지 양식(A4 2단)입니다.</li>
             <li><b>배정</b>하면 그 학생 앱 「할 일」에 뜨고, 학생의 <b>학습지 기록</b>에 남습니다.</li>
           </ol>
@@ -136,7 +137,10 @@ export default function PdfWorksheetsPage() {
                     <tr key={s.code} className="border-t">
                       <td className="px-3 py-2">
                         <div className="font-semibold" style={{ color: GREEN }}>{s.title}</div>
-                        <div className="text-[11px] text-gray-400">코드 {s.code}{s.pdfName ? ` · ${s.pdfName}` : ''}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-gray-400">
+                          {s.kind && <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-medium" style={{ color: GREEN }}>{s.kind}</span>}
+                          <span>코드 {s.code}{s.pdfName ? ` · ${s.pdfName}` : ''}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-center">{s.problems}</td>
                       <td className="px-3 py-2 text-center">{s.targets || '-'}</td>

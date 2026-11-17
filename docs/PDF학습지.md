@@ -71,7 +71,7 @@
   (`VIEW_SCALE = 1.4`, 약 100dpi)로 그리고, **자를 때만** 그 쪽을 200dpi 로 다시 그린다.
   쪽마다 한 번만 그린다 — 네모마다 그리면 같은 쪽을 수십 번 다시 그린다.
 
-## 제목 — 「과정 - 단원명 - 난이도」
+## 제목 — 「과정 - 단원명 - 학습지 종류 - 난이도」
 
 원장님이 적으라고 하신 꼴이다. 규칙은 `lib/tutorWorksheet.ts` 한 곳에 있고 **화면과 서버가 같은 함수를
 쓴다**(`tutorKeyError`) — 화면만 막으면 주소로 직접 부르는 길이 열린다.
@@ -79,7 +79,18 @@
 - 과정: `공통수학1` `공통수학2` `대수` `미적분1` `확률과통계` `기하`
   — `problems.grade` 에 **그대로** 들어가므로 `lib/curriculumProgress.ts` 의 `GRADE_ORDER` 와 글자가 같아야 한다.
 - 단원명: 자유 입력. **줄표(-)는 못 쓴다** — 제목을 줄표로 가르기 때문이다.
+- **학습지 종류**(원장님 2026-11-17 「학습지 종류도 쓰게 해줘 … 교과서 … 단계별 학습지라던가」):
+  **고르는 목록이 아니라 적는 칸**이다. 범주를 지어내지 않는다(원장님 2026-10-31 「현재 쓰고 있는
+  규칙에서 우리가 범주를 만들어가는게 맞아`). `TUTOR_KINDS` 는 **자주 쓰실 말을 한 번에 넣는 단추**일
+  뿐이고 다른 말을 적어도, 비워 두어도 된다. `problems.source_meta.source_kind` 에 남는다.
 - 난이도: `상` `중` `하` → `problems.difficulty`
+
+### 제목을 되읽는 법 — `parseTutorTitle`
+
+★ **`split('-')` 한 자리를 번호로 집지 않는다.** 종류가 생기기 전(2026-11-17 낮)에 만든 학습지는
+세 칸이고 그 뒤는 네 칸이다. 그래서 **과정은 밖에서 받고(`exam_sheets.grade`), 난이도는 맨 뒤에서,
+나머지를 가운데로** 읽는다. 난이도가 언제나 맨 뒤인 까닭이 이것이다.
+서버(`action: 'question'`)와 인쇄 화면이 둘 다 이 함수를 쓴다.
 
 ## problems 에 들어가는 값
 
@@ -170,7 +181,7 @@ gradings             푼 결과 (QR 채점 · 학생 앱)
 ## 검사
 
 ```bash
-node --import ./scripts/ts-resolve.mjs scripts/pdf-worksheet-check.ts         # 규칙 (65/65)
+node --import ./scripts/ts-resolve.mjs scripts/pdf-worksheet-check.ts         # 규칙 (120/120)
 node --import ./scripts/ts-resolve.mjs scripts/pdf-worksheet-guard-check.ts   # 가드 (18/18)
 ```
 
