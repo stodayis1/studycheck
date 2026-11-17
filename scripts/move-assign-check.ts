@@ -156,6 +156,34 @@ if (!url || !key) {
     ok(bad2.length === 0, `초6 ${s.name} → ${t} 선생님: 못 오시는 ${bad2.join('·')}요일에 수업이 있다`)
   }
 
+  // ⑧ 서버 API 가 토큰 없이 열려 있지 않나 — **route.ts 를 그대로 불러** 돌린다
+  //    (베껴 쓴 사본으로 재면 진짜 가드를 재는 것이 아니다)
+  const route: any = await import('../app/api/move-assign/route.ts')
+  for (const [name, call] of [
+    ['GET', () => route.GET(new Request('http://localhost/api/move-assign'))],
+    ['POST', () => route.POST(new Request('http://localhost/api/move-assign',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }))],
+  ] as [string, () => Promise<Response>][]) {
+    const res = await call()
+    ok(res.status === 401, `토큰 없는 ${name} 은 401 이어야 한다 (지금 ${res.status})`)
+  }
+  // 엉뚱한 토큰도 막혀야 한다
+  const res3 = await route.GET(new Request('http://localhost/api/move-assign',
+    { headers: { Authorization: 'Bearer not-a-real-token' } }))
+  ok(res3.status === 401, `가짜 토큰은 401 이어야 한다 (지금 ${res3.status})`)
+
+  // ⑨ 권한 확인이 코드에 **남아 있나**. 토큰을 만들어 볼 수 없으니 글자로 재지만,
+  //    지우면 걸리게 해 둔다 — 지우면 직원 누구에게나 초6·고등부 명단이 열린다.
+  const src = fs.readFileSync('app/api/move-assign/route.ts', 'utf8')
+  ok(/rpc\(\s*'can_see_high_curriculum'\s*\)/.test(src), '서버 API 가 can_see_high_curriculum 을 묻지 않는다')
+  ok(/status:\s*403/.test(src), '권한 없는 사람을 403 으로 막는 줄이 없다')
+  for (const h of ['GET', 'POST']) {
+    const at = src.indexOf(`export async function ${h}(req: Request) {`)
+    const head = at < 0 ? '' : src.slice(at, at + 220)
+    ok(head.includes('const deny = await denyUnlessAllowed(req)') && head.includes('if (deny) return deny'),
+      `${h} 핸들러 첫 줄에서 권한을 확인해야 한다`)
+  }
+
   // 표가 살아 있나 (읽기만)
   const { error } = await db.from('class_move_assign').select('student_id').limit(1)
   ok(!error, '표 class_move_assign 을 읽지 못했다 — docs/sql/진급배정판.sql 을 적용했나')

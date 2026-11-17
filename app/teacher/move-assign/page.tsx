@@ -24,7 +24,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { cx, fetchAllRows } from '@/lib/utils'
+import { cx } from '@/lib/utils'
+import { apiFetch } from '@/lib/apiFetch'
 import {
   DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID,
   WD, WE, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID,
@@ -68,35 +69,29 @@ export default function MoveAssignPage() {
 
   useEffect(() => { if (allowed) load() }, [allowed])
 
+  /**
+   * ★ 학생·시간표를 **서버 API 로** 읽는다 (app/api/move-assign).
+   *   학생 조회 정책은 담당 학생 + 주임 학년만 읽히므로, 중등 선생님이 브라우저에서 직접 읽으면
+   *   초6 이 **조용히 0명**이 된다(에러도 안 난다 — 2026-11-17 신애진 선생님 화면에서 그랬다).
+   *   students 정책을 넓히면 앱 전체에서 초등이 열리므로, 이 화면이 쓰는 것만 서버가 내려 준다.
+   */
   async function load() {
     setLoading(true)
     try {
-      // ★ 1000행에 잘리지 않게 돌려 가며 읽는다 (lib/utils 의 fetchAllRows)
-      const ss = await fetchAllRows<Student & { is_test: boolean }>(() => supabase.from('students')
-        .select('id, name, grade, teacher_name, is_test')
-        .or('is_active.eq.true,on_leave.eq.true').in('grade', GRADES).order('id'))
-      // 가상 학생(테스트용)은 숫자·명단에서 뺀다
-      const real = ss.filter((s) => !s.is_test)
+      const res = await apiFetch('/api/move-assign')
+      const j = await res.json()
+      if (!res.ok) throw new Error(j?.error ?? '읽지 못했어요')
+      const real: Student[] = j.students ?? []
       setStudents(real)
-
-      const ids = real.map((s) => s.id)
-      const sc: Sched[] = []
-      // in() 은 100개씩 끊는다
-      for (let i = 0; i < ids.length; i += 100) {
-        sc.push(...await fetchAllRows<Sched>(() => supabase.from('schedules')
-          .select('student_id, day_of_week, start_time, periods').in('student_id', ids.slice(i, i + 100)).order('id')))
-      }
-      setScheds(sc)
-
-      const rows = await fetchAllRows<Row>(() => supabase.from('class_move_assign')
-        .select('student_id, track, teacher_name, weekday_slot, weekend_slot').order('student_id'))
+      setScheds(j.schedules ?? [])
+      const rows: Row[] = j.rows ?? []
 
       // 저장된 것이 있으면 그쪽이 이기고, 없으면 처음 제안(DRAFT_*)을 보여 준다.
       const next: Record<string, Pick3> = {}
-      for (const s of real) {
-        const k = keyOf(s.name, s.grade)
-        const d = s.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
-        if (d) next[s.id] = { t: d[0], wd: d[1], we: d[2] }
+      for (const st of real) {
+        const k = keyOf(st.name, st.grade)
+        const d = st.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
+        if (d) next[st.id] = { t: d[0], wd: d[1], we: d[2] }
       }
       for (const r of rows) next[r.student_id] = { t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '' }
       setAssign(next)
@@ -107,19 +102,21 @@ export default function MoveAssignPage() {
     setLoading(false)
   }
 
-  /** 학생 한 명의 배정을 저장한다 (고르는 즉시). */
+  /** 학생 한 명의 배정을 저장한다 (고르는 즉시). 저장도 서버를 거친다 — 읽기와 같은 길이다. */
   async function save(st: Student, p: Pick3, track: Track) {
     setAssign((prev) => ({ ...prev, [st.id]: p }))
-    const { error } = await supabase.from('class_move_assign').upsert({
-      student_id: st.id, track,
-      teacher_name: p.t || null,
-      weekday_slot: p.wd || null,
-      weekend_slot: p.we || null,
-      updated_at: new Date().toISOString(),
-      updated_by_name: currentUser?.name ?? null,
-    }, { onConflict: 'student_id' })
-    if (error) setHint('저장하지 못했어요 — ' + error.message)
-    else setHint('저장했어요 · ' + st.name)
+    try {
+      const res = await apiFetch('/api/move-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: st.id, track, teacher: p.t, weekday: p.wd, weekend: p.we }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error ?? '저장하지 못했어요')
+      setHint('저장했어요 · ' + st.name)
+    } catch (e: any) {
+      setHint('저장하지 못했어요 — ' + (e?.message ?? '연결 실패'))
+    }
   }
 
   function setOne(st: Student, track: Track, part: 't' | 'wd' | 'we', value: string) {
