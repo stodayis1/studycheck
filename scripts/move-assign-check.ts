@@ -10,8 +10,9 @@
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import {
-  WD, WE, DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID,
+  WD, WE, DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID, ROWS_ELEM,
   EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID, NO_SHOW,
+  GRADES_ELEM, ELEM_PICKS, nextGrade, elemDraft,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff, toMin,
 } from '../lib/moveAssign.ts'
 
@@ -114,6 +115,19 @@ ok(ROWS_MID[0] === '15:00', '중등 격자는 3시부터')
 ok(ROWS_WD.every((r, i) => i === 0 || toMin(r) - toMin(ROWS_WD[i - 1]) === 30), '평일 격자는 30분 간격')
 ok(HIGH_TEACHERS.map((x) => x.name).join() === '최대호,주한,이규숙', '시간표를 그리는 차례')
 
+// ⑧ 초등 판 (원장님 2026-11-17 「초등버전 하나더 만들어줘」)
+ok(GRADES_ELEM.join() === '초1,초2,초3,초4,초5', '초등 판에 오르는 학년은 초1~초5')
+ok(!(GRADES_ELEM as readonly string[]).includes('초6'), '초6 은 중등 판으로 가므로 초등 판에 없어야 한다')
+ok(ELEM_PICKS.join() === '윤주희,조윤희,이규숙', '초등 판에서 고를 수 있는 선생님')
+ok(nextGrade('초3') === '초4' && nextGrade('초5') === '초6', '한 학년 올린다')
+ok(nextGrade('초6') === null && nextGrade('중1') === null && nextGrade(null) === null,
+  '초6·중등·빈 칸은 올리지 않는다 (초6 은 중등 판이 맡는다)')
+// 첫 제안은 **지금 담당 그대로**. 두 분이 같이 적힌 줄은 기계가 고를 수 없으니 비워 둔다.
+ok(elemDraft('윤주희') === '윤주희' && elemDraft('이규숙') === '이규숙', '지금 담당을 그대로 제안한다')
+ok(elemDraft('조윤희, 이규숙') === '', '두 분이 같이 적힌 줄은 비워 둔다 — 원장님이 고르신다')
+ok(elemDraft(null) === '' && elemDraft('김은수') === '', '초등 선생님이 아니면 비워 둔다')
+ok(ROWS_ELEM[0] === '14:00' && ROWS_ELEM[ROWS_ELEM.length - 1] === '18:00', '초등 격자는 14:00~18:00')
+
 // ── 여기부터는 운영 데이터 (.env.local 이 있을 때만)
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -140,7 +154,7 @@ if (!url || !key) {
   const students = await all(() => db.from('students')
     .select('id, name, grade, teacher_name, is_test')
     .or('is_active.eq.true,on_leave.eq.true')
-    .in('grade', ['초6', '중1', '중2', '중3', '고1', '고2']).order('id'))
+    .in('grade', [...GRADES_ELEM, '초6', '중1', '중2', '중3', '고1', '고2']).order('id'))
   const real = students.filter((s) => !s.is_test)
   const byKey = new Map<string, any[]>()
   for (const s of real) {
@@ -204,11 +218,16 @@ if (!url || !key) {
       `${h} 핸들러 첫 줄에서 권한을 확인해야 한다`)
   }
   // 「초6 → 중등」만 보는 사람에게 고등부를 내려 주면 안 된다
-  ok(src.includes("const GRADES = full ? GRADES_ALL : GRADES_MID"),
+  ok(src.includes("const GRADES = full ? GRADES_ALL : GRADES_BASE"),
     '전체 권한이 아닌 사람에게 고등부 학년을 빼고 내려 줘야 한다')
-  ok(!/GRADES_MID\s*=\s*\[[^\]]*고/.test(src), '중등만 보는 목록에 고등 학년이 들어 있다')
-  ok(src.includes("if (!full) rows = rows.filter((r: any) => r.track === '중등')"),
+  ok(!/GRADES_BASE\s*=\s*\[[^\]]*'고/.test(src), '고등 빼고 보는 목록에 고등 학년이 들어 있다')
+  ok(src.includes("if (!full) rows = rows.filter((r: any) => r.track === '중등' || r.track === '초등')"),
     '전체 권한이 아닌 사람에게 고등 판 줄을 빼야 한다')
+  // 중등·초등 판은 선생님만 고른다 — 타임이 섞여 들어오면 그 학생이 고등 판 칸에 그려진다
+  ok(/track !== '고등' && \(weekday \|\| weekend \|\| extra\)/.test(src),
+    '중등·초등 판에 타임이 섞여 들어오는 것을 막아야 한다')
+  ok(/track !== '고등' && track !== '중등' && track !== '초등'/.test(src),
+    '판 이름 셋만 받아야 한다')
   ok(/track === '고등' && !full/.test(src), '전체 권한이 아닌 사람이 고등 판을 고치는 것을 막아야 한다')
 
   // 화면·메뉴도 같은 함수를 봐야 한다 (한쪽만 열리면 메뉴는 보이는데 화면이 빈다)
@@ -229,6 +248,27 @@ if (!url || !key) {
     ok(!colErr, '칸 class_move_assign.' + col + ' 이 없다 — docs/sql/ 의 알맞은 .sql 을 적용했나')
   }
 
+  // 초등 판을 DB 가 받아 주나 — track CHECK 에 '초등' 이 들어 있어야 한다.
+  //   ★ 없는 학생 id 로 **일부러 실패하는** 넣기를 해 본다. 아무것도 안 써진다(FK 가 막는다).
+  //     CHECK 가 FK 보다 **먼저** 터지므로, 돌아온 코드로 둘을 가를 수 있다.
+  //       23514 class_move_assign_track_check → docs/sql/진급배정판_초등판.sql 을 아직 안 넣은 것
+  //       23503 foreign key                    → CHECK 는 통과했다(='초등' 을 받는다)
+  //     안 그러면 화면은 멀쩡히 뜨는데 **고르는 순간 저장만** 빨간 글로 막힌다.
+  const probe = await db.from('class_move_assign')
+    .insert({ student_id: '00000000-0000-4000-8000-000000000000', track: '초등' })
+  ok(probe.error?.code !== '23514',
+    "DB 가 track='초등' 을 안 받는다 — docs/sql/진급배정판_초등판.sql 을 적용했나")
+  ok(probe.error?.code === '23503',
+    `없는 학생으로 넣기를 해 봤는데 FK 가 아니라 ${probe.error?.code ?? '성공'} 이 났다 (아무것도 안 써졌는지 확인할 것)`)
+
+  // 운영 초1~초5 — 초등 판에 오를 학생과 첫 제안
+  const 초등 = real.filter((s) => (GRADES_ELEM as readonly string[]).includes(s.grade ?? ''))
+  ok(초등.length > 0, '운영 초1~초5 가 한 명도 안 읽혔다 — 서버 API 의 학년 목록을 확인할 것')
+  ok(초등.every((s) => nextGrade(s.grade)), '초등 판 학생 중 한 학년 올릴 수 없는 학년이 있다')
+  const 제안없음 = 초등.filter((s) => !elemDraft(s.teacher_name))
+  ok(제안없음.length <= 3,
+    `첫 제안이 비는 초등 학생이 ${제안없음.length}명이다 — ${제안없음.map((s) => `${s.name}(${s.teacher_name ?? '담당 없음'})`).join(' · ')}`)
+
   // ⑩ 권한 함수가 DB 에 살아 있나 — 화면·API 가 이 이름을 부르는데 함수가 없으면
   //    rpc 가 조용히 false 를 주고 **아무도 못 들어온다.**
   //    (정책이 이 함수를 보는지는 docs/sql/진급배정판_권한분리.sql 끝의 확인 쿼리로 센다 —
@@ -237,7 +277,7 @@ if (!url || !key) {
     const { error: fnErr } = await db.rpc(fn as any)
     ok(!fnErr, `DB 함수 ${fn}() 를 부르지 못했다 — docs/sql/진급배정판_권한분리.sql 을 적용했나`)
   }
-  console.log(`(운영 데이터 — 중3 ${중3.length}명 · 초6 ${초6.length}명 · 중1·중2 ${real.filter((s) => s.grade === '중1' || s.grade === '중2').length}명)`)
+  console.log(`(운영 데이터 — 중3 ${중3.length}명 · 초6 ${초6.length}명 · 중1·중2 ${real.filter((s) => s.grade === '중1' || s.grade === '중2').length}명 · 초1~초5 ${초등.length}명)`)
 }
 
 if (bad) { console.error(`\n진급 배정판 자가확인 실패 ${bad}건`); process.exit(1) }

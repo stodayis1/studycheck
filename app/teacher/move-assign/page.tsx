@@ -5,6 +5,7 @@
  *
  * 원장님 2026-11-17 「링크 띄워주고 스터디체크 안에 넣어줘」
  *                  「초6이 중등으로 넘어오는 시간표도 같이 넣어줘, 같은 메뉴안에」
+ *                  「초등학생들도 한학년 올라가면서 … 진급배정판에 초등버전 하나더 만들어줘」
  *
  * 그동안 claude.ai 아티팩트 두 장으로 쓰고 있었다. 앱으로 옮긴 까닭 세 가지
  *   ① 강사가 고치려면 claude.ai 계정과 「참여」 권한이 따로 필요했다(보기 권한으로는 저장이 막힌다).
@@ -27,8 +28,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx } from '@/lib/utils'
 import { apiFetch } from '@/lib/apiFetch'
 import {
-  DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID,
+  DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID, ROWS_ELEM,
   WD, WE, EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID,
+  GRADES_ELEM, ELEM_PICKS, nextGrade, elemDraft,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff,
   toMin, type Track,
 } from '@/lib/moveAssign'
@@ -39,14 +41,14 @@ interface Row { student_id: string; track: Track; teacher_name: string | null; w
 /** 화면에서 들고 다니는 한 학생의 배정 */
 type Pick3 = { t: string; wd: string; we: string; ex: string }
 
-const GRADES = ['초6', '중1', '중2', '중3', '고1', '고2']
 const DAY_ORDER = ['월', '화', '수', '목', '금', '토', '일']
 
 export default function MoveAssignPage() {
   const { currentUser } = useAuth()
   const [allowed, setAllowed] = useState<boolean | null>(null)
-  // 두 탭을 다 볼 사람인가. false 면 「초6 → 중등」 탭만 — 초6 담당 선생님(조윤희·윤주희)이다
-  // (원장님 2026-11-17 「전체 인원을 볼 필요가 없어」). 서버도 그분들께는 고등부를 안 내려 준다.
+  // 세 탭을 다 볼 사람인가. false 면 「초6 → 중등」·「초등 진급」만 — 초등 담당 선생님
+  // (조윤희·윤주희)이다 (원장님 2026-11-17 「전체 인원을 볼 필요가 없어」).
+  // 서버도 그분들께는 고등부를 안 내려 준다.
   const [full, setFull] = useState(false)
   const [tab, setTab] = useState<Track>('고등')
   const [students, setStudents] = useState<Student[]>([])
@@ -64,10 +66,13 @@ export default function MoveAssignPage() {
   }, [currentUser])
 
   useEffect(() => {
-    try { const t = localStorage.getItem('ma-tab'); if (t === '고등' || t === '중등') setTab(t) } catch { /* 저장 못 해도 화면은 된다 */ }
+    try {
+      const t = localStorage.getItem('ma-tab')
+      if (t === '고등' || t === '중등' || t === '초등') setTab(t)
+    } catch { /* 저장 못 해도 화면은 된다 */ }
   }, [])
-  // 「초6 → 중등」만 보는 분은 어느 탭이 기억돼 있든 그 탭으로
-  useEffect(() => { if (!full) setTab('중등') }, [full])
+  // 고등 권한이 없는 분께는 고등 탭이 아예 없다 — 기억된 탭이 고등이면 중등으로 옮긴다
+  useEffect(() => { if (!full) setTab((t) => (t === '고등' ? '중등' : t)) }, [full])
   function pickTab(t: Track) {
     setTab(t)
     try { localStorage.setItem('ma-tab', t) } catch { /* 무시 */ }
@@ -96,8 +101,12 @@ export default function MoveAssignPage() {
       const next: Record<string, Pick3> = {}
       for (const st of real) {
         const k = keyOf(st.name, st.grade)
-        const d = st.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
-        if (d) next[st.id] = { t: d[0], wd: d[1], we: d[2], ex: '' }
+        // 초1~초5 는 **지금 담당 그대로**가 첫 제안이다 (같은 초등부 안에서 다시 나누는 것이라
+        // 「바꿀 학생만 고치는」 편이 맞다 — 원장님 2026-11-17).
+        const d = (GRADES_ELEM as readonly string[]).includes(st.grade ?? '')
+          ? [elemDraft(st.teacher_name), '', '']
+          : st.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
+        if (d && d[0]) next[st.id] = { t: d[0], wd: d[1], we: d[2], ex: '' }
       }
       for (const r of rows) next[r.student_id] = { t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '', ex: r.extra_slot ?? '' }
       setAssign(next)
@@ -141,6 +150,13 @@ export default function MoveAssignPage() {
     return m
   }, [students])
 
+  /** 초등 판에 오르는 학생 — 초1~초5 (학년 → 이름 차례) */
+  const elem = useMemo(() => {
+    const order = (g: string | null) => GRADES_ELEM.indexOf((g ?? '') as any)
+    return students.filter((s) => (GRADES_ELEM as readonly string[]).includes(s.grade ?? ''))
+      .sort((a, b) => order(a.grade) - order(b.grade) || a.name.localeCompare(b.name, 'ko'))
+  }, [students])
+
   /** 그 학생이 지금 다니는 시간 — '월·수·금 16:00(2교시)' 꼴로 */
   const nowText = useMemo(() => {
     const byStudent: Record<string, Sched[]> = {}
@@ -181,17 +197,19 @@ export default function MoveAssignPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="진급 배정판" subtitle="중3 → 고등 · 초6 → 중등" />
+      <Header title="진급 배정판" subtitle="중3 → 고등 · 초6 → 중등 · 초등 진급" />
       <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto">
 
         <div className="flex gap-2">
-          {(full ? (['고등', '중등'] as Track[]) : (['중등'] as Track[])).map((t) => (
+          {(full ? (['고등', '중등', '초등'] as Track[]) : (['중등', '초등'] as Track[])).map((t) => (
             <button key={t} onClick={() => pickTab(t)}
               className={cx('px-4 py-2 rounded-xl text-sm font-bold border transition-all',
                 tab === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200')}>
-              {t === '고등' ? '중3 → 고등' : '초6 → 중등'}
+              {t === '고등' ? '중3 → 고등' : t === '중등' ? '초6 → 중등' : '초등 진급'}
               <span className="ml-1.5 font-normal opacity-70">
-                {t === '고등' ? `${(byGrade['중3'] ?? []).length}명` : `${(byGrade['초6'] ?? []).length}명`}
+                {t === '고등' ? `${(byGrade['중3'] ?? []).length}명`
+                  : t === '중등' ? `${(byGrade['초6'] ?? []).length}명`
+                  : `${elem.length}명`}
               </span>
             </button>
           ))}
@@ -202,12 +220,17 @@ export default function MoveAssignPage() {
           그대로예요 — 진급할 때 옮기는 일은 따로 합니다. 학생과 시간표는 스터디체크에서 그대로 읽어 오니
           원생이 들어오고 나가면 저절로 맞습니다.
           {!full && (
-            <span className="block mt-1">초6 담당 선생님께는 <b>「초6 → 중등」</b>만 보여요 — 고등부 명단은 내려받지도 않습니다.</span>
+            <span className="block mt-1">초등 담당 선생님께는 <b>「초6 → 중등」</b>과 <b>「초등 진급」</b>만 보여요 — 고등부 명단은 내려받지도 않습니다.</span>
           )}
           <span className="block mt-1 text-gray-400">{loading ? '불러오는 중…' : hint}</span>
         </div>
 
-        {tab === '고등'
+        {tab === '초등'
+          ? <ElemBoard
+              elem={elem} e6={byGrade['초6'] ?? []}
+              assign={assign} nowText={nowText} daysOf={daysOf} scheds={scheds}
+              onPick={(st, v) => setOne(st, '초등', 't', v)} />
+          : tab === '고등'
           ? <HighBoard
               m3={byGrade['중3'] ?? []}
               others={students.filter((s) => s.grade !== '중3' && DRAFT_HIGH[keyOf(s.name, s.grade)])}
@@ -613,6 +636,200 @@ function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, onPick }:
                               {n === 0 && b.length === 0 ? <span className="text-gray-300">빔</span> : (
                                 <>
                                   <span className="block font-bold text-gray-500">{n}명{b.length > 0 && ` (중3 ${b.length}명 빠짐)`}</span>
+                                  {a.length > 0 && <span className="block text-gray-500">{a.map((s) => s.name).join('·')}</span>}
+                                  {b.length > 0 && <span className="block text-gray-300 line-through">{b.map((s) => s.name).join('·')}</span>}
+                                  {c.length > 0 && <span className="block text-emerald-700 font-semibold">{c.map((s) => s.name).join('·')}</span>}
+                                </>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })}
+      </section>
+    </div>
+  )
+}
+
+/* ────────────────────────── 초등 진급 (초1~초5 → 한 학년 위) ──────────────────────────
+ * 원장님 2026-11-17 「초등학생들도 한학년 올라가면서 윤주희, 조윤희 강사 담당 학생들을
+ *   다시 배정할거거든. 현재 담당 학생들 학년 올라가면서 배정할수 있도록 … 초등버전 하나더」
+ *
+ * 중등 판과 같은 꼴이다 — **선생님만** 고른다. 다른 점 둘:
+ *   ① 부(部)를 옮기는 것이 아니라서 첫 제안이 **지금 담당 그대로**다. 바꿀 학생만 고치면 된다.
+ *   ② 빠지는 자리는 중3 이 아니라 **중등으로 올라가는 초6** 이다.
+ */
+
+function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
+  elem: Student[]; e6: Student[]
+  assign: Record<string, Pick3>; nowText: Record<string, string>
+  daysOf: Record<string, string[]>; scheds: Sched[]
+  onPick: (st: Student, v: string) => void
+}) {
+  /** 그 학생이 그 칸(요일·시각)에 수업이 있나 — 지금 시간표 그대로 */
+  const busy = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const s of scheds) {
+      const start = toMin(String(s.start_time).slice(0, 5))
+      const end = start + Math.round(Number(s.periods || 0) * 60)
+      const set = m.get(s.student_id) ?? new Set<string>()
+      for (let t = start; t < end; t += 30) set.add(s.day_of_week + '|' + t)
+      m.set(s.student_id, set)
+    }
+    return m
+  }, [scheds])
+  const at = (s: Student, day: string, row: string) => busy.get(s.id)?.has(day + '|' + toMin(row)) ?? false
+
+  const 맡을이 = (s: Student) => assign[s.id]?.t ?? ''
+  /** 지금 담당과 달라졌나 — 눈에 띄게 해 둔다(바꾼 것만 보시면 된다) */
+  const 바뀜 = (s: Student) => !!맡을이(s) && 맡을이(s) !== (s.teacher_name ?? '')
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-indigo-50 border-2 border-indigo-100 rounded-2xl px-4 py-3">
+        <p className="text-xs font-bold text-indigo-900 mb-2"><i className="ti ti-sum align-[-0.125em]" /> 지금 짜여 있는 모양</p>
+        <ul className="text-xs text-indigo-900 space-y-1">
+          {ELEM_PICKS.map((t) => {
+            const 맡는 = elem.filter((s) => 맡을이(s) === t)
+            const 지금 = elem.filter((s) => (s.teacher_name ?? '') === t)
+            const 올라감 = e6.filter((s) => (s.teacher_name ?? '') === t)
+            if (맡는.length === 0 && 지금.length === 0 && 올라감.length === 0) return null
+            const 들어옴 = 맡는.filter((s) => (s.teacher_name ?? '') !== t)
+            const 나감 = 지금.filter((s) => 맡을이(s) !== t)
+            return (
+              <li key={t}>
+                <b>{t} 선생님</b> — 맡을 학생 <b>{맡는.length}명</b>
+                <span className="text-indigo-500"> (지금 {지금.length}명</span>
+                {올라감.length > 0 && <span className="text-indigo-500"> · 중등으로 올라가는 초6 {올라감.length}명</span>}
+                <span className="text-indigo-500">)</span>
+                {들어옴.length > 0 && <span className="text-emerald-700"> · 새로 {들어옴.map((s) => s.name).join('·')}</span>}
+                {나감.length > 0 && <span className="text-amber-700"> · 보냄 {나감.map((s) => s.name).join('·')}</span>}
+              </li>
+            )
+          })}
+          {(() => {
+            const 안정함 = elem.filter((s) => !맡을이(s))
+            return 안정함.length > 0
+              ? <li className="text-orange-700"><b>아직 안 정한 학생 {안정함.length}명</b> — {안정함.map((s) => `${s.name}(지금 ${s.teacher_name ?? '—'})`).join(' · ')}</li>
+              : null
+          })()}
+          {(() => {
+            const 걸림 = elem.map((s) => {
+              const bad = clashesWithOff(맡을이(s), daysOf[s.id] ?? [])
+              return bad.length > 0 ? `${s.name}(${맡을이(s)} 선생님 ${bad.join('·')}요일)` : null
+            }).filter(Boolean)
+            return 걸림.length > 0
+              ? <li className="text-rose-700"><b>못 오시는 요일에 걸린 학생 {걸림.length}명</b> — {걸림.join(' · ')}</li>
+              : null
+          })()}
+        </ul>
+      </div>
+
+      <section className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+          <h3 className="font-bold text-gray-800 text-sm">초1~초5 {elem.length}명 — 한 학년 올라간 뒤 맡을 선생님</h3>
+          <p className="text-[11px] text-gray-500">
+            처음에는 <b>지금 담당 그대로</b> 채워져 있어요 — <b>바꿀 학생만</b> 고치시면 됩니다.
+            시간표는 지금 쓰는 것을 그대로 가져옵니다.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500">
+                <th className="text-left px-3 py-2 font-medium">학생</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">학년</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">지금 다니는 시간</th>
+                <th className="text-left px-3 py-2 font-medium">맡을 선생님</th>
+              </tr>
+            </thead>
+            <tbody>
+              {elem.map((s) => {
+                const t = 맡을이(s)
+                const bad = clashesWithOff(t, daysOf[s.id] ?? [])
+                return (
+                  <tr key={s.id} className={cx('border-b border-gray-50', 바뀜(s) && 'bg-emerald-50/50')}>
+                    <td className="px-3 py-2">
+                      <b className="text-[13px] text-gray-800">{s.name}</b>
+                      <span className="block text-[11px] text-gray-400">지금 {s.teacher_name ?? '—'} 선생님</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      {s.grade} <span className="text-gray-300">→</span> <b className="text-gray-800">{nextGrade(s.grade) ?? '—'}</b>
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{nowText[s.id] ?? '시간표 없음'}</td>
+                    <td className="px-3 py-2">
+                      <Sel value={t} unset={!t} onChange={(v) => onPick(s, v)}
+                        options={[['', '— 안 정함'], ...ELEM_PICKS.map((x) => [x, x] as [string, string])]} />
+                      {바뀜(s) && <span className="block text-[11px] text-emerald-700 font-semibold mt-0.5">바뀜 · {s.teacher_name} → {t}</span>}
+                      {bad.length > 0 && (
+                        <span className="block text-[11px] text-rose-600 font-semibold mt-0.5">
+                          {t} 선생님은 {bad.join('·')}요일에 안 계세요
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="font-bold text-gray-800 text-sm">선생님별 초등 시간표</h3>
+          <p className="text-[11px] text-gray-500">
+            흐린 글씨는 그대로 맡는 학생, 초록은 <span className="text-emerald-700 font-semibold">새로 오는 학생</span>,
+            <span className="line-through"> 가운뎃줄</span>은 중등으로 올라가는 초6이에요.
+            초6이 빠지는 자리에 누가 들어갈 수 있는지 보세요.
+          </p>
+        </div>
+        {ELEM_PICKS.map((t) => {
+          const 그대로 = elem.filter((s) => 맡을이(s) === t && (s.teacher_name ?? '') === t)
+          const 새로 = elem.filter((s) => 맡을이(s) === t && (s.teacher_name ?? '') !== t)
+          const 올라감 = e6.filter((s) => (s.teacher_name ?? '') === t)
+          if (그대로.length === 0 && 새로.length === 0 && 올라감.length === 0) return null
+          return (
+            <div key={t} className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-indigo-50 border-b border-gray-100 flex flex-wrap items-baseline gap-2">
+                <h4 className="font-bold text-gray-800 text-sm">{t} 선생님</h4>
+                <span className="text-[11px] text-gray-500">
+                  그대로 {그대로.length}명 · 새로 {새로.length}명 · 올라가는 초6 {올라감.length}명
+                </span>
+              </div>
+              <div className="overflow-x-auto p-3">
+                <table className="text-[11px] border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="border border-gray-100 bg-gray-50 px-1.5 py-1 text-gray-400 font-medium">시각</th>
+                      {DAYS_WD.map((d) => (
+                        <th key={d} className="border border-gray-100 bg-gray-50 px-1.5 py-1 text-center text-gray-500 font-medium min-w-[100px]">
+                          {d}{(clashesWithOff(t, [d]).length > 0) && <span className="block text-[10px] text-rose-500 font-normal">안 계심</span>}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ROWS_ELEM.map((row) => (
+                      <tr key={row}>
+                        <th className="border border-gray-100 bg-gray-50 px-1.5 py-1 text-right text-gray-400 font-normal whitespace-nowrap">{row}</th>
+                        {DAYS_WD.map((d) => {
+                          const a = 그대로.filter((s) => at(s, d, row))
+                          const b = 올라감.filter((s) => at(s, d, row))
+                          const c = 새로.filter((s) => at(s, d, row))
+                          const n = a.length + c.length
+                          return (
+                            <td key={d} className={cx('border border-gray-100 px-1.5 py-1 align-top',
+                              n === 0 && b.length === 0 ? 'bg-white' : c.length ? 'bg-emerald-50' : 'bg-amber-50')}>
+                              {n === 0 && b.length === 0 ? <span className="text-gray-300">빔</span> : (
+                                <>
+                                  <span className="block font-bold text-gray-500">{n}명{b.length > 0 && ` (초6 ${b.length}명 올라감)`}</span>
                                   {a.length > 0 && <span className="block text-gray-500">{a.map((s) => s.name).join('·')}</span>}
                                   {b.length > 0 && <span className="block text-gray-300 line-through">{b.map((s) => s.name).join('·')}</span>}
                                   {c.length > 0 && <span className="block text-emerald-700 font-semibold">{c.map((s) => s.name).join('·')}</span>}
