@@ -615,7 +615,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           //   그래서 번호 오른쪽에서 **번호 줄에 걸쳐 있는 글자**도 같이 보고 가장 위를 잡는다.
           //   올라가는 높이는 번호 글자의 2.5배까지만 — 앞 문항 끝줄을 삼키지 않게 한다.
           const ceiling = t.top - t.size * 2.5
-          const tall = items.filter((o) => o !== t && colOf(o.x) === c && o.x >= t.x
+          //   ★ 번호 **오른쪽**만 본다(o.x >= t.x1). 번호와 같은 자리에서 시작하는 윗줄은
+          //     그 문항의 것이 아니다 — 2026-11-17 능곡고·무원고는 1번 번호 15pt 위에
+          //     「범위 : 명제 - 무리함수」 안내 줄이 있어서 **1번 그림에 딸려 들어갔다.**
+          const tall = items.filter((o) => o !== t && colOf(o.x) === c && o.x >= t.x1 - 1
             && o.top < t.bottom && o.bottom > ceiling && o.base <= t.base + t.size * 0.6)
           let top = Math.max(ceiling, Math.min(t.top, ...same.map((o) => o.top), ...tall.map((o) => o.top))) - 2
           // 바로 위에 논술형 이름표가 있었으면 거기서부터 자른다 (ceiling 막이를 넘어서라도)

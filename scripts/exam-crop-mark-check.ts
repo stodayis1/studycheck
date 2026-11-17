@@ -350,5 +350,15 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('점을 안 붙이면 아무것도 아니다', dotNumberOf('3', 14.03, lim, bg) === null)
 }
 
+// 키 큰 수식은 **번호 오른쪽**만 본다 (2026-11-17 능곡고 · 무원고)
+//   번호 15pt 위에 「범위 : 명제 - 무리함수」 안내 줄이 있는 시험지가 있다. 번호와 같은
+//   x 에서 시작해서, 「번호 줄에 걸친 키 큰 글자」로 읽혀 **1번 그림에 딸려 들어갔다.**
+{
+  const srcA = fs.readFileSync(libPath, 'utf8')
+  ok('키 큰 수식은 번호 오른쪽만 본다', srcA.includes('colOf(o.x) === c && o.x >= t.x1 - 1'))
+  ok('번호와 같은 자리에서 시작하는 것은 안 본다', !/o\.x >= t\.x$/m.test(srcA))
+  ok('천장 막이는 그대로 (앞 문항 끝줄을 안 삼킨다)', srcA.includes('const ceiling = t.top - t.size * 2.5'))
+}
+
 console.log(`\n통과 ${pass} / 전체 ${all}`)
 process.exitCode = pass === all ? 0 : 1
