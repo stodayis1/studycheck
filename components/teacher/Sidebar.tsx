@@ -45,7 +45,8 @@ const ITEM = {
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
   // 화면 제목이 「시험대비 관리」인데 메뉴만 「시험배정」이라 서로 달랐다. 화면 쪽에 맞췄다.
   examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },
-  examAnalysis:  { href: '/teacher/exam-analysis',  label: '시험지 분석',  icon: 'ti-file-analytics' },
+  // 원장님 2026-11-17 「메뉴 "시험지 분석"명을 "기출 모음"으로」. 주소·표 이름(exam_papers 등)은 그대로다.
+  examAnalysis:  { href: '/teacher/exam-analysis',  label: '기출 모음',   icon: 'ti-file-analytics' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
   // ★ 「학습지출제」와 「출제한 학습지」를 한 메뉴로 합쳤다 (원장님 2026-10-22).

@@ -57,8 +57,8 @@ export default function ExamPaperPage({ params }: { params: Promise<{ id: string
   }, [id])
   useEffect(() => { if (!loading && currentUser) load() }, [loading, currentUser, load])
 
-  if (err) return <Shell title="시험지 분석"><p className="p-10 text-center text-sm text-red-600">{err}</p></Shell>
-  if (!data) return <Shell title="시험지 분석"><p className="p-10 text-center text-gray-400">불러오는 중…</p></Shell>
+  if (err) return <Shell title="기출 모음"><p className="p-10 text-center text-sm text-red-600">{err}</p></Shell>
+  if (!data) return <Shell title="기출 모음"><p className="p-10 text-center text-gray-400">불러오는 중…</p></Shell>
 
   const paper = data.paper
   const isAdmin = !!data.me?.isAdmin

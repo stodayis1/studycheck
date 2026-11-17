@@ -401,7 +401,7 @@ const GROUPS: ManualGroup[] = [
         ],
       },
       {
-        href: '/teacher/exam-analysis', label: '시험지 분석', icon: 'ti-file-analytics',
+        href: '/teacher/exam-analysis', label: '기출 모음', icon: 'ti-file-analytics',
         summary: '중 · 고등 학교 기출분석을 노션 대신 여기서 해요. 시험지는 원장님(윤T)이 올리고, 담당 선생님은 변별문항 손풀이 · 총평 · 다음 시험 대비를 채워요.',
         steps: [
           '원장님이 시험지를 올리면 현황판의 맡은 학교 줄에 「인쇄」 버튼과 문항이 생겨요. 그 줄을 눌러 들어가요.',

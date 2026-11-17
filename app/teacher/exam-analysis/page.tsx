@@ -97,7 +97,7 @@ export default function ExamAnalysisPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="시험지 분석" subtitle="학교별 시험지 수합 · 정답 · 변별문항 · 총평 · 이너프원 매칭 · 문제은행 · 블로그"
+      <Header title="기출 모음" subtitle="학교별 시험지 수합 · 정답 · 변별문항 · 총평 · 이너프원 매칭 · 문제은행 · 블로그"
         action={
           <button onClick={() => setAdding((v) => !v)} className="rounded-xl px-3 py-2 text-xs font-semibold text-white" style={{ background: GREEN }}>
             + 시험지 추가
