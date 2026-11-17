@@ -51,16 +51,18 @@ export function docTitle(p: PaperInfo) {
   return `${String(p.exam_year).slice(2)}년 ${p.school_name} ${p.term}학기 ${p.exam_type}`
 }
 
-export function ExamPaperPrint({ paper, problems, initial = 'paper', heading }: {
+export function ExamPaperPrint({ paper, problems, initial = 'paper', heading, defaultPerCol = 3 }: {
   /** 학교 시험지일 때만. `heading` 을 넘기면 안 줘도 된다 */
   paper?: PaperInfo
   problems: PrintProblem[]
   initial?: 'paper' | 'answers'
   heading?: PrintHeading
+  /** 한 단에 넣을 문항 수의 **상한**. 0 이면 「자동」(높이가 되는 데까지). 기출은 3, PDF 학습지는 0 */
+  defaultPerCol?: number
 }) {
   const [what, setWhat] = useState<'paper' | 'answers' | 'both'>(initial)
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number }> | null>(null)
-  const [perCol, setPerCol] = useState(3)
+  const [perCol, setPerCol] = useState(defaultPerCol)
   const [zoom, setZoom] = useState(1)
 
   // 그림을 미리 다 받아 크기를 안다 (크기를 알아야 쪽을 짤 수 있다)
@@ -106,7 +108,8 @@ export function ExamPaperPrint({ paper, problems, initial = 'paper', heading }: 
         </div>
         <label className="flex items-center gap-1.5">한 단에
           <select value={perCol} onChange={(e) => setPerCol(Number(e.target.value))} className="rounded border px-1.5 py-0.5">
-            {[2, 3, 4].map((n) => <option key={n} value={n}>{n}문항</option>)}
+            <option value={0}>자동 (되는 데까지)</option>
+            {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}문항까지</option>)}
           </select>
         </label>
         <label className="flex items-center gap-1.5">글씨 크기

@@ -106,6 +106,8 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
   const [code, setCode] = useState('')
   const dataRef = useRef<ArrayBuffer | null>(null)
   const docRef = useRef<any>(null)
+  // 끌어올리기(원장님 2026-11-17 「끌어와서 올리는것도 가능하게 해줘」)
+  const [dropping, setDropping] = useState(false)
 
   // 쪽 그림은 커서, 창을 닫을 때 비워 준다
   useEffect(() => () => {
@@ -113,6 +115,19 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
   }, [pageViews])
 
   // ── ① PDF 고르기 ───────────────────────────────────────────────────────────
+  /**
+   * 끌어다 놓은 것에서 PDF 하나를 집는다.
+   * 폴더나 그림을 끌어오면 조용히 아무 일도 안 일어나면 안 된다 — 왜 안 되는지 적어 준다.
+   */
+  const takeDropped = (dt: DataTransfer) => {
+    const files = Array.from(dt.files ?? [])
+    if (!files.length) { setErr('파일이 아닌 것을 끌어오셨어요. PDF 파일을 끌어다 놓아 주세요.'); return }
+    const pdf = files.find((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+    if (!pdf) { setErr(`PDF 가 아니에요: ${files.map((f) => f.name).join(', ')}`); return }
+    if (files.length > 1) setErr(`PDF 는 한 번에 하나만 올립니다 — 「${pdf.name}」 로 합니다.`)
+    pick(pdf)
+  }
+
   const pick = async (file: File) => {
     setErr('')
     setPdfName(file.name)
@@ -262,7 +277,10 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+    // 창 어디에 놓아도 받는다. 브라우저가 PDF 를 **새 탭으로 열어 버리는 것**도 이걸로 막는다
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3"
+      onDragOver={(e) => { if (stage === 'pick') e.preventDefault() }}
+      onDrop={(e) => { if (stage !== 'pick') return; e.preventDefault(); setDropping(false); setErr(''); takeDropped(e.dataTransfer) }}>
       <div className="flex max-h-[94vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-3">
           <div>
@@ -279,11 +297,19 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
         {/* ① 고르기 */}
         {stage === 'pick' && (
           <div className="px-6 py-10">
-            <label className="block cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center hover:bg-gray-50">
+            {/* 눌러서 고르기 **와** 끌어다 놓기 둘 다 된다 (원장님 2026-11-17) */}
+            <label
+              onDragOver={(e) => { e.preventDefault(); if (!dropping) setDropping(true) }}
+              onDragEnter={(e) => { e.preventDefault(); setDropping(true) }}
+              onDragLeave={(e) => { if (e.currentTarget === e.target) setDropping(false) }}
+              onDrop={(e) => { e.preventDefault(); setDropping(false); setErr(''); takeDropped(e.dataTransfer) }}
+              className={`block cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${dropping ? 'border-emerald-500 bg-emerald-50' : 'hover:bg-gray-50'}`}>
               <input type="file" accept="application/pdf" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f) }} />
-              <i className="ti ti-file-type-pdf text-4xl text-gray-400" />
-              <div className="mt-3 text-sm font-semibold">PDF 파일을 고르세요</div>
+              <i className={`ti text-4xl ${dropping ? 'ti-download' : 'ti-file-type-pdf'}`} style={{ color: dropping ? GREEN : '#9ca3af' }} />
+              <div className="mt-3 text-sm font-semibold">
+                {dropping ? '여기에 놓으세요' : <>PDF 를 <span style={{ color: GREEN }}>끌어다 놓거나</span> 눌러서 고르세요</>}
+              </div>
               <div className="mt-1 text-xs text-gray-500">모의고사 · 오답 모음 · 이전 학원에서 만든 자료</div>
               <div className="mt-1 text-xs font-semibold text-amber-700">학교 기출 시험지는 「기출 모음」의 「기출 파일 올리기」로 올려 주세요</div>
             </label>
@@ -292,7 +318,7 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
               <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
                 <li>PDF 를 열어 쪽을 보여 주고, 한글 2단 작업본이면 <b>문항을 자동으로</b> 찾습니다.</li>
                 <li>자동이 못 읽거나 자리가 틀렸으면 쪽 그림 위에 <b>네모를 그려</b> 문항을 만듭니다.</li>
-                <li>제목(<b>과정 - 단원명 - 난이도</b>)을 적고 문항 수 · 번호를 확인합니다.</li>
+                <li>제목(<b>과정 - 단원명 - 학습지 종류 - 난이도</b>)을 적고 문항 수 · 번호를 확인합니다.</li>
                 <li><b>문제은행에 넣기</b> → 바로 <b>수학의지혜 양식 인쇄</b>와 <b>학생 배정</b>을 할 수 있습니다.</li>
                 <li>배정하면 그 학생의 <b>학습지 기록</b>(학생 앱 「선생님이 보낸 학습지」)에 남습니다.</li>
               </ol>
