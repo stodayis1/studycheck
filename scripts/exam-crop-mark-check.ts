@@ -123,6 +123,9 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('줄 맨 앞이 아닌 숫자는 문항 번호가 아니다', src.includes('if (same.some((o) => o.x < t.x - 1 && o.x1 > cols[c][0] - 2)) continue'))
   // 「1. 정답 ④ 해설…」 에서 정답만 남긴다 (백양고). 안 떼면 해설이 통째로 정답이 된다
   ok('「정답」이라고 적힌 말을 떼고 동그라미만 남긴다', src.includes('/^(정답|답)'))
+  // 첫 줄에 키 큰 수식(분수·중괄호)이 오면 번호보다 위로 올라간다 — 그 윗부분이 앞 문항에 붙으면 안 된다
+  ok('문항 첫 줄의 키 큰 수식까지 이 문항으로 본다', src.includes('const ceiling = t.top - t.size * 2.5') && src.includes('...tall.map((o) => o.top)'))
+  ok('올라가는 높이를 번호 글자의 2.5배로 막는다', src.includes('Math.max(ceiling, Math.min(t.top'))
   ok('숫자표는 맞을 때만 쓴다', src.includes('dotUsed && dotOk ? eqText(t) : t'))
   ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun) continue'))
   ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
