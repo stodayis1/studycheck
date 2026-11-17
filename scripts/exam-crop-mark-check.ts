@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerHeadPageOf, numberStyleOf, styleNumberOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerHeadPageOf, numberStyleOf, styleNumberOf, isEssayHead, essayMainOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
   bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
@@ -26,6 +26,8 @@ const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf, pointsOf, answerH
   answerHeadPageOf: (pageTexts: string[]) => number | null
   numberStyleOf: (c: { page: number; col: number; base: number; no: number; size: number; fn: string }[]) => { size: number; fn: string } | null
   styleNumberOf: (str: string, size: number, fn: string, style: { size: number; fn: string } | null) => number | null
+  isEssayHead: (str: string) => boolean
+  essayMainOf: (str: string) => number | null
 }
 
 let pass = 0, all = 0
@@ -156,7 +158,7 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('숫자표는 맞을 때만 쓴다', src.includes('dotUsed && dotOk ? eqText(t) : t'))
   // 배점 규칙은 **한 함수**로 둔다 — 자르는 자리에 정규식을 또 적으면 crop.py 와 어긋난다
   ok('배점은 pointsOf 한 곳에서 읽는다', src.includes('const pts = pointsOf(text)'))
-  ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun) continue'))
+  ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue'))
   ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
   ok('맨 아래 「※ 확인사항」 은 문항에 안 넣는다', src.includes('/^※/.test(t.str)'))
   ok('정답표는 「1)」 과 「1.」 두 꼴을 다 읽는다', src.includes('[`${want})`, `${want}.`]'))
@@ -270,7 +272,33 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('그 번호 그림은 이름표 위부터 자른다', src5.includes('top = Math.min(top, essayTop); essayTop = null'))
   ok('이름표가 붙은 문항도 서술형으로 센다', src5.includes('if (논술 || 쌓인논술) essayQ = dotNo'))
   // 머리가 혼자 있는 파일(번호 없는 묶음)은 전처럼 머리가 문항 시작이다
-  ok('번호 없는 논술형 묶음은 전처럼 머리가 문항 시작', src5.includes('if (논술 && essayRun) continue'))
+  ok('번호 없는 논술형 묶음은 전처럼 머리가 문항 시작', src5.includes('Number.isNaN(머리번호) || 머리번호 === essayMain'))
+}
+
+// 서답형 머리 — 「단답형·서답형」도 문항 머리다 (2026-11-17 일산동고).
+//   일산동고의 서답형 3문항은 머리가 「[단답형1]」 이고 번호(19·20·21)는 들여 써서
+//   단 맨 왼쪽에 없다. 머리를 못 보면 18번 그림이 4,359px 로 늘어나 셋을 삼킨다.
+{
+  ok('「[논술형 1-1]」 은 머리다', isEssayHead('[논술형 1-1]'))
+  ok('「[서술형 2]」 는 머리다', isEssayHead('[서술형 2]'))
+  ok('「[단답형1]」 도 머리다', isEssayHead('[단답형1]'))
+  ok('「[서답형 3]」 도 머리다', isEssayHead('[서답형 3]'))
+  ok('「[총 7.0점]」 은 머리가 아니다', !isEssayHead('[총 7.0점]'))
+  ok('「[3.0점]」 은 머리가 아니다', !isEssayHead('[3.0점]'))
+  ok('글 가운데의 「논술형」 은 머리가 아니다', !isEssayHead('다음은 논술형 문제이다'))
+
+  // 큰 번호가 같으면 한 문항(1-1 · 1-2 · 1-3), 다르면 다른 문항(단답형1 · 2 · 3)
+  ok('「[논술형 1-1]」 의 큰 번호는 1', essayMainOf('[논술형 1-1]') === 1)
+  ok('「[논술형 1]」 도 1 — 1-1 과 한 문항으로 묶인다', essayMainOf('[논술형 1]') === 1)
+  ok('「[단답형2]」 의 큰 번호는 2 — 1 과 다른 문항', essayMainOf('[단답형2]') === 2)
+  ok('「[단답형 10]」 처럼 두 자리도 읽는다', essayMainOf('[단답형 10]') === 10)
+  ok('번호 없는 머리는 null (전처럼 앞 문항에 붙는다)', essayMainOf('[서술형]') === null)
+}
+
+{
+  const src6 = fs.readFileSync(libPath, 'utf8')
+  ok('큰 번호가 같을 때만 앞 문항에 붙인다', src6.includes('if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue'))
+  ok('머리를 만나면 큰 번호를 기억한다', src6.includes('if (논술) essayMain = 머리번호'))
 }
 
 console.log(`\n통과 ${pass} / 전체 ${all}`)

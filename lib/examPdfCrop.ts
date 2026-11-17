@@ -77,7 +77,24 @@ export function pointsOf(text: string): number | null {
   return Number.isFinite(n) && n > 0 && n <= 100 ? n : null
 }
 
-const ESSAY_HEAD = /^\[\s*(논술|서술)형/   // 「[논술형 1-1]」
+// 「[논술형 1-1]」 · 「[서술형 2]」 · 「[단답형1]」 · 「[서답형 3]」
+// ★ 「단답형·서답형」을 안 보면 그 문항이 통째로 빠진다 — 2026-11-17 일산동고는 서답형 3문항의
+//   머리가 「[단답형1]」 이고 번호(19·20·21)는 **들여 써서** 단 맨 왼쪽에 없다. 그 바람에
+//   18번 그림이 4,359px 로 늘어나 서답형 셋을 삼켰다(문항 18 · 정답 21).
+const ESSAY_HEAD = /^\[\s*(논술|서술|단답|서답)형/
+// 머리의 **큰 번호** — 「[논술형 1-1]」 은 1, 「[단답형2]」 는 2.
+// 큰 번호가 **같으면** 한 문항에 딸린 물음(1-1 · 1-2 · 1-3)이고, **다르면** 다른 문항이다.
+// 전에는 「머리가 두 번 나오면 무조건 앞 문항에 붙인다」였다 — 그래서 일산동고의
+// 「[단답형1]」·「[단답형2]」·「[단답형3]」 세 문항이 **하나로 뭉쳤다**(19문항, 머리말은 21).
+const ESSAY_NO = /^\[\s*(?:논술|서술|단답|서답)형\s*(\d+)/
+
+/** 그 조각이 논술·서술·단답·서답형 머리인가 (「[단답형1]」·「[논술형 1-1]」). 시험: scripts/exam-crop-mark-check.ts */
+export function isEssayHead(str: string): boolean { return ESSAY_HEAD.test(str.trim()) }
+/** 그 머리의 **큰 번호** (「[논술형 1-1]」 → 1). 번호가 없으면 null. */
+export function essayMainOf(str: string): number | null {
+  const m = ESSAY_NO.exec(str.trim())
+  return m ? Number(m[1]) : null
+}
 
 // 미주 번호는 **본문보다 작다**. 전에는 「8.5pt 보다 작으면」으로 봤는데, 한글에서 본문을 크게
 // (11.5pt) 잡아 만든 파일은 미주가 8.63pt 로 찍혀 **한 끗 차이로 안 걸렸다** — 2026-11-09
@@ -269,6 +286,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   let inAnswers = false, lastAnswerNo = 0
   let dotNo = 0                         // 「1.」 꼴에서 매긴 마지막 번호 (쪽을 넘어서도 이어진다)
   let essayRun = false                  // 논술형 묶음 안인가 (딸린 물음은 같은 문항으로 붙인다)
+  let essayMain = NaN                   // 그 묶음의 큰 번호 (「[논술형 1-1]」 → 1). 바뀌면 다른 문항이다
   let essayTop: number | null = null    // 바로 위에 있던 논술형 이름표의 윗선 (뒤따르는 번호 그림을 여기서부터 자른다)
   let dotUsed = false                   // 「1.」 꼴로 읽었나
   let dotOk = true                      // 수식 글꼴 숫자표가 이 파일에 맞나 (번호가 1,2,3… 으로 읽히나)
@@ -546,7 +564,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
           if (!번호 && !논술) continue
-          if (논술 && essayRun) continue          // 묶음에 딸린 물음 → 앞 문항에 이어 붙인다
+          const 머리번호 = 논술 ? Number(ESSAY_NO.exec(t.str)?.[1] ?? NaN) : NaN
+          // 묶음에 딸린 물음(큰 번호가 같거나 번호가 없는 머리) → 앞 문항에 이어 붙인다
+          if (논술 && essayRun && (Number.isNaN(머리번호) || 머리번호 === essayMain)) continue
+          if (논술) essayMain = 머리번호
           // ★ 「[논술형 1]」 **바로 아래에 번호가 또 있는** 파일이 있다
           //   (2026-11-17 도래울고 · 백신고 · 세원고 · 향동고 — 「[논술형 1]」 다음 줄에 「19.」).
           //   그때 논술형 머리는 **이름표**이고 문항 시작은 번호다. 둘 다 세면 한 문항이 둘이 되어
