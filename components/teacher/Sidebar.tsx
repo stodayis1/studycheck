@@ -47,6 +47,9 @@ const ITEM = {
   examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },
   // 원장님 2026-11-17 「메뉴 "시험지 분석"명을 "기출 모음"으로」. 주소·표 이름(exam_papers 등)은 그대로다.
   examAnalysis:  { href: '/teacher/exam-analysis',  label: '기출 모음',   icon: 'ti-file-analytics' },
+  // 선생님이 가진 PDF 한 개 → 문제은행 → 수학의지혜 양식 인쇄 → 학생 배정 (원장님 2026-11-17, 고등 강사까지).
+  // ★ 학교 기출은 여기가 아니라 위 「기출 모음」으로 간다.
+  pdfWorksheets: { href: '/teacher/pdf-worksheets', label: 'PDF 학습지', icon: 'ti-file-import' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
   // ★ 「학습지출제」와 「출제한 학습지」를 한 메뉴로 합쳤다 (원장님 2026-10-22).
@@ -90,7 +93,9 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.career, ITEM.schools] },
     // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
     // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
-    { title: '과제 · 평가', items: [ITEM.assignments, ...(영상과제 ? [ITEM.videoAssign] : []), ITEM.exams, ITEM.examPrep, ITEM.examAnalysis] },
+    // PDF 학습지는 고등 커리큘럼과 같은 분들께만 (원장님 2026-11-17 「고등 강사까지 열기」)
+    { title: '과제 · 평가', items: [ITEM.assignments, ...(영상과제 ? [ITEM.videoAssign] : []), ITEM.exams, ITEM.examPrep, ITEM.examAnalysis,
+      ...(고등커리큘럼 ? [ITEM.pdfWorksheets] : [])] },
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {

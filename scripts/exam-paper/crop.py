@@ -10,6 +10,15 @@ import json, os, re, sys
 import pymupdf
 from PIL import Image
 
+
+def _points(m):
+    """배점 — 빈칸을 떼고 0 < n <= 100 인 것만 (lib/examPdfCrop.ts 의 pointsOf 와 같은 규칙)"""
+    if not m:
+        return None
+    n = float(re.sub(r"\s+", "", m.group(1)))
+    return n if 0 < n <= 100 else None
+
+
 sys.stdout.reconfigure(encoding="utf-8")
 DPI = 200
 Z = DPI / 72
@@ -153,13 +162,17 @@ def main():
         name = f"{p['no']:02d}.png"
         sheet.save(os.path.join(out, name))
         text = re.sub(r"\s+", " ", p["text"]).strip()
-        pts = re.search(r"[\[(]\s*(\d+(?:\.\d+)?)\s*점\s*[\])]", text)          # [4점] 또는 (4점)
+        # ★ 숫자 사이에 빈칸이 들어와도 읽는다 — 배점을 수식으로 넣으면 「[」 「4」 「.」 「6」 「점]」
+        #    다섯 조각으로 쪼개져 「[ 4 . 6 점]」 이 된다 (2026-11-17 백양고). lib/examPdfCrop.ts 의
+        #    pointsOf 와 같은 규칙이다 — 한쪽만 고치지 말 것.
+        #    닫는 괄호는 너그럽게 본다 — 「[5.0점[」 처럼 잘못 친 작업본이 있다 (백양고 12번).
+        pts = re.search(r"[\[(]\s*(\d+(?:\s*\.\s*\d+)?)\s*점\s*[\])\[(]", text)   # [4점] · (4점) · [ 4 . 6 점]
         # 「[논술형17~20]」 같은 묶음 표시는 그 문항이 아니라 뒤 문항들의 것이다 → 떼고 본다
         own = re.sub(r"\[\s*(논술|서술)형\s*\d+\s*[~∼\-]\s*\d+\s*\]", "", text)
         for r in re.finditer(r"(논술|서술)형\s*(\d+)\s*[~∼\-]\s*(\d+)", text):
             essay_ranges.append((int(r.group(2)), int(r.group(3))))
         manifest.append({"no": p["no"], "page": p["page"], "file": name, "w": w, "h": h, "parts": len(p["parts"]),
-                         "points": float(pts.group(1)) if pts else None,          # [3점] — 비어 있으면 None
+                         "points": _points(pts),          # 0 < n <= 100 만. 비어 있으면 None
                          "essay": bool(re.search(r"서술|논술|풀이 과정|물음에 답하시오|\[\s*총", own)),
                          "choices": sum(1 for c in "①②③④⑤" if c in text),
                          "text": text[:300]})
