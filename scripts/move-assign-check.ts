@@ -222,6 +222,13 @@ if (!url || !key) {
   const { error } = await db.from('class_move_assign').select('student_id').limit(1)
   ok(!error, '표 class_move_assign 을 읽지 못했다 — docs/sql/진급배정판.sql 을 적용했나')
 
+  // 칸이 하나하나 다 있나 (읽기만) — 화면이 고르는 칸을 DB 가 모르면
+  // **저장만 조용히 실패한다**(화면은 그대로 보인다). 칸을 더할 때마다 여기에 이름을 넣는다.
+  for (const col of ['track', 'teacher_name', 'weekday_slot', 'weekend_slot', 'extra_slot']) {
+    const { error: colErr } = await db.from('class_move_assign').select(col).limit(1)
+    ok(!colErr, '칸 class_move_assign.' + col + ' 이 없다 — docs/sql/ 의 알맞은 .sql 을 적용했나')
+  }
+
   // ⑩ 권한 함수가 DB 에 살아 있나 — 화면·API 가 이 이름을 부르는데 함수가 없으면
   //    rpc 가 조용히 false 를 주고 **아무도 못 들어온다.**
   //    (정책이 이 함수를 보는지는 docs/sql/진급배정판_권한분리.sql 끝의 확인 쿼리로 센다 —
