@@ -32,7 +32,8 @@ import { randomBytes } from 'crypto'
 import { denyIfNotStaff, staffOrDeny } from '@/lib/apiAuth'
 import { resolveBriefingTemplateCodes, pickCodes, V4_SCORE_BUTTON } from '@/lib/briefingTemplate'
 import { loadExamPrepResults, EXAM_PREP_TITLE } from '@/lib/examPrepResult'
-import { RESEND_KEY, pickResend, allDates, dropDates } from '@/lib/briefingResend'
+import { RESEND_KEY, pickResend, pickResendSms, allDates, dropDates } from '@/lib/briefingResend'
+import { sendSmsViaOps } from '@/lib/opsSms'
 import { buildBriefing, diagnosticLabel } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
@@ -91,8 +92,8 @@ export interface BriefingSummary {
   template?: string
   /** 보내기 직전에 메모에 붙인 기출유사 결과 */
   pastExam?: { 붙임: number; 보기: string[] }
-  /** 예약해 둔 「다시 보내기」를 오전 발송이 같이 보낸 결과 */
-  resent?: { 예약: number; 보냄: number; 실패: number; 오류: { name: string; error: string }[] }
+  /** 예약해 둔 「다시 보내기」를 오전 발송이 같이 보낸 결과 (문자 = 같이 보낸 알림 문자) */
+  resent?: { 예약: number; 보냄: number; 실패: number; 문자?: number; 오류: { name: string; error: string }[] }
   errors: { name: string; error: string }[]
   previews?: {
     studentId: string; name: string; phone: string; bodyLen: number; body: string
@@ -551,11 +552,26 @@ export async function GET(req: NextRequest) {
         //   더 옛날 수업일 수 있다(원장님 2026-11-03 「지호는 29일꺼 보내고」).
         const 날짜들 = allDates((row as any)?.value)
         if (날짜들.length) {
-          const 몫 = { 예약: 0, 보냄: 0, 실패: 0, 오류: [] as { name: string; error: string }[] }
+          const 몫 = { 예약: 0, 보냄: 0, 실패: 0, 문자: 0, 오류: [] as { name: string; error: string }[] }
           const 끝낸날짜: string[] = []
           for (const d of 날짜들) {
             const ids = pickResend((row as any)?.value, d)
             if (!ids.length) continue
+            // ★ 알림 문자가 적혀 있으면 **브리핑보다 먼저** 보낸다 (원장님 2026-11-17
+            //   「재발송되었다는 문자와 함께」). 브리핑 알림톡은 승인된 템플릿과 글자 단위로
+            //   같아야 해서 설명을 끼워 넣을 자리가 없다 — 그래서 문자로 따로 간다.
+            //   ★ 문자가 안 가도 **브리핑은 그대로 보낸다**. 설명이 없는 편이 안 가는 것보다 낫다.
+            const 알림글 = pickResendSms((row as any)?.value, d)
+            if (알림글) {
+              const { data: 받을이 } = await db.from('students')
+                .select('name, parent_phone').in('id', ids.slice(0, 100))
+              for (const st of (받을이 ?? []) as any[]) {
+                if (!st.parent_phone) { 몫.오류.push({ name: st.name, error: '보호자 번호가 없어 문자를 못 보냈어요' }); continue }
+                const sms = await sendSmsViaOps({ to: st.parent_phone, text: 알림글, refType: 'briefing_resend', refId: d })
+                if (sms.ok) 몫.문자++
+                else 몫.오류.push({ name: st.name, error: '알림 문자: ' + (sms.error ?? '발송 실패') })
+              }
+            }
             const r = await run({ date: d, dryRun: false, studentIds: ids, resend: true })
             몫.예약 += ids.length; 몫.보냄 += r.sent; 몫.실패 += r.failed; 몫.오류.push(...r.errors)
             끝낸날짜.push(d)

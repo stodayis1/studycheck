@@ -24,7 +24,7 @@ const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).
 const { leaveDiff, leaveLine } = await import(pathToFileURL(path.resolve('lib/opsLeave.ts')).href)
 const { chooseApproved, buttonsMatch } = await import(pathToFileURL(path.resolve('lib/briefingTemplate.ts')).href)
 const { fetchAligoRows, summarize, aligoProblems, aligoRecord, aligoProblemsFromRecord, whoText, maskPhone, phoneKey } = await import(pathToFileURL(path.resolve('lib/aligoResults.ts')).href)
-const { RESEND_KEY, pickResend, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
+const { RESEND_KEY, pickResend, pickResendSms, dropDate, addResend, allDates, dropDates } = await import(pathToFileURL(path.resolve('lib/briefingResend.ts')).href)
 const { phoneNames } = await import(pathToFileURL(path.resolve('lib/cronBriefing.ts')).href)
 
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+09:00`).toISOString()
@@ -261,6 +261,44 @@ T('사람을 더해도 이미 있는 사람은 겹치지 않는다', () => {
   return got['2026-11-02'].length === 2
 })
 
+// ── 다시 보낼 때 **설명 문자도 같이** (원장님 2026-11-17 「재발송되었다는 문자와 함께」) ──
+//   브리핑 알림톡은 승인된 템플릿과 글자 단위로 같아야 해서 설명을 끼워 넣을 자리가 없다.
+//   「▶ 선생님 알림장」 칸에 넣는 방법도 있지만 그 칸은 300자에서 잘려 **선생님 글 끝이
+//   밀려 나간다.** 그래서 문자로 따로 보낸다.
+const 새꼴 = { '2026-11-17': { ids: ['x'], sms: '다시 보내드립니다' } }
+
+T('새 꼴에서도 사람이 그대로 꺼내진다', () =>
+  pickResend(새꼴, '2026-11-17').join() === 'x')
+
+T('알림 문자를 꺼낸다', () =>
+  pickResendSms(새꼴, '2026-11-17') === '다시 보내드립니다')
+
+// ★ 예전 꼴(배열)이 그대로 읽혀야 한다 — 이미 적혀 있는 예약이 날아가면 안 된다.
+T('예전 꼴(배열)은 문자 없이 그대로 돈다', () =>
+  pickResend({ '2026-11-02': ['a', 'b'] }, '2026-11-02').length === 2
+  && pickResendSms({ '2026-11-02': ['a', 'b'] }, '2026-11-02') === null)
+
+T('문자가 비어 있으면 없는 것으로 본다', () =>
+  pickResendSms({ '2026-11-17': { ids: ['x'], sms: '   ' } }, '2026-11-17') === null
+  && pickResendSms({ '2026-11-17': { ids: ['x'] } }, '2026-11-17') === null
+  && pickResendSms(null, '2026-11-17') === null)
+
+T('새 꼴도 날짜 목록·지우기에 그대로 걸린다', () => {
+  const v = { ...새꼴, '2026-11-02': ['a'] }
+  return allDates(v).join() === '2026-11-02,2026-11-17'
+    && !('2026-11-17' in dropDate(v, '2026-11-17'))
+    && dropDate(v, '2026-11-02')['2026-11-17']?.sms === '다시 보내드립니다'
+})
+
+T('문자를 붙여 예약하고, 사람만 더할 때는 문자를 지우지 않는다', () => {
+  const a = addResend({}, '2026-11-17', ['x'], '다시 보내드립니다')
+  const b = addResend(a, '2026-11-17', ['y'])          // 문자를 안 주면 있던 글을 둔다
+  const c = addResend(b, '2026-11-17', ['y'], '')      // 빈 글을 주면 문자를 뗀다
+  return a['2026-11-17'].sms === '다시 보내드립니다'
+    && b['2026-11-17'].ids.length === 2 && b['2026-11-17'].sms === '다시 보내드립니다'
+    && Array.isArray(c['2026-11-17'])
+})
+
 // ★ 함수만 있고 **자동 발송이 그걸 안 읽으면** 아무 일도 안 일어난다.
 //   2026-11-02 에 「판정은 맞는데 화면이 안 쓴다」로 한 번 당했다 — 부르는 자리까지 본다.
 T('오전 자동 발송이 예약을 실제로 읽고, 보낸 뒤 지운다', () => {
@@ -268,6 +306,14 @@ T('오전 자동 발송이 예약을 실제로 읽고, 보낸 뒤 지운다', ()
   return src.includes('pickResend(') && src.includes('dropDates(') && src.includes('allDates(')
     && src.includes('RESEND_KEY') && /phase === 2/.test(src)
     && /resend: true/.test(src)
+})
+
+// ★ 알림 문자도 **부르는 자리**가 있어야 한다. 적어 두기만 하고 안 보내면 조용히 아무 일도 없다.
+T('오전 자동 발송이 알림 문자를 실제로 보낸다', () => {
+  const src = fs.readFileSync(path.resolve('app/api/kakao-briefing/route.ts'), 'utf8')
+  const at = src.indexOf('pickResendSms(')
+  return at > 0 && /sendSmsViaOps\(/.test(src.slice(at, at + 900))
+    && /refType: 'briefing_resend'/.test(src)
 })
 
 // ── 알림톡이 거절되면 문자로 대신 (원장님 2026-11-03 「켜줘」) ──────────────
