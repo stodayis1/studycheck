@@ -10,6 +10,7 @@
 // ★ 순수 함수다(DB·시계를 직접 안 만진다). 그래야 일부러 망가뜨린 가짜 기록으로 시험할 수 있다
 //   (scripts/cron-health-check.ts).
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { aligoProblemsFromRecord } from './aligoResults'
 
 export interface CronRunRow {
   phase: string
@@ -144,6 +145,12 @@ export function checkCronRuns(rows: CronRunRow[], nowMs: number): CronProblem[] 
       }
       const errs = runErrors(row.result)
       if (errs.length) push(s, date, '오류', `${short(date)} ${errs.join(' / ')}`)
+      // 알림톡 거절 — 감시가 알리고에 물어본 결과를 cron_runs 에 적어 둔다.
+      // ★ 열쇠가 감시의 문자와 **같아야** 한다(`aligo|날짜|사유`). 안 그러면 어제 알린 것을
+      //   오늘 또 문자로 보낸다. 그래서 줄을 만드는 곳을 lib/aligoResults.ts 한 곳에 뒀다.
+      for (const ap of aligoProblemsFromRecord(row.result?.aligo, date)) {
+        if (!problems.some((x) => x.key === ap.key)) problems.push(ap)
+      }
       const point = Number(row.result?.send?.pointLeft)
       if (Number.isFinite(point) && point < LOW_POINT) {
         push(s, date, '잔액 부족', `알리고 잔여 ${point.toLocaleString()}포인트 — 충전이 필요해요`)

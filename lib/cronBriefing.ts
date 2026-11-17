@@ -26,10 +26,11 @@ import { fillOpsExtraFromNotes } from '@/lib/opsExtraFill'
 import { syncFirstClassFromOps } from '@/lib/opsFirstClass'
 import { syncLeaveFromOps } from '@/lib/opsLeave'
 import { checkCronRuns, loadRecentCronRuns, type CronProblem } from '@/lib/cronHealth'
-import { fetchAligoRows, summarize, aligoProblems } from '@/lib/aligoResults'
+import { fetchAligoRows, summarize, aligoProblems, aligoRecord, phoneKey } from '@/lib/aligoResults'
 import { aligoPost } from '@/lib/aligo'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 import { sendSmsViaOps } from '@/lib/opsSms'
+import { fetchAllRows } from '@/lib/utils'
 
 /** 한국 시각 'HH:MM'. 서버는 UTC 로 돈다. */
 function kstHhmm() {
@@ -386,8 +387,13 @@ export async function runWatchCron(req: NextRequest) {
       const 어제 = kstDate(-1)
       const 오늘 = kstDate(0)
       const 결과 = summarize(await fetchAligoRows(aligoCall, 어제, 오늘))
-      out.aligo = { 본것: 결과.전체, 성공: 결과.성공, 실패: 결과.실패, 사유: 결과.사유별 }
-      problems.push(...aligoProblems(결과, 오늘))
+      // 거절된 **번호에 이름을 붙인다** (원장님 2026-11-17).
+      //   건수만 알려 주면 누구에게 안 갔는지 알 수 없어 다시 보낼 수도 없다.
+      //   ★ 이름을 못 찾아도 점검은 그대로 간다 — 그때는 가린 번호로 적힌다.
+      const nameOf = await phoneNames(db).catch(() => new Map<string, string>())
+      const 누구 = (phone: string) => nameOf.get(phoneKey(phone)) ?? null
+      out.aligo = aligoRecord(결과, 누구)
+      problems.push(...aligoProblems(결과, 오늘, 누구))
     } catch (e: any) {
       out.aligo = { error: e?.message ?? '알리고에 물어보지 못했어요' }
     }
@@ -427,6 +433,38 @@ async function aligoCall(path: string, params: Record<string, string>) {
   const userid = process.env.ALIGO_USER_ID
   if (!apikey || !userid) throw new Error('알리고 설정값이 없어요')
   return aligoPost(path, new URLSearchParams({ apikey, userid, ...params }).toString())
+}
+
+/**
+ * 번호 → 누구 것인가. 알림톡이 거절됐을 때 **이름을 붙여** 알리려고 쓴다.
+ *
+ * ★ 형제가 보호자 번호를 같이 쓰는 집이 있다 — 한 번호에 이름이 여럿이면 가운뎃점으로 잇는다.
+ *   (한 명만 적으면 동생 브리핑이 거절됐는데 형 이름이 나온다.)
+ * ★ 퇴원·휴원한 학생도 넣는다. 「누구 것인지」를 알아야 하는 것이지 재원 여부를 묻는 것이 아니다.
+ */
+export async function phoneNames(db: any): Promise<Map<string, string>> {
+  // ★ 칸 이름은 parent_phone · student_phone 이다. students 에 `phone` 은 **없다** —
+  //   없는 칸을 적으면 질의 하나가 통째로 실패해 이름이 **하나도** 안 붙는다(조용히).
+  const rows = await fetchAllRows<any>(() =>
+    db.from('students').select('name, grade, parent_phone, student_phone').order('id'))
+  const 모음 = new Map<string, string[]>()
+  const put = (phone: any, who: string) => {
+    const k = phoneKey(String(phone ?? ''))
+    if (!k) return
+    const list = 모음.get(k) ?? []
+    if (!list.includes(who)) list.push(who)
+    모음.set(k, list)
+  }
+  for (const s of rows) {
+    const 이름 = `${s.name}(${s.grade})`
+    put(s.parent_phone, `${이름} 학부모님`)
+    put(s.student_phone, `${이름} 학생`)
+  }
+  // 선생님 샘플도 알림톡으로 나간다 — 거절되면 선생님 이름이 나와야 한다.
+  try {
+    for (const [name, phone] of await fetchOpsTeacherPhones()) put(phone, `${name} 선생님`)
+  } catch { /* OPS 를 못 불러도 학생 이름은 붙는다 */ }
+  return new Map([...모음].map(([k, v]) => [k, v.join('·')]))
 }
 
 /** 원장(users.role=admin) 이름으로 수학OPS 번호를 찾는다. 선생님 번호는 쓰지 않는다. */

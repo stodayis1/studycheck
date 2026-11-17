@@ -159,6 +159,9 @@ description: StudyCheck 앱 코드를 바꾸는 작업을 끝내기 전에 반�
       **추가만** 하는 방향으로, 동작이 안 바뀌는 단계부터 순서대로 배포한다(학부모세션분리 1→앱 배포→2 순서 참고).
 - [ ] SQL은 `docs/sql/<한글이름>.sql` + **`docs/sql/<한글이름>_되돌리기.sql`** 짝으로 남긴다. 파일 끝에 확인 쿼리
       (`select tablename, policyname, cmd from pg_policies where tablename='…'`)를 둔다.
+- [ ] **가짜(stub) db 로 하는 시험은 「칸 이름이 틀린 것」을 못 잡는다.** `select('없는칸')` 하나면 질의가
+      통째로 실패해 그 기능이 **조용히 빈다**. 새로 읽는 칸은 `information_schema.columns` 로 먼저 확인하고,
+      검사에 `.env.local` 이 있을 때 **운영 표로 한 번 더 재는 토막**을 둔다(`scripts/cron-health-check.ts` 끝부분).
 - [ ] **Supabase는 한 번에 1000행만 준다.** 전체가 필요하면:
       ```ts
       import { fetchAllRows } from '@/lib/utils'
@@ -930,3 +933,4 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-17 「원장 + 고등 담당」 가드는 `highOrDeny`(lib/apiAuth.ts) 한 곳 — 명단을 route 에 베껴 적지 않는다. 다만 **권한이 두 갈래**면(move-assign 처럼) 그 화면이 자기 `allow()` 를 둔다. 강사가 **본인 담당 학생에게만** 하는 저장은 service_role 로 쓰기 전에 **그 사람 토큰으로 students 를 되읽어** 가린다(걸러진 수를 화면에 알린다)
 - 2026-11-17 지우는 단추는 **FK 부터 뽑아 본다** — `exam_sheets` 를 지우면 `gradings`(학생 채점 기록)가 CASCADE 로 같이 날아간다. 막는 쪽(NO ACTION)은 미리 골라 남기고, 차례는 그림 → 자식 → 부모, 확인창에 숫자와 「되돌릴 수 없다」를 적는다
 - 2026-11-17 자동 발송 시각을 옮길 때는 **pg_cron 깨움 창**(docs/sql/제시간_자동발송_pgcron.sql)과 vercel.json 도 같이 — 창 밖으로 미루면 그날 발송이 통째로 조용히 빈다. SQL 먼저, 배포 나중. scripts/briefing-time-check.ts 가 본다
+- 2026-11-17 알림·점검은 **건수만 세지 말고 누구인지** 적는다 — 번호는 숫자만 남겨 비교(010-…/010… 섞여 있다), 형제는 번호를 같이 쓰니 이름을 둘 다, 문자와 대시보드는 글·열쇠를 **한 함수**에서 만든다. 가짜 db 시험은 칸 이름 오타를 못 잡으니 운영 표로 한 번 더 잰다
