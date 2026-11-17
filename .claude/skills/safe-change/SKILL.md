@@ -249,6 +249,8 @@ node --import ./scripts/ts-resolve.mjs scripts/briefing-check.ts
       (`eveningNotBefore()` · `lib/cronBriefing.ts`), 깨우는 것은 **Supabase pg_cron 의 창**이다
       (`docs/sql/제시간_자동발송_pgcron.sql`). 창이 끝난 뒤로 발송 시각을 미루면 **그날 발송이 통째로
       안 나간다 — 에러도 안 난다.** `vercel.json` 의 예약은 보험이라 역시 발송 시각 뒤여야 한다.
+      ★ **점검 쪽 사본**(`EVENING_DUE` · `lib/cronHealth.ts`)도 같이 옮긴다. 안 옮기면 조용히 안 되는 것이
+      아니라 **날마다 거짓 경보 문자**가 간다(21:00 에 돈 것을 「늦음」으로 본다). 시험의 기준 시각(`NOW`)도 같이.
       차례는 **SQL 먼저 → 배포**, 되돌릴 때는 **코드 먼저 → SQL**. 검사:
       ```bash
       node --import ./scripts/ts-resolve.mjs scripts/briefing-time-check.ts
@@ -934,3 +936,4 @@ SQL 은 원장님이 손으로 실행하신다. 배포가 먼저 올라가는 �
 - 2026-11-17 지우는 단추는 **FK 부터 뽑아 본다** — `exam_sheets` 를 지우면 `gradings`(학생 채점 기록)가 CASCADE 로 같이 날아간다. 막는 쪽(NO ACTION)은 미리 골라 남기고, 차례는 그림 → 자식 → 부모, 확인창에 숫자와 「되돌릴 수 없다」를 적는다
 - 2026-11-17 자동 발송 시각을 옮길 때는 **pg_cron 깨움 창**(docs/sql/제시간_자동발송_pgcron.sql)과 vercel.json 도 같이 — 창 밖으로 미루면 그날 발송이 통째로 조용히 빈다. SQL 먼저, 배포 나중. scripts/briefing-time-check.ts 가 본다
 - 2026-11-17 알림·점검은 **건수만 세지 말고 누구인지** 적는다 — 번호는 숫자만 남겨 비교(010-…/010… 섞여 있다), 형제는 번호를 같이 쓰니 이름을 둘 다, 문자와 대시보드는 글·열쇠를 **한 함수**에서 만든다. 가짜 db 시험은 칸 이름 오타를 못 잡으니 운영 표로 한 번 더 잰다
+- 2026-11-17 **배포가 끝났다고 끝난 게 아니다** — 시각·기준값을 옮기면 「그 값을 또 들고 있는 곳」을 grep 으로 전수 확인한다. 발송 시각을 21시로 옮기고 점검 쪽 사본(EVENING_DUE)을 안 고쳐, 날마다 거짓 경보 문자가 갈 뻔했다(배포 뒤 확인에서 잡음)

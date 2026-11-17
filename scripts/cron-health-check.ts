@@ -19,7 +19,7 @@ import { pathToFileURL } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/cronHealth.ts')
-const { checkCronRuns, CRON_SLOTS } = await import(pathToFileURL(target).href)
+const { checkCronRuns, CRON_SLOTS, EVENING_DUE } = await import(pathToFileURL(target).href)
 const { failoverOn } = await import(pathToFileURL(path.resolve('lib/aligo.ts')).href)
 const { leaveDiff, leaveLine } = await import(pathToFileURL(path.resolve('lib/opsLeave.ts')).href)
 const { chooseApproved, buttonsMatch } = await import(pathToFileURL(path.resolve('lib/briefingTemplate.ts')).href)
@@ -38,7 +38,9 @@ const okResult = () => ({
 })
 const DUE: Record<string, (d: string) => string> = {
   premorning: () => '10:00', morning: () => '11:00', 'watch-noon': () => '12:30',
-  evening: (d) => (new Date(d + 'T00:00:00Z').getUTCDay() === 6 ? '18:00' : '20:00'), 'watch-night': () => '21:30',
+  // ★ 저녁 발송 시각은 **고쳐 적지 않고** 보는 쪽(lib/cronHealth.ts)의 것을 그대로 쓴다.
+  //   여기에 또 베껴 적으면 사본이 셋이 되고, 시각을 옮길 때 이 시험만 옛 시각으로 남는다.
+  evening: (d) => EVENING_DUE(d), 'watch-night': () => '21:30',
 }
 /** 그 날짜들의 다섯 가지가 전부 제시간에 돌고 1분 만에 끝난 기록. nowIso 뒤의 것은 안 만든다. */
 function healthy(dates: string[], nowIso: string) {
@@ -63,7 +65,9 @@ function T(name: string, fn: () => boolean) {
 const kinds = (ps: any[]) => ps.map((p) => `${p.phase}:${p.kind}`).sort().join(',')
 
 // 화요일 10/27 밤 21:45 (어제는 월요일 10/26)
-const NOW = at('2026-10-27', '21:45')
+// ★ 저녁 발송(21:00) + 「한 시간 지나도 없으면 안 돎」 뒤여야 한다 — 2026-11-17 에 20:00 → 21:00 으로
+//   옮기면서 21:45 → 22:45 로 같이 옮겼다. 안 옮기면 「안 돎」 시험이 거짓으로 통과한다.
+const NOW = at('2026-10-27', '22:45')
 const DAYS = ['2026-10-26', '2026-10-27']
 
 T('정상 기록이면 아무것도 안 잡는다', () => checkCronRuns(healthy(DAYS, NOW), Date.parse(NOW)).length === 0)
@@ -74,7 +78,7 @@ T('저녁 발송 기록이 없으면 「안 돎」', () => {
 })
 
 T('시각이 지난 지 한 시간 전이면 아직 「안 돎」이 아니다', () => {
-  const now = at('2026-10-27', '20:50')
+  const now = at('2026-10-27', '21:50')
   const rows = healthy(DAYS, now).filter((r) => !(r.phase === 'evening' && r.run_date === '2026-10-27'))
   return checkCronRuns(rows, Date.parse(now)).length === 0
 })
@@ -422,6 +426,31 @@ T('승인 전인 새 판이 있어도 지금 승인된 판으로 보낸다', () 
 T('버튼 개수가 다르거나 없으면 맞다고 하지 않는다', () =>
   buttonsMatch(템플릿('x', 'APR', ['레벨학습지 점수 현황']), 바른버튼) === false
   && buttonsMatch({ inspStatus: 'APR' }, 바른버튼) === false)
+
+// ── 저녁 발송 시각 (원장님 2026-11-17 저녁 8시 → 밤 9시) ────────────────────
+//   ★ 이 시각은 lib/cronBriefing.ts 의 eveningNotBefore() 와 **사본 관계**다.
+//     어긋나면 조용히 안 되는 것이 아니라 **날마다 거짓 경보 문자**가 간다 —
+//     발송은 21:00 에 도는데 점검이 20:00 로 알면 「30분 넘게 늦음」으로 본다.
+T('평일 저녁 발송은 밤 9시, 토요일은 오후 6시로 안다', () =>
+  EVENING_DUE('2026-11-17') === '21:00'          // 화요일
+  && EVENING_DUE('2026-11-21') === '18:00')      // 토요일
+
+T('밤 9시에 돈 저녁 발송을 「늦음」이라 하지 않는다', () => {
+  const rows = healthy(['2026-11-16', '2026-11-17'], at('2026-11-17', '23:00'))
+  const ev = find(rows, 'evening', '2026-11-17')
+  ev.started_at = at('2026-11-17', '21:00')
+  ev.finished_at = plus(ev.started_at, 1)
+  return checkCronRuns(rows, Date.parse(at('2026-11-17', '23:00'))).length === 0
+})
+
+T('그래도 진짜로 늦으면(21:31) 잡는다', () => {
+  const rows = healthy(['2026-11-16', '2026-11-17'], at('2026-11-17', '23:00'))
+  const ev = find(rows, 'evening', '2026-11-17')
+  ev.started_at = at('2026-11-17', '21:31')
+  ev.finished_at = plus(ev.started_at, 1)
+  const ps = checkCronRuns(rows, Date.parse(at('2026-11-17', '23:00')))
+  return ps.length === 1 && ps[0].kind === '늦음' && ps[0].phase === 'evening'
+})
 
 // ── 거절된 사람이 **누구인지** 적는다 (원장님 2026-11-17 「1번 고쳐줘」) ──────────
 //   그날 밤 9시 30분 점검이 「1건 — 스팸」만 알려 왔다. 건수만으로는 누구에게 안 갔는지
