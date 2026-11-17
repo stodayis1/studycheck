@@ -360,5 +360,19 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('천장 막이는 그대로 (앞 문항 끝줄을 안 삼킨다)', srcA.includes('const ceiling = t.top - t.size * 2.5'))
 }
 
+// 첫 쪽에서 **첫 문항 번호보다 위는 시험지 머리띠다** (2026-11-17 성사고 3번 · 향동고 3번)
+//   머리를 쪽마다 찍는 학교는 isRunning 이 걸러 주지만, **첫 쪽에만** 찍는 학교가 있다.
+//   그러면 한 번만 나와 안 걸리고, 오른단 맨 위 「앞 문항의 이어지는 부분」 조각이 그 띠를
+//   떠 가서 **앞 문항 그림 아래에 「1학년 2학기 기말고사 · 선택형20문항」 표가 붙는다.**
+//   성사고 3번이 567px·조각 2개였다(바른 것은 416px·조각 1개).
+{
+  const srcB = fs.readFileSync(libPath, 'utf8')
+  ok('첫 쪽 첫 번호 위를 잘라 낸다',
+    srcB.includes('const firstMarkTop = pi === 0 && ms.length ? Math.min(...ms.map((m) => m.top ?? m.y0)) - 2 : -Infinity'))
+  ok('그 막이를 그림 자를 때 쓴다', srcB.includes('const y0 = Math.max(s.y0, bodyTop, firstMarkTop)'))
+  ok('첫 쪽이 아니면 막이를 안 건다 (앞 쪽에서 이어지는 문항을 자르면 안 된다)',
+    srcB.includes('pi === 0 && ms.length ?'))
+}
+
 console.log(`\n통과 ${pass} / 전체 ${all}`)
 process.exitCode = pass === all ? 0 : 1
