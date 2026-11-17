@@ -48,9 +48,23 @@ console.log(`\n배점 합계 ${배점합}점 ${배점합 === 100 ? '(100점 — 
 const out = process.argv[3]
 if (out) {
   fs.mkdirSync(out, { recursive: true })
+  // 그림과 함께 **manifest.json** 도 쓴다 — scripts/exam-paper/upload.mjs 가 읽는 꼴 그대로다
+  // (crop.py 가 만들던 것과 같은 모양). 이것이 없으면 자른 뒤 올릴 수가 없다.
+  const problems = []
   for (const p of r.problems) {
-    fs.writeFileSync(path.join(out, `${String(p.no).padStart(2, '0')}.png`), p.image.toBuffer('image/png'))
-    if (p.answerImage) fs.writeFileSync(path.join(out, `${String(p.no).padStart(2, '0')}_a.png`), p.answerImage.toBuffer('image/png'))
+    const file = `${String(p.no).padStart(2, '0')}.png`
+    fs.writeFileSync(path.join(out, file), p.image.toBuffer('image/png'))
+    const row = { no: p.no, page: p.page, file, w: p.w, h: p.h, parts: p.parts,
+      points: p.points ?? null, essay: !!p.essay, choices: p.choices,
+      text: (p.text ?? '').slice(0, 300), answer: p.answer ?? null }
+    if (p.answerImage) {
+      const af = `${String(p.no).padStart(2, '0')}_a.png`
+      fs.writeFileSync(path.join(out, af), p.answerImage.toBuffer('image/png'))
+      row.answer_image = af
+    }
+    problems.push(row)
   }
-  console.log('그림:', path.resolve(out))
+  fs.writeFileSync(path.join(out, 'manifest.json'),
+    JSON.stringify({ pdf: path.basename(file ?? ''), source: path.basename(process.argv[2]), problems }, null, 1))
+  console.log('그림:', path.resolve(out), `· manifest.json (${problems.length}문항)`)
 }

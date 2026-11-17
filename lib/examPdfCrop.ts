@@ -182,7 +182,9 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   // (2026-11-10 신원중 — 문항마다 머리말 띠가 붙어 그림이 쪽 높이만큼 길어졌다).
   const sigOf = (x: number, base: number, str: string) => `${Math.round(x)}|${Math.round(base)}|${str}`
   const numSig = (x: number, base: number) => `${Math.round(x / 5) * 5}|${Math.round(base)}`
-  const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$/      // 「3」 · 「3/12」 — 쪽마다 글자가 달라진다
+  // 「3」 · 「3/12」 · 「-3-」 — 쪽마다 글자가 달라진다. 「-3-」 꼴을 안 보면 바닥 띠를 못 찾아
+  //   문항 그림이 **쪽 맨 아래 줄까지** 늘어난다 (2026-11-17 고양시 파일 — 22번이 2382px 였다)
+  const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$|^[-‐‑‒–—－]\s*\d{1,3}\s*[-‐‑‒–—－]$/
   const seen = new Map<string, number>()
   const seenNum = new Map<string, number>()
   for (let pi = 0; pi < doc.numPages; pi++) {
@@ -436,14 +438,18 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
 
     for (const s of stream) {
       if (s.no !== null) { cur = { no: s.no, page: pi + 1, parts: [], text: '' }; problems.push(cur) }
-      if (!cur || s.y1! - s.y0 < 3) continue
-      const [x0, x1] = cols[s.c]
-      const y0 = Math.max(s.y0, bodyTop)
-      cur.text += ' ' + textIn(items, x0, y0, x1, s.y1!)
+      // ★ 번호 글자 지우기는 **높이 막이보다 먼저** 해야 한다.
+      //   번호가 붙은 줄(s.no !== null)은 바로 뒤에 오는 「이어지는 부분」과 y 가 같아 높이가 0 이고,
+      //   아래 `continue` 에 걸려 **한 번도 지워지지 않았다** — 잘린 그림마다 「1.」 「2.」 가 남았다
+      //   (2026-11-17 신원고). 그림은 다음 줄에서 떠 가므로 칠하는 것이 먼저다.
       if (s.erase) {           // 같은 줄에 찍힌 번호 글자를 지운다
         ctx.fillStyle = '#fff'
         ctx.fillRect(Math.floor(s.erase[0] * Z) - 1, Math.floor(s.erase[1] * Z) - 1, Math.ceil((s.erase[2] - s.erase[0]) * Z) + 4, Math.ceil((s.erase[3] - s.erase[1]) * Z) + 3)
       }
+      if (!cur || s.y1! - s.y0 < 3) continue
+      const [x0, x1] = cols[s.c]
+      const y0 = Math.max(s.y0, bodyTop)
+      cur.text += ' ' + textIn(items, x0, y0, x1, s.y1!)
       const part = clip(canvas, x0, y0, x1, s.y1!)
       if (part) cur.parts.push(part)
     }
