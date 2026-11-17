@@ -7,6 +7,9 @@
 //   본문 : 2단, 가운데 세로줄, 문항 앞에 「1.」
 //   맨 아래: 줄 + 「1/6」
 //
+// 2026-11-17 — 머리 글자(맨 윗줄 · 학년 · 오른쪽 상자)를 `heading` 으로 밖에서 넣을 수 있게 했다.
+//   강사가 올린 PDF 학습지(app/teacher/pdf-worksheets)도 같은 양식으로 찍는다. 안 넘기면 전과 같다.
+//
 // 쪽 짜기는 화면에서 재지 않고 **숫자로 계산한다.** 문항 그림은 200dpi 라 「px ÷ 200 × 25.4」가
 // 곧 mm 다. 단 높이(BODY_MM)에 몇 문항이 들어가는지 더해 보고, 남는 자리는 그 단의 문항들이
 // 풀이 여백으로 고르게 나눠 갖는다. 그래서 한 단의 높이 합은 언제나 BODY_MM 과 같다 (넘치지 않는다).
@@ -27,6 +30,19 @@ export type PrintProblem = {
   points?: number | null
 }
 
+/**
+ * 머리 글자를 **밖에서 넣는 길**. 학교 시험지가 아닌 한 벌(강사가 올린 PDF 학습지)도 같은 양식으로
+ * 찍기 위해 둔 것이다 — 양식(쪽 짜기 · 치수 · CSS)은 한 벌만 두고 글자만 바꾼다.
+ * 안 넘기면 지금까지와 똑같이 `paper` 에서 만들어 쓴다 (기출 인쇄는 달라지는 것이 없다).
+ */
+export type PrintHeading = {
+  top: string            // 맨 윗줄 가운데
+  doc: string            // 저장할 때의 파일 이름
+  grade: string          // 큰 글씨 칸 (학교 시험지는 「3학년」)
+  right: string          // 오른쪽 상자 (학교 시험지는 학교 이름)
+  subject?: string       // 가운데 칸 (기본 「수학」)
+}
+
 export function examTitle(p: PaperInfo) {
   return `${p.exam_year}학년도 ${p.term}학기 ${p.exam_type}`
 }
@@ -35,10 +51,12 @@ export function docTitle(p: PaperInfo) {
   return `${String(p.exam_year).slice(2)}년 ${p.school_name} ${p.term}학기 ${p.exam_type}`
 }
 
-export function ExamPaperPrint({ paper, problems, initial = 'paper' }: {
-  paper: PaperInfo
+export function ExamPaperPrint({ paper, problems, initial = 'paper', heading }: {
+  /** 학교 시험지일 때만. `heading` 을 넘기면 안 줘도 된다 */
+  paper?: PaperInfo
   problems: PrintProblem[]
   initial?: 'paper' | 'answers'
+  heading?: PrintHeading
 }) {
   const [what, setWhat] = useState<'paper' | 'answers' | 'both'>(initial)
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number }> | null>(null)
@@ -59,9 +77,15 @@ export function ExamPaperPrint({ paper, problems, initial = 'paper' }: {
     return () => { dead = true }
   }, [problems])
 
+  // 머리 글자 — 밖에서 넘겨 준 것이 있으면 그것을 쓰고, 없으면 지금까지처럼 시험지에서 만든다
+  const head: PrintHeading = heading ?? (paper
+    ? { top: examTitle(paper), doc: docTitle(paper), grade: `${paper.grade.replace(/[^0-9]/g, '')}학년`, right: paper.school_name }
+    : { top: '', doc: '학습지', grade: '', right: '' })
+  const subject = head.subject ?? '수학'
+
   useEffect(() => { setWhat(initial) }, [initial])
   // PDF 로 저장할 때의 파일 이름 — 빠른 정답만 뽑으면 이름도 그렇게
-  useEffect(() => { document.title = docTitle(paper) + (what === 'answers' ? ' 빠른 정답' : '') }, [paper, what])
+  useEffect(() => { document.title = head.doc + (what === 'answers' ? ' 빠른 정답' : '') }, [head.doc, what])
 
   const broken = sizes ? problems.filter((p) => !sizes[p.no]?.w).map((p) => p.no) : []
   const pages = useMemo(() => {
@@ -70,12 +94,10 @@ export function ExamPaperPrint({ paper, problems, initial = 'paper' }: {
     return layout(items, perCol)
   }, [sizes, problems, perCol, zoom])
 
-  const gradeNo = paper.grade.replace(/[^0-9]/g, '')
-
   return (
     <>
       <div className="no-print sticky top-0 z-50 flex flex-wrap items-center gap-4 border-b border-gray-200 bg-white px-4 py-3 text-sm">
-        <span className="font-semibold">{docTitle(paper)}</span>
+        <span className="font-semibold">{head.doc}</span>
         <div className="flex overflow-hidden rounded-lg border">
           {([['paper', '시험지'], ['answers', '빠른 정답'], ['both', '둘 다']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setWhat(k)} className="px-3 py-1.5"
@@ -105,14 +127,14 @@ export function ExamPaperPrint({ paper, problems, initial = 'paper' }: {
         {(what === 'answers' ? [] : pages ?? []).map((page, pi) => (
           <div className="ep-page" key={pi}>
             <div className="ep-top">
-              <span>{examTitle(paper)}</span>
+              <span>{head.top}</span>
               <span className="ep-pno">{pi + 1}</span>
             </div>
             <div className="ep-head">
               <span className="ep-box ep-round">수학의 지혜</span>
-              <span className="ep-grade">{gradeNo}학년</span>
-              <span className="ep-subj">수학</span>
-              <span className="ep-box">{paper.school_name}</span>
+              <span className="ep-grade">{head.grade}</span>
+              <span className="ep-subj">{subject}</span>
+              <span className="ep-box">{head.right}</span>
             </div>
             <div className="ep-body">
               {[0, 1].map((ci) => (
@@ -135,14 +157,14 @@ export function ExamPaperPrint({ paper, problems, initial = 'paper' }: {
         {what !== 'paper' && answerPages(problems, akWeight).map((cells, pi, arr) => (
           <div className="ep-page" key={`ak${pi}`}>
             <div className="ep-top">
-              <span>{examTitle(paper)} 빠른 정답</span>
+              <span>{head.top} 빠른 정답</span>
               <span className="ep-pno">{pi + 1}</span>
             </div>
             <div className="ep-head">
               <span className="ep-box ep-round">수학의 지혜</span>
-              <span className="ep-grade">{gradeNo}학년</span>
+              <span className="ep-grade">{head.grade}</span>
               <span className="ep-subj">빠른 정답</span>
-              <span className="ep-box">{paper.school_name}</span>
+              <span className="ep-box">{head.right}</span>
             </div>
             <div className="ep-body ak-body">
               {cells.map((p) => (

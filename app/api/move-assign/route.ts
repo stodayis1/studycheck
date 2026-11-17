@@ -13,11 +13,12 @@
 //
 // 누가 쓸 수 있나 — 직원이면서(staffOrDeny) **고등 커리큘럼을 볼 수 있는 사람**
 //   (can_see_high_curriculum, 원장·고등 강사·명단에 넣은 강사). 그 판단은 DB 함수 한 곳에만
-//   있고, 여기서는 **그 사람의 토큰으로** 불러서 그대로 따른다 — 규칙을 베껴 쓰지 않는다.
+//   있고, lib/apiAuth.ts 의 highOrDeny 가 **그 사람의 토큰으로** 불러서 그대로 따른다
+//   — 규칙을 베껴 쓰지 않는다. 같은 가드를 app/api/pdf-worksheets 도 쓴다.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { staffOrDeny } from '@/lib/apiAuth'
+import { highOrDeny } from '@/lib/apiAuth'
 import { WD, WE } from '@/lib/moveAssign'
 
 export const dynamic = 'force-dynamic'
@@ -29,29 +30,6 @@ const GRADES = ['초6', '중1', '중2', '중3', '고1', '고2']
 function admin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } })
-}
-
-/**
- * 직원인지 보고, 그 다음 **그 사람 토큰으로** can_see_high_curriculum() 을 불러 본다.
- * 통과하면 null, 아니면 막는 응답.
- */
-async function denyUnlessAllowed(req: Request): Promise<NextResponse | null> {
-  const who = await staffOrDeny(req)
-  if (who.deny) return who.deny
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
-  if (!url || !anon) return NextResponse.json({ error: '서버 설정이 올바르지 않아요.' }, { status: 500 })
-
-  const asUser = createClient(url, anon, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  })
-  const { data, error } = await asUser.rpc('can_see_high_curriculum')
-  if (error) return NextResponse.json({ error: '권한을 확인하지 못했어요.' }, { status: 500 })
-  if (data !== true) return NextResponse.json({ error: '원장님과 고등 담당 선생님만 볼 수 있어요.' }, { status: 403 })
-  return null
 }
 
 /** 수파베이스는 한 번에 1000행만 준다 — 다 읽을 때는 돌려 가며 읽는다. */
@@ -66,8 +44,8 @@ async function all(make: () => any): Promise<any[]> {
 }
 
 export async function GET(req: Request) {
-  const deny = await denyUnlessAllowed(req)
-  if (deny) return deny
+  const who = await highOrDeny(req)
+  if (who.deny) return who.deny
   const db = admin()
   try {
     const students = (await all(() => db.from('students')
@@ -95,8 +73,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const deny = await denyUnlessAllowed(req)
-  if (deny) return deny
+  const who = await highOrDeny(req)
+  if (who.deny) return who.deny
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: '잘못된 요청이에요.' }, { status: 400 }) }
 
@@ -111,7 +89,6 @@ export async function POST(req: Request) {
   if (weekday && !WD[weekday]) return NextResponse.json({ error: '없는 평일 타임이에요.' }, { status: 400 })
   if (weekend && !WE[weekend]) return NextResponse.json({ error: '없는 토·일 타임이에요.' }, { status: 400 })
 
-  const who = await staffOrDeny(req)
   const db = admin()
   const { error } = await db.from('class_move_assign').upsert({
     student_id: studentId,

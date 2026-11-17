@@ -53,3 +53,32 @@ export async function staffOrDeny(req: Request, opts: { adminOnly?: boolean } = 
 
   return out(null, profile)   // 통과
 }
+
+// 「고등 커리큘럼을 볼 수 있는 사람」만 쓰는 API 의 가드 — 원장 · 고등 강사 · 명단에 넣은 강사.
+//
+// ★ 규칙을 베껴 쓰지 않는다. 판단은 DB 함수 can_see_high_curriculum() 한 곳에만 있고
+//   (docs/sql/고등커리큘럼_고등강사만.sql), 여기서는 **그 사람의 토큰으로** 불러서 그대로 따른다.
+//   그래야 원장님이 명단에 한 사람을 더해도 앱을 고치지 않는다.
+//
+//   const who = await highOrDeny(req)
+//   if (who.deny) return who.deny
+export async function highOrDeny(req: Request): Promise<StaffCheck> {
+  const who = await staffOrDeny(req)
+  if (who.deny) return who
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
+  if (!url || !anon)
+    return { ...who, deny: NextResponse.json({ error: '서버 설정이 올바르지 않아요.' }, { status: 500 }) }
+
+  const asUser = createClient(url, anon, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+  const { data, error } = await asUser.rpc('can_see_high_curriculum')
+  if (error) return { ...who, deny: NextResponse.json({ error: '권한을 확인하지 못했어요.' }, { status: 500 }) }
+  if (data !== true)
+    return { ...who, deny: NextResponse.json({ error: '원장님과 고등 담당 선생님만 볼 수 있어요.' }, { status: 403 }) }
+  return who
+}
