@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
 import { ExamPaperPrint, type PrintHeading } from '@/components/exam-analysis/ExamPaperPrint'
-import { tutorGradeLabel } from '@/lib/tutorWorksheet'
+import { parseTutorTitle, tutorGradeLabel } from '@/lib/tutorWorksheet'
 
 export default function PdfWorksheetPrintPage() {
   const { currentUser, loading } = useAuth()
@@ -40,15 +40,17 @@ export default function PdfWorksheetPrintPage() {
   if (err) return <p className="p-10 text-center text-gray-500">{err}</p>
   if (!data) return <p className="p-10 text-center text-gray-400">불러오는 중…</p>
 
-  // 제목은 「과정-단원명-난이도」 (lib/tutorWorksheet.ts 의 tutorTitle). 칸이 모자라면 있는 것만 쓴다.
+  // 제목은 「과정-단원명-종류-난이도」 (lib/tutorWorksheet.ts). 종류가 없던 때 만든 것은 세 칸이라
+  // 자리를 번호로 집지 않고 parseTutorTitle 로 되읽는다.
   const title = String(data.sheet?.title ?? '학습지')
-  const [course, , level] = title.split('-')
+  const { course, kind, level } = parseTutorTitle(title, data.sheet?.course ?? undefined)
   const heading: PrintHeading = {
     top: title,
     doc: title,
     // 큰 글씨 칸은 「3학년」처럼 짧은 자리다 — 과정을 그대로 넣으면 머리 띠가 밀린다
-    grade: tutorGradeLabel(data.sheet?.course ?? course ?? ''),
-    right: level ? `난이도 ${level}` : '수학의지혜',
+    grade: tutorGradeLabel(course),
+    // 오른쪽 상자 — 종류가 있으면 종류, 없으면 난이도 (상자가 좁아 둘 다는 안 들어간다)
+    right: kind || (level ? `난이도 ${level}` : '수학의지혜'),
   }
   return <ExamPaperPrint problems={data.problems} initial={what} heading={heading} />
 }

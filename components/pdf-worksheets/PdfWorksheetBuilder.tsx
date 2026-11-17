@@ -5,7 +5,7 @@
 // 네 걸음으로 간다.
 //   ① PDF 고르기        — 쪽을 그려 놓고 **자동 자르기**를 한 번 해 본다
 //   ② 자리 손보기        — 자동이 틀렸거나 못 읽었으면 쪽 그림 위에 네모를 그려 문항을 만든다
-//   ③ 확인              — 제목 세 칸(과정 · 단원명 · 난이도) · 문항 수 · 번호 연속 · 배점
+//   ③ 확인              — 제목(과정 · 단원명 · 학습지 종류 · 난이도) · 문항 수 · 번호 연속
 //   ④ 넣기              — 문항마다 한 번씩 보낸다 → 바로 인쇄 · 배정
 //
 // ★ 학교 기출 시험지는 여기 올리지 않는다 — 「기출 모음」 현황판의 「기출 파일 올리기」(기출모음)로 간다
@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cropExamPdf, toPngBase64 } from '@/lib/examPdfCrop'
 import { apiFetch } from '@/lib/apiFetch'
 import {
-  TUTOR_COURSES, TUTOR_LEVELS, tutorCheck, tutorKeyError, tutorTitle, type TutorKey,
+  TUTOR_COURSES, TUTOR_KINDS, TUTOR_LEVELS, tutorCheck, tutorKeyError, tutorTitle, type TutorKey,
 } from '@/lib/tutorWorksheet'
 
 const GREEN = '#0f7b6c'
@@ -102,7 +102,7 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
   const [rects, setRects] = useState<Rect[]>([])
   const [byDrawOrder, setByDrawOrder] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
-  const [key, setKey] = useState<TutorKey>({ course: '공통수학1', unit: '', level: '중' })
+  const [key, setKey] = useState<TutorKey>({ course: '공통수학1', unit: '', kind: '', level: '중' })
   const [code, setCode] = useState('')
   const dataRef = useRef<ArrayBuffer | null>(null)
   const docRef = useRef<any>(null)
@@ -210,6 +210,9 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
 
   // ── ④ 넣기 ────────────────────────────────────────────────────────────────
   const check = useMemo(() => tutorCheck(rows.map((r) => ({ no: r.no, points: Number(r.pointsText) || null, w: r.canvas.width, h: r.canvas.height }))), [rows])
+  // 이 자료에 배점이 **하나라도** 읽혔나. 없으면 배점 칸을 아예 안 보여 준다
+  // (원장님 2026-11-17 「배점은 없어도됨」 — 교과서 · 단계별 학습지에는 배점이 없다)
+  const hasPoints = rows.some((r) => Number(r.pointsText) > 0)
   const keyErr = tutorKeyError(key)
 
   const save = async () => {
@@ -341,7 +344,7 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
         {stage === 'review' && (
           <>
             <div className="border-b px-5 py-3">
-              <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+              <div className="grid gap-2 sm:grid-cols-[1fr_1.6fr_1.1fr_auto]">
                 <label className="text-xs text-gray-600">과정
                   <select value={key.course} onChange={(e) => setKey({ ...key, course: e.target.value })}
                     className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm">
@@ -349,7 +352,13 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
                   </select>
                 </label>
                 <label className="text-xs text-gray-600">단원명
-                  <input value={key.unit} onChange={(e) => setKey({ ...key, unit: e.target.value })} placeholder="삼각함수"
+                  <input value={key.unit} onChange={(e) => setKey({ ...key, unit: e.target.value })} placeholder="집합과 명제"
+                    className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+                </label>
+                {/* 고르는 목록이 아니라 **적는 칸**이다 — 아래 단추는 자주 쓰실 말을 한 번에 넣을 뿐이다
+                    (원장님 2026-10-31 「현재 쓰고 있는 규칙에서 우리가 범주를 만들어가는게 맞아」) */}
+                <label className="text-xs text-gray-600">학습지 종류
+                  <input value={key.kind ?? ''} onChange={(e) => setKey({ ...key, kind: e.target.value })} placeholder="교과서"
                     className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
                 </label>
                 <label className="text-xs text-gray-600">난이도
@@ -359,20 +368,33 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
                   </select>
                 </label>
               </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-gray-500">
+                <span className="mr-1">자주 쓰는 종류</span>
+                {TUTOR_KINDS.map((k) => (
+                  <button key={k} type="button" onClick={() => setKey({ ...key, kind: key.kind === k ? '' : k })}
+                    className={`rounded-full border px-2 py-0.5 ${key.kind === k ? 'text-white' : 'hover:bg-gray-50'}`}
+                    style={key.kind === k ? { background: GREEN, borderColor: GREEN } : undefined}>{k}</button>
+                ))}
+                <span className="ml-1">다른 말을 적어도 되고, 비워 두어도 됩니다.</span>
+              </div>
               <div className="mt-2 text-sm">
-                제목 <b style={{ color: GREEN }}>{tutorTitle(key) || '(과정 - 단원명 - 난이도)'}</b>
+                제목 <b style={{ color: GREEN }}>{tutorTitle(key) || '(과정 - 단원명 - 종류 - 난이도)'}</b>
                 {keyErr && <span className="ml-2 text-xs text-red-600">{keyErr}</span>}
               </div>
               <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
                 <span><b>{rows.length}</b>문항</span>
                 <span>번호 <b>{rows.length ? `${rows[0].no} ~ ${rows[rows.length - 1].no}` : '-'}</b></span>
-                <span>배점 적은 문항 <b>{check.priced}</b>개{check.priced ? <> · 합 <b className={check.points === 100 ? '' : 'text-amber-700'}>{check.points}</b>점</> : null}</span>
+                <span>정답 <b>{rows.filter((r) => r.answerText.trim()).length}</b>개</span>
                 <span>서술형 <b>{rows.filter((r) => r.essay).length}</b>개</span>
+                {/* 배점은 **읽힌 것이 있을 때만** 보여 준다 — 강사 자료에는 배점이 없는 것이 보통이라
+                    「배점 적은 문항 0개」가 늘 떠 있으면 할 일이 남은 것처럼 보인다
+                    (원장님 2026-11-17 「배점은 없어도됨」) */}
+                {hasPoints && <span>배점 <b>{check.priced}</b>개 · 합 <b className={check.points === 100 ? '' : 'text-amber-700'}>{check.points}</b>점</span>}
               </div>
               {autoNote.map((n) => <div key={n} className="mt-1 text-xs text-gray-500">{n}</div>)}
               {check.errors.map((n) => <div key={n} className="mt-1 text-xs font-semibold text-red-600"><i className="ti ti-alert-triangle mr-1" />{n}</div>)}
               {check.warns.map((n) => <div key={n} className="mt-1 text-xs text-amber-700"><i className="ti ti-alert-triangle mr-1" />{n}</div>)}
-              <div className="mt-1 text-xs text-gray-500">배점 · 정답은 <b>비워 두어도 됩니다</b> (강사 자료에는 없는 것이 보통입니다). 정답이 없으면 학생이 QR 채점에서 스스로 O/X 를 고릅니다.</div>
+              <div className="mt-1 text-xs text-gray-500">정답은 <b>비워 두어도 됩니다</b> (강사 자료에는 없는 것이 보통입니다). 정답이 없으면 학생이 QR 채점에서 스스로 O/X 를 고릅니다.</div>
             </div>
             <div className="flex-1 overflow-auto px-5 py-3">
               <div className="grid gap-3 md:grid-cols-2">
@@ -380,10 +402,12 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
                   <div key={r.no} className="rounded-xl border p-3">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
                       <b className="w-9" style={{ color: GREEN }}>{r.no}번</b>
-                      <label className="flex items-center gap-1 text-xs text-gray-600">배점
-                        <input value={r.pointsText} onChange={(e) => setRows((xs) => xs.map((x) => x.no === r.no ? { ...x, pointsText: e.target.value.replace(/[^\d.]/g, '') } : x))}
-                          className="w-12 rounded border px-1.5 py-1 text-center text-sm" />
-                      </label>
+                      {hasPoints && (
+                        <label className="flex items-center gap-1 text-xs text-gray-600">배점
+                          <input value={r.pointsText} onChange={(e) => setRows((xs) => xs.map((x) => x.no === r.no ? { ...x, pointsText: e.target.value.replace(/[^\d.]/g, '') } : x))}
+                            className="w-12 rounded border px-1.5 py-1 text-center text-sm" />
+                        </label>
+                      )}
                       <label className="flex items-center gap-1 text-xs text-gray-600">정답
                         <input value={r.answerText} onChange={(e) => setRows((xs) => xs.map((x) => x.no === r.no ? { ...x, answerText: e.target.value } : x))}
                           className="w-24 rounded border px-1.5 py-1 text-sm" />

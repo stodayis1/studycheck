@@ -48,26 +48,65 @@ export function tutorGradeLabel(course: string): string {
 export const TUTOR_LEVELS = ['상', '중', '하'] as const
 export type TutorLevel = (typeof TUTOR_LEVELS)[number]
 
-export type TutorKey = { course: string; unit: string; level: string }
+/**
+ * 학습지 종류 — 원장님 2026-11-17 「학습지 종류도 쓰게 해줘. 가령 내가 지금 교과서 파일을 올릴거거든.
+ * 뭐 아니면 단계별 학습지라던가」.
+ *
+ * ★ **고르는 목록이 아니라 적는 칸이다.** 범주를 지어내지 않는다(원장님 2026-10-31
+ *   「규칙을 너무 많이 만들면 되려 헷갈려. 현재 쓰고 있는 규칙에서 우리가 범주를 만들어가는게 맞아」).
+ *   아래는 **자주 쓰실 말을 한 번에 넣는 단추**일 뿐, 다른 말을 적어도 된다.
+ *   비워 두면 제목에서 그 칸이 빠진다 — 막지 않는다.
+ */
+export const TUTOR_KINDS = ['교과서', '단계별 학습지', '교재', '모의고사', '오답'] as const
 
-/** 「공통수학2-삼각함수-중」 — 원장님이 적으라고 하신 제목 꼴. 학습지 제목과 학생 화면에 그대로 보인다 */
+export type TutorKey = { course: string; unit: string; level: string; kind?: string }
+
+/**
+ * 「공통수학2-집합과 명제-교과서-중」 — 원장님이 적으라고 하신 제목 꼴.
+ * 학습지 제목과 **학생 화면**에 그대로 보인다. 종류를 비우면 「공통수학2-집합과 명제-중」.
+ *
+ * ★ 난이도는 **언제나 맨 뒤**다. 종류가 있든 없든 되읽을 수 있어야 하기 때문이다(parseTutorTitle).
+ */
 export function tutorTitle(k: TutorKey): string {
-  return [k.course, k.unit, k.level].map((s) => String(s ?? '').trim()).filter(Boolean).join('-')
+  return [k.course, k.unit, k.kind, k.level].map((s) => String(s ?? '').trim()).filter(Boolean).join('-')
 }
 
 /**
- * 제목 세 칸을 검사한다. 통과하면 null, 아니면 사람 말로 된 사유.
+ * 제목을 세 칸(또는 네 칸)으로 되읽는다. 서버와 인쇄 화면이 쓴다.
+ *
+ * ★ `split('-')` 한 자리를 번호로 집지 않는다 — 종류가 생기기 전에 만든 학습지는 세 칸이다.
+ *   **과정은 밖에서 받고(exam_sheets.grade), 난이도는 맨 뒤에서, 나머지를 가운데로** 읽는다.
+ *   그래야 칸이 셋이든 넷이든 같은 답이 나온다.
+ */
+export function parseTutorTitle(title: string, course?: string): Required<TutorKey> {
+  const parts = String(title ?? '').split('-').map((s) => s.trim()).filter(Boolean)
+  const level = parts.length > 1 && (TUTOR_LEVELS as readonly string[]).includes(parts[parts.length - 1])
+    ? parts.pop()! : ''
+  const head = String(course ?? '').trim() || parts.shift() || ''
+  if (course && parts[0] === course) parts.shift()       // 과정이 제목에도 있으면 한 번만 센다
+  // 가운데가 둘이면 「단원명 - 종류」, 하나면 단원명뿐이다
+  const kind = parts.length > 1 ? parts.pop()! : ''
+  return { course: head, unit: parts.join('-'), kind, level }
+}
+
+/**
+ * 제목 칸을 검사한다. 통과하면 null, 아니면 사람 말로 된 사유.
  * 서버와 화면이 **같은 함수**를 쓴다 — 화면만 막으면 주소로 직접 부르는 길이 열린다.
  */
 export function tutorKeyError(k: Partial<TutorKey>): string | null {
   const course = String(k.course ?? '').trim()
   const unit = String(k.unit ?? '').trim()
+  const kind = String(k.kind ?? '').trim()
   const level = String(k.level ?? '').trim()
   if (!(TUTOR_COURSES as readonly string[]).includes(course)) return '과정을 골라 주세요.'
   if (!unit) return '단원명을 적어 주세요.'
   if (unit.length > 40) return '단원명이 너무 깁니다 (40자까지).'
-  // 제목을 「과정-단원명-난이도」로 읽으므로 단원명에 줄표가 들어가면 칸이 어긋난다
-  if (/[-]/.test(unit)) return '단원명에는 줄표(-)를 쓸 수 없습니다. 「삼각함수」처럼 적어 주세요.'
+  // 제목을 줄표로 갈라 읽으므로 단원명·종류에 줄표가 들어가면 칸이 어긋난다
+  if (/[-]/.test(unit)) return '단원명에는 줄표(-)를 쓸 수 없습니다. 「집합과 명제」처럼 적어 주세요.'
+  if (kind.length > 20) return '학습지 종류가 너무 깁니다 (20자까지).'
+  if (/[-]/.test(kind)) return '학습지 종류에는 줄표(-)를 쓸 수 없습니다.'
+  // 종류를 난이도와 같은 글자로 적으면 되읽을 때 칸이 엇갈린다
+  if ((TUTOR_LEVELS as readonly string[]).includes(kind)) return '학습지 종류를 「상·중·하」로 적을 수는 없습니다.'
   if (!(TUTOR_LEVELS as readonly string[]).includes(level)) return '난이도를 상 · 중 · 하 가운데 골라 주세요.'
   return null
 }
@@ -154,6 +193,7 @@ export function tutorProblemRow(args: {
       source_course: key.course,
       source_unit: key.unit,
       source_level: key.level,
+      source_kind: String(key.kind ?? '').trim() || null,     // 교과서 · 단계별 학습지 … (원장님 2026-11-17)
       source_problem_no: no,
       source_key: tutorSourceKey(sheetId, no),
       sheet_id: sheetId,

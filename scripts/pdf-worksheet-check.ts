@@ -6,8 +6,9 @@
 // ★ 「일부러 망가뜨린 사본에서 실패하는가」도 본다 — 통과만 하는 검사는 검사가 아니다.
 
 import {
-  TUTOR_BOOK, TUTOR_COURSES, TUTOR_LEVELS, TUTOR_NOTE, TUTOR_STEP,
-  tutorCheck, tutorGradeLabel, tutorImagePath, tutorKeyError, tutorProblemRow, tutorSourceKey, tutorTitle,
+  TUTOR_BOOK, TUTOR_COURSES, TUTOR_KINDS, TUTOR_LEVELS, TUTOR_NOTE, TUTOR_STEP,
+  parseTutorTitle, tutorCheck, tutorGradeLabel, tutorImagePath, tutorKeyError, tutorProblemRow,
+  tutorSourceKey, tutorTitle,
 } from '../lib/tutorWorksheet'
 
 let fail = 0
@@ -75,6 +76,7 @@ ok(row.book === '강사자료' && row.step === '강사자료', 'book · step = �
 ok(row.grade === '공통수학2' && row.semester === 1, 'grade = 과정, semester = 1', [row.grade, row.semester])
 ok(row.sub_chapter_no === 0 && row.sub_chapter_title === '삼각함수', 'sub_chapter_no 0 · 제목은 단원명')
 ok(row.difficulty === '중', '난이도는 difficulty 에 글자로')
+ok((row.source_meta as any).source_kind === null, '종류를 안 적었으면 source_kind 는 null')
 ok(row.local_no === '삼각함수-중-7', 'local_no', row.local_no)
 ok(row.source_key === 'tutor:S1:7' && row.image_path === 'tutor/S1/7.png', 'source_key · image_path')
 ok(!('answer_image_path' in row), '정답 그림이 없으면 그 칸을 아예 안 보낸다')
@@ -87,6 +89,14 @@ const row2 = tutorProblemRow({
   hasAnswerImage: true, pdfName: null, byName: null,
 })
 ok(row2.is_essay === true && (row2 as any).answer_image_path === 'tutor/S1/1_a.png', '서술형 · 정답 그림이 있으면 그 칸도 보낸다')
+{
+  const row3 = tutorProblemRow({
+    sheetId: 'S1', key: { course: '공통수학2', unit: '집합과 명제', kind: '교과서', level: '중' }, no: 3,
+    essay: false, answerKind: 'image', answerText: null, points: null,
+    hasAnswerImage: false, pdfName: null, byName: null,
+  })
+  ok((row3.source_meta as any).source_kind === '교과서', '적은 종류는 source_meta.source_kind 에 남는다')
+}
 
 console.log('\n■ ★ 학교 기출을 여기로 받는다고 적어 두지 않았는지 (원장님 2026-11-17 「기출은 기출모음에 넣기로 했잖아」)')
 // 기계가 막을 열쇠가 없다 — 학교 이름을 묻지 않으므로. 그래서 **글로 적어 두는 것**이 유일한 막이다.
@@ -116,15 +126,39 @@ console.log('\n■ ★ 학교 기출을 여기로 받는다고 적어 두지 않
   ok(exam.includes('기출은 기출모음에 넣기로 했잖아'), 'docs/시험지분석.md 쪽에도 가르는 줄이 있다')
 }
 
-console.log('\n■ 제목을 되읽을 수 있어야 한다 — 서버와 인쇄 화면이 title.split(\'-\') 로 세 칸을 되살린다')
-// app/api/pdf-worksheets (action 'question') 와 app/teacher/pdf-worksheets/print 가 둘 다 이렇게 읽는다.
-// 제목 짜는 규칙을 바꾸면 여기서 먼저 걸린다 — 안 걸리면 운영에서 단원명·난이도가 조용히 어긋난다.
+console.log('\n■ 학습지 종류 (원장님 2026-11-17 「학습지 종류도 쓰게 해줘 … 교과서 … 단계별 학습지」)')
+ok(tutorTitle({ course: '공통수학2', unit: '집합과 명제', kind: '교과서', level: '중' }) === '공통수학2-집합과 명제-교과서-중',
+  '제목은 과정-단원명-종류-난이도')
+ok(tutorTitle({ course: '공통수학2', unit: '집합과 명제', kind: '', level: '중' }) === '공통수학2-집합과 명제-중',
+  '종류를 비우면 그 칸이 빠진다 (막지 않는다)')
+ok(tutorKeyError({ course: '공통수학2', unit: '집합과 명제', kind: '', level: '중' }) === null, '종류는 비어도 통과')
+ok(tutorKeyError({ course: '공통수학2', unit: '집합과 명제', kind: '단계별 학습지', level: '중' }) === null, '목록에 없는 말도 통과 (적는 칸이다)')
+ok(tutorKeyError({ course: '공통수학2', unit: '집합과 명제', kind: '교과서-상', level: '중' }), '종류에 줄표가 있으면 막는다')
+ok(tutorKeyError({ course: '공통수학2', unit: '집합과 명제', kind: '중', level: '중' }), '종류를 「상·중·하」로 적으면 막는다 (되읽을 때 엇갈린다)')
+ok(TUTOR_KINDS.length >= 2 && TUTOR_KINDS.includes('교과서' as any), '자주 쓰는 종류에 원장님이 말씀하신 「교과서」가 있다')
+
+console.log('\n■ 제목을 되읽을 수 있어야 한다 — 세 칸(옛것)과 네 칸(새것)이 **같은 답**이어야 한다')
+// app/api/pdf-worksheets (action 'question') 와 app/teacher/pdf-worksheets/print 가 둘 다 parseTutorTitle 로 읽는다.
+// ★ 자리를 번호로 집으면 종류가 생기기 전에 만든 학습지가 조용히 어긋난다.
 for (const course of TUTOR_COURSES) {
   for (const level of TUTOR_LEVELS) {
     const unit = '이차함수와 그래프'                    // 빈칸이 있어도 되어야 한다
-    const [c2, u2, l2] = tutorTitle({ course, unit, level }).split('-')
-    ok(c2 === course && u2 === unit && l2 === level, `${course}-${unit}-${level} 을 세 칸으로 되읽는다`, [c2, u2, l2])
+    for (const kind of ['', '교과서', '단계별 학습지']) {
+      const t = tutorTitle({ course, unit, kind, level })
+      const r = parseTutorTitle(t, course)
+      ok(r.course === course && r.unit === unit && r.kind === kind && r.level === level,
+        `${t} 을 되읽는다`, r)
+    }
   }
+}
+// 과정을 못 받아도(옛 학습지의 grade 가 비었을 때) 제목만으로 읽힌다
+{
+  const r = parseTutorTitle('공통수학2-집합과 명제-교과서-중')
+  ok(r.course === '공통수학2' && r.unit === '집합과 명제' && r.kind === '교과서' && r.level === '중',
+    '과정을 안 넘겨도 제목만으로 네 칸을 읽는다', r)
+  const r3 = parseTutorTitle('공통수학2-집합과 명제-중')
+  ok(r3.course === '공통수학2' && r3.unit === '집합과 명제' && r3.kind === '' && r3.level === '중',
+    '세 칸짜리 옛 제목은 종류가 빈 것으로 읽는다', r3)
 }
 
 console.log('\n■ 일부러 망가뜨린 값으로 돌려 본다 (통과만 하는 검사는 검사가 아니다)')

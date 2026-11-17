@@ -29,7 +29,7 @@ import { highOrDeny } from '@/lib/apiAuth'
 import { bankAnswer } from '@/lib/examAnalysis'
 import {
   TUTOR_NOTE, tutorCheck, tutorImagePath, tutorAnswerImagePath,
-  tutorKeyError, tutorProblemRow, tutorSourceKey, tutorTitle, type TutorKey,
+  parseTutorTitle, tutorKeyError, tutorProblemRow, tutorSourceKey, tutorTitle, type TutorKey,
 } from '@/lib/tutorWorksheet'
 
 export const dynamic = 'force-dynamic'
@@ -124,6 +124,7 @@ export async function GET(req: Request) {
         me: { name: who.name, isAdmin: who.role === 'admin' },
         sheets: (sheets ?? []).map((s: any) => ({
           code: s.code, title: s.title, course: s.grade, createdAt: s.created_at,
+          kind: parseTutorTitle(String(s.title), s.grade ?? undefined).kind || null,
           by: s.created_by_name ?? null, mine: !s.created_by || s.created_by === who.id,
           pdfName: String(s.note ?? '').slice(TUTOR_NOTE.length + 1) || null,
           problems: nP.get(s.id) ?? 0, targets: nT.get(s.id) ?? 0, solved: nG.get(s.id) ?? 0,
@@ -212,7 +213,10 @@ export async function POST(req: Request) {
     switch (String(b.action)) {
       // ── 학습지 한 벌을 연다. 제목 세 칸은 화면과 **같은 함수**로 검사한다
       case 'start': {
-        const key: TutorKey = { course: String(b.course ?? ''), unit: String(b.unit ?? '').trim(), level: String(b.level ?? '') }
+        const key: TutorKey = {
+          course: String(b.course ?? ''), unit: String(b.unit ?? '').trim(),
+          kind: String(b.kind ?? '').trim(), level: String(b.level ?? ''),
+        }
         const err = tutorKeyError(key)
         if (err) return bad(err)
         const title = tutorTitle(key)
@@ -233,9 +237,9 @@ export async function POST(req: Request) {
         const no = Math.trunc(Number(b.no))
         if (!(no > 0)) return bad('문항 번호가 올바르지 않습니다.')
         if (!b.image) return bad(`${no}번 그림이 없습니다.`)
-        // 제목 세 칸은 학습지에 이미 박혀 있다 — 제목에서 되읽어 쓴다 (화면이 다른 값을 보내도 안 따른다)
-        const [course, unit, level] = String(sheet.title).split('-')
-        const key: TutorKey = { course: sheet.grade ?? course, unit: unit ?? '', level: level ?? '' }
+        // 제목 칸은 학습지에 이미 박혀 있다 — 제목에서 되읽어 쓴다 (화면이 다른 값을 보내도 안 따른다).
+        // ★ 자리를 번호로 집지 않는다 — 종류가 생기기 전 학습지는 세 칸이다(parseTutorTitle).
+        const key: TutorKey = parseTutorTitle(String(sheet.title), sheet.grade ?? undefined)
 
         const answer = String(b.answer ?? '').trim() || null
         const essay = !!b.essay
