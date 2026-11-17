@@ -29,9 +29,12 @@ const DOT_NUM = /^(\d{1,3})\.$/
  *
  * 시험: scripts/exam-crop-mark-check.ts
  */
-export function dotNumberOf(str: string, size: number, limit: number): number | null {
+export function dotNumberOf(str: string, size: number, limit: number, big = Infinity): number | null {
   const m = DOT_NUM.exec(str.trim())
-  if (!m || !(size < limit)) return null
+  if (!m) return null
+  // 번호는 본문보다 **작거나**(미주·지축중 꼴) **크다**(고양시 고1 꼴). 본문과 같은 크기면
+  // 문항 번호가 아니라 글 속의 「12.」 다 — 그건 걸리면 안 된다.
+  if (!(size < limit || size > big)) return null
   return Number(m[1])
 }
 // 한글 수식 글꼴의 **숫자**는 사용자 영역 글자로 찍힌다 — 실측(2026-11-10 신원중)으로는
@@ -56,6 +59,20 @@ export function markLimit(sizes: number[]): number {
   const s = sizes.filter((v) => v > 0).sort((a, b) => a - b)
   if (!s.length) return 8.5                      // 글자가 없으면 옛 기준
   return s[Math.floor(s.length / 2)] * 0.85
+}
+
+/**
+ * 번호가 본문보다 **큰** 꼴도 있다 — 2026-11-17 고양시 고1 공통수학2 25개교가 그랬다.
+ * 번호 14.99pt · 본문 11.03pt (1.36배)라 「작은 것만 번호」 규칙에 하나도 안 걸려
+ * 25개 파일이 모두 「문항 번호를 찾지 못했습니다」였다.
+ * 본문 가운데값의 1.15배보다 큰 것만 번호로 본다 — 머리말(「2025년」·「1학년」)은 `숫자.` 꼴이
+ * 아니라 안 걸리고, 해설 쪽의 작은 번호는 정답표로 따로 걸러진다(inAnswers).
+ * 시험: scripts/exam-crop-mark-check.ts
+ */
+export function bigLimit(sizes: number[]): number {
+  const s = sizes.filter((v) => v > 0).sort((a, b) => a - b)
+  if (!s.length) return Infinity
+  return s[Math.floor(s.length / 2)] * 1.15
 }
 
 // 정답표에서 정답이 번호 **아랫줄**부터 적혀 있는가. 같은 줄에 적힌 정답(「18) 가 × 나」)의
@@ -165,7 +182,9 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
   // (2026-11-10 신원중 — 문항마다 머리말 띠가 붙어 그림이 쪽 높이만큼 길어졌다).
   const sigOf = (x: number, base: number, str: string) => `${Math.round(x)}|${Math.round(base)}|${str}`
   const numSig = (x: number, base: number) => `${Math.round(x / 5) * 5}|${Math.round(base)}`
-  const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$/      // 「3」 · 「3/12」 — 쪽마다 글자가 달라진다
+  // 「3」 · 「3/12」 · 「-3-」 — 쪽마다 글자가 달라진다. 「-3-」 꼴을 안 보면 바닥 띠를 못 찾아
+  //   문항 그림이 **쪽 맨 아래 줄까지** 늘어난다 (2026-11-17 고양시 파일 — 22번이 2382px 였다)
+  const PAGE_NO = /^\d{1,3}$|^\d{1,3}\s*\/\s*\d{1,3}$|^[-‐‑‒–—－]\s*\d{1,3}\s*[-‐‑‒–—－]$/
   const seen = new Map<string, number>()
   const seenNum = new Map<string, number>()
   for (let pi = 0; pi < doc.numPages; pi++) {
@@ -243,6 +262,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
     // 번호가 문제 첫 줄과 같은 줄에 찍힌 파일도 있다 (「10) 다음 중 옳지 않은 것은?」).
     // 그때는 번호 줄 아래부터 자르면 첫 줄이 날아간다 → 그 줄 위에서부터 자르고 번호 글자만 지운다 (top · box)
     const limit = markLimit(items.map((t) => t.size))
+    const big = bigLimit(items.map((t) => t.size))
     markShaped += items.filter((t) => MARK.test(t.str)).length
     type Mark = { no: number; col: number; y0: number; y1: number; top: number | null; box?: [number, number, number, number] }
     const ms: Mark[] = items
@@ -259,7 +279,11 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
 
     // 정답표 쪽: 번호만 줄줄이 있거나, 작은 미주 번호 없이 「1) ③」 줄이 5개 넘게 있는 쪽
     // 정답표는 「1) ③」 과 「1. ④」 두 꼴이 다 있다
-    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14)
+    // ★ 본문보다 **큰** 번호는 문항 번호다 — 정답표 줄로 세면 안 된다.
+    //   2026-11-17 고양시 고1 25개교: 문제 1쪽의 「1.」「2.」「3.」(15.0pt)이 여섯 개 걸려
+    //   그 쪽이 통째로 「정답표」로 판정됐고, inAnswers 가 거기서 켜져 **그 뒤 쪽이 모두 정답**이 됐다
+    //   (문항 0 · 정답 21). 정답표의 번호는 본문보다 작다(해설 쪽 8.75pt).
+    const lineStarts = items.filter((t) => /^\d+[).]/.test(t.str) && Math.abs(t.x - cols[colOf(t.x)][0]) < 14 && !(t.size > big))
     const nMark = items.filter((t) => MARK.test(t.str)).length
     // 정답표가 시작되면 그 뒤 쪽은 전부 정답 · 해설이다 (뒤에 해설이 이어져도 문항으로 자르지 않는다)
     if (inAnswers || (nMark >= 5 && nMark >= 0.4 * items.length) || (!ms.length && lineStarts.length >= 5)) {
@@ -288,6 +312,10 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         let text = dec(textIn(items, cols[m.c][0] - 1, m.y0 - 1, x1, y1)).replace(/[-]/g, '').replace(/\s+/g, ' ').trim()
         text = text.replace(new RegExp(`(^|\\s)${m.no}[).]\\s*`), ' ').trim().replace(/^(논술|서술)형?\s*\d+\s*[.)]\s*/, '')
         if (/^[①②③④⑤,\s]+$/.test(text.replace(/[^\p{L}\p{N}①②③④⑤,]/gu, '') || ' ')) text = text.replace(/[^①②③④⑤,]/g, '')   // 빈 수식 틀 같은 찌꺼기는 버린다
+        // 「1. 정답 ④ 의 값을 …」 처럼 **「정답」이라고 적고** 해설이 이어지는 꼴 (2026-11-17 백양고).
+        // 이 말을 떼야 아래 `lead` 가 동그라미만 남긴다 — 안 떼면 해설이 통째로 정답으로 들어가
+        // QR 자동 채점이 안 된다.
+        text = text.replace(/^(정답|답)\s*[:：)]?\s*/, '')
         const lead = text.match(/^[①②③④⑤](\s*,\s*[①②③④⑤])*/)
         if (lead && text.length > lead[0].length) text = lead[0]          // 「② 원의 중심을 …」 = 정답 뒤에 해설이 붙은 것 → 정답만
         if (text) answers[m.no] = text
@@ -357,13 +385,20 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
         for (const t of cands) {
           const same = items.filter((o) => o !== t && Math.abs(o.base - t.base) < 3)
           const next = same.filter((o) => o.x >= t.x1 - 1).sort((a, b) => a.x - b.x)[0]
+          // ★ 문항 번호는 **그 줄의 맨 앞**에 있다. 왼쪽에 무언가 있으면 번호가 아니다 —
+          //   2026-11-17 백양고: 배점 「[4.9점]」이 줄바꿈으로 「[」 만 앞줄에 남고 수식 글꼴 숫자가
+          //   단 맨 왼쪽으로 내려와 **9번 문항 번호로 읽혔다.** 그 바람에 8번이 한 줄(39px)로 잘리고,
+          //   번호가 차례와 안 맞아(4 ≠ 9) dotOk 가 꺼져 **배점을 하나도 못 읽었다.**
+          if (same.some((o) => o.x < t.x - 1 && o.x1 > cols[c][0] - 2)) continue
           // ① 수식 글꼴 번호 + 따로 찍힌 「.」 (신원중 꼴)
           const 번호수식 = PUA.test(t.str) && !!next && next.x < t.x1 + 8 && next.str.startsWith('.')
           // ② 번호와 점이 **한 덩어리**로 그냥 글자인 꼴 (지축중 꼴). 본문 안에도 「12.」 같은
           //    조각이 있을 수 있으니 **미주와 같은 85% 규칙**(limit)으로 가른다 —
           //    이 파일의 번호는 8.6pt, 본문은 11.0pt 라 깨끗이 갈린다. 마지막 정답표 쪽의
           //    「22.」·「23.」 은 본문 크기(11.5pt)여서 여기 안 걸린다.
-          const 글자번호 = dotNumberOf(t.str, t.size, limit)
+          // ③ 번호가 본문보다 **큰** 꼴도 있다 (고양시 고1 — 번호 15.0pt · 본문 11.0pt).
+          //    작은 쪽만 보면 하나도 안 걸린다. 같은 크기만 아니면 되므로 limit · big 양쪽으로 가른다.
+          const 글자번호 = dotNumberOf(t.str, t.size, limit, big)
           const 번호글자 = 글자번호 !== null
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
@@ -412,14 +447,18 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
 
     for (const s of stream) {
       if (s.no !== null) { cur = { no: s.no, page: pi + 1, parts: [], text: '' }; problems.push(cur) }
-      if (!cur || s.y1! - s.y0 < 3) continue
-      const [x0, x1] = cols[s.c]
-      const y0 = Math.max(s.y0, bodyTop)
-      cur.text += ' ' + textIn(items, x0, y0, x1, s.y1!)
+      // ★ 번호 글자 지우기는 **높이 막이보다 먼저** 해야 한다.
+      //   번호가 붙은 줄(s.no !== null)은 바로 뒤에 오는 「이어지는 부분」과 y 가 같아 높이가 0 이고,
+      //   아래 `continue` 에 걸려 **한 번도 지워지지 않았다** — 잘린 그림마다 「1.」 「2.」 가 남았다
+      //   (2026-11-17 신원고). 그림은 다음 줄에서 떠 가므로 칠하는 것이 먼저다.
       if (s.erase) {           // 같은 줄에 찍힌 번호 글자를 지운다
         ctx.fillStyle = '#fff'
         ctx.fillRect(Math.floor(s.erase[0] * Z) - 1, Math.floor(s.erase[1] * Z) - 1, Math.ceil((s.erase[2] - s.erase[0]) * Z) + 4, Math.ceil((s.erase[3] - s.erase[1]) * Z) + 3)
       }
+      if (!cur || s.y1! - s.y0 < 3) continue
+      const [x0, x1] = cols[s.c]
+      const y0 = Math.max(s.y0, bodyTop)
+      cur.text += ' ' + textIn(items, x0, y0, x1, s.y1!)
       const part = clip(canvas, x0, y0, x1, s.y1!)
       if (part) cur.parts.push(part)
     }

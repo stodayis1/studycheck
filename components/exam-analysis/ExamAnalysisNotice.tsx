@@ -73,7 +73,7 @@ export function ExamAnalysisNotice() {
 
         <div className="mt-3 flex gap-2">
           <Link href="/teacher/exam-analysis" className="flex-1 rounded-xl px-3 py-2 text-center text-xs font-semibold text-white" style={{ background: GREEN }}>
-            시험지 분석 열기
+            기출 모음 열기
           </Link>
           <a href={ORDER_PDF} target="_blank" rel="noreferrer" className="flex-1 rounded-xl border px-3 py-2 text-center text-xs font-semibold" style={{ borderColor: GREEN, color: GREEN }}>
             업무플로우 안내문 보기 (PDF)

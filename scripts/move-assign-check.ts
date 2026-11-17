@@ -175,18 +175,42 @@ if (!url || !key) {
   // ⑨ 권한 확인이 코드에 **남아 있나**. 토큰을 만들어 볼 수 없으니 글자로 재지만,
   //    지우면 걸리게 해 둔다 — 지우면 직원 누구에게나 초6·고등부 명단이 열린다.
   const src = fs.readFileSync('app/api/move-assign/route.ts', 'utf8')
-  ok(/rpc\(\s*'can_see_high_curriculum'\s*\)/.test(src), '서버 API 가 can_see_high_curriculum 을 묻지 않는다')
+  ok(/rpc\(\s*'can_see_move_assign'\s*\)/.test(src), '서버 API 가 can_see_move_assign 을 묻지 않는다')
+  ok(/rpc\(\s*'can_see_high_curriculum'\s*\)/.test(src), '서버 API 가 can_see_high_curriculum(전체 권한)을 묻지 않는다')
   ok(/status:\s*403/.test(src), '권한 없는 사람을 403 으로 막는 줄이 없다')
   for (const h of ['GET', 'POST']) {
     const at = src.indexOf(`export async function ${h}(req: Request) {`)
     const head = at < 0 ? '' : src.slice(at, at + 220)
-    ok(head.includes('const deny = await denyUnlessAllowed(req)') && head.includes('if (deny) return deny'),
+    ok(head.includes('await allow(req)') && head.includes('if (deny) return deny'),
       `${h} 핸들러 첫 줄에서 권한을 확인해야 한다`)
   }
+  // 「초6 → 중등」만 보는 사람에게 고등부를 내려 주면 안 된다
+  ok(src.includes("const GRADES = full ? GRADES_ALL : GRADES_MID"),
+    '전체 권한이 아닌 사람에게 고등부 학년을 빼고 내려 줘야 한다')
+  ok(!/GRADES_MID\s*=\s*\[[^\]]*고/.test(src), '중등만 보는 목록에 고등 학년이 들어 있다')
+  ok(src.includes("if (!full) rows = rows.filter((r: any) => r.track === '중등')"),
+    '전체 권한이 아닌 사람에게 고등 판 줄을 빼야 한다')
+  ok(/track === '고등' && !full/.test(src), '전체 권한이 아닌 사람이 고등 판을 고치는 것을 막아야 한다')
+
+  // 화면·메뉴도 같은 함수를 봐야 한다 (한쪽만 열리면 메뉴는 보이는데 화면이 빈다)
+  const pageSrc = fs.readFileSync('app/teacher/move-assign/page.tsx', 'utf8')
+  ok(/rpc\('can_see_move_assign'\)/.test(pageSrc), '화면이 can_see_move_assign 으로 막아야 한다')
+  ok(/rpc\('can_see_high_curriculum'\)/.test(pageSrc), '화면이 전체 권한도 물어 탭을 가려야 한다')
+  const sideSrc = fs.readFileSync('components/teacher/Sidebar.tsx', 'utf8')
+  ok(/rpc\('can_see_move_assign'\)/.test(sideSrc), '사이드바 메뉴가 can_see_move_assign 으로 떠야 한다')
 
   // 표가 살아 있나 (읽기만)
   const { error } = await db.from('class_move_assign').select('student_id').limit(1)
   ok(!error, '표 class_move_assign 을 읽지 못했다 — docs/sql/진급배정판.sql 을 적용했나')
+
+  // ⑩ 권한 함수가 DB 에 살아 있나 — 화면·API 가 이 이름을 부르는데 함수가 없으면
+  //    rpc 가 조용히 false 를 주고 **아무도 못 들어온다.**
+  //    (정책이 이 함수를 보는지는 docs/sql/진급배정판_권한분리.sql 끝의 확인 쿼리로 센다 —
+  //     pg_policies 는 PostgREST 로 읽히지 않는다)
+  for (const fn of ['can_see_move_assign', 'can_see_high_curriculum']) {
+    const { error: fnErr } = await db.rpc(fn as any)
+    ok(!fnErr, `DB 함수 ${fn}() 를 부르지 못했다 — docs/sql/진급배정판_권한분리.sql 을 적용했나`)
+  }
   console.log(`(운영 데이터 — 중3 ${중3.length}명 · 초6 ${초6.length}명 · 중1·중2 ${real.filter((s) => s.grade === '중1' || s.grade === '중2').length}명)`)
 }
 

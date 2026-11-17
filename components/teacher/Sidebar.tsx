@@ -45,8 +45,10 @@ const ITEM = {
   exams:         { href: '/teacher/exams',          label: '평가관리',     icon: 'ti-clipboard-check' },
   // 화면 제목이 「시험대비 관리」인데 메뉴만 「시험배정」이라 서로 달랐다. 화면 쪽에 맞췄다.
   examPrep:      { href: '/teacher/exam-prep',      label: '시험대비',     icon: 'ti-target' },
-  examAnalysis:  { href: '/teacher/exam-analysis',  label: '시험지 분석',  icon: 'ti-file-analytics' },
-  // PDF 한 개를 올려 문제은행 → 수학의지혜 양식 인쇄 → 학생 배정 (원장님 2026-11-17, 고등 강사까지)
+  // 원장님 2026-11-17 「메뉴 "시험지 분석"명을 "기출 모음"으로」. 주소·표 이름(exam_papers 등)은 그대로다.
+  examAnalysis:  { href: '/teacher/exam-analysis',  label: '기출 모음',   icon: 'ti-file-analytics' },
+  // 선생님이 가진 PDF 한 개 → 문제은행 → 수학의지혜 양식 인쇄 → 학생 배정 (원장님 2026-11-17, 고등 강사까지).
+  // ★ 학교 기출은 여기가 아니라 위 「기출 모음」으로 간다.
   pdfWorksheets: { href: '/teacher/pdf-worksheets', label: 'PDF 학습지', icon: 'ti-file-import' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
@@ -78,13 +80,16 @@ const ITEM = {
 //   · 출결관리는 '보고'가 아니라 '학생' 쪽으로 (학생을 보다가 바로 넘어간다)
 //   · 내 기록은 '수업'이 아니라 '보고' 쪽으로 (남이 아니라 내 것을 돌아보는 화면)
 //   · 학습기록 가져오기·대표개념 연결·변경 기록은 가끔 쓰므로 접어 둔다
-function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean, 고등커리큘럼: boolean): NavGroup[] {
+function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean, 고등커리큘럼: boolean, 진급배정판: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
       ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids,
       // 고등 커리큘럼은 원장님과 고등 강사에게만 (원장님 2026-11-16). DB 함수 can_see_high_curriculum 이 정한다.
-      ...(고등커리큘럼 ? [ITEM.highCurriculum, ITEM.moveAssign] : [])] },
+      ...(고등커리큘럼 ? [ITEM.highCurriculum] : []),
+      // 진급 배정판은 **다른 권한**이다 — 초6 담당 선생님도 「초6 → 중등」 탭을 보셔야 한다
+      // (원장님 2026-11-17). docs/sql/진급배정판_권한분리.sql
+      ...(진급배정판 ? [ITEM.moveAssign] : [])] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.career, ITEM.schools] },
     // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
     // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
@@ -119,6 +124,7 @@ export function TeacherSidebar() {
   const [schedRequests, setSchedRequests] = useState(0)
   // 고등 커리큘럼 메뉴 — 원장 또는 재원 고등학생을 맡은 강사 (docs/sql/고등커리큘럼_고등강사만.sql)
   const [highCurriculum, setHighCurriculum] = useState(false)
+  const [moveAssign, setMoveAssign] = useState(false)
 
   useEffect(() => {
     async function fetchBulkSetting() {
@@ -132,6 +138,7 @@ export function TeacherSidebar() {
     if (!currentUser) { setHighCurriculum(false); return }
     let alive = true
     supabase.rpc('can_see_high_curriculum').then(({ data }) => { if (alive) setHighCurriculum(data === true) })
+    supabase.rpc('can_see_move_assign').then(({ data }) => { if (alive) setMoveAssign(data === true) })
     return () => { alive = false }
   }, [currentUser])
 
@@ -152,7 +159,7 @@ export function TeacherSidebar() {
   }, [currentUser, adminMode, pathname])
 
   const showBulk = isAdmin() || bulkEnabled
-  const navGroups = buildNavGroups(isAdmin(), showBulk, canAssignVideos(currentUser), highCurriculum)
+  const navGroups = buildNavGroups(isAdmin(), showBulk, canAssignVideos(currentUser), highCurriculum, moveAssign)
   const mobileMainHrefs = new Set(MOBILE_MAIN.map((i) => i.href))
   const mobileMoreGroups = navGroups
     .map((g) => ({ ...g, items: g.items.filter((i) => !mobileMainHrefs.has(i.href)) }))
