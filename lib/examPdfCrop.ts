@@ -572,7 +572,13 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
           //    ④ 쪽마다 본문 크기가 달라져 ②·③ 이 뒤집히는 파일이 있다 (능곡고 — 번호는
           //       1~23번 모두 11.03pt 로 일정한데 본문이 11.03 → 9.95 → 8.99 로 바뀐다).
           //       그래서 **문서 한 번으로 정한 번호 꼴**(numStyle)도 같이 본다.
+          //    ⑤ 숫자와 점이 **따로** 찍힌 꼴도 있다 — 2026-11-17 덕이고 3번은 「3」(14.03pt) +
+          //       「.」(12.95pt) 두 조각이라 「N.」 꼴에 안 걸려 **그 문항이 통째로 빠졌다**
+          //       (문항 20 · 정답 21 · 번호가 1, 2, 4, 5 … 로 매겨졌다). 수식 글꼴 꼴(번호수식)과
+          //       같은 모양인데 숫자가 그냥 글자인 것이다. 점을 붙여 같은 크기 규칙으로 다시 본다.
+          const 쪼갠점 = !!next && next.x < t.x1 + 8 && next.str.startsWith('.') && /^[0-9]{1,3}$/.test(t.str)
           const 글자번호 = dotNumberOf(t.str, t.size, limit, big) ?? styleNumberOf(t.str, t.size, t.fn, numStyle)
+            ?? (쪼갠점 ? (dotNumberOf(t.str + '.', t.size, limit, big) ?? styleNumberOf(t.str + '.', t.size, t.fn, numStyle)) : null)
           const 번호글자 = 글자번호 !== null
           const 번호 = 번호수식 || 번호글자
           const 논술 = ESSAY_HEAD.test(t.str)
@@ -619,7 +625,7 @@ export async function cropExamPdf(data: ArrayBuffer, onProgress?: (page: number,
             no: ++dotNo, col: c, y0: t.top, y1: t.bottom, top,
             // 논술형 줄은 지우지 않는다 (「[논술형 1-1]」 이 문제의 일부다)
             // 번호 글자만 하얀게 지운다. 수식 꼴은 「번호 + 따로 있는 점」, 글자 꼴은 한 덩어리다.
-            box: 번호수식 ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom]
+            box: (번호수식 || (번호글자 && 쪼갠점)) ? [t.x, t.top, next!.x + next!.size * 0.45, t.bottom]
               : 번호글자 ? [t.x, t.top, t.x1, t.bottom]
                 : undefined,
           })

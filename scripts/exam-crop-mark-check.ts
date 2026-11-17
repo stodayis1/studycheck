@@ -333,5 +333,22 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('머리에 글이 이어 붙어 와도 번호를 읽는다', essayMainOf('[논술형 1] 전체집합') === 1)
 }
 
+// 숫자와 점이 **따로** 찍힌 번호 (2026-11-17 덕이고 3번 · 화수고)
+//   「3」(14.03pt) + 「.」(12.95pt) 두 조각이라 「N.」 꼴에 안 걸려 그 문항이 통째로 빠졌고,
+//   번호가 1, 2, 4, 5 … 로 매겨져 마지막 문항이 밀려 사라졌다(문항 20 · 정답 21).
+{
+  const src9 = fs.readFileSync(libPath, 'utf8')
+  ok('숫자 조각 뒤에 점이 따로 오면 쪼갠 번호로 본다',
+    src9.includes("const 쪼갠점 = !!next && next.x < t.x1 + 8 && next.str.startsWith('.')"))
+  ok('쪼갠 번호도 같은 크기 규칙을 거친다',
+    src9.includes("(쪼갠점 ? (dotNumberOf(t.str + '.', t.size, limit, big) ?? styleNumberOf(t.str + '.', t.size, t.fn, numStyle)) : null)"))
+  ok('쪼갠 번호는 점까지 지운다', src9.includes('box: (번호수식 || (번호글자 && 쪼갠점))'))
+  // 점을 붙여 보면 같은 규칙으로 읽힌다 — 덕이고에서 잰 값 그대로
+  const sizes = [9.95, 9.95, 9.95, 9.95, 14.03, 12.95, 9.95, 9.95]
+  const lim = markLimit(sizes), bg = bigLimit(sizes)
+  ok('「3」 + 「.」 를 붙이면 큰 번호 규칙으로 3 이 된다', dotNumberOf('3' + '.', 14.03, lim, bg) === 3)
+  ok('점을 안 붙이면 아무것도 아니다', dotNumberOf('3', 14.03, lim, bg) === null)
+}
+
 console.log(`\n통과 ${pass} / 전체 ${all}`)
 process.exitCode = pass === all ? 0 : 1
