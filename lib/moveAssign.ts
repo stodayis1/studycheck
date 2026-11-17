@@ -129,6 +129,23 @@ export const WE: Record<string, Slot> = {
     pieces: [['주한', '토', toMin('09:00'), toMin('13:00')], ['주한', '일', toMin('09:00'), toMin('13:00')]] },
 }
 
+/**
+ * **따로 부르는 추가 클리닉** (원장님 2026-11-17 「월수금 클리닉 시간(이규숙쌤)을 8-9시 타임에도
+ * 넣어줘. 근무시간을 9시까지로 잡았거든. 그때 더 남는 애들이나 추가로 부를애들 부르는 것으로 하게」).
+ *
+ * 평일 타임(WD)은 「키움쌤 수업 + 채움쌤 클리닉」이 한 묶음이라, 거기 안 들어가는 이 자리를
+ * 적을 데가 없었다 → **칸을 따로 둔다**(class_move_assign.extra_slot). 비워 두면 안 부르는 것이다.
+ * 반은 그대로 두고 **여기만 더 고르면 된다** — 그래서 고르는 목록이 반과 겹쳐도 괜찮다.
+ */
+export const EXTRA: Record<string, Slot> = {
+  'c-mwf': { t: CLINIC, label: '월·수·금 8~9시 클리닉', det: '채움쌤 20:00~21:00 · 세 날 다',
+    pieces: ['월', '수', '금'].map((d) => [CLINIC, d, toMin('20:00'), toMin('21:00')] as Piece) },
+  'c-mf': { t: CLINIC, label: '월·금 8~9시 클리닉', det: '채움쌤 20:00~21:00',
+    pieces: ['월', '금'].map((d) => [CLINIC, d, toMin('20:00'), toMin('21:00')] as Piece) },
+  'c-w': { t: CLINIC, label: '수 8~9시 클리닉', det: '채움쌤 20:00~21:00',
+    pieces: [[CLINIC, '수', toMin('20:00'), toMin('21:00')] as Piece] },
+}
+
 /** 그 토·일 묶음을 이 선생님 반 학생이 고를 수 있는가 */
 export function weekendPickable(key: string, teacher: string): boolean {
   const g = WE[key]
@@ -141,24 +158,24 @@ export function weekendOwner(key: string): string {
   return g.t === '*' ? g.pieces[0][0] : g.t
 }
 
-/** 한 사람의 모든 조각 (평일 + 토·일) */
-export function piecesOf(weekday?: string | null, weekend?: string | null): Piece[] {
+/** 한 사람의 모든 조각 (평일 + 토·일 + 추가 클리닉) */
+export function piecesOf(weekday?: string | null, weekend?: string | null, extra?: string | null): Piece[] {
   const out: Piece[] = []
-  for (const key of [weekday, weekend]) {
-    const g = (key && (WD[key] || WE[key])) || null
+  for (const key of [weekday, weekend, extra]) {
+    const g = (key && (WD[key] || WE[key] || EXTRA[key])) || null
     if (g) out.push(...g.pieces)
   }
   return out
 }
 /** 칸(요일 · row 부터 span 분)에 그 사람이 있는가 — 칸과 조각이 겹치면 있는 것이다 */
 export function isAt(who: string, day: string, row: string, span: number,
-  weekday?: string | null, weekend?: string | null): boolean {
+  weekday?: string | null, weekend?: string | null, extra?: string | null): boolean {
   const s = toMin(row), e = s + span
-  return piecesOf(weekday, weekend).some(([w, d, a, b]) => w === who && d === day && a < e && b > s)
+  return piecesOf(weekday, weekend, extra).some(([w, d, a, b]) => w === who && d === day && a < e && b > s)
 }
 /** 그 선생님이 그 요일에 일하는가 */
 export function worksOn(who: string, day: string): boolean {
-  for (const g of [...Object.values(WD), ...Object.values(WE)]) {
+  for (const g of [...Object.values(WD), ...Object.values(WE), ...Object.values(EXTRA)]) {
     if (g.pieces.some(([w, d]) => w === who && d === day)) return true
   }
   return false

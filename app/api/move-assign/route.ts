@@ -23,7 +23,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { staffOrDeny } from '@/lib/apiAuth'
-import { WD, WE } from '@/lib/moveAssign'
+import { WD, WE, EXTRA } from '@/lib/moveAssign'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -100,7 +100,7 @@ export async function GET(req: Request) {
     }
 
     let rows = await all(() => db.from('class_move_assign')
-      .select('student_id, track, teacher_name, weekday_slot, weekend_slot').order('student_id'))
+      .select('student_id, track, teacher_name, weekday_slot, weekend_slot, extra_slot').order('student_id'))
     // 「초6 → 중등」만 보는 사람에게는 고등 판 줄도 내려 주지 않는다
     if (!full) rows = rows.filter((r: any) => r.track === '중등')
 
@@ -121,6 +121,7 @@ export async function POST(req: Request) {
   const teacher = String(body?.teacher ?? '')
   const weekday = String(body?.weekday ?? '')
   const weekend = String(body?.weekend ?? '')
+  const extra = String(body?.extra ?? '')
   if (!studentId) return NextResponse.json({ error: '학생을 알 수 없어요.' }, { status: 400 })
   if (track !== '고등' && track !== '중등') return NextResponse.json({ error: '판을 알 수 없어요.' }, { status: 400 })
   // 「초6 → 중등」만 보는 사람은 고등 판을 고칠 수 없다 (화면에도 그 탭이 안 뜬다)
@@ -129,6 +130,7 @@ export async function POST(req: Request) {
   // 없는 타임 열쇠가 들어오면 화면에서 그 학생이 아무 칸에도 안 그려진다 — 여기서 막는다.
   if (weekday && !WD[weekday]) return NextResponse.json({ error: '없는 평일 타임이에요.' }, { status: 400 })
   if (weekend && !WE[weekend]) return NextResponse.json({ error: '없는 토·일 타임이에요.' }, { status: 400 })
+  if (extra && !EXTRA[extra]) return NextResponse.json({ error: '없는 추가 클리닉이에요.' }, { status: 400 })
 
   const db = admin()
   const { error } = await db.from('class_move_assign').upsert({
@@ -137,6 +139,7 @@ export async function POST(req: Request) {
     teacher_name: teacher || null,
     weekday_slot: weekday || null,
     weekend_slot: weekend || null,
+    extra_slot: extra || null,
     updated_at: new Date().toISOString(),
     updated_by_name: name || null,
   }, { onConflict: 'student_id' })
