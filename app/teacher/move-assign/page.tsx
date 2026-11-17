@@ -45,6 +45,9 @@ const DAY_ORDER = ['월', '화', '수', '목', '금', '토', '일']
 export default function MoveAssignPage() {
   const { currentUser } = useAuth()
   const [allowed, setAllowed] = useState<boolean | null>(null)
+  // 두 탭을 다 볼 사람인가. false 면 「초6 → 중등」 탭만 — 초6 담당 선생님(조윤희·윤주희)이다
+  // (원장님 2026-11-17 「전체 인원을 볼 필요가 없어」). 서버도 그분들께는 고등부를 안 내려 준다.
+  const [full, setFull] = useState(false)
   const [tab, setTab] = useState<Track>('고등')
   const [students, setStudents] = useState<Student[]>([])
   const [scheds, setScheds] = useState<Sched[]>([])
@@ -55,13 +58,16 @@ export default function MoveAssignPage() {
   useEffect(() => {
     if (!currentUser) return
     let alive = true
-    supabase.rpc('can_see_high_curriculum').then(({ data }) => { if (alive) setAllowed(data === true) })
+    supabase.rpc('can_see_move_assign').then(({ data }) => { if (alive) setAllowed(data === true) })
+    supabase.rpc('can_see_high_curriculum').then(({ data }) => { if (alive) setFull(data === true) })
     return () => { alive = false }
   }, [currentUser])
 
   useEffect(() => {
     try { const t = localStorage.getItem('ma-tab'); if (t === '고등' || t === '중등') setTab(t) } catch { /* 저장 못 해도 화면은 된다 */ }
   }, [])
+  // 「초6 → 중등」만 보는 분은 어느 탭이 기억돼 있든 그 탭으로
+  useEffect(() => { if (!full) setTab('중등') }, [full])
   function pickTab(t: Track) {
     setTab(t)
     try { localStorage.setItem('ma-tab', t) } catch { /* 무시 */ }
@@ -168,7 +174,7 @@ export default function MoveAssignPage() {
     <div className="min-h-screen bg-gray-50">
       <Header title="진급 배정판" subtitle="중3 → 고등 · 초6 → 중등" />
       <div className="p-10 text-center text-gray-500">
-        {allowed === null ? '불러오는 중…' : '원장님과 고등 담당 선생님만 볼 수 있어요.'}
+        {allowed === null ? '불러오는 중…' : '이 화면을 볼 수 있는 선생님만 들어올 수 있어요. 원장님께 말씀해 주세요.'}
       </div>
     </div>
   )
@@ -179,7 +185,7 @@ export default function MoveAssignPage() {
       <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto">
 
         <div className="flex gap-2">
-          {(['고등', '중등'] as Track[]).map((t) => (
+          {(full ? (['고등', '중등'] as Track[]) : (['중등'] as Track[])).map((t) => (
             <button key={t} onClick={() => pickTab(t)}
               className={cx('px-4 py-2 rounded-xl text-sm font-bold border transition-all',
                 tab === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200')}>
@@ -195,6 +201,9 @@ export default function MoveAssignPage() {
           <b className="text-gray-800">여기서 고른 것은 계획입니다.</b> 저장해도 지금 시간표·담당·브리핑은
           그대로예요 — 진급할 때 옮기는 일은 따로 합니다. 학생과 시간표는 스터디체크에서 그대로 읽어 오니
           원생이 들어오고 나가면 저절로 맞습니다.
+          {!full && (
+            <span className="block mt-1">초6 담당 선생님께는 <b>「초6 → 중등」</b>만 보여요 — 고등부 명단은 내려받지도 않습니다.</span>
+          )}
           <span className="block mt-1 text-gray-400">{loading ? '불러오는 중…' : hint}</span>
         </div>
 

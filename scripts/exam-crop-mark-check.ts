@@ -16,11 +16,12 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const libPath = path.resolve(process.argv[2] ?? 'lib/examPdfCrop.ts')
-const { markLimit, answerBelow, eqText, dotNumberOf } = (await import(pathToFileURL(libPath).href)) as {
+const { markLimit, bigLimit, answerBelow, eqText, dotNumberOf } = (await import(pathToFileURL(libPath).href)) as {
   markLimit: (s: number[]) => number
+  bigLimit: (s: number[]) => number
   answerBelow: (base: number, size: number, bases: number[], y1: number) => boolean
   eqText: (s: string) => string
-  dotNumberOf: (str: string, size: number, limit: number) => number | null
+  dotNumberOf: (str: string, size: number, limit: number, big?: number) => number | null
 }
 
 let pass = 0, all = 0
@@ -115,8 +116,13 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
 }
 {
   const src = fs.readFileSync(libPath, 'utf8')
-  ok('미주 번호가 하나도 없을 때만 「1.」 꼴로 본다', /if \(!ms\.length\) \{[\s\S]{0,600}PUA\.test/.test(src))
+  // 사이 길이를 넉넉히 둔다 — 그 가지 안의 주석이 길어졌다고 검사가 깨지면 안 된다(2026-11-17)
+  ok('미주 번호가 하나도 없을 때만 「1.」 꼴로 본다', /if \(!ms\.length\) \{[\s\S]{0,1400}PUA\.test/.test(src))
   ok('번호가 차례와 다르면 숫자표를 안 쓴다', src.includes('if (read && read !== String(dotNo + 1)) dotOk = false'))
+  // 배점 「[4.9점]」이 줄바꿈으로 단 맨 왼쪽에 내려오면 번호로 읽혔다 (2026-11-17 백양고)
+  ok('줄 맨 앞이 아닌 숫자는 문항 번호가 아니다', src.includes('if (same.some((o) => o.x < t.x - 1 && o.x1 > cols[c][0] - 2)) continue'))
+  // 「1. 정답 ④ 해설…」 에서 정답만 남긴다 (백양고). 안 떼면 해설이 통째로 정답이 된다
+  ok('「정답」이라고 적힌 말을 떼고 동그라미만 남긴다', src.includes('/^(정답|답)'))
   ok('숫자표는 맞을 때만 쓴다', src.includes('dotUsed && dotOk ? eqText(t) : t'))
   ok('논술형 묶음은 한 문항으로 붙인다', src.includes('if (논술 && essayRun) continue'))
   ok('되풀이되는 머리말·쪽 번호를 뺀다', src.includes('!isRunning(t) && t.base > topBand && t.base < botBand'))
@@ -137,10 +143,25 @@ ok('크기 0 인 조각이 섞여도 본문 크기로 본다', markLimit([0, 0, 
   ok('네 자리 숫자는 문항 번호로 안 본다', dotNumberOf('2025.', N, lim) === null)
 }
 
+// ★ 번호가 본문보다 **큰** 작업본 (2026-11-17 고양시 고1 공통수학2 25개교).
+//   그 파일을 재 값 그대로 — 본문 11.03pt · 문항 번호 14.99pt · 해설 쪽 번호 8.75pt.
+{
+  const B = 11.03, N = 14.99, H = 8.75
+  const sizes = [B, B, B, B, N, H, B, B]
+  const lim = markLimit(sizes), big = bigLimit(sizes)
+  ok('고양시 꼴 — 본문보다 큰 「1.」 을 문항 번호로 읽는다', dotNumberOf('1.', N, lim, big) === 1, `작은한계 ${lim.toFixed(2)} · 큰한계 ${big.toFixed(2)}pt`)
+  ok('해설 쪽의 작은 「1.」 도 (작은 쪽 규칙으로) 읽힌다', dotNumberOf('1.', H, lim, big) === 1)
+  ok('본문과 같은 크기의 「12.」 는 문항 번호가 아니다', dotNumberOf('12.', B, lim, big) === null)
+  ok('큰한계를 안 주면 큰 번호는 안 읽힌다(옛 규칙 그대로)', dotNumberOf('1.', N, lim) === null)
+  ok('지축중 꼴(작은 번호)은 큰한계가 있어도 그대로 읽힌다', dotNumberOf('1.', 8.6, markLimit([11.04, 11.04, 8.6, 11.04]), bigLimit([11.04, 11.04, 8.6, 11.04])) === 1)
+}
+
 {
   const src2 = fs.readFileSync(libPath, 'utf8')
   ok('「1.」 꼴 가지가 수식 글꼴도 그냥 글자도 받는다', src2.includes('const 번호 = 번호수식 || 번호글자'))
-  ok('글자 번호는 크기로 가른다', src2.includes('dotNumberOf(t.str, t.size, limit)'))
+  ok('글자 번호는 크기로 가른다(작은 쪽·큰 쪽 둘 다)', src2.includes('dotNumberOf(t.str, t.size, limit, big)'))
+  // 문제 쪽이 「정답표 쪽」으로 걸리면 그 뒤가 통째로 정답이 된다 — 큰 번호는 정답표 줄로 세지 않는다
+  ok('큰 번호는 정답표 줄로 세지 않는다', src2.includes('const lineStarts = items.filter') && src2.includes('&& !(t.size > big))'))
   ok('글자 번호는 번호 덩어리만 지운다', src2.includes('번호글자 ? [t.x, t.top, t.x1, t.bottom]'))
 }
 
