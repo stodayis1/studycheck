@@ -34,15 +34,26 @@ export interface CronProblem {
 /** from: 이 날짜부터 돌기 시작했다 — 그 전 날 기록이 없는 것은 「안 돎」이 아니다. */
 interface Slot { phase: string; label: string; due: (date: string) => string; from?: string }
 
-/** 토요일은 저녁 발송이 오후 6시다 (lib/cronBriefing.ts eveningNotBefore 와 같게). */
+/**
+ * 토요일은 저녁 발송이 오후 6시다 (lib/cronBriefing.ts eveningNotBefore 와 같게).
+ *
+ * ★★ 아래 EVENING_DUE 는 `eveningNotBefore()` 의 **사본**이다. 어긋나면 조용히 안 되는 것이
+ *    아니라 **날마다 거짓 경보가 간다** — 발송은 21:00 에 도는데 여기가 20:00 이면
+ *    30분 넘게 늦은 것으로 보여 「저녁 발송 늦음」 문자가 매일 나간다.
+ *    2026-11-17 에 발송을 21:00 으로 옮기면서 여기를 안 고쳐 하마터면 그럴 뻔했다.
+ *    scripts/briefing-time-check.ts 가 두 사본을 맞춰 본다.
+ */
 const isSaturday = (date: string) => new Date(date + 'T00:00:00Z').getUTCDay() === 6
+
+/** 저녁 발송이 도는 시각 (한국). lib/cronBriefing.ts 의 eveningNotBefore() 와 **같아야 한다**. */
+export const EVENING_DUE = (date: string) => (isSaturday(date) ? '18:00' : '21:00')
 
 /** 매일 돌아야 하는 것과 그 시각(한국). 감시 자신도 넣는다 — 감시가 죽으면 대시보드에 뜬다. */
 export const CRON_SLOTS: Slot[] = [
   { phase: 'premorning', label: '미작성 알림(10:00)', due: () => '10:00' },
   { phase: 'morning', label: '오전 발송(11:00)', due: () => '11:00' },
   { phase: 'watch-noon', label: '점검(12:30)', due: () => '12:30', from: '2026-10-27' },
-  { phase: 'evening', label: '저녁 발송', due: (d) => (isSaturday(d) ? '18:00' : '20:00') },
+  { phase: 'evening', label: '저녁 발송', due: EVENING_DUE },
   { phase: 'watch-night', label: '점검(21:30)', due: () => '21:30', from: '2026-10-27' },
 ]
 
