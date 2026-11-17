@@ -34,7 +34,10 @@ const OPS_ROWS: PlanRow[] = [
   { id: 'daily', label: '데일리테스트', sub: '매 수업', merged: false, lessons: false, style: 'plain', ph: '예: 10문항' },
   { id: 'hw', label: '숙제 양', sub: '수업 1회당', merged: false, lessons: false, style: 'plain', ph: '예: 30문항' },
   { id: 'sat', label: '토요 테스트', sub: '매주 토요일', merged: true, lessons: false, style: 'plain', ph: '범위·문항 수·시간 (예: 그 주 진도 범위, 반별 교재 수준 20문항, 50분)' },
-  { id: 'review', label: '수업 전 대표문제', sub: '매 수업 시작', merged: true, lessons: false, style: 'plain', ph: '지난 시간에 푼 대표문제를 다시 풀고 시작 — 몇 문제, 몇 분, 누가 준비하는지' },
+  // 수업 한 번 = 키움 2시간 + 채움 1시간. 채움을 먼저 듣고 들어오는 학생도 있어서
+  // 채움은 그날 키움이 아니라 **지난 차시 복습**으로 짠다 (원장님 2026-11-17).
+  { id: 'kium', label: '키움 2시간 구성', sub: '새 진도', merged: false, lessons: false, style: 'plain', ph: '예: 개념 40분 · 유형 60분 · 정리 20분' },
+  { id: 'chaeum', label: '채움 1시간 구성', sub: '지난 차시 복습 · 순서 바뀌어도 됨', merged: false, lessons: false, style: 'plain', ph: '예: 지난 차시 대표문제 다시 풀기 20분 · 데일리테스트 15분 · 오답·숙제 점검 25분' },
 ]
 
 export const EXAM_ROWS: PlanRow[] = [
@@ -96,6 +99,8 @@ export const GRADES: Record<GradeKey, { label: string; subjects: string; courses
 
 // 단원 한 줄에 늘 붙는 칸 (차시 칸은 교재 단계마다 따로 생긴다)
 export const UNIT_COLS: [string, string, string][] = [
+  ['kium', '키움 내용 (2시간)', '예: 2.1 개념 + 유형 1~4'],
+  ['chaeum', '채움 내용 (1시간 · 지난 차시 복습)', '예: 지난 차시 대표문제 3개 · 데일리 10문항'],
   ['daily', '데일리테스트', '예: 10문항'],
   ['homework', '숙제', '예: 30문항'],
   ['week', '토요 테스트 주차', '예: 2주차'],
