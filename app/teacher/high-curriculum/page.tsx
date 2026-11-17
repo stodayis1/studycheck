@@ -36,6 +36,12 @@ export default function HighCurriculumPage() {
   const [armed, setArmed] = useState<string | null>(null)
   const queues = useRef<Record<string, Promise<unknown>>>({})
   const pending = useRef(0)
+  // 원장님과 고등 강사만 (원장님 2026-11-16). 진짜 차단은 RLS — docs/sql/고등커리큘럼_고등강사만.sql
+  const [allowed, setAllowed] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!currentUser) return
+    supabase.rpc('can_see_high_curriculum').then(({ data }) => setAllowed(data === true))
+  }, [currentUser])
 
   // 고른 학년·탭 기억 (이 기기에서만)
   useEffect(() => {
@@ -59,13 +65,13 @@ export default function HighCurriculumPage() {
     }
     setLoading(false)
   }
-  useEffect(() => { load(grade) }, [grade])
+  useEffect(() => { if (allowed) load(grade) }, [grade, allowed])
   // 다른 선생님이 고친 것을 보려고, 창으로 돌아올 때 다시 읽는다 (저장 중이면 건너뜀)
   useEffect(() => {
-    const onFocus = () => { if (!pending.current) load(grade) }
+    const onFocus = () => { if (allowed && !pending.current) load(grade) }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [grade])
+  }, [grade, allowed])
 
   const cfg = GRADES[grade]
   const tables: Record<TableKey, PlanRow[]> = {
@@ -124,6 +130,15 @@ export default function HighCurriculumPage() {
   const bookName = (r: PlanRow, tk: string) => (tk === 'common' ? r.all : r[tk as ClassKey]) || ''
   const pickTab = (k: 'common' | ClassKey) => { setTab(k); try { localStorage.setItem('hc-tab', k) } catch { /* */ } }
   const pickGrade = (g: GradeKey) => { setGrade(g); setEdit({ books: false, exam: false }); try { localStorage.setItem('hc-grade', g) } catch { /* */ } }
+
+  if (allowed !== true) return (
+    <div className="min-h-screen bg-gray-50">
+      <Header title="고등 커리큘럼" subtitle="반별 교재 흐름 · 내신 대비 · 단원별 차시" />
+      <div className="p-10 text-center text-gray-500">
+        {allowed === null ? '불러오는 중…' : '원장님과 고등 담당 선생님만 볼 수 있어요.'}
+      </div>
+    </div>
+  )
 
   const busy = loading || !!loadError
   const lr = lessonRows(tab)

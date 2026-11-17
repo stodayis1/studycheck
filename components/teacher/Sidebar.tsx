@@ -28,6 +28,9 @@ const ITEM = {
   visualAids:    { href: '/teacher/visual-aids',    label: '수업 시각화',  icon: 'ti-cube' },
   // 고1·고2 반별 교재 흐름·내신 대비·단원별 차시 (원장님 2026-11-16). 고등 선생님이 같이 고친다.
   highCurriculum: { href: '/teacher/high-curriculum', label: '고등 커리큘럼', icon: 'ti-route' },
+  // 학년이 올라갈 때 누가 어느 선생님·타임으로 가는지 맞춰 보는 판 (원장님 2026-11-17).
+  // 중3 → 고등 · 초6 → 중등 두 장이 한 메뉴 안에 있다. 보이는 사람은 고등 커리큘럼과 같다.
+  moveAssign:    { href: '/teacher/move-assign',    label: '진급 배정판',  icon: 'ti-arrow-ramp-right' },
   students:      { href: '/teacher/students',       label: '학생관리',     icon: 'ti-users' },
   curriculum:    { href: '/teacher/curriculum',     label: '과정관리',     icon: 'ti-books' },
   consultations: { href: '/teacher/consultations',  label: '상담내역',     icon: 'ti-message-circle' },
@@ -73,11 +76,13 @@ const ITEM = {
 //   · 출결관리는 '보고'가 아니라 '학생' 쪽으로 (학생을 보다가 바로 넘어간다)
 //   · 내 기록은 '수업'이 아니라 '보고' 쪽으로 (남이 아니라 내 것을 돌아보는 화면)
 //   · 학습기록 가져오기·대표개념 연결·변경 기록은 가끔 쓰므로 접어 둔다
-function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean): NavGroup[] {
+function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean, 고등커리큘럼: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { title: null, items: [ITEM.dashboard, ITEM.announcements, ITEM.manual] },
     { title: '수업', items: [ITEM.notes, ITEM.weekly, ...(admin ? [] : [ITEM.myClassMap]),
-      ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids, ITEM.highCurriculum] },
+      ...(showBulk ? [ITEM.bulk] : []), ITEM.visualAids,
+      // 고등 커리큘럼은 원장님과 고등 강사에게만 (원장님 2026-11-16). DB 함수 can_see_high_curriculum 이 정한다.
+      ...(고등커리큘럼 ? [ITEM.highCurriculum, ITEM.moveAssign] : [])] },
     { title: '학생', items: [ITEM.students, ITEM.curriculum, ITEM.attendance, ITEM.consultations, ITEM.career, ITEM.schools] },
     // 영상과제 배부는 아직 **쓸 수 있는 분께만** 보인다(학습일지의 영상 칸과 같은 규칙).
     // 메뉴만 보이고 들어가면 못 쓰는 화면이 되면 안 된다.
@@ -108,6 +113,8 @@ export function TeacherSidebar() {
   const [deleteRequests, setDeleteRequests] = useState(0)
   // 선생님이 올린 시간표 변경요청 건수(원장님만) — 같은 이유로 메뉴에 달아 둔다.
   const [schedRequests, setSchedRequests] = useState(0)
+  // 고등 커리큘럼 메뉴 — 원장 또는 재원 고등학생을 맡은 강사 (docs/sql/고등커리큘럼_고등강사만.sql)
+  const [highCurriculum, setHighCurriculum] = useState(false)
 
   useEffect(() => {
     async function fetchBulkSetting() {
@@ -116,6 +123,13 @@ export function TeacherSidebar() {
     }
     fetchBulkSetting()
   }, [])
+
+  useEffect(() => {
+    if (!currentUser) { setHighCurriculum(false); return }
+    let alive = true
+    supabase.rpc('can_see_high_curriculum').then(({ data }) => { if (alive) setHighCurriculum(data === true) })
+    return () => { alive = false }
+  }, [currentUser])
 
   useEffect(() => {
     // 모드를 따른다 — 강사 모드로 보실 때는 강사 화면과 같아야 하고,
@@ -134,7 +148,7 @@ export function TeacherSidebar() {
   }, [currentUser, adminMode, pathname])
 
   const showBulk = isAdmin() || bulkEnabled
-  const navGroups = buildNavGroups(isAdmin(), showBulk, canAssignVideos(currentUser))
+  const navGroups = buildNavGroups(isAdmin(), showBulk, canAssignVideos(currentUser), highCurriculum)
   const mobileMainHrefs = new Set(MOBILE_MAIN.map((i) => i.href))
   const mobileMoreGroups = navGroups
     .map((g) => ({ ...g, items: g.items.filter((i) => !mobileMainHrefs.has(i.href)) }))
