@@ -88,7 +88,8 @@ app/
     high-curriculum/    고등 커리큘럼 (고1·고2 반별 교재 흐름·내신 대비·단원별 차시) — 표: curriculum_plan_docs, 직원만
     exam-analysis/      시험지 분석 (학교별 수합·정답·총평·이너프원 매칭) + 기출문제 → 문제은행 반영
     pdf-worksheets/     PDF 학습지 — 선생님이 가진 PDF 한 개를 잘라 문제은행 → 수학의지혜 양식 인쇄 → 학생 배정
-                        (원장 + 고등 강사. 학교 시험지는 exam-analysis 로 간다 — docs/PDF학습지.md)
+                        (원장 + 고등 강사. ★학교 기출은 여기가 아니다 — exam-analysis 의 「기출 파일
+                        올리기」(기출모음)로 간다. 여기는 모의고사·오답 모음·이전 학원 자료 — docs/PDF학습지.md)
     worksheets/         학습지 출제 첫 화면 (교재연계/문제은행/목적별)  ※원장 전용
       books/            시중교재 고르기
       textbooks/        교과서 (아직 문항 없음)

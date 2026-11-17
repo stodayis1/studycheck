@@ -88,6 +88,34 @@ const row2 = tutorProblemRow({
 })
 ok(row2.is_essay === true && (row2 as any).answer_image_path === 'tutor/S1/1_a.png', '서술형 · 정답 그림이 있으면 그 칸도 보낸다')
 
+console.log('\n■ ★ 학교 기출을 여기로 받는다고 적어 두지 않았는지 (원장님 2026-11-17 「기출은 기출모음에 넣기로 했잖아」)')
+// 기계가 막을 열쇠가 없다 — 학교 이름을 묻지 않으므로. 그래서 **글로 적어 두는 것**이 유일한 막이다.
+// 사람이 읽는 세 자리에 「기출 파일 올리기」로 보내는 말이 있는지, 옛 문구가 되살아나지 않았는지 본다.
+{
+  const fs = await import('node:fs')
+  const WHERE = [
+    ['올리는 화면', 'components/pdf-worksheets/PdfWorksheetBuilder.tsx'],
+    ['목록 화면', 'app/teacher/pdf-worksheets/page.tsx'],
+    ['선생님 매뉴얼', 'app/teacher/manual/page.tsx'],
+  ] as const
+  // ★ **주석을 뺀 뒤** 본다. 주석에만 적어 두면 화면에는 한 줄도 안 뜨는데 검사가 통과한다
+  //   (2026-11-17 에 실제로 그랬다 — 머리말 주석의 글자로 통과했다).
+  const visible = (t: string) => t
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')            // /* … */ · JSDoc
+    .split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n')   // // 한 줄 · 이어지는 * 줄
+    .replace(/\s+\/\/.*$/gm, ' ')                 // 줄 끝 주석
+  for (const [name, file] of WHERE) {
+    const t = visible(fs.readFileSync(file, 'utf8'))
+    ok(t.includes('기출 파일 올리기'), `${name} — 화면에 「기출 파일 올리기」로 보내는 말이 있다 (${file})`)
+    // 옛 문구: 기출도 여기 올려도 된다고 읽힌다
+    ok(!/기출\s*·\s*모의고사/.test(t), `${name} — 「기출 · 모의고사 …」 라고 늘어놓지 않는다`)
+  }
+  const doc = fs.readFileSync('docs/PDF학습지.md', 'utf8')
+  ok(doc.includes('학교 기출 시험지는 여기가 아니다'), 'docs/PDF학습지.md 에 못박은 절이 있다')
+  const exam = fs.readFileSync('docs/시험지분석.md', 'utf8')
+  ok(exam.includes('기출은 기출모음에 넣기로 했잖아'), 'docs/시험지분석.md 쪽에도 가르는 줄이 있다')
+}
+
 console.log('\n■ 제목을 되읽을 수 있어야 한다 — 서버와 인쇄 화면이 title.split(\'-\') 로 세 칸을 되살린다')
 // app/api/pdf-worksheets (action 'question') 와 app/teacher/pdf-worksheets/print 가 둘 다 이렇게 읽는다.
 // 제목 짜는 규칙을 바꾸면 여기서 먼저 걸린다 — 안 걸리면 운영에서 단원명·난이도가 조용히 어긋난다.

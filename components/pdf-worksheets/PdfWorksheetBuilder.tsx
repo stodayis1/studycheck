@@ -8,8 +8,11 @@
 //   ③ 확인              — 제목 세 칸(과정 · 단원명 · 난이도) · 문항 수 · 번호 연속 · 배점
 //   ④ 넣기              — 문항마다 한 번씩 보낸다 → 바로 인쇄 · 배정
 //
+// ★ 학교 기출 시험지는 여기 올리지 않는다 — 「시험지 분석」 현황판의 「기출 파일 올리기」(기출모음)로 간다
+//   (원장님 2026-11-17 「기출은 기출모음에 넣기로 했잖아」). 적중률 · 블로그 · 연도별 찾기가 거기 달려 있다.
+//
 // ★ 자동 자르기는 **한글에서 변환한 2단 작업본**만 읽는다(lib/examPdfCrop.ts — 「시험지 분석」과 같은 코드).
-//   강사가 가진 PDF 는 기출 · 모의고사 · 오답 모음 · 이전 학원 자료라 그 꼴이 아닌 것이 보통이다.
+//   여기 올라오는 PDF 는 모의고사 · 오답 모음 · 이전 학원 자료라 그 꼴이 아닌 것이 보통이다.
 //   그래서 **못 읽어도 막다른 길이 아니다** — 왜 못 읽었는지 적어 주고 손으로 자르기로 보낸다.
 //
 // ★ 쪽 그림을 전부 200dpi 로 들고 있으면 13쪽에서 200MB 가 넘는다. 그래서
@@ -278,7 +281,8 @@ export default function PdfWorksheetBuilder({ onClose, onDone }: { onClose: () =
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f) }} />
               <i className="ti ti-file-type-pdf text-4xl text-gray-400" />
               <div className="mt-3 text-sm font-semibold">PDF 파일을 고르세요</div>
-              <div className="mt-1 text-xs text-gray-500">기출 · 모의고사 · 오답 모음 · 이전 학원 자료 모두 됩니다</div>
+              <div className="mt-1 text-xs text-gray-500">모의고사 · 오답 모음 · 이전 학원에서 만든 자료</div>
+              <div className="mt-1 text-xs font-semibold text-amber-700">학교 기출 시험지는 「시험지 분석」의 「기출 파일 올리기」로 올려 주세요</div>
             </label>
             <div className="mt-5 rounded-xl bg-gray-50 p-4 text-xs leading-relaxed text-gray-600">
               <b className="text-gray-800">어떻게 진행되는지</b>
