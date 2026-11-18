@@ -17,6 +17,7 @@ import {
   findStudents, pickByRule, nameDiffers, isEnoughOne, coreTestRound, isDiagnostic, parseDiagnosticTitle,
   isDailyTest, pickSessionForDaily, parseWorksheetTitle, gradeFromCourse, resolveUnit, isWrongNote,
   prevLevelOf, alreadyIn, needsLevel, rankWorksheets, isClearWinner, matchTextbook, isTextbookLinked,
+  wrongNoteDateOf, unitsOnDate, isWrongSimilar,
   DEFAULT_LEVEL,
   type MatholicRow, type NameRules, type SessionLite, type ConceptRow, type ResolvedUnit,
   type StudentLite, type WsCandidate, type DiagnosticParts,
@@ -65,6 +66,15 @@ export interface MatholicPlan {
    * (원장님 2026-11-02 「이전 레벨 학습지의 레벨과 동일하게 해줘」).
    */
   prevLevel?: number | null
+  /**
+   * 오답 학습지일 때 — **제목의 그 날짜에 푼** 레벨학습지 단원 이름들 (원장님 2026-11-18
+   * 「그 단원에 대한 오답, 오답유사가 되도록 붙여주면 됨」). 못 찾으면 빈 배열이다.
+   */
+  wrongUnits?: string[]
+  /** 오답유사인가 (제목에 「유사」) — 이름을 「… 오답유사」로 붙인다 */
+  wrongSimilar?: boolean
+  /** 오답 제목에서 읽은 날짜 — 화면에 「11/16 것」으로 적어 준다 */
+  wrongDate?: string | null
   mode: Mode
   /** 왜 이렇게 골랐는지 — 화면에 그대로 보여 준다 */
   why: string
@@ -178,7 +188,9 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
   //   (원장님 2026-11-06 「주간평가는 평가로 들어가야해」 · 2026-11-07 「주말복습 테스트는
   //    평가관리.진단평가로 가야해」). 코어테스트(월간평가)를 먼저 본 뒤라야 새지 않는다.
   if (isDiagnostic(row)) {
-    const d = parseDiagnosticTitle(row.title)
+    // ★ 학생 이름을 같이 넘긴다 — 제목 끝에 이름을 적어 보내시는 선생님이 있어서
+    //   단원 칸에 학생 이름이 박혔다 (2026-11-17 조하윤). parseDiagnosticTitle 참고.
+    const d = parseDiagnosticTitle(row.title, picked.name)
     const already = ctx.examByKey.get(`${sid}|${row.date}|${d.unitName ?? ''}`)
     if (already != null) {
       return { row, students, studentId: sid, candidates: [], wsId: null, sessionId: null, coreRound: null, unit: null, exam: d,
@@ -200,9 +212,15 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
   const list = ctx.wsByStudent.get(sid) ?? []
   // ★ 오답 학습지는 레벨을 물려받는다 — 그 날짜까지의 마지막 레벨학습지를 찾아 둔다.
   const prevLevel = isWrongNote(row) ? prevLevelOf(list, row.date) : null
+  // ★ 오답은 제목에 단원이 없고 **날짜**만 있다 — 그 날짜에 푼 학습지에서 단원을 가져온다
+  //   (원장님 2026-11-18). 못 찾으면 빈 배열이고, 그때는 적힌 글자에 「오답」만 붙인다.
+  const wrongDate = isWrongNote(row) ? wrongNoteDateOf(row.title ?? '', row.date) : null
+  const wrongUnits = wrongDate ? unitsOnDate(list, wrongDate) : []
+  const wrongSimilar = isWrongNote(row) ? isWrongSimilar(row) : false
+  const 오답꾸러미 = { wrongUnits, wrongSimilar, wrongDate }
   // 이미 넣은 것인가 — 같은 점수·같은 날짜면 다시 넣지 않는다
   const dup = list.find((w) => alreadyIn(row, w))
-  if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, unit, prevLevel, mode: 'done', why: tag('이미 들어가 있어요') }
+  if (dup) return { row, students, studentId: sid, candidates: [dup], wsId: dup.id, sessionId: null, coreRound: null, unit, prevLevel, ...오답꾸러미, mode: 'done', why: tag('이미 들어가 있어요') }
 
   // ★ 학습지는 **레벨학습지**다 (원장님 2026-10-29 「반드시 레벨이 제목에 있어야」).
   //    레벨 없이 들어가면 레벨 현황판과 초등 70점 규칙이 조용히 멈춘다.
@@ -216,7 +234,7 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
   const ranked = rankWorksheets(row, list, unit, ctx.books)
   if (isClearWinner(ranked)) {
     return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: ranked[0].ws.id,
-      sessionId: null, coreRound: null, unit, prevLevel, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
+      sessionId: null, coreRound: null, unit, prevLevel, ...오답꾸러미, mode: 'fill', why: tag(ranked[0].why.join(' · ')) }
   }
   // 교재 이름으로 걸린 것은 **어느 교재인지** 적어 준다 — 레벨이 없어도 들어가므로
   // 「왜 레벨 없이 들어갔지」를 사람이 바로 알 수 있어야 한다.
@@ -231,9 +249,14 @@ export function planRow(row: MatholicRow, ctx: PlanContext): MatholicPlan {
   const 쓸레벨 = isWrongNote(row) ? (prevLevel ?? row.level) : row.level
   const 레벨말 = 쓸레벨 == null ? ` · 레벨이 없어 Lv${DEFAULT_LEVEL} 로 넣습니다` : ''
   // 오답은 제목에 「오답학습지」가 들어가고 레벨을 물려받는다 — 화면에 그대로 적어 보여 준다.
+  // 오답은 **그 날짜 단원 이름**을 붙이고 레벨을 물려받는다 — 화면에 그대로 적어 보여 준다.
+  //   단원을 못 찾은 것도 적는다. 조용히 날짜만 들어가면 왜 그런지 알 수가 없다.
   const 오답말 = isWrongNote(row)
-    ? ` · 오답학습지로 넣습니다 (레벨 ${prevLevel ?? row.level ?? '없음'}${prevLevel != null ? ' 물려받음' : ''})`
+    ? ` · ${wrongUnits.length
+        ? `「${wrongUnits.slice(0, 2).join('·')}${wrongUnits.length > 2 ? ` 외 ${wrongUnits.length - 2}개` : ''} ${wrongSimilar ? '오답유사' : '오답'}」로 넣습니다`
+        : `오답${wrongSimilar ? '유사' : ''}학습지로 넣습니다 (${wrongDate ?? '날짜 없음'} 에 푼 학습지를 못 찾아 단원을 붙이지 못했어요)`}`
+      + ` (레벨 ${prevLevel ?? row.level ?? '없음'}${prevLevel != null ? ' 물려받음' : ''})`
     : ''
   return { row, students, studentId: sid, candidates: ranked.map((r) => r.ws), wsId: null, sessionId: null,
-    coreRound: null, unit, prevLevel, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 교재말 + 오답말 + 레벨말) }
+    coreRound: null, unit, prevLevel, ...오답꾸러미, mode: 'new', why: tag((ranked.length ? '비슷한 것이 여럿이라 새로 만듭니다 (바꿀 수 있어요)' : '붙일 학습지가 없어 새로 만듭니다') + 교재말 + 오답말 + 레벨말) }
 }

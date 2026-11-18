@@ -186,6 +186,10 @@ async function main() {
   }
   const r = await applyPlans(db, plans, { teacherName: TEACHER, books: ctx.books })
   console.log(`\n넣었습니다 — 학습일지 ${r.daily} · 코어테스트 ${r.core} · 진단평가 ${r.exam} · 점수 채움 ${r.filled} · 새 학습지 ${r.created}`)
+  if (r.triggerBlocked) {
+    console.log(`  ※ ${r.triggerBlocked}건은 점수만 넣고 닫지 못했습니다`
+      + ' — docs/sql/학습지_자동완료.sql 을 아직 안 돌렸어요.')
+  }
   if (r.failed.length) {
     console.log(`실패 ${r.failed.length}건:`)
     for (const f of r.failed) console.log('  ✗ ' + f)

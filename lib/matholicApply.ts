@@ -10,7 +10,7 @@
  * ★ 한 건이 실패해도 나머지는 계속 간다. 실패한 것은 이름을 남긴다.
  */
 import { unitNameBeside } from './worksheetTitle'
-import { statusAfterScore } from './worksheetStatus'
+import { statusAfterScore, blockedByTrigger } from './worksheetStatus'
 import {
   parseWorksheetTitle, gradeFromCourse, isWrongNote, wrongNoteFix, levelForInsert, worksheetTypeOf,
 } from './matholic'
@@ -32,6 +32,11 @@ export interface ApplyResult {
   created: number
   /** 실패한 줄 — 「이름 날짜 점수 — 까닭」 */
   failed: string[]
+  /**
+   * DB 트리거(초등 70점 미만 막이)에 막혀 **닫지 못하고 점수만** 넣은 수.
+   * 0 이 아니면 `docs/sql/학습지_자동완료.sql` 을 아직 안 돌린 것이다 — 화면이 그렇게 적는다.
+   */
+  triggerBlocked: number
 }
 
 export async function applyPlans(
@@ -40,7 +45,7 @@ export async function applyPlans(
   opts: { teacherName?: string | null; books: string[] },
 ): Promise<ApplyResult> {
   const { teacherName = null, books } = opts
-  let daily = 0, core = 0, exam = 0, filled = 0, created = 0
+  let daily = 0, core = 0, exam = 0, filled = 0, created = 0, triggerBlocked = 0
   const failed: string[] = []
 
   for (const p of plans) {
@@ -95,30 +100,26 @@ export async function applyPlans(
         exam++
       } else if (p.mode === 'fill' && p.wsId) {
         // ★ 점수가 들어오면 **그 자리에서 닫는다**(passed) — 선생님이 「완료」를 또 누르지
-        //   않게 (원장님 2026-11-14). 다만 **사람이 골라야 하는 두 자리는 열어 둔다**:
-        //   초등 본 학습지 70점 미만 · 초등 오답유사(원래가 70점 미만). statusAfterScore 참고.
-        //   ★ 초등 70점 미만을 passed 로 올리면 DB 트리거가 **에러로 막아** 긁어 넣기가
-        //     통째로 멈춘다. 그래서 막는 선을 트리거와 같은 줄로 맞췄다.
-        const { data: cur } = await db.from('student_worksheets')
-          .select('worksheet_type, grade_level, parent_worksheet_id').eq('id', p.wsId).maybeSingle()
-        let parentScore: number | null | undefined = undefined
-        if (cur?.worksheet_type === 'similar' && cur?.parent_worksheet_id) {
-          const { data: par } = await db.from('student_worksheets')
-            .select('score').eq('id', cur.parent_worksheet_id).maybeSingle()
-          parentScore = par?.score ?? null
+        //   않게 (원장님 2026-11-14). 2026-11-18 부터는 **예외가 없다**
+        //   (「다 닫자 — 재도전 배정 안 함」). 규칙은 lib/worksheetStatus.ts 한 곳에 있다.
+        const next = statusAfterScore({ score: p.row.score })
+        const 적을것 = {
+          score: p.row.score, submitted_at: `${p.row.date}T12:00:00+09:00`,
+          // 닫을 때는 「누가 눌렀나」를 처리 기록에 남긴다 — 사람이 누른 것과 가르려고 따로 쓴다.
+          ...(next === 'passed' ? { last_action: 'auto_complete', updated_at: new Date().toISOString() } : {}),
         }
-        const next = statusAfterScore({
-          worksheet_type: cur?.worksheet_type, grade_level: cur?.grade_level,
-          score: p.row.score, parentScore,
-        })
         const { error } = await db.from('student_worksheets')
-          .update({
-            score: p.row.score, status: next, submitted_at: `${p.row.date}T12:00:00+09:00`,
-            // 닫을 때는 「누가 눌렀나」를 처리 기록에 남긴다 — 사람이 누른 것과 가르려고 따로 쓴다.
-            ...(next === 'passed' ? { last_action: 'auto_complete', updated_at: new Date().toISOString() } : {}),
-          })
-          .eq('id', p.wsId)
-        if (error) throw new Error(error.message)
+          .update({ ...적을것, status: next }).eq('id', p.wsId)
+        if (error) {
+          // ★ DB 트리거(초등 70점 미만 막이)가 아직 안 풀렸을 때 — 점수 채우기가 통째로
+          //   멈추면 그날 점수가 하나도 안 들어간다. 예전 동작('scored')으로 되돌려
+          //   **점수만은 반드시 남긴다.** docs/sql/학습지_자동완료.sql 을 돌리면 없어진다.
+          if (!blockedByTrigger(error.message)) throw new Error(error.message)
+          const { error: e2 } = await db.from('student_worksheets')
+            .update({ ...적을것, status: 'scored', last_action: null }).eq('id', p.wsId)
+          if (e2) throw new Error(e2.message)
+          triggerBlocked++
+        }
         filled++
       } else if (p.mode === 'new' && p.studentId) {
         // ★ 단원과 레벨을 **칸에 제대로** 넣는다. 제목을 통째로 unit_name 에 넣으면
@@ -134,7 +135,10 @@ export async function applyPlans(
         // ★ 오답 학습지 — 제목에 「오답학습지」를 넣고 레벨은 직전 레벨학습지와 같게
         //   (원장님 2026-11-02). 학부모 브리핑과 레벨 현황판이 이 두 칸만 읽는다.
         if (isWrongNote(p.row)) {
-          const fixed = wrongNoteFix(unitNameCell ?? unitCell, p.row.level, p.prevLevel ?? null)
+          // ★ 2026-11-18 — 제목의 **그 날짜에 푼 단원**을 붙인다 (planRow 가 찾아 둔다).
+          //   못 찾았으면 빈 배열이고, 그때는 적힌 글자에 「오답」만 붙는다 — 지어내지 않는다.
+          const fixed = wrongNoteFix(unitNameCell ?? unitCell, p.row.level, p.prevLevel ?? null,
+            { units: p.wrongUnits ?? [], similar: !!p.wrongSimilar })
           unitNameCell = fixed.unitName
           levelCell = fixed.level
         }
@@ -174,5 +178,5 @@ export async function applyPlans(
     } catch (e: any) { failed.push(`${label} — ${e?.message ?? '실패'}`) }
   }
 
-  return { daily, core, exam, filled, created, failed }
+  return { daily, core, exam, filled, created, failed, triggerBlocked }
 }

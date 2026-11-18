@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cx, formatConceptRangeLabel, fetchAllRows } from '@/lib/utils'
 import { splitTeachers } from '@/lib/teachers'
 import { unitNameBeside } from '@/lib/worksheetTitle'
-import { statusAfterScore } from '@/lib/worksheetStatus'
+import { statusAfterScore, blockedByTrigger } from '@/lib/worksheetStatus'
 
 interface Student {
   id: string
@@ -597,29 +597,24 @@ export default function TeacherAssignmentsPage() {
     const score = parseInt(inputScore)
     if (isNaN(score) || score < 0 || score > 100) { alert('0~100 사이 점수를 입력해주세요.'); return }
     setSavingScore(true)
-    // 점수만 저장하고, 다음 액션(레벨업/재도전/오답유사/완료)은 선생님이 직접 선택
-    const { error } = await supabase.from('student_worksheets').update({ score, status: 'scored' }).eq('id', scoreWS.id)
-    if (error) { setSavingScore(false); alert('점수 저장 실패: ' + error.message); return }
-    // 초등 오답유사: 원래 학습지가 70점 미만이었다면 오답유사 점수와 상관없이 같은 레벨 재도전을 자동 배정
-    let parentScore: number | null | undefined = undefined
-    if (scoreWS.worksheet_type === 'similar' && (scoreWS.grade_level ?? '').startsWith('초')) {
-      parentScore = null
-      if (scoreWS.parent_worksheet_id) {
-        const { data } = await supabase.from('student_worksheets').select('score').eq('id', scoreWS.parent_worksheet_id).maybeSingle()
-        parentScore = data?.score ?? null
-      }
-      if (parentScore == null || parentScore < PASS_SCORE) {
-        await handleRetry({ ...scoreWS, score, status: 'scored' }, 'auto_retry')
-        setSavingScore(false); setShowScoreModal(false); setInputScore('')
-        return
-      }
-    }
     // ★ 점수가 들어왔으면 **그 자리에서 닫는다** (원장님 2026-11-14 「굳이 완료까지 눌러야
-    //   없어지거든 … 완료처리 되게 하면 어떨까」). 사람이 골라야 하는 자리만 열어 둔다 —
-    //   초등 본 학습지 70점 미만(위 규칙·DB 트리거가 막는 줄)과 초등 오답유사(바로 위에서
-    //   이미 재도전으로 빠진다). 규칙 한 벌은 lib/worksheetStatus.ts 에 있다.
-    if (statusAfterScore({ worksheet_type: scoreWS.worksheet_type, grade_level: scoreWS.grade_level, score, parentScore }) === 'passed') {
-      await closeWorksheet({ ...scoreWS, score, status: 'scored' }, 'auto_complete')
+    //   없어지거든 … 완료처리 되게 하면 어떨까」). 2026-11-18 부터는 **예외가 없다** —
+    //   원장님 「다 닫자 — 재도전 배정 안 함」. 초등 70점 미만도 닫고, 초등 오답유사에
+    //   붙던 **자동 재도전 배정도 없앴다**(재도전 학습지는 매쓰홀릭에서 내시고 긁혀 들어온다).
+    //   규칙 한 벌은 lib/worksheetStatus.ts 에 있다.
+    const next = statusAfterScore({ score })
+    const 적을것 = next === 'passed'
+      ? { score, status: 'passed', updated_at: new Date().toISOString(), last_action: 'auto_complete' }
+      : { score, status: 'scored' }
+    const { error } = await supabase.from('student_worksheets').update(적을것).eq('id', scoreWS.id)
+    if (error) {
+      // ★ DB 트리거(초등 70점 미만 막이)가 아직 안 풀렸을 때 — 점수는 반드시 남긴다.
+      //   docs/sql/학습지_자동완료.sql 을 돌리면 없어진다.
+      if (!blockedByTrigger(error.message)) { setSavingScore(false); alert('점수 저장 실패: ' + error.message); return }
+      const { error: e2 } = await supabase.from('student_worksheets')
+        .update({ score, status: 'scored' }).eq('id', scoreWS.id)
+      if (e2) { setSavingScore(false); alert('점수 저장 실패: ' + e2.message); return }
+      alert('점수는 저장했지만 완료로 닫지 못했어요.\n원장님께 「학습지_자동완료.sql 을 돌려 주세요」라고 알려 주세요.')
     }
     setSavingScore(false); setShowScoreModal(false); setInputScore(''); fetchData()
   }
