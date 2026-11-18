@@ -17,7 +17,7 @@ import { buildTeacherColors, mainTeacher } from '@/lib/teacherColors'
 import { findMissingNotes } from '@/lib/missingNotes'
 import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
-import { splitTeachers, teachersOf, teacherLabels } from '@/lib/teachers'
+import { splitTeachers, teachersOf, teacherLabels, visibleInSupervisorMode } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
 import { buildBriefing, BODY_LIMIT, diagnosticLabel } from '@/lib/briefing'
 import { pickExamPrep, EXAM_PREP_TITLE } from '@/lib/examPrepResult'
@@ -183,7 +183,7 @@ function PctPicker({ value, onChange, disabled }: { value: number | null; onChan
 }
 
 export default function TeacherLearningNotesPage() {
-  const { currentUser, isAdmin, isSupervisorModeActive, supervisorLabel, supervisorScope } = useAuth()
+  const { currentUser, isAdmin, isSupervisorModeActive, supervisorLabel, supervisorGrades } = useAuth()
   const searchParams = useSearchParams()
   const deepLinkedStudentId = searchParams.get('student')
   const deepLinkOpenedRef = useRef(false)
@@ -1045,11 +1045,12 @@ export default function TeacherLearningNotesPage() {
   //   예전엔 「isEditable(s) || 담당 학년」이라 중등주임 화면에 내 초6·고1 학생이
   //   같이 떴다(원장님 지적 2026-10-09). 내 학생 전부를 보려면 강사모드로 바꾼다.
   const myStudents = students.filter((s) => {
-    if (isSupervisorModeActive()) {
-      const scope = supervisorScope(s.grade)
-      if (!scope) return false
-      return scope === 'scope' || isEditable(s)
-    }
+    // ★ 주임모드라도 **내 담당 학생은 늘 보인다** (원장님 2026-11-18).
+    //   전에는 학년을 먼저 보고 담당인지 묻지도 않고 숨겨서, 중등주임 신애진 선생님이
+    //   손예원(초6) 담당으로 적혔는데도 이 화면에 안 떴다. 12월 진급으로 초6 을 중등
+    //   선생님께 옮기는 동안 계속 걸릴 자리라 순서를 뒤집었다.
+    //   규칙은 lib/teachers.ts 의 visibleInSupervisorMode 한 곳에 있다.
+    if (isSupervisorModeActive()) return visibleInSupervisorMode(supervisorGrades, s.grade, isEditable(s))
     return isEditable(s)
   })
   // ★ 주임모드에서는 학년별 색 대신 **강사별 색**으로 가른다. 주임 선생님은 세 강사의
