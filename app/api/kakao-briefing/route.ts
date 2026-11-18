@@ -37,7 +37,7 @@ import { sendSmsViaOps } from '@/lib/opsSms'
 import { buildBriefing, diagnosticLabel } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
-import { isExamAbsence } from '@/lib/attendance'
+import { briefingBlockFor, blocksPreviewToo } from '@/lib/briefingBlock'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 import { mainTeacherOf } from '@/lib/teachers'
 
@@ -84,6 +84,8 @@ export interface BriefingSummary {
   skippedNoRecord: { name: string }[]
   /** 시험기간 결석이라 일부러 안 보낸 학생 */
   skippedExam: { name: string }[]
+  /** 결석이라 일부러 안 보낸 학생 (원장님 2026-11-18) */
+  skippedAbsent?: { name: string }[]
   /** 연습용(가짜) 학생이라 일부러 안 보낸 학생 */
   skippedTest?: { name: string }[]
   /** 밤 9시에 「출결만 찍혀 있어」 다음 날 오전 11시로 미룬 학생 */
@@ -104,6 +106,8 @@ export interface BriefingSummary {
     alreadySent?: boolean
     /** 출결 말고 적힌 것이 없는 건 — 밤 9시 자동 발송에서는 다음 날 11시로 미뤄진다. */
     thin?: boolean
+    /** 결석이라 학부모님께는 안 나간다 (원장님 2026-11-18). 목록에는 사유와 함께 보인다. */
+    absent?: boolean
   }[]
   /** 「선생님께 보내기」에서 고를 수 있는 분 — 원장·주임 (담당 강사는 줄마다 따로) */
   staffOptions?: { admins: string[]; supervisors: string[] }
@@ -149,7 +153,7 @@ async function run(opts: {
   const { date, dryRun } = opts
   const out: BriefingSummary = {
     date, dryRun, sent: 0, failed: 0, skippedAlreadySent: 0,
-    skippedNoPhone: [], skippedNoRecord: [], skippedExam: [], skippedThin: [], skippedTest: [], errors: [], previews: [],
+    skippedNoPhone: [], skippedNoRecord: [], skippedExam: [], skippedAbsent: [], skippedThin: [], skippedTest: [], errors: [], previews: [],
   }
 
   let q = db.from('class_sessions').select('*').eq('session_date', date)
@@ -312,14 +316,33 @@ async function run(opts: {
     //   적혀 있다 — 그대로 두면 선생님 휴대폰으로 학부모 브리핑이 간다.
     //   조용히 거르지 않고 **「연습용」으로 세어 보여 준다** — 빠진 것과 구분돼야 한다.
     if (student.is_test) { out.skippedTest!.push({ name: student.name }); continue }
-    if (!note || !note.attendance) { out.skippedNoRecord.push({ name: student.name }); continue }
+    // ★ 출결로 막히는 사유는 **lib/briefingBlock.ts 한 곳**에서 정한다 (2026-11-18).
+    //   세 가지로 늘어서 if 를 늘어놓으면 한 줄이 조용히 빠져도 에러가 안 난다.
+    const 막힘 = briefingBlockFor(note?.attendance)
+    if (막힘 === 'noRecord') { out.skippedNoRecord.push({ name: student.name }); continue }
     // ★ 시험기간은 **아예 보내지 않는다**(원장님 결정 2026-10-08).
     //   중·고등은 시험기간에 학원을 안 나와도 봐주시는데, 그걸 「결석」으로 통보하면
     //   학부모도 아는 상황을 굳이 들춰 보는 꼴이 된다. 보낼 내용도 없다.
-    if (isExamAbsence(note.attendance)) { out.skippedExam.push({ name: student.name }); continue }
+    if (막힘 === 'exam') { out.skippedExam.push({ name: student.name }); continue }
+    // ★ 결석도 **아예 보내지 않는다** (원장님 2026-11-18 「결석인 친구는 아예 내보내지말자」).
+    //   그때까지는 보냈다 — 10/07 에 결석 17명이 진도·과제 빈칸으로 나가 「선생님이 안 적었나」로
+    //   읽히는 일이 있어서, 빈칸 대신 「결석으로 수업에 참여하지 못했습니다」로 채워 보내게 했다.
+    //   그런데 채워 봐도 학부모가 이미 아는 사실 한 줄이고, 알림톡은 건당 요금이 든다
+    //   (11/18 에 12건 나갔다). 보강 예약 안내는 금요일 문자로 따로 가므로 빠지는 말도 없다.
+    //   ★ 일지는 그대로 쓴다 — 미작성 판정·결석률·보강 명단은 하나도 안 바뀐다. 발송만 막는다.
+    //
+    //   ★★ **미리보기(dryRun)에서는 거르지 않는다.** 아래 runTeacherSample 이
+    //   `previews` 의 `attendance === '결석'` 을 보고 「그날 담당 학생이 모두 결석이라
+    //   보낼 글이 없어요」를 알린다. 여기서 통째로 빼 버리면 그 선생님이 **아무 사유도 없이**
+    //   샘플 목록에서 사라진다(조용히 틀리는 쪽이다). 미리보기에는 남기고 「보낼 대상」에서만 뺀다.
+    const 결석제외 = 막힘 === 'absent'
+    if (결석제외 && (!dryRun || blocksPreviewToo(막힘))) {
+      out.skippedAbsent!.push({ name: student.name }); continue
+    }
 
     // ★ 밤 9시 1차 — 출결 말고 **적힌 것이 하나라도** 있어야 보낸다.
-    //   결석은 그 자체가 할 말이라(보강 안내가 붙는다) 이 기준을 쓰지 않는다.
+    //   (결석은 위에서 이미 빠지므로 아래 `!== '결석'` 은 지금은 늘 참이다.
+    //    결석을 다시 보내기로 되돌릴 때 이 줄이 필요해 그대로 둔다.)
     const 껍데기 = note.attendance !== '결석'
       && !([ses.progress_content, ses.today_textbook_name, ses.today_chapter,
             ses.hw_textbook_name, ses.hw_textbook_page, ses.hw_worksheet_range,
@@ -374,8 +397,13 @@ async function run(opts: {
         alreadySent: already,
         // 출결 말고는 아무것도 안 적힌 건 — 밤 9시 자동 발송에서는 다음 날로 미뤄진다.
         thin: 껍데기,
+        // 결석이라 학부모께는 안 나간다 — 화면에 사유로 적어 준다.
+        absent: 결석제외,
       })
-      if (already) out.skippedAlreadySent++
+      // ★ 결석은 「보낼 대상」에 세지 않는다. 세면 미리보기 머리글이 실제보다 많아져서,
+      //   원장님이 보낸 뒤 「왜 N명이 빠졌나」를 다시 세게 된다.
+      if (결석제외) out.skippedAbsent!.push({ name: student.name })
+      else if (already) out.skippedAlreadySent++
       else out.sent++
       continue
     }

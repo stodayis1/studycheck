@@ -15,7 +15,12 @@
 //   · 휴원·퇴원 학생 — is_active 로 이미 걸러진다
 //   · **학습일지를 안 쓰는 학생**(skip_lesson_note) — 수업에는 오지만 일지를 쓰지 않는다
 //     (원장님 2026-10-17: 이윤경 고3 — 「시간표에만 뜨고 학습일지는 안뜨게」)
+//
+// 거꾸로 **시간표에 없는데 그날 온** 학생도 있다 — 진급 이동 중이라 아직 시간표를 확정하지
+// 않은 학생, 보강으로 하루 온 학생. 그건 `one_day_classes`(하루 수업)에 적는다.
+// 시간표에 넣으면 매주 떠 버리니까(원장님 2026-11-18 「오늘 하루만」). 규칙은 lib/oneDayClass.ts.
 import { fetchMovedAway } from './opsMovedAway'
+import { fetchOneDayClasses } from './oneDayClass'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -30,6 +35,8 @@ export interface ExpectedResult {
   beforeFirst: number
   /** 학습일지를 안 쓰기로 한 학생 id — 기록이 남아 있어도 미작성으로 세지 않는다 */
   skipNote: string[]
+  /** 시간표엔 없지만 그날 하루 수업으로 더해진 학생 수 */
+  oneDay: number
 }
 
 /**
@@ -47,11 +54,12 @@ export async function expectedStudentsOn(
     db.from('academy_closures').select('date, memo').eq('date', date),
   ])
   const closed = (hs ?? [])[0]?.name ?? (cs ?? [])[0]?.memo ?? ((cs ?? []).length ? '학원 휴원일' : null)
-  if (closed) return { ids: [], closed, movedAway: 0, beforeFirst: 0, skipNote: [] }
+  if (closed) return { ids: [], closed, movedAway: 0, beforeFirst: 0, skipNote: [], oneDay: 0 }
 
-  const [{ data: sch }, { data: students }] = await Promise.all([
+  const [{ data: sch }, { data: students }, oneDayRows] = await Promise.all([
     db.from('schedules').select('student_id, is_active').eq('day_of_week', dow),
     db.from('students').select('id, first_class_date, skip_lesson_note, is_test').eq('is_active', true),
+    fetchOneDayClasses(db, date),
   ])
   // ★ 첫 수업 전인 학생은 뺀다. 첫 수업일이 비어 있으면 **빼지 않는다** —
   //   값이 없다고 수업을 안 한다고 볼 수는 없으니 안전한 쪽(다 센다)으로 기운다.
@@ -75,5 +83,18 @@ export async function expectedStudentsOn(
   const before = ids.length
   ids = ids.filter((id) => !movedIds.has(id))
 
-  return { ids, closed: null, movedAway: before - ids.length, beforeFirst: notYet.size, skipNote }
+  // ★ 하루 수업은 **대체수업 제외 뒤에** 더한다. 선생님이 「오늘 왔어요」를 직접 누른 것이니
+  //   OPS 의 대체수업 기록보다 이쪽이 맞다 — 옮겨 놓고 그날 또 온 경우까지 빠지면
+  //   그 학생 일지는 아무도 쓰라는 말을 못 듣는다.
+  //   거르는 조건(휴원·첫 수업 전·일지 안 쓰는 학생·연습용)은 시간표와 똑같이 적용한다.
+  const already = new Set(ids)
+  // 못 읽었으면(null) 「없다」로 다룬다 — 이쪽은 곁들이는 정보라 전체를 멈추지 않는다.
+  const addedOneDay = [...new Set((oneDayRows ?? []).map((o) => o.student_id))]
+    .filter((id) => live.has(id) && !notYet.has(id) && !skipSet.has(id) && !already.has(id))
+  ids = [...ids, ...addedOneDay]
+
+  return {
+    ids, closed: null, movedAway: before - (ids.length - addedOneDay.length),
+    beforeFirst: notYet.size, skipNote, oneDay: addedOneDay.length,
+  }
 }

@@ -19,6 +19,7 @@ import { buildSessionIndex, buildNoteIndex } from '@/lib/noteIndex'
 import { computeTextbookLevels } from '@/lib/progressLevel'
 import { splitTeachers, teachersOf, teacherLabels, visibleInSupervisorMode } from '@/lib/teachers'
 import { expectedStudentsOn } from '@/lib/expectedToday'
+import { fetchOneDayClasses, slotFor, ONE_DAY_TABLE, type OneDayClass } from '@/lib/oneDayClass'
 import { buildBriefing, BODY_LIMIT, diagnosticLabel } from '@/lib/briefing'
 import { pickExamPrep, EXAM_PREP_TITLE } from '@/lib/examPrepResult'
 import { LessonVideoPicker } from '@/components/teacher/LessonVideoPicker'
@@ -792,6 +793,15 @@ export default function TeacherLearningNotesPage() {
   // 시간표 모달
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [scheduleStudent, setScheduleStudent] = useState<Student | null>(null)
+  // ★ 「오늘 하루만 온 수업」 (원장님 2026-11-18). 시간표엔 없지만 그날 온 학생을
+  //   오늘 목록에 띄운다 — 진급 이동 중이라 시간표를 아직 확정하지 않은 학생, 보강으로
+  //   하루 온 학생. 규칙은 lib/oneDayClass.ts 한 곳에 있다.
+  const [oneDayRows, setOneDayRows] = useState<OneDayClass[]>([])
+  // 표를 읽을 수 있나 — 아직 SQL 을 안 돌렸으면 「오늘 왔어요」 단추를 아예 안 보인다.
+  const [oneDayReady, setOneDayReady] = useState(false)
+  // 「오늘 왔어요」를 누른 학생 — 시각·교시를 고르는 작은 창
+  const [oneDayPick, setOneDayPick] = useState<{ student: Student; time: string; periods: number } | null>(null)
+  const [oneDayBusy, setOneDayBusy] = useState(false)
   const [scheduleDays, setScheduleDays] = useState<string[]>([])
   const [scheduleTime, setScheduleTime] = useState('16:00')
   const [schedulePeriods, setSchedulePeriods] = useState(2)
@@ -868,6 +878,9 @@ export default function TeacherLearningNotesPage() {
       supabase.from('autostep_concept_page_map').select('concept_id, page_start, page_end, workbook_name, concept_book_page_start, concept_book_page_end, concept_book_workbook_name'),
       supabase.from('ssenb_problem_map').select('*'),
     ])
+    // 오늘 하루만 온 수업 — 날짜 한 개짜리라 가볍다. 못 읽어도 화면은 돌아간다.
+    fetchOneDayClasses(supabase, new Date(Date.now() + 9 * 3600_000).toISOString().split('T')[0])
+      .then((rows) => { setOneDayReady(rows !== null); setOneDayRows(rows ?? []) })
     if (sData) setStudents(sData)
     // periods는 DB에서 numeric 타입이라 문자열("2.5")로 내려올 수 있어 숫자로 변환 (연산 시 문자열 이어붙기 방지)
     if (scData) setSchedules(scData.map((s: any) => ({ ...s, periods: Number(s.periods) })))
@@ -1099,12 +1112,12 @@ export default function TeacherLearningNotesPage() {
   // ★ 대체수업으로 **다른 날에 이미 한** 학생은 뺀다. 시간표에는 오늘 수업이 남아 있지만
   //   오늘은 오지 않는다 — 목록에 두면 결석으로 눌리게 된다.
   const movedIds = new Set(movedAway.map((m) => m.studentId))
+  const todaySchedules = schedules.filter((sc) => sc.day_of_week === todayDay)
   const todayStudents = (hideForHoliday ? [] : myStudents)
-    .map((s) => {
-      const sc = schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay)
-      return { student: s, schedule: sc }
-    })
-    .filter((x) => x.schedule && !movedIds.has(x.student.id))
+    .map((s) => ({ student: s, schedule: slotFor(s.id, todaySchedules, oneDayRows) }))
+    // ★ 하루 수업은 대체수업으로 빼지 않는다 — 선생님이 「오늘 왔어요」를 직접 누른 것이
+    //   OPS 기록보다 맞다. 기준은 lib/expectedToday.ts 와 같다.
+    .filter((x) => x.schedule && (!!x.schedule.oneDayId || !movedIds.has(x.student.id)))
     .sort((a, b) => (a.schedule!.start_time > b.schedule!.start_time ? 1 : -1))
 
   // ★ 「일지를 쓸 학생」은 시간표보다 좁다. 학습일지를 안 쓰기로 한 학생은
@@ -1120,7 +1133,21 @@ export default function TeacherLearningNotesPage() {
   const movedMine = movedAway.filter((m) => myStudents.some((s) => s.id === m.studentId))
 
   const otherStudents = myStudents
-    .filter((s) => !schedules.find((sc) => sc.student_id === s.id && sc.day_of_week === todayDay))
+    .filter((s) => !slotFor(s.id, todaySchedules, oneDayRows))
+  /**
+   * 「오늘 왔어요」 창을 열 때 미리 넣어 둘 시각 — **그 학생이 평소 오는 시각**.
+   * 아무 시간표도 없으면 16:00(가장 흔한 시각)으로 둔다. 어차피 선생님이 고른다.
+   */
+  function defaultOneDayTime(studentId: string) {
+    const mine = schedules.filter((sc) => sc.student_id === studentId)
+      .map((sc) => String(sc.start_time).slice(0, 5)).sort()
+    return mine[0] ?? '16:00'
+  }
+
+  // 오늘 하루 수업으로 더해진 내 학생 — 머리에 적어 주고 거기서 취소한다
+  const oneDayMine = todayStudents
+    .filter(({ schedule }) => !!schedule!.oneDayId)
+    .map(({ student, schedule }) => ({ student, slot: schedule! }))
 
   // 대시보드 등 다른 화면에서 ?student=<id>로 들어오면 그 학생의 학습일지/알림장 모달을 자동으로 열어준다.
   // (예: 첫수업 알림장 현황에서 학생 이름 클릭 시 바로 진입)
@@ -2095,6 +2122,10 @@ ${e?.message ?? '연결 실패'}
             <span className={cx(칩, 'bg-blue-100 text-blue-700')}>
               {schedule!.start_time.slice(0, 5)} · {schedule!.periods}교시
             </span>
+            {/* 시간표엔 없고 오늘만 더해진 수업 — 다음 주에는 안 뜬다는 표시 */}
+            {schedule?.oneDayId && (
+              <span className={cx(칩, 'bg-amber-100 text-amber-800')}>오늘만</span>
+            )}
             {student.wise_step && (
               <span className={cx(칩, 'bg-purple-100 text-purple-700')}>{student.wise_step}단계</span>
             )}
@@ -2785,6 +2816,38 @@ ${e?.message ?? '연결 실패'}
     fetchData()
   }
 
+  /**
+   * 「오늘 왔어요」 — **오늘 하루만** 수업 한 칸을 더한다 (원장님 2026-11-18).
+   * 정규 시간표(schedules)는 건드리지 않는다. 그래서 다음 주 같은 요일엔 안 뜬다.
+   */
+  async function addOneDay() {
+    if (!oneDayPick) return
+    setOneDayBusy(true)
+    const { error } = await supabase.from(ONE_DAY_TABLE).insert({
+      student_id: oneDayPick.student.id,
+      class_date: todayStr,
+      start_time: oneDayPick.time,
+      periods: oneDayPick.periods,
+      created_by: currentUser?.name ?? null,
+    })
+    setOneDayBusy(false)
+    if (error) {
+      // 같은 학생·같은 시각을 두 번 누른 경우(unique)도 여기로 온다 — 이미 더해진 것이다.
+      alert(error.code === '23505' ? '이미 더해져 있어요.' : '오늘 수업을 더하지 못했어요. ' + error.message)
+      return
+    }
+    setOneDayPick(null)
+    setOneDayRows((await fetchOneDayClasses(supabase, todayStr)) ?? [])
+  }
+
+  /** 잘못 더했을 때 — 표시만 지운다. **이미 쓴 학습일지는 그대로 남는다.** */
+  async function removeOneDay(id: string) {
+    if (!confirm('오늘 수업 표시를 지울까요? 이미 쓴 학습일지와 브리핑은 그대로 남아요.')) return
+    const { error } = await supabase.from(ONE_DAY_TABLE).delete().eq('id', id)
+    if (error) { alert('지우지 못했어요. ' + error.message); return }
+    setOneDayRows((await fetchOneDayClasses(supabase, todayStr)) ?? [])
+  }
+
   // 수업일지 삭제 (당일+다음 수업일 오후 2시까지만 가능, 관리자 예외)
   async function handleDeleteNote(sessionId: string, sessionDate: string, studentId: string) {
     const canEdit = canEditNote(sessionDate, studentId)
@@ -3237,6 +3300,7 @@ ${e?.message ?? '연결 실패'}
                   const other = noRec
                     + (briefPreview.skippedNoPhone?.length ?? 0)
                     + (briefPreview.skippedExam?.length ?? 0)
+                    + (briefPreview.skippedAbsent?.length ?? 0)
                   if (already > 0 && other === 0) {
                     return (
                       <div className="rounded-lg border p-2.5" style={{ borderColor: '#cfe3b5', background: '#EAF3DE' }}>
@@ -3297,6 +3361,13 @@ ${e?.message ?? '연결 실패'}
                     시험기간 결석이라 일부러 제외 {briefPreview.skippedExam.length}명 — {briefPreview.skippedExam.map((x: any) => x.name).join(', ')}
                   </div>
                 )}
+                {/* 결석도 일부러 안 보낸다 (원장님 2026-11-18). 사유를 안 적으면 「왜 빠졌지」가 남는다. */}
+                {briefPreview.skippedAbsent?.length > 0 && (
+                  <div className="text-gray-500">
+                    결석이라 일부러 제외 {briefPreview.skippedAbsent.length}명 — {briefPreview.skippedAbsent.map((x: any) => x.name).join(', ')}
+                    <span className="text-gray-400"> (일지는 그대로 쓰셔야 해요 — 결석률·보강 명단에 쓰입니다)</span>
+                  </div>
+                )}
                 {/* 한 사람씩 — 어떤 글이 어디로 가는지 보고, 원하면 그 사람만 보낸다 */}
                 {(briefPreview.previews ?? []).length > 0 && (() => {
                   // ★ 하루 100명이 넘어 눈으로 훑을 수가 없다 (원장님 2026-10-22).
@@ -3351,6 +3422,12 @@ ${e?.message ?? '연결 실패'}
                                 title="진도·과제·알림장이 하나도 없어요. 밤 9시 자동 발송에서는 빠지고 다음 날 오전 11시로 미뤄집니다."
                                 style={{ background: '#FEF3C7', color: '#92400E' }}>출결만 적힘</span>
                             )}
+                            {/* 결석은 학부모께 안 나간다 (원장님 2026-11-18). 일지는 그대로 써야 한다. */}
+                            {p.absent && (
+                              <span className="px-1.5 py-0.5 rounded-md font-bold"
+                                title="결석한 날은 학부모님께 브리핑을 보내지 않습니다. 일지는 그대로 쓰셔야 해요 — 결석률·보강 명단에 쓰입니다."
+                                style={{ background: '#F3F4F6', color: '#4B5563' }}>결석 · 안 나감</span>
+                            )}
                             {/* ★ 글을 보고 바로 고칠 수 있어야 한다 (원장님 2026-10-22 「내가 첨삭할 필요있을 때」).
                                 그 날짜의 수업일지를 **찾아서 넘겨** 연다 — 안 넘기면 빈 칸으로 열린다. */}
                             <button
@@ -3368,20 +3445,24 @@ ${e?.message ?? '연결 실패'}
                             </button>
                             <button
                               onClick={(e) => { e.preventDefault(); openSendToTeachers(p) }}
-                              disabled={briefBusy}
-                              title="이 학생 글을 고른 선생님께만 보냅니다. 학부모님께는 안 갑니다."
+                              disabled={briefBusy || !!p.absent}
+                              title={p.absent
+                                ? '결석한 날은 보낼 글이 없어요 (자동 문구만 남습니다).'
+                                : '이 학생 글을 고른 선생님께만 보냅니다. 학부모님께는 안 갑니다.'}
                               className="px-2 py-0.5 text-[10px] font-bold rounded-md border border-gray-200 bg-white text-gray-700 disabled:opacity-50">
                               선생님께 보내기
                             </button>
                             <button
                               onClick={(e) => { e.preventDefault(); sendOne(p) }}
-                              disabled={briefBusy}
-                              title={p.alreadySent
-                                ? '이미 나간 날이에요. 눌러서 같은 글을 한 번 더 보낼 수 있어요 (못 받으셨다고 할 때).'
-                                : undefined}
+                              disabled={briefBusy || !!p.absent}
+                              title={p.absent
+                                ? '결석한 날은 학부모님께 보내지 않습니다 (원장님 2026-11-18).'
+                                : p.alreadySent
+                                  ? '이미 나간 날이에요. 눌러서 같은 글을 한 번 더 보낼 수 있어요 (못 받으셨다고 할 때).'
+                                  : undefined}
                               className="px-2 py-0.5 text-[10px] font-bold rounded-md text-[#3C1E1E] disabled:opacity-50"
                               style={{ background: p.alreadySent ? '#FFF0B3' : '#FEE500' }}>
-                              {p.alreadySent ? '다시 보내기' : '이 학생만 보내기'}
+                              {p.absent ? '결석' : p.alreadySent ? '다시 보내기' : '이 학생만 보내기'}
                             </button>
                           </summary>
                           <pre className="mx-2.5 mb-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap text-[11px] leading-relaxed">
@@ -3587,6 +3668,22 @@ ${e?.message ?? '연결 실패'}
                     <span className="text-sm font-bold text-gray-800"><i className="ti ti-calendar align-[-0.125em]" /> 오늘 ({todayDay}요일) 시간표</span>
                     <span className="text-xs text-gray-400">{todayStudents.length}명</span>
                   </div>
+                  {/* 오늘만 더해진 수업 — 여기서 취소한다 (원장님 2026-11-18) */}
+                  {oneDayMine.length > 0 && (
+                    <div className="px-4 py-2 border-b border-gray-50 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-amber-700 mr-0.5">오늘만</span>
+                      {oneDayMine.map(({ student, slot }) => (
+                        <span key={slot.oneDayId}
+                          className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1.5">
+                          {student.name} {slot.start_time.slice(0, 5)}
+                          <button onClick={() => removeOneDay(slot.oneDayId!)}
+                            className="text-amber-400 hover:text-amber-800" title="오늘만 표시 지우기">✕</button>
+                        </span>
+                      ))}
+                      <span className="text-[11px] text-gray-400">· 다음 주 같은 요일에는 안 떠요</span>
+                    </div>
+                  )}
+
                   {/* 주임모드 범례 — 색만 보고 외우게 하면 안 된다 */}
                   {colorByTeacher && legendNames.length > 1 && (
                     <div className="px-4 py-2 border-b border-gray-50 flex items-center gap-1.5 flex-wrap">
@@ -3654,6 +3751,7 @@ ${e?.message ?? '연결 실패'}
                                     ? `${student.grade}·${mainTeacher(student.teacher_name) || '미지정'}`
                                     : student.grade}
                                 </span>
+                                {schedule!.oneDayId && <span className="text-[9px] font-bold text-amber-700">오늘만</span>}
                                 {skipNote && <span className="text-[9px] font-bold text-gray-400">일지 없음</span>}
                                 {!skipNote && isComplete && <span className="text-[9px] text-green-600 font-bold">✓ 입력완료</span>}
                                 {!skipNote && !isComplete && schedule!.start_time.slice(0,5) && (
@@ -3789,6 +3887,9 @@ ${e?.message ?? '연결 실패'}
                   <p className="text-xs font-bold text-gray-400 px-1 mb-2">
                     오늘 수업 없는 학생 {otherStudents.length}명
                     <span className="ml-1.5 font-normal text-gray-300">· 클릭하면 수업일지/진도 입력 가능</span>
+                    {oneDayReady && (
+                      <span className="ml-1.5 font-normal text-amber-600">· 오늘 온 학생은 「오늘 왔어요」를 누르면 위 목록으로 올라가요</span>
+                    )}
                   </p>
                   {/* ★ 가로 4개로 줄 맞춰 세운다. flex-wrap 으로 흘려 두면 카드 너비가 제각각이라
                       줄이 들쭉날쭉 밀린다 (원장님 2026-10-20 「칸반크기 일정하게, 가로 4」).
@@ -3847,10 +3948,21 @@ ${e?.message ?? '연결 실패'}
                               퇴근 후 다음날 학습일지를 쓰는 선생님이 많은데, 예전엔 이 카드에
                               알림장 버튼이 없어서 그날이 지나면 학부모께 전달할 길이 없었다. */}
                           {editable && (
-                            <button onClick={() => openFeedbackModal(student)}
-                              className="mt-2 shrink-0 w-full px-2.5 py-1 text-[11px] font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg hover:bg-purple-50">
-                              <i className="ti ti-message-circle align-[-0.125em]" /> 알림장
-                            </button>
+                            <div className="mt-2 shrink-0 flex gap-1">
+                              <button onClick={() => openFeedbackModal(student)}
+                                className="flex-1 min-w-0 px-1.5 py-1 text-[11px] font-semibold text-[#712B13] bg-white border border-purple-200 rounded-lg hover:bg-purple-50 truncate">
+                                <i className="ti ti-message-circle align-[-0.125em]" /> 알림장
+                              </button>
+                              {/* ★ 시간표에 없는 날에 온 학생 — 오늘 목록으로 올린다 (원장님 2026-11-18).
+                                  시간표를 고치는 것이 아니라 **오늘 하루만**이다.
+                                  표를 아직 못 읽으면(SQL 전) 단추를 안 보인다 — 눌러도 안 되는 단추는 없는 게 낫다. */}
+                              {oneDayReady && (
+                              <button onClick={() => setOneDayPick({ student, time: defaultOneDayTime(student.id), periods: 2 })}
+                                className="flex-1 min-w-0 px-1.5 py-1 text-[11px] font-semibold text-amber-800 bg-white border border-amber-200 rounded-lg hover:bg-amber-50 truncate">
+                                <i className="ti ti-user-check align-[-0.125em]" /> 오늘 왔어요
+                              </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       )
@@ -5738,6 +5850,61 @@ ${e?.message ?? '연결 실패'}
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 「오늘 왔어요」 창 — 오늘 하루만 수업 더하기 (원장님 2026-11-18) ── */}
+      {oneDayPick && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center md:justify-center"
+          onClick={() => setOneDayPick(null)}>
+          <div className="bg-white w-full max-w-sm rounded-t-3xl md:rounded-2xl p-6 pb-8 space-y-4"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">
+                <i className="ti ti-user-check align-[-0.125em]" /> 오늘 왔어요
+              </h3>
+              <button onClick={() => setOneDayPick(null)} className="text-gray-400">✕</button>
+            </div>
+            <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-sm font-bold text-amber-900">
+                {oneDayPick.student.name} <span className="font-normal text-amber-700">{oneDayPick.student.grade}</span>
+              </p>
+              <p className="text-[11px] text-amber-700 mt-1">
+                {todayStr} ({todayDay}) <b>오늘 하루만</b> 오늘 수업 목록에 올라가요.
+                시간표는 그대로라 다음 주 {todayDay}요일에는 안 떠요.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">시간</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {TIMES.map((t) => (
+                  <button key={t} onClick={() => setOneDayPick({ ...oneDayPick, time: t })}
+                    className={cx('px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                      oneDayPick.time === t ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-2">수업 교시</label>
+              <div className="flex gap-2">
+                {[1, 1.5, 2, 2.5, 3].map((pp) => (
+                  <button key={pp} onClick={() => setOneDayPick({ ...oneDayPick, periods: pp })}
+                    className={cx('flex-1 py-2 rounded-xl text-sm font-bold border transition-all',
+                      oneDayPick.periods === pp ? 'bg-[#9FE1CB] text-white border-[#9FE1CB]' : 'bg-white text-gray-600 border-gray-200')}>
+                    {pp}교시
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={addOneDay} disabled={oneDayBusy}
+              className="w-full py-3.5 bg-[#9FE1CB] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {oneDayBusy
+                ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />더하는 중...</>
+                : `${oneDayPick.time} ${oneDayPick.periods}교시로 오늘만 더하기`}
+            </button>
           </div>
         </div>
       )}
