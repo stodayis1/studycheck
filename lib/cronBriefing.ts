@@ -30,6 +30,7 @@ import { fetchAligoRows, summarize, aligoProblems, aligoRecord, phoneKey } from 
 import { aligoPost } from '@/lib/aligo'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 import { sendSmsViaOps } from '@/lib/opsSms'
+import { runWorksheetSweep } from '@/lib/worksheetSweep'
 import { fetchAllRows } from '@/lib/utils'
 
 /** 한국 시각 'HH:MM'. 서버는 UTC 로 돈다. */
@@ -240,6 +241,19 @@ export async function runBriefingCron(req: NextRequest, phaseFixed?: 1 | 2) {
     out.sample = await res.json()
   } catch (e: any) {
     out.sample = { error: e?.message ?? '샘플 발송 실패' }
+  }
+
+  // ── ⑤ 학습지 쓸어 담기 ─────────────────────────────────────────────────
+  // 점수는 들어왔는데 아직 안 닫힌 학습지를 닫는다 (원장님 2026-11-18
+  // 「날짜 지난지 오래된거나 학습일지에 올라가서 학습브리핑이 발송된건 앞으로 자동으로 닫아줘」).
+  //
+  // ★ **발송 뒤에** 돈다. 그래야 오늘 나간 브리핑까지 「나갔다」로 세어 그날 것이 바로 닫힌다.
+  // ★ 규칙 한 벌은 lib/worksheetSweep.ts 에 있다. 몇 번을 돌려도 결과가 같다.
+  // ★ 여기서 터져도 발송은 이미 끝났다 — 예약 기록이 안 남으면 안 되므로 통째로 감싼다.
+  try {
+    out.sweep = await runWorksheetSweep(db, kstDate(0))
+  } catch (e: any) {
+    out.sweep = { error: e?.message ?? '학습지 닫기 실패' }
   }
 
   out.finishedAt = new Date().toISOString()

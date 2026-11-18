@@ -34,10 +34,17 @@ end $$;
 
 -- 확인 ────────────────────────────────────────────────────────────────────
 -- ① 막이가 돌아왔나 — **1** 이어야 한다
-select count(*) as 막이
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public' and p.proname = 'worksheet_before_update'
-  and pg_get_functiondef(p.oid) like '%70점 미만%';
+-- ★ 주석을 빼고 본다 — 함수 주석에 적힌 글자에 걸리면 안 된다.
+with src as (
+  select pg_get_functiondef(p.oid) as def
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'worksheet_before_update'
+), 주석뺀것 as (
+  select string_agg(l, chr(10)) as code
+  from src, lateral regexp_split_to_table(replace(def, chr(13), ''), chr(10)) as l
+  where btrim(l) !~ '^--'
+)
+select count(*) as 막이 from 주석뺀것 where code ilike '%raise exception%';
 
 -- ② 자동 완료로 닫힌 초등 70점 미만 줄 — 되돌릴지 원장님께 **먼저 여쭌다**
 select s.name, w.grade_level, w.unit, w.current_level, w.score, w.submitted_at::date

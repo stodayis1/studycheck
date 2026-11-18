@@ -38,22 +38,25 @@ begin
 end $$;
 
 -- 확인 ────────────────────────────────────────────────────────────────────
--- ① 막이가 빠졌나 — 아래가 **0** 이어야 한다
-select count(*) as 남은_막이
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public' and p.proname = 'worksheet_before_update'
-  and pg_get_functiondef(p.oid) like '%70점 미만%';
+-- ★ 주석을 빼고 본다. 함수 안에 「70점 미만」·「raise exception」이라고 **적어 둔 주석**이
+--   있어서, 글자만 찾으면 막이가 없는데도 있다고 나온다 (2026-11-18 에 실제로 그랬다).
+with src as (
+  select pg_get_functiondef(p.oid) as def
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'worksheet_before_update'
+), 주석뺀것 as (
+  select string_agg(l, chr(10)) as code
+  from src, lateral regexp_split_to_table(replace(def, chr(13), ''), chr(10)) as l
+  where btrim(l) !~ '^--'
+)
+select
+  (select count(*) from 주석뺀것 where code ilike '%raise exception%')      as 남은_막이,      -- 0 이어야 한다
+  (select count(*) from 주석뺀것 where code ilike '%worksheet_action_logs%') as 기록_남김;      -- 1 이어야 한다
 
--- ② 기록은 그대로 남나 — 아래가 **1** 이어야 한다
-select count(*) as 기록_남김
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public' and p.proname = 'worksheet_before_update'
-  and pg_get_functiondef(p.oid) like '%worksheet_action_logs%';
-
--- ③ 트리거가 아직 붙어 있나
+-- 트리거가 아직 붙어 있나
 select tgname, tgenabled from pg_trigger
 where tgrelid = 'public.student_worksheets'::regclass and not tgisinternal;
 
--- ④ 지금 막혀 있는 줄 — 배포 뒤 다음 긁어 넣기에서 저절로 닫힌다
+-- 점수가 있는데 안 닫힌 줄 — 날마다 브리핑 예약이 쓸어 담는다(lib/worksheetSweep.ts)
 select count(*) as 점수있는데_안닫힌것 from public.student_worksheets
 where score is not null and status <> 'passed';
