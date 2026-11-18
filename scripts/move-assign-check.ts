@@ -12,7 +12,8 @@ import { createClient } from '@supabase/supabase-js'
 import {
   WD, WE, DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID, ROWS_ELEM,
   EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID, NO_SHOW,
-  GRADES_ELEM, ELEM_PICKS, nextGrade, elemDraft,
+  GRADES_ELEM, ELEM_PICKS, ELEM_STARTS, ELEM_PERIODS, nextGrade, elemDraft,
+  parseNewTime, newTimeText, newTimeAt, sameTime,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff, toMin,
 } from '../lib/moveAssign.ts'
 
@@ -126,7 +127,46 @@ ok(nextGrade('초6') === null && nextGrade('중1') === null && nextGrade(null) =
 ok(elemDraft('윤주희') === '윤주희' && elemDraft('이규숙') === '이규숙', '지금 담당을 그대로 제안한다')
 ok(elemDraft('조윤희, 이규숙') === '', '두 분이 같이 적힌 줄은 비워 둔다 — 원장님이 고르신다')
 ok(elemDraft(null) === '' && elemDraft('김은수') === '', '초등 선생님이 아니면 비워 둔다')
-ok(ROWS_ELEM[0] === '14:00' && ROWS_ELEM[ROWS_ELEM.length - 1] === '18:00', '초등 격자는 14:00~18:00')
+ok(ROWS_ELEM[0] === '14:00' && ROWS_ELEM[ROWS_ELEM.length - 1] === '19:00', '초등 격자는 14:00~19:00')
+// ★ 30분 칸이어야 한다 — 16:30 을 고를 수 있는데 한 시간 칸이면 그 학생이 17:00 줄에만
+//   그려져 「그 칸에 몇 명」이 틀어진다(지금도 16:30 시작이 6명 있다).
+ok(ROWS_ELEM.every((r, i) => i === 0 || toMin(r) - toMin(ROWS_ELEM[i - 1]) === 30), '초등 격자는 30분 간격')
+
+// ⑨ 바뀔 시간 (원장님 2026-11-18 「시간도 변경하는 기능이 지금은 없어. 같이 추가해줘」)
+const 때 = { days: ['월', '수'], start: '16:00', periods: 2 }
+ok(JSON.stringify(parseNewTime(때)) === JSON.stringify({ days: ['월', '수'], start: '16:00', periods: 2 }),
+  '제대로 된 값은 그대로 읽힌다')
+ok(parseNewTime({ ...때, days: ['수', '월'] })!.days.join() === '월,수', '요일은 늘 월→금 차례로 돌려준다')
+ok(parseNewTime({ ...때, days: ['월', '월', '수'] })!.days.length === 2, '같은 요일을 두 번 적어도 한 번')
+// ★ 반쯤 맞는 값을 통과시키면 격자에 **안 그려지는 학생**이 조용히 생긴다.
+ok(parseNewTime(null) === null && parseNewTime('월 4시') === null && parseNewTime([]) === null,
+  '값이 아니면 null (= 지금 시간표 그대로)')
+ok(parseNewTime({ ...때, days: [] }) === null, '요일이 없으면 안 받는다')
+ok(parseNewTime({ ...때, days: ['토'] }) === null, '초등은 평일만 — 토·일은 안 받는다')
+ok(parseNewTime({ ...때, start: '13:00' }) === null && parseNewTime({ ...때, start: '16:20' }) === null,
+  '고를 수 없는 시작 시각은 안 받는다')
+ok(parseNewTime({ ...때, periods: 4 }) === null && parseNewTime({ ...때, periods: 0 }) === null,
+  '고를 수 없는 교시는 안 받는다')
+ok(ELEM_STARTS.every((t) => ROWS_ELEM.includes(t)), '고를 수 있는 시작 시각은 모두 격자에 줄이 있다')
+ok(ELEM_PERIODS.includes(2) && ELEM_PERIODS.includes(2.5), '지금 쓰는 교시(2·2.5)가 들어 있다')
+
+ok(newTimeText(parseNewTime(때)) === '월·수 16:00(2교시)', '글로 적는 꼴')
+ok(newTimeText(null) === '', '안 바꿨으면 빈 글')
+
+// 격자 판정 — 16:00 에 2교시면 16:00~18:00 이다
+const t2 = parseNewTime(때)
+ok(newTimeAt(t2, '월', '16:00') && newTimeAt(t2, '월', '17:30'), '수업 시간 안의 칸에 선다')
+ok(!newTimeAt(t2, '월', '15:30'), '시작 전 칸에는 없다')
+ok(!newTimeAt(t2, '월', '18:00'), '끝나는 시각 칸에는 없다')
+ok(!newTimeAt(t2, '화', '16:00'), '안 고른 요일에는 없다')
+ok(!newTimeAt(null, '월', '16:00'), '안 바꿨으면 이 함수로는 아무 데도 안 선다')
+// 2.5교시 = 150분
+ok(newTimeAt(parseNewTime({ ...때, periods: 2.5 }), '월', '18:00'), '2.5교시는 18:30 까지라 18:00 칸에 선다')
+
+ok(sameTime(parseNewTime(때), parseNewTime({ days: ['수', '월'], start: '16:00', periods: 2 })),
+  '요일 차례가 달라도 같은 시간이다')
+ok(!sameTime(parseNewTime(때), parseNewTime({ ...때, start: '17:00' })), '시각이 다르면 다른 시간')
+ok(sameTime(null, null) && !sameTime(parseNewTime(때), null), '빈 것끼리만 같다')
 
 // ── 여기부터는 운영 데이터 (.env.local 이 있을 때만)
 for (const f of ['.env.local', '.env']) {
@@ -228,6 +268,10 @@ if (!url || !key) {
     '중등·초등 판에 타임이 섞여 들어오는 것을 막아야 한다')
   ok(/track !== '고등' && track !== '중등' && track !== '초등'/.test(src),
     '판 이름 셋만 받아야 한다')
+  // 바뀔 시간은 **초등 판에서만**. 다른 판에 들어오면 아무 데도 안 쓰이고 조용히 쌓인다.
+  ok(src.includes('parseNewTime(body?.newTime)'), '서버가 바뀔 시간을 lib 함수로 풀어야 한다')
+  ok(/track !== '초등' && body\?\.newTime/.test(src), '초등 판이 아닌데 시간이 들어오면 막아야 한다')
+  ok(/new_time: track === '초등' \? newTime : null/.test(src), '초등 판이 아니면 시간을 비워 저장해야 한다')
   ok(/track === '고등' && !full/.test(src), '전체 권한이 아닌 사람이 고등 판을 고치는 것을 막아야 한다')
 
   // 화면·메뉴도 같은 함수를 봐야 한다 (한쪽만 열리면 메뉴는 보이는데 화면이 빈다)
@@ -243,7 +287,7 @@ if (!url || !key) {
 
   // 칸이 하나하나 다 있나 (읽기만) — 화면이 고르는 칸을 DB 가 모르면
   // **저장만 조용히 실패한다**(화면은 그대로 보인다). 칸을 더할 때마다 여기에 이름을 넣는다.
-  for (const col of ['track', 'teacher_name', 'weekday_slot', 'weekend_slot', 'extra_slot']) {
+  for (const col of ['track', 'teacher_name', 'weekday_slot', 'weekend_slot', 'extra_slot', 'new_time']) {
     const { error: colErr } = await db.from('class_move_assign').select(col).limit(1)
     ok(!colErr, '칸 class_move_assign.' + col + ' 이 없다 — docs/sql/ 의 알맞은 .sql 을 적용했나')
   }
