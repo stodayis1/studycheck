@@ -23,7 +23,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { staffOrDeny } from '@/lib/apiAuth'
-import { WD, WE, EXTRA, GRADES_ELEM } from '@/lib/moveAssign'
+import { WD, WE, EXTRA, GRADES_ELEM, parseNewTime } from '@/lib/moveAssign'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
     }
 
     let rows = await all(() => db.from('class_move_assign')
-      .select('student_id, track, teacher_name, weekday_slot, weekend_slot, extra_slot').order('student_id'))
+      .select('student_id, track, teacher_name, weekday_slot, weekend_slot, extra_slot, new_time').order('student_id'))
     // 고등 권한이 없는 사람에게는 고등 판 줄도 내려 주지 않는다
     if (!full) rows = rows.filter((r: any) => r.track === '중등' || r.track === '초등')
 
@@ -136,9 +136,18 @@ export async function POST(req: Request) {
   if (weekday && !WD[weekday]) return NextResponse.json({ error: '없는 평일 타임이에요.' }, { status: 400 })
   if (weekend && !WE[weekend]) return NextResponse.json({ error: '없는 토·일 타임이에요.' }, { status: 400 })
   if (extra && !EXTRA[extra]) return NextResponse.json({ error: '없는 추가 클리닉이에요.' }, { status: 400 })
-  // 중등·초등 판은 **선생님만** 고른다. 타임이 섞여 들어오면 그 학생이 고등 판 칸에 그려진다.
+  // 중등·초등 판은 고등 **타임**을 고르지 않는다. 섞여 들어오면 그 학생이 고등 판 칸에 그려진다.
   if (track !== '고등' && (weekday || weekend || extra))
-    return NextResponse.json({ error: '이 판은 선생님만 고릅니다.' }, { status: 400 })
+    return NextResponse.json({ error: '이 판은 고등 타임을 고르지 않습니다.' }, { status: 400 })
+
+  // ★ 바뀔 시간 — **초등 판에서만** 고른다 (원장님 2026-11-18).
+  //   값이 반쯤 맞으면 받지 않는다(null = 지금 시간표 그대로). 반쯤 맞는 값을 넣으면
+  //   격자에 **안 그려지는 학생**이 조용히 생긴다. 판단은 lib/moveAssign.ts 한 곳에만 둔다.
+  const newTime = parseNewTime(body?.newTime)
+  if (track !== '초등' && body?.newTime)
+    return NextResponse.json({ error: '시간은 초등 진급 판에서만 바꿉니다.' }, { status: 400 })
+  if (track === '초등' && body?.newTime && !newTime)
+    return NextResponse.json({ error: '요일·시작 시각·교시를 다 골라야 해요.' }, { status: 400 })
 
   const db = admin()
   const { error } = await db.from('class_move_assign').upsert({
@@ -148,6 +157,7 @@ export async function POST(req: Request) {
     weekday_slot: weekday || null,
     weekend_slot: weekend || null,
     extra_slot: extra || null,
+    new_time: track === '초등' ? newTime : null,
     updated_at: new Date().toISOString(),
     updated_by_name: name || null,
   }, { onConflict: 'student_id' })

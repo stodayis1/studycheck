@@ -30,16 +30,17 @@ import { apiFetch } from '@/lib/apiFetch'
 import {
   DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID, ROWS_ELEM,
   WD, WE, EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID,
-  GRADES_ELEM, ELEM_PICKS, nextGrade, elemDraft,
+  GRADES_ELEM, ELEM_PICKS, ELEM_STARTS, ELEM_PERIODS, nextGrade, elemDraft,
+  parseNewTime, newTimeText, newTimeAt, sameTime, type NewTime,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff,
   toMin, type Track,
 } from '@/lib/moveAssign'
 
 interface Student { id: string; name: string; grade: string | null; teacher_name: string | null }
 interface Sched { student_id: string; day_of_week: string; start_time: string; periods: number }
-interface Row { student_id: string; track: Track; teacher_name: string | null; weekday_slot: string | null; weekend_slot: string | null; extra_slot: string | null }
+interface Row { student_id: string; track: Track; teacher_name: string | null; weekday_slot: string | null; weekend_slot: string | null; extra_slot: string | null; new_time?: any }
 /** 화면에서 들고 다니는 한 학생의 배정 */
-type Pick3 = { t: string; wd: string; we: string; ex: string }
+type Pick3 = { t: string; wd: string; we: string; ex: string; nt?: NewTime | null }
 
 const DAY_ORDER = ['월', '화', '수', '목', '금', '토', '일']
 
@@ -108,7 +109,10 @@ export default function MoveAssignPage() {
           : st.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
         if (d && d[0]) next[st.id] = { t: d[0], wd: d[1], we: d[2], ex: '' }
       }
-      for (const r of rows) next[r.student_id] = { t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '', ex: r.extra_slot ?? '' }
+      for (const r of rows) next[r.student_id] = {
+        t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '', ex: r.extra_slot ?? '',
+        nt: parseNewTime(r.new_time),
+      }
       setAssign(next)
       setHint(rows.length ? `저장된 배정 ${rows.length}건을 읽었어요. 고르면 바로 저장됩니다.` : '고르면 바로 저장됩니다.')
     } catch (e: any) {
@@ -124,7 +128,7 @@ export default function MoveAssignPage() {
       const res = await apiFetch('/api/move-assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: st.id, track, teacher: p.t, weekday: p.wd, weekend: p.we, extra: p.ex }),
+        body: JSON.stringify({ studentId: st.id, track, teacher: p.t, weekday: p.wd, weekend: p.we, extra: p.ex, newTime: p.nt ?? null }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error ?? '저장하지 못했어요')
@@ -138,8 +142,16 @@ export default function MoveAssignPage() {
     const cur = assign[st.id] ?? { t: '', wd: '', we: '', ex: '' }
     const p: Pick3 = { ...cur, [part]: value }
     // 선생님을 바꾸면 반과 토·일을 비운다 — 다른 선생님 타임이 남으면 엉뚱한 칸에 그려진다.
+    // ★ 바뀔 시간(nt)은 **그대로 둔다.** 선생님과 시간은 따로 정하는 것이고,
+    //   선생님만 바꿨다고 애써 맞춰 둔 시간이 사라지면 안 된다.
     if (part === 't') { p.wd = ''; p.we = ''; p.ex = '' }
     save(st, p, track)
+  }
+
+  /** 초등 판 — 바뀔 시간만 따로 저장한다 (비우면 지금 시간표 그대로). */
+  function setTime(st: Student, nt: NewTime | null) {
+    const cur = assign[st.id] ?? { t: '', wd: '', we: '', ex: '' }
+    save(st, { ...cur, nt }, '초등')
   }
 
   // ── 학생 묶음
@@ -229,7 +241,8 @@ export default function MoveAssignPage() {
           ? <ElemBoard
               elem={elem} e6={byGrade['초6'] ?? []}
               assign={assign} nowText={nowText} daysOf={daysOf} scheds={scheds}
-              onPick={(st, v) => setOne(st, '초등', 't', v)} />
+              onPick={(st, v) => setOne(st, '초등', 't', v)}
+              onTime={setTime} />
           : tab === '고등'
           ? <HighBoard
               m3={byGrade['중3'] ?? []}
@@ -666,11 +679,12 @@ function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, onPick }:
  *   ② 빠지는 자리는 중3 이 아니라 **중등으로 올라가는 초6** 이다.
  */
 
-function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
+function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }: {
   elem: Student[]; e6: Student[]
   assign: Record<string, Pick3>; nowText: Record<string, string>
   daysOf: Record<string, string[]>; scheds: Sched[]
   onPick: (st: Student, v: string) => void
+  onTime: (st: Student, nt: NewTime | null) => void
 }) {
   /** 그 학생이 그 칸(요일·시각)에 수업이 있나 — 지금 시간표 그대로 */
   const busy = useMemo(() => {
@@ -684,11 +698,47 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
     }
     return m
   }, [scheds])
-  const at = (s: Student, day: string, row: string) => busy.get(s.id)?.has(day + '|' + toMin(row)) ?? false
+  /**
+   * 지금 시간표를 **요일+시작+교시 한 벌**로. 시간 칸의 기본값으로 쓴다.
+   * ★ 한 학생이 서로 다른 시간대를 둘 이상 쓰면 한 벌로 못 줄이므로 null 이다
+   *   (그런 학생은 「지금 그대로」만 두고, 바꾸시려면 직접 고르신다).
+   */
+  const nowTime = useMemo(() => {
+    const byStudent = new Map<string, Map<string, string[]>>()
+    for (const s of scheds) {
+      const key = String(s.start_time).slice(0, 5) + '|' + Number(s.periods)
+      const m = byStudent.get(s.student_id) ?? new Map<string, string[]>()
+      m.set(key, [...(m.get(key) ?? []), s.day_of_week])
+      byStudent.set(s.student_id, m)
+    }
+    const out = new Map<string, NewTime | null>()
+    for (const [id, m] of byStudent) {
+      if (m.size !== 1) { out.set(id, null); continue }
+      const [key, days] = [...m][0]
+      const [start, periods] = key.split('|')
+      out.set(id, parseNewTime({ days, start, periods: Number(periods) }))
+    }
+    return out
+  }, [scheds])
+
+  const 바뀔시간 = (s: Student) => assign[s.id]?.nt ?? null
+  /** 격자에 그릴 자리 — 바꾼 시간이 있으면 **그쪽**, 없으면 지금 시간표. */
+  const at = (s: Student, day: string, row: string) => {
+    const nt = 바뀔시간(s)
+    if (nt) return newTimeAt(nt, day, row)
+    return busy.get(s.id)?.has(day + '|' + toMin(row)) ?? false
+  }
+  /** 바꾼 시간이 걸리는 요일 — 「못 오시는 요일」을 그 시간으로 본다. */
+  const 요일들 = (s: Student) => 바뀔시간(s)?.days ?? daysOf[s.id] ?? []
 
   const 맡을이 = (s: Student) => assign[s.id]?.t ?? ''
   /** 지금 담당과 달라졌나 — 눈에 띄게 해 둔다(바꾼 것만 보시면 된다) */
   const 바뀜 = (s: Student) => !!맡을이(s) && 맡을이(s) !== (s.teacher_name ?? '')
+  /** 시간이 지금과 달라졌나 */
+  const 시간바뀜 = (s: Student) => {
+    const nt = 바뀔시간(s)
+    return !!nt && !sameTime(nt, nowTime.get(s.id) ?? null)
+  }
 
   return (
     <div className="space-y-5">
@@ -721,7 +771,7 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
           })()}
           {(() => {
             const 걸림 = elem.map((s) => {
-              const bad = clashesWithOff(맡을이(s), daysOf[s.id] ?? [])
+              const bad = clashesWithOff(맡을이(s), 요일들(s))
               return bad.length > 0 ? `${s.name}(${맡을이(s)} 선생님 ${bad.join('·')}요일)` : null
             }).filter(Boolean)
             return 걸림.length > 0
@@ -736,7 +786,7 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
           <h3 className="font-bold text-gray-800 text-sm">초1~초5 {elem.length}명 — 한 학년 올라간 뒤 맡을 선생님</h3>
           <p className="text-[11px] text-gray-500">
             처음에는 <b>지금 담당 그대로</b> 채워져 있어요 — <b>바꿀 학생만</b> 고치시면 됩니다.
-            시간표는 지금 쓰는 것을 그대로 가져옵니다.
+            <b>시간</b>도 바꿀 수 있어요. 비워 두면 지금 쓰는 시간표를 그대로 가져옵니다.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -747,14 +797,15 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">학년</th>
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">지금 다니는 시간</th>
                 <th className="text-left px-3 py-2 font-medium">맡을 선생님</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">바뀔 시간</th>
               </tr>
             </thead>
             <tbody>
               {elem.map((s) => {
                 const t = 맡을이(s)
-                const bad = clashesWithOff(t, daysOf[s.id] ?? [])
+                const bad = clashesWithOff(t, 요일들(s))
                 return (
-                  <tr key={s.id} className={cx('border-b border-gray-50', 바뀜(s) && 'bg-emerald-50/50')}>
+                  <tr key={s.id} className={cx('border-b border-gray-50', (바뀜(s) || 시간바뀜(s)) && 'bg-emerald-50/50')}>
                     <td className="px-3 py-2">
                       <b className="text-[13px] text-gray-800">{s.name}</b>
                       <span className="block text-[11px] text-gray-400">지금 {s.teacher_name ?? '—'} 선생님</span>
@@ -770,6 +821,15 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
                       {bad.length > 0 && (
                         <span className="block text-[11px] text-rose-600 font-semibold mt-0.5">
                           {t} 선생님은 {bad.join('·')}요일에 안 계세요
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <TimePick now={nowTime.get(s.id) ?? null} value={바뀔시간(s)}
+                        onChange={(nt) => onTime(s, nt)} />
+                      {시간바뀜(s) && (
+                        <span className="block text-[11px] text-emerald-700 font-semibold mt-0.5">
+                          바뀜 · {newTimeText(nowTime.get(s.id) ?? null) || '지금 시간표'} → {newTimeText(바뀔시간(s))}
                         </span>
                       )}
                     </td>
@@ -847,6 +907,70 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick }: {
           )
         })}
       </section>
+    </div>
+  )
+}
+
+/* ────────────────── 바뀔 시간 고르기 (초등 진급 · 원장님 2026-11-18) ──────────────────
+ * 요일(월~금 눌러서 켜고 끄기) + 시작 시각 + 교시.
+ *
+ * ★ 비워 두면 **지금 시간표 그대로**다. 그래서 처음에는 지금 값이 흐리게 들어가 있고,
+ *   하나라도 건드리면 그때 「바꾼 것」이 된다. 「지금 그대로」를 누르면 도로 비워진다.
+ * ★ 요일을 하나도 안 고르면 저장하지 않는다 — 요일 없는 시간은 격자에 그릴 수가 없다.
+ */
+
+function TimePick({ now, value, onChange }: {
+  now: NewTime | null
+  value: NewTime | null
+  onChange: (nt: NewTime | null) => void
+}) {
+  const 쓰는값: NewTime = value ?? now ?? { days: [], start: '15:00', periods: 2 }
+  const 바꿈 = !!value
+
+  const 내보내기 = (next: NewTime) => {
+    // 요일이 없으면 격자에 그릴 수 없다 — 저장하지 않고 화면만 그대로 둔다.
+    if (!next.days.length) return
+    onChange(parseNewTime(next))
+  }
+  const 요일누름 = (d: string) => {
+    const has = 쓰는값.days.includes(d)
+    const days = has ? 쓰는값.days.filter((x) => x !== d) : [...쓰는값.days, d]
+    if (!days.length) { onChange(null); return }   // 다 끄면 「지금 그대로」로 돌아간다
+    내보내기({ ...쓰는값, days })
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap gap-0.5">
+        {DAYS_WD.map((d) => {
+          const on = 쓰는값.days.includes(d)
+          return (
+            <button key={d} type="button" onClick={() => 요일누름(d)}
+              className={cx('w-6 h-6 rounded-md text-[11px] font-bold border',
+                on ? (바꿈 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-100 text-gray-500 border-gray-200')
+                   : 'bg-white text-gray-300 border-gray-200')}>
+              {d}
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex flex-wrap gap-1 items-center">
+        <Sel value={쓰는값.start} unset={!바꿈}
+          onChange={(v) => 내보내기({ ...쓰는값, start: v })}
+          options={ELEM_STARTS.map((x) => [x, x] as [string, string])} />
+        <Sel value={String(쓰는값.periods)} unset={!바꿈}
+          onChange={(v) => 내보내기({ ...쓰는값, periods: Number(v) })}
+          options={ELEM_PERIODS.map((x) => [String(x), x + '교시'] as [string, string])} />
+        {바꿈 && (
+          <button type="button" onClick={() => onChange(null)}
+            className="text-[11px] text-gray-400 underline px-1">지금 그대로</button>
+        )}
+      </div>
+      {!바꿈 && !now && (
+        <span className="block text-[11px] text-amber-700">
+          지금 시간표가 한 벌이 아니라 기본값이 없어요 — 바꾸시려면 요일부터 고르세요
+        </span>
+      )}
     </div>
   )
 }

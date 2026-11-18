@@ -36,10 +36,14 @@ export const ROWS_WD = ['16:00', '16:30', '17:00', '17:30', '18:00', '18:30',
 /** 토·일은 정각뿐이라 한 시간 칸. */
 export const ROWS_WE = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00']
 /**
- * 초등부는 오후 2시부터. 지금 초1~초5 시간표는 **14·15·16·17시 시작 2교시뿐**이라
- * 14:00~19:00 한 시간 칸으로 다 덮인다 (2026-11-17 재원생 50명 기준).
+ * 초등부 격자 — 오후 2시부터 7시까지 **30분 칸**.
+ *
+ * ★ 2026-11-18 에 한 시간 칸에서 30분 칸으로 바꿨다. 시간을 바꾸는 칸이 생기면서
+ *   16:30 같은 자리를 고를 수 있게 됐는데, 한 시간 칸이면 그 학생이 **17:00 줄에만**
+ *   그려져 「그 칸에 몇 명」이 틀어진다. 지금도 16:30 시작이 6명 있다.
  */
-export const ROWS_ELEM = ['14:00', '15:00', '16:00', '17:00', '18:00']
+export const ROWS_ELEM = ['14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+  '17:00', '17:30', '18:00', '18:30', '19:00']
 
 /** 중등부는 3시부터 10시까지 한 시간 칸 (초6 판은 학생이 지금 쓰는 시간표를 그대로 쓴다). */
 export const ROWS_MID = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
@@ -361,4 +365,70 @@ export function nextGrade(grade: string | null | undefined): string | null {
 export function elemDraft(teacherName: string | null | undefined): string {
   const t = String(teacherName ?? '').trim()
   return ELEM_PICKS.includes(t) ? t : ''
+}
+
+/* ─────────────────── 초등 진급 — 바뀔 시간 (원장님 2026-11-18) ───────────────────
+ * 「시간이 바껴서 진급하는 학생들도 있거든. 담당도 바뀌고. … 시간도 변경하는 기능이
+ *   지금은 없어. 같이 추가해줘」
+ *
+ * 고등 판은 **정해진 타임**(ja·at1 …)을 고르지만 초등은 그런 반이 없다. 그래서
+ * **요일 + 시작 시각 + 교시** 를 그대로 고른다 — 지금 시간표가 적히는 꼴과 같다.
+ *
+ * ★ 비워 두면(null) **지금 시간표 그대로**다. 바꿀 학생만 고르면 된다.
+ * ★ 이 값은 선생님별 격자를 **새 자리로** 다시 그리는 데 쓰인다. 안 그러면 시간을
+ *   옮겨 놓고도 「그 칸에 몇 명」이 옛 자리로 세어져 **숫자가 거짓이 된다**.
+ */
+
+/** 고를 수 있는 시작 시각 — 격자(ROWS_ELEM) 안에서 수업이 끝나게 18:00 까지. */
+export const ELEM_STARTS = ['14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00']
+/** 고를 수 있는 교시 — 지금 초등 시간표에 있는 값(1·2·2.5·3)에 1.5 를 더했다. */
+export const ELEM_PERIODS = [1, 1.5, 2, 2.5, 3]
+/** 한 교시는 60분. */
+export const PERIOD_MIN = 60
+
+export interface NewTime {
+  /** 월~금 중 하나 이상 */
+  days: string[]
+  /** 'HH:MM' */
+  start: string
+  /** 교시 (1 교시 = 60분) */
+  periods: number
+}
+
+/**
+ * 저장된 값을 믿지 않고 푼다 — 화면·서버·검사가 **이 함수 하나**를 같이 쓴다.
+ * 하나라도 어긋나면 null 이다(= 지금 시간표 그대로). 반쯤 맞는 값을 통과시키면
+ * 격자에 안 그려지는 학생이 조용히 생긴다.
+ */
+export function parseNewTime(v: any): NewTime | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const days = [...new Set((Array.isArray(v.days) ? v.days : [])
+    .map((d: any) => String(d ?? '').trim())
+    .filter((d: string) => (DAYS_WD as readonly string[]).includes(d)))] as string[]
+  const start = String(v.start ?? '').trim()
+  const periods = Number(v.periods)
+  if (!days.length || !ELEM_STARTS.includes(start) || !ELEM_PERIODS.includes(periods)) return null
+  // 요일은 늘 월→금 차례로 — 적는 사람에 따라 뒤집히면 「바뀜」 판정이 흔들린다.
+  days.sort((a, b) => (DAYS_WD as readonly string[]).indexOf(a) - (DAYS_WD as readonly string[]).indexOf(b))
+  return { days, start, periods }
+}
+
+/** '월·수 16:00(2교시)' 꼴로. */
+export function newTimeText(t: NewTime | null | undefined): string {
+  if (!t) return ''
+  return `${t.days.join('·')} ${t.start}(${t.periods}교시)`
+}
+
+/** 그 칸(요일 · row 부터 30분)에 이 시간이 걸리나. */
+export function newTimeAt(t: NewTime | null | undefined, day: string, row: string): boolean {
+  if (!t || !t.days.includes(day)) return false
+  const s = toMin(t.start), e = s + Math.round(t.periods * PERIOD_MIN)
+  const a = toMin(row), b = a + 30
+  return s < b && e > a
+}
+
+/** 두 시간이 같은가 — 「바뀜」을 알리는 데 쓴다. */
+export function sameTime(a: NewTime | null | undefined, b: NewTime | null | undefined): boolean {
+  if (!a || !b) return !a && !b
+  return a.start === b.start && a.periods === b.periods && a.days.join() === b.days.join()
 }
