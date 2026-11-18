@@ -13,7 +13,7 @@ import {
   WD, WE, DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID, ROWS_ELEM,
   EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID, NO_SHOW,
   GRADES_ELEM, ELEM_PICKS, ELEM_STARTS, ELEM_PERIODS, nextGrade, elemDraft,
-  parseNewTime, newTimeText, newTimeAt, sameTime,
+  parseNewTime, newTimeText, newTimeAt, newTimeDays, sameTime, withDay,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff, toMin,
 } from '../lib/moveAssign.ts'
 
@@ -132,41 +132,69 @@ ok(ROWS_ELEM[0] === '14:00' && ROWS_ELEM[ROWS_ELEM.length - 1] === '19:00', '초
 //   그려져 「그 칸에 몇 명」이 틀어진다(지금도 16:30 시작이 6명 있다).
 ok(ROWS_ELEM.every((r, i) => i === 0 || toMin(r) - toMin(ROWS_ELEM[i - 1]) === 30), '초등 격자는 30분 간격')
 
-// ⑨ 바뀔 시간 (원장님 2026-11-18 「시간도 변경하는 기능이 지금은 없어. 같이 추가해줘」)
-const 때 = { days: ['월', '수'], start: '16:00', periods: 2 }
-ok(JSON.stringify(parseNewTime(때)) === JSON.stringify({ days: ['월', '수'], start: '16:00', periods: 2 }),
-  '제대로 된 값은 그대로 읽힌다')
-ok(parseNewTime({ ...때, days: ['수', '월'] })!.days.join() === '월,수', '요일은 늘 월→금 차례로 돌려준다')
-ok(parseNewTime({ ...때, days: ['월', '월', '수'] })!.days.length === 2, '같은 요일을 두 번 적어도 한 번')
+// ⑨ 바뀔 시간 — **요일마다** 따로 (원장님 2026-11-18)
+//   「시간표가 화2 목2 금5 이렇게 시간이 다르거든. 그런데 지금 요일별 시간 설정은 못하네」
+//   초1~초5 50명 중 **23명**이 요일마다 시각이 다르다 — 한 벌로는 절반을 못 적는다.
+const 요일별 = [
+  { day: '화', start: '14:00', periods: 2 },
+  { day: '목', start: '14:00', periods: 2 },
+  { day: '금', start: '17:00', periods: 2 },
+]
+// ★ 여기서 `!` 로 단정하면 **망가진 사본에서 터져** 버려서 ✗ 한 줄 없이 끝난다 —
+//   「아무것도 안 잡힘」이 「통과」처럼 보인다. 그래서 전부 물음표로 받는다
+//   (2026-11-18 에 실제로 이렇게 두 군데를 놓칠 뻔했다).
+const t3 = parseNewTime(요일별)
+ok(t3?.length === 3, '요일 셋을 그대로 읽는다')
+ok(t3?.[0]?.day === '화' && t3?.[2]?.day === '금', '늘 월→금 차례로 돌려준다')
+ok(parseNewTime([...요일별].reverse())?.map((d) => d.day).join() === '화,목,금', '적는 차례가 뒤집혀도 같다')
+ok(parseNewTime([요일별[0], { ...요일별[0], start: '17:00' }])?.length === 1, '같은 요일이 두 번이면 한 번만')
+
+// ★ 예전 꼴({days,start,periods})도 읽어야 한다 — 2026-11-18 에 이미 저장된 줄이 있다.
+//   안 읽으면 그 학생 배정이 **조용히 사라진다**.
+const 예전 = parseNewTime({ days: ['화', '목', '금'], start: '14:00', periods: 2 })
+ok(예전?.length === 3 && 예전.every((d) => d.start === '14:00' && d.periods === 2),
+  '예전 꼴(요일 묶음 하나)은 요일마다 한 줄로 펴서 읽는다')
+
 // ★ 반쯤 맞는 값을 통과시키면 격자에 **안 그려지는 학생**이 조용히 생긴다.
 ok(parseNewTime(null) === null && parseNewTime('월 4시') === null && parseNewTime([]) === null,
   '값이 아니면 null (= 지금 시간표 그대로)')
-ok(parseNewTime({ ...때, days: [] }) === null, '요일이 없으면 안 받는다')
-ok(parseNewTime({ ...때, days: ['토'] }) === null, '초등은 평일만 — 토·일은 안 받는다')
-ok(parseNewTime({ ...때, start: '13:00' }) === null && parseNewTime({ ...때, start: '16:20' }) === null,
-  '고를 수 없는 시작 시각은 안 받는다')
-ok(parseNewTime({ ...때, periods: 4 }) === null && parseNewTime({ ...때, periods: 0 }) === null,
-  '고를 수 없는 교시는 안 받는다')
+ok(parseNewTime([{ day: '토', start: '14:00', periods: 2 }]) === null, '초등은 평일만 — 토·일은 안 받는다')
+ok(parseNewTime([{ day: '월', start: '13:00', periods: 2 }]) === null
+  && parseNewTime([{ day: '월', start: '16:20', periods: 2 }]) === null, '고를 수 없는 시작 시각은 안 받는다')
+ok(parseNewTime([{ day: '월', start: '14:00', periods: 4 }]) === null
+  && parseNewTime([{ day: '월', start: '14:00', periods: 0 }]) === null, '고를 수 없는 교시는 안 받는다')
+// 어긋난 줄만 버리고 나머지는 산다 — 한 줄 때문에 그 학생 배정이 통째로 사라지면 안 된다
+ok(parseNewTime([요일별[0], { day: '토', start: '14:00', periods: 2 }])?.length === 1,
+  '어긋난 줄만 버리고 쓸 줄은 남긴다')
 ok(ELEM_STARTS.every((t) => ROWS_ELEM.includes(t)), '고를 수 있는 시작 시각은 모두 격자에 줄이 있다')
 ok(ELEM_PERIODS.includes(2) && ELEM_PERIODS.includes(2.5), '지금 쓰는 교시(2·2.5)가 들어 있다')
 
-ok(newTimeText(parseNewTime(때)) === '월·수 16:00(2교시)', '글로 적는 꼴')
-ok(newTimeText(null) === '', '안 바꿨으면 빈 글')
+// 글로 적을 때는 같은 시각끼리 묶는다 — 요일마다 줄을 세우면 길어서 못 읽는다
+ok(newTimeText(t3) === '화·목 14:00(2교시) · 금 17:00(2교시)', '같은 시각끼리 묶어 적는다')
+ok(newTimeText(null) === '' && newTimeText([]) === '', '안 바꿨으면 빈 글')
 
-// 격자 판정 — 16:00 에 2교시면 16:00~18:00 이다
-const t2 = parseNewTime(때)
-ok(newTimeAt(t2, '월', '16:00') && newTimeAt(t2, '월', '17:30'), '수업 시간 안의 칸에 선다')
-ok(!newTimeAt(t2, '월', '15:30'), '시작 전 칸에는 없다')
-ok(!newTimeAt(t2, '월', '18:00'), '끝나는 시각 칸에는 없다')
-ok(!newTimeAt(t2, '화', '16:00'), '안 고른 요일에는 없다')
-ok(!newTimeAt(null, '월', '16:00'), '안 바꿨으면 이 함수로는 아무 데도 안 선다')
-// 2.5교시 = 150분
-ok(newTimeAt(parseNewTime({ ...때, periods: 2.5 }), '월', '18:00'), '2.5교시는 18:30 까지라 18:00 칸에 선다')
+// 격자 판정 — 요일마다 따로
+ok(newTimeAt(t3, '화', '14:00') && newTimeAt(t3, '화', '15:30'), '화요일 14:00~16:00 칸에 선다')
+ok(!newTimeAt(t3, '화', '16:00'), '끝나는 시각 칸에는 없다')
+ok(!newTimeAt(t3, '화', '17:00') && newTimeAt(t3, '금', '17:00'), '금요일만 17:00 에 선다')
+ok(!newTimeAt(t3, '월', '14:00'), '안 고른 요일에는 없다')
+ok(!newTimeAt(null, '화', '14:00'), '안 바꿨으면 이 함수로는 아무 데도 안 선다')
+ok(newTimeAt(parseNewTime([{ day: '월', start: '16:00', periods: 2.5 }]), '월', '18:00'),
+  '2.5교시는 18:30 까지라 18:00 칸에 선다')
+ok(newTimeDays(t3).join() === '화,목,금', '걸리는 요일을 돌려준다')
+ok(newTimeText(t3) !== '' && newTimeText(parseNewTime('x')) === '', '못 읽은 값은 빈 글')
 
-ok(sameTime(parseNewTime(때), parseNewTime({ days: ['수', '월'], start: '16:00', periods: 2 })),
-  '요일 차례가 달라도 같은 시간이다')
-ok(!sameTime(parseNewTime(때), parseNewTime({ ...때, start: '17:00' })), '시각이 다르면 다른 시간')
-ok(sameTime(null, null) && !sameTime(parseNewTime(때), null), '빈 것끼리만 같다')
+// 요일 한 줄씩 고치기 — 화면이 쓰는 길
+ok(withDay(t3, '금', null)?.length === 2, '요일을 빼면 그 줄만 빠진다')
+ok(withDay(t3, '금', { start: '18:00', periods: 1 })?.find((d) => d.day === '금')?.start === '18:00',
+  '요일 하나의 시각만 고친다')
+ok(withDay(t3, '월', { start: '15:00', periods: 2 })?.map((d) => d.day).join() === '월,화,목,금',
+  '요일을 더하면 차례대로 들어간다')
+ok(withDay(parseNewTime([요일별[0]]), '화', null) === null, '마지막 요일을 빼면 null (= 지금 그대로)')
+
+ok(sameTime(t3, parseNewTime([...요일별].reverse())), '적는 차례가 달라도 같은 시간이다')
+ok(!sameTime(t3, withDay(t3, '금', { start: '18:00', periods: 2 })), '한 요일만 달라도 다른 시간')
+ok(sameTime(null, null) && sameTime(null, []) && !sameTime(t3, null), '빈 것끼리만 같다')
 
 // ── 여기부터는 운영 데이터 (.env.local 이 있을 때만)
 for (const f of ['.env.local', '.env']) {
@@ -313,6 +341,35 @@ if (!url || !key) {
   ok(제안없음.length <= 3,
     `첫 제안이 비는 초등 학생이 ${제안없음.length}명이다 — ${제안없음.map((s) => `${s.name}(${s.teacher_name ?? '담당 없음'})`).join(' · ')}`)
 
+  // ★ 운영 초등 시간표가 **요일별 꼴로 다 읽히나** (원장님 2026-11-18)
+  //   처음엔 「요일 묶음 하나 + 시각 하나」로 만들었다가, 요일마다 시각이 다른 학생을
+  //   아예 못 적는 것을 원장님이 잡으셨다. 그런 학생이 **절반**이다 — 그래서 센다.
+  const elemIds = 초등.map((s) => s.id)
+  const esc: any[] = []
+  for (let i = 0; i < elemIds.length; i += 100) {
+    esc.push(...await all(() => db.from('schedules').select('student_id, day_of_week, start_time, periods')
+      .in('student_id', elemIds.slice(i, i + 100)).order('id')))
+  }
+  const byStu = new Map<string, any[]>()
+  for (const r of esc) {
+    byStu.set(r.student_id, [...(byStu.get(r.student_id) ?? []),
+      { day: r.day_of_week, start: String(r.start_time).slice(0, 5), periods: Number(r.periods) }])
+  }
+  let 못읽음: string[] = []
+  let 요일마다다름 = 0
+  for (const st of 초등) {
+    const rows = byStu.get(st.id) ?? []
+    if (!rows.length) continue                       // 시간표가 아직 없는 학생은 넘어간다
+    const parsed = parseNewTime(rows)
+    const 평일 = rows.filter((r: any) => (['월', '화', '수', '목', '금'] as string[]).includes(r.day))
+    if (!parsed || parsed.length !== new Set(평일.map((r: any) => r.day)).size) { 못읽음.push(st.name); continue }
+    if (new Set(parsed.map((d) => d.start + '|' + d.periods)).size > 1) 요일마다다름++
+  }
+  ok(못읽음.length === 0,
+    `운영 초등 시간표를 못 읽는 학생 ${못읽음.length}명 — ${못읽음.slice(0, 8).join(' · ')}`)
+  ok(요일마다다름 > 0,
+    `요일마다 시각이 다른 학생이 ${요일마다다름}명 — 요일별로 적을 수 있어야 한다`)
+
   // ⑩ 권한 함수가 DB 에 살아 있나 — 화면·API 가 이 이름을 부르는데 함수가 없으면
   //    rpc 가 조용히 false 를 주고 **아무도 못 들어온다.**
   //    (정책이 이 함수를 보는지는 docs/sql/진급배정판_권한분리.sql 끝의 확인 쿼리로 센다 —
@@ -321,7 +378,7 @@ if (!url || !key) {
     const { error: fnErr } = await db.rpc(fn as any)
     ok(!fnErr, `DB 함수 ${fn}() 를 부르지 못했다 — docs/sql/진급배정판_권한분리.sql 을 적용했나`)
   }
-  console.log(`(운영 데이터 — 중3 ${중3.length}명 · 초6 ${초6.length}명 · 중1·중2 ${real.filter((s) => s.grade === '중1' || s.grade === '중2').length}명 · 초1~초5 ${초등.length}명)`)
+  console.log(`(운영 데이터 — 중3 ${중3.length}명 · 초6 ${초6.length}명 · 중1·중2 ${real.filter((s) => s.grade === '중1' || s.grade === '중2').length}명 · 초1~초5 ${초등.length}명, 그중 요일마다 시각 다른 학생 ${요일마다다름}명)`)
 }
 
 if (bad) { console.error(`\n진급 배정판 자가확인 실패 ${bad}건`); process.exit(1) }

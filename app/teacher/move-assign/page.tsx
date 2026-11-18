@@ -31,7 +31,7 @@ import {
   DAYS_WD, DAYS_WE, ROWS_WD, ROWS_WE, ROWS_MID, ROWS_ELEM,
   WD, WE, EXTRA, HIGH_TEACHERS, HIGH_PICKS, MID_PICKS, DRAFT_HIGH, DRAFT_MID,
   GRADES_ELEM, ELEM_PICKS, ELEM_STARTS, ELEM_PERIODS, nextGrade, elemDraft,
-  parseNewTime, newTimeText, newTimeAt, sameTime, type NewTime,
+  parseNewTime, newTimeText, newTimeAt, newTimeDays, sameTime, withDay, type NewTime,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff,
   toMin, type Track,
 } from '@/lib/moveAssign'
@@ -704,20 +704,13 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }
    *   (그런 학생은 「지금 그대로」만 두고, 바꾸시려면 직접 고르신다).
    */
   const nowTime = useMemo(() => {
-    const byStudent = new Map<string, Map<string, string[]>>()
+    const byStudent = new Map<string, any[]>()
     for (const s of scheds) {
-      const key = String(s.start_time).slice(0, 5) + '|' + Number(s.periods)
-      const m = byStudent.get(s.student_id) ?? new Map<string, string[]>()
-      m.set(key, [...(m.get(key) ?? []), s.day_of_week])
-      byStudent.set(s.student_id, m)
+      byStudent.set(s.student_id, [...(byStudent.get(s.student_id) ?? []),
+        { day: s.day_of_week, start: String(s.start_time).slice(0, 5), periods: Number(s.periods) }])
     }
     const out = new Map<string, NewTime | null>()
-    for (const [id, m] of byStudent) {
-      if (m.size !== 1) { out.set(id, null); continue }
-      const [key, days] = [...m][0]
-      const [start, periods] = key.split('|')
-      out.set(id, parseNewTime({ days, start, periods: Number(periods) }))
-    }
+    for (const [id, list] of byStudent) out.set(id, parseNewTime(list))
     return out
   }, [scheds])
 
@@ -729,7 +722,7 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }
     return busy.get(s.id)?.has(day + '|' + toMin(row)) ?? false
   }
   /** 바꾼 시간이 걸리는 요일 — 「못 오시는 요일」을 그 시간으로 본다. */
-  const 요일들 = (s: Student) => 바뀔시간(s)?.days ?? daysOf[s.id] ?? []
+  const 요일들 = (s: Student) => (바뀔시간(s) ? newTimeDays(바뀔시간(s)) : (daysOf[s.id] ?? []))
 
   const 맡을이 = (s: Student) => assign[s.id]?.t ?? ''
   /** 지금 담당과 달라졌나 — 눈에 띄게 해 둔다(바꾼 것만 보시면 된다) */
@@ -912,11 +905,14 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }
 }
 
 /* ────────────────── 바뀔 시간 고르기 (초등 진급 · 원장님 2026-11-18) ──────────────────
- * 요일(월~금 눌러서 켜고 끄기) + 시작 시각 + 교시.
+ * **요일마다** 시작 시각과 교시를 고른다.
  *
- * ★ 비워 두면 **지금 시간표 그대로**다. 그래서 처음에는 지금 값이 흐리게 들어가 있고,
- *   하나라도 건드리면 그때 「바꾼 것」이 된다. 「지금 그대로」를 누르면 도로 비워진다.
- * ★ 요일을 하나도 안 고르면 저장하지 않는다 — 요일 없는 시간은 격자에 그릴 수가 없다.
+ * ★ 처음엔 한 벌(요일 묶음 + 시각 하나)로 만들었다가 바로 고쳤다 — 원장님
+ *   「시간표가 화2 목2 금5 이렇게 시간이 다르거든」. 재어 보니 초1~초5 50명 중
+ *   **23명**이 요일마다 시각이 다르다. 한 벌로는 그 절반을 아예 못 적는다.
+ *
+ * ★ 비워 두면 **지금 시간표 그대로**다. 요일을 다 끄면 도로 비워진다.
+ *   처음에는 지금 시간표가 흐리게 들어가 있고, 하나라도 건드리면 그때 「바꾼 것」이 된다.
  */
 
 function TimePick({ now, value, onChange }: {
@@ -924,26 +920,27 @@ function TimePick({ now, value, onChange }: {
   value: NewTime | null
   onChange: (nt: NewTime | null) => void
 }) {
-  const 쓰는값: NewTime = value ?? now ?? { days: [], start: '15:00', periods: 2 }
-  const 바꿈 = !!value
+  const 바꿈 = !!value && value.length > 0
+  const 쓰는값: NewTime = value ?? now ?? []
+  const 하루 = (d: string) => 쓰는값.find((x) => x.day === d) ?? null
 
-  const 내보내기 = (next: NewTime) => {
-    // 요일이 없으면 격자에 그릴 수 없다 — 저장하지 않고 화면만 그대로 둔다.
-    if (!next.days.length) return
-    onChange(parseNewTime(next))
-  }
+  /** 그 요일을 켜고 끈다. 다 끄면 「지금 그대로」로 돌아간다. */
   const 요일누름 = (d: string) => {
-    const has = 쓰는값.days.includes(d)
-    const days = has ? 쓰는값.days.filter((x) => x !== d) : [...쓰는값.days, d]
-    if (!days.length) { onChange(null); return }   // 다 끄면 「지금 그대로」로 돌아간다
-    내보내기({ ...쓰는값, days })
+    if (하루(d)) { onChange(withDay(쓰는값, d, null)); return }
+    // 켤 때의 기본값 — 지금 시간표의 그 요일, 없으면 같은 학생의 다른 요일, 그것도 없으면 15:00 2교시
+    const 본 = (now ?? []).find((x) => x.day === d) ?? 쓰는값[0] ?? (now ?? [])[0]
+    onChange(withDay(쓰는값, d, { start: 본?.start ?? '15:00', periods: 본?.periods ?? 2 }))
+  }
+  const 고침 = (d: string, part: 'start' | 'periods', v: string) => {
+    const 본 = 하루(d); if (!본) return
+    onChange(withDay(쓰는값, d, { ...본, [part]: part === 'periods' ? Number(v) : v }))
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 min-w-[230px]">
       <div className="flex flex-wrap gap-0.5">
         {DAYS_WD.map((d) => {
-          const on = 쓰는값.days.includes(d)
+          const on = !!하루(d)
           return (
             <button key={d} type="button" onClick={() => 요일누름(d)}
               className={cx('w-6 h-6 rounded-md text-[11px] font-bold border',
@@ -953,24 +950,24 @@ function TimePick({ now, value, onChange }: {
             </button>
           )
         })}
-      </div>
-      <div className="flex flex-wrap gap-1 items-center">
-        <Sel value={쓰는값.start} unset={!바꿈}
-          onChange={(v) => 내보내기({ ...쓰는값, start: v })}
-          options={ELEM_STARTS.map((x) => [x, x] as [string, string])} />
-        <Sel value={String(쓰는값.periods)} unset={!바꿈}
-          onChange={(v) => 내보내기({ ...쓰는값, periods: Number(v) })}
-          options={ELEM_PERIODS.map((x) => [String(x), x + '교시'] as [string, string])} />
         {바꿈 && (
           <button type="button" onClick={() => onChange(null)}
             className="text-[11px] text-gray-400 underline px-1">지금 그대로</button>
         )}
       </div>
-      {!바꿈 && !now && (
-        <span className="block text-[11px] text-amber-700">
-          지금 시간표가 한 벌이 아니라 기본값이 없어요 — 바꾸시려면 요일부터 고르세요
-        </span>
-      )}
+      {쓰는값.length === 0
+        ? <span className="block text-[11px] text-gray-400">요일을 눌러 고르세요</span>
+        : 쓰는값.map((x) => (
+          <div key={x.day} className="flex items-center gap-1">
+            <span className={cx('text-[11px] w-4 text-center font-bold', 바꿈 ? 'text-emerald-700' : 'text-gray-400')}>{x.day}</span>
+            <Sel value={x.start} unset={!바꿈}
+              onChange={(v) => 고침(x.day, 'start', v)}
+              options={ELEM_STARTS.map((t) => [t, t] as [string, string])} />
+            <Sel value={String(x.periods)} unset={!바꿈}
+              onChange={(v) => 고침(x.day, 'periods', v)}
+              options={ELEM_PERIODS.map((t) => [String(t), t + '교시'] as [string, string])} />
+          </div>
+        ))}
     </div>
   )
 }
