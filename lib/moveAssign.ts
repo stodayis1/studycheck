@@ -386,9 +386,10 @@ export const ELEM_PERIODS = [1, 1.5, 2, 2.5, 3]
 /** 한 교시는 60분. */
 export const PERIOD_MIN = 60
 
-export interface NewTime {
-  /** 월~금 중 하나 이상 */
-  days: string[]
+/** 하루치 — 요일 하나에 시작 시각과 교시. */
+export interface DayTime {
+  /** 월~금 */
+  day: string
   /** 'HH:MM' */
   start: string
   /** 교시 (1 교시 = 60분) */
@@ -396,39 +397,91 @@ export interface NewTime {
 }
 
 /**
+ * 바뀔 시간 — **요일마다 따로** 적는다. 비었으면 null 로 다룬다(= 지금 시간표 그대로).
+ *
+ * ★ 2026-11-18 에 「요일 묶음 하나 + 시각 하나」에서 **요일별**로 바꿨다 (원장님
+ *   「시간표가 화2 목2 금5 이렇게 시간이 다르거든. 그런데 지금 요일별 시간 설정은 못하네」).
+ *   재어 보니 초1~초5 **50명 중 23명**이 요일마다 시각이 다르다 — 절반이다.
+ *   한 벌로는 그 23명을 아예 적을 수가 없었다.
+ */
+export type NewTime = DayTime[]
+
+/**
  * 저장된 값을 믿지 않고 푼다 — 화면·서버·검사가 **이 함수 하나**를 같이 쓴다.
- * 하나라도 어긋나면 null 이다(= 지금 시간표 그대로). 반쯤 맞는 값을 통과시키면
- * 격자에 안 그려지는 학생이 조용히 생긴다.
+ * 어긋난 줄은 **버리고**, 쓸 줄이 하나도 없으면 null 이다(= 지금 시간표 그대로).
+ * 반쯤 맞는 값을 통과시키면 격자에 안 그려지는 학생이 조용히 생긴다.
+ *
+ * ★ **예전 꼴도 그대로 읽는다** — `{days:[…], start, periods}` 는 요일마다 한 줄로 편다.
+ *   2026-11-18 에 이미 저장된 줄이 있어서, 안 읽으면 그 학생 배정이 조용히 사라진다.
  */
 export function parseNewTime(v: any): NewTime | null {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
-  const days = [...new Set((Array.isArray(v.days) ? v.days : [])
-    .map((d: any) => String(d ?? '').trim())
-    .filter((d: string) => (DAYS_WD as readonly string[]).includes(d)))] as string[]
-  const start = String(v.start ?? '').trim()
-  const periods = Number(v.periods)
-  if (!days.length || !ELEM_STARTS.includes(start) || !ELEM_PERIODS.includes(periods)) return null
-  // 요일은 늘 월→금 차례로 — 적는 사람에 따라 뒤집히면 「바뀜」 판정이 흔들린다.
-  days.sort((a, b) => (DAYS_WD as readonly string[]).indexOf(a) - (DAYS_WD as readonly string[]).indexOf(b))
-  return { days, start, periods }
+  const raw: any[] = Array.isArray(v)
+    ? v
+    : (v && typeof v === 'object' && Array.isArray(v.days))
+      // 예전 꼴 — 요일 묶음 하나에 시각 하나
+      ? v.days.map((d: any) => ({ day: d, start: v.start, periods: v.periods }))
+      : []
+
+  const byDay = new Map<string, DayTime>()
+  for (const r of raw) {
+    const day = String(r?.day ?? '').trim()
+    const start = String(r?.start ?? '').trim()
+    const periods = Number(r?.periods)
+    if (!(DAYS_WD as readonly string[]).includes(day)) continue
+    if (!ELEM_STARTS.includes(start) || !ELEM_PERIODS.includes(periods)) continue
+    // 같은 요일이 두 번 적혀 오면 **먼저 적힌 것**만 쓴다(초등은 하루 한 번뿐이다).
+    if (!byDay.has(day)) byDay.set(day, { day, start, periods })
+  }
+  if (!byDay.size) return null
+  // 늘 월→금 차례로 — 적는 차례가 뒤집히면 「바뀜」 판정이 흔들린다.
+  return [...byDay.values()].sort((a, b) =>
+    (DAYS_WD as readonly string[]).indexOf(a.day) - (DAYS_WD as readonly string[]).indexOf(b.day))
 }
 
-/** '월·수 16:00(2교시)' 꼴로. */
+/**
+ * '화·목 14:00(2교시) · 금 17:00(2교시)' 꼴로.
+ * 같은 시각끼리 묶어 적는다 — 요일마다 줄을 세우면 길어서 못 읽는다.
+ */
 export function newTimeText(t: NewTime | null | undefined): string {
-  if (!t) return ''
-  return `${t.days.join('·')} ${t.start}(${t.periods}교시)`
+  if (!t || !t.length) return ''
+  const 묶음: { key: string; days: string[]; start: string; periods: number }[] = []
+  for (const d of t) {
+    const key = d.start + '|' + d.periods
+    const 있는것 = 묶음.find((g) => g.key === key)
+    if (있는것) 있는것.days.push(d.day)
+    else 묶음.push({ key, days: [d.day], start: d.start, periods: d.periods })
+  }
+  return 묶음.map((g) => `${g.days.join('·')} ${g.start}(${g.periods}교시)`).join(' · ')
 }
 
 /** 그 칸(요일 · row 부터 30분)에 이 시간이 걸리나. */
 export function newTimeAt(t: NewTime | null | undefined, day: string, row: string): boolean {
-  if (!t || !t.days.includes(day)) return false
-  const s = toMin(t.start), e = s + Math.round(t.periods * PERIOD_MIN)
+  if (!t) return false
   const a = toMin(row), b = a + 30
-  return s < b && e > a
+  return t.some((d) => {
+    if (d.day !== day) return false
+    const s = toMin(d.start), e = s + Math.round(d.periods * PERIOD_MIN)
+    return s < b && e > a
+  })
+}
+
+/** 그 시간이 걸리는 요일 — 「못 오시는 요일」을 보는 데 쓴다. */
+export function newTimeDays(t: NewTime | null | undefined): string[] {
+  return (t ?? []).map((d) => d.day)
 }
 
 /** 두 시간이 같은가 — 「바뀜」을 알리는 데 쓴다. */
 export function sameTime(a: NewTime | null | undefined, b: NewTime | null | undefined): boolean {
-  if (!a || !b) return !a && !b
-  return a.start === b.start && a.periods === b.periods && a.days.join() === b.days.join()
+  const x = a && a.length ? a : null
+  const y = b && b.length ? b : null
+  if (!x || !y) return !x && !y
+  if (x.length !== y.length) return false
+  return x.every((d, i) => d.day === y[i].day && d.start === y[i].start && d.periods === y[i].periods)
+}
+
+/** 그 요일의 줄을 바꾼(또는 뺀) 값. 화면이 요일 한 줄씩 고칠 때 쓴다. */
+export function withDay(t: NewTime | null | undefined, day: string, v: { start: string; periods: number } | null): NewTime | null {
+  const 남길것 = (t ?? []).filter((d) => d.day !== day)
+  const 더할것 = v ? [{ day, start: v.start, periods: v.periods }] : []
+  return parseNewTime([...남길것, ...더할것])
 }
