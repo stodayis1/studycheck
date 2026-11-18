@@ -222,6 +222,32 @@ const WEEKEND_REVIEW = /주말\s*복습\s*(?:TEST|테스트|시험|평가)/i
  *        낸 레벨학습지다. 레벨로 가르지 않으면 그쪽이 통째로 평가로 새어 나간다.
  *      ★ **단원평가는 보내지 않는다** (초등 학교시험 칸). 위 분류 표에 적어 두었다.
  *
+ * ── 2026-11-18 원장님이 주신 **최종 규칙** (그대로 옮긴다) ──────────────────────
+ *   「수업에 사용하고 스터디체크에 읽히는 학습지 종류는 총 4가지로 구분됩니다
+ *
+ *    1. 레벨 학습지   — 단계별 성취도 확인          · 제목 필수 키워드: 단원명 + 레벨
+ *    2. 평가 학습지   — 주간평가(소단원·중단원 하나가 끝났을 때 진단평가/주간평가/월간평가
+ *                       기능으로 출제)              · 제목 필수 키워드: 단원명 + 레벨
+ *    3. TOMA(코어테스트) — 학원 정기 시험            · 제목 필수 키워드: TOMA
+ *    4. 오답 학습지   — 기간별·회차별 오답복습       · 제목 필수 키워드: 날짜 + 「오답」
+ *
+ *    ※ 교과서나 교재 쌍둥이 학습지의 경우, 구성 문항에 따라 레벨 정하여 제목에 표시해
+ *      '레벨학습지'에 포함」
+ *   「제목 필수 키워드가 우선키워드가 되는거지」
+ *   「오답이 있을 경우 제목에 오답은 꼭 날짜가 기입이 될거거든. 너는 학습결과에 올릴때
+ *    해당날짜에 풀었던 학습지의 단원명이 있을거 아냐. 그럼 그 단원에 대한 오답, 오답유사가
+ *    되도록 붙여주면 됨」
+ *
+ *   이 규칙으로 **두 군데가 바뀌었다**:
+ *   ⑦ **평가 낱말이 레벨보다 먼저다** (`isDiagnostic`). 평가에도 레벨을 쓰시기로 했으니
+ *      11-06 의 「레벨이 적혀 있으면 레벨학습지」로 가르면 평가가 전부 레벨학습지로 밀린다.
+ *      → 「[주간평가] … _Lv3.5」도 이제 평가관리로 간다. 레벨학습지로 두려면 제목에서
+ *        「주간평가」를 빼야 한다. 「단원평가」는 여전히 제외(초등 학교시험 칸이다).
+ *   ⑧ **오답 이름은 그 날짜에 푼 단원으로 짓는다** (`wrongNoteDateOf` · `unitsOnDate` ·
+ *      `unitCore` · `wrongNoteFix`). 그동안 학부모 브리핑에 「(2026.11.16) 오답과제」처럼
+ *      날짜만 나갔다 — 이제 「4단원 오답」·「4단원 오답유사」로 나간다. 그 날짜에 푼
+ *      학습지를 못 찾으면 **지어내지 않고** 적힌 글자에 「오답」만 붙인다.
+ *
  * ★ 선생님께 **새로 가르칠 말은 없다.** 고쳐야 할 것은 표기뿐이다 — 별표로 감싸기
  *   (`* 레벨학습지 (3-2) 3단원 *`), 꺾쇠(`< 중 ( 1-1 ) 1단원 >`), 들쭉날쭉한 띄어쓰기
  *   (같은 단원이 네 꼴로 갈려 레벨 현황판이 쪼개졌다), 「1차시~9차시」처럼 단원명이 아닌 것.
@@ -619,8 +645,15 @@ export function isDiagnostic(row: { title?: string | null; kind?: string | null;
   if (isDailyTest(row)) return false
   if (WEEKEND_REVIEW.test(String(row.title ?? ''))) return true
   const t = `${row.title ?? ''} ${row.kind ?? ''}`
-  if (!/진단\s*평가|주간\s*평가|주말\s*평가/.test(t)) return false
-  return row.level == null
+  if (!/진단\s*평가|주간\s*평가|주말\s*평가|월간\s*평가/.test(t)) return false
+  // ★★ 2026-11-18 — **평가 낱말이 레벨보다 먼저다** (원장님이 최종 규칙을 주셨다).
+  //   「평가 학습지 … 제목 필수 키워드 : 단원명 + 레벨」 — 평가에도 레벨을 쓰시기로 했으니
+  //   「레벨이 적혀 있으면 레벨학습지」(2026-11-06)로 가르면 **평가가 전부 레벨학습지로 밀린다.**
+  //   그래서 `return row.level == null` 을 뺐다. 레벨은 평가관리의 단계 칸에 그대로 들어간다.
+  //   ★ 바뀌는 것: 「[주간평가] 중1-2 1. 기본도형 ~ 3. 입체도형_Lv3.5」처럼 **학습지 메뉴에서
+  //     낸 것도 이제 평가로 간다.** 레벨학습지로 두고 싶으면 제목에서 「주간평가」를 빼야 한다.
+  //   ★ 「단원평가」는 여전히 보내지 않는다(위 설명) — 낱말 묶음에 넣지 않았다.
+  return true
 }
 
 /** 진단평가 제목에서 떼어낸 것 — 평가관리의 `unit_name` 과 `level` 칸에 그대로 들어간다. */
@@ -641,7 +674,7 @@ export interface DiagnosticParts {
  * 덜어내는 것: 「[…]」 머리표·「11월」·「첫째주」·「주간평가(1)」·레벨 표기.
  * 남은 것이 단원이다. 아무것도 안 남으면 null — **지어내지 않는다.**
  */
-export function parseDiagnosticTitle(title: string): DiagnosticParts {
+export function parseDiagnosticTitle(title: string, studentName?: string | null): DiagnosticParts {
   let t = String(title ?? '').trim()
   const 단계 = /\[\s*([0-9]+(?:\.[0-9]+)?)\s*단계\s*\]/.exec(t)
   const level = 단계 ? Number(단계[1]) : levelOf(LEVEL.exec(t))
@@ -652,14 +685,30 @@ export function parseDiagnosticTitle(title: string): DiagnosticParts {
   if (WEEKEND_REVIEW.test(t)) return { unitName: '주말복습', level }
   t = t
     .replace(/\[[^\]]*\]/g, ' ')
+    // ★ 날짜를 먼저 뗀다 — 「(2026.11.17) (주간평가+…) 조하윤」처럼 날짜가 **괄호째로**
+    //   앞에 붙어 온다. 안 떼면 날짜가 단원 이름이 되고 평가관리에서 날마다 따로 흩어진다.
+    .replace(/\(?\s*\d{4}\s*[.\-/]\s*\d{1,2}\s*[.\-/]\s*\d{1,2}\s*\)?/g, ' ')
     .replace(/[0-9]+\s*월/g, ' ')
     .replace(/(첫|둘|두|셋|세|넷|네|다섯)\s*째\s*주/g, ' ')
-    .replace(/(진단|주간|주말)\s*평가\s*(\([0-9]+\))?/g, ' ')
+    .replace(/(진단|주간|주말|월간)\s*평가\s*(\([0-9]+\))?/g, ' ')
     .replace(LEVEL, ' ')
+    // ★ 낱말을 떼면 괄호가 깨진 채 남는다 — 「(주간평가+토요수업 오답학습)」에서 「주간평가」만
+    //   떼면 「( +토요수업 오답학습)」이 된다(2026-11-17 조하윤 학생이 그렇게 들어갔다).
+    //   단원 이름에 괄호는 뜻이 없으니 괄호 글자를 **아예 뗀다**. 남은 +·- 는 앞뒤에서 지운다.
+    .replace(/[()]/g, ' ')
+    .replace(/\s*[+＋]\s*/g, ' ')
     .replace(/[-–~·,\s]+$/g, '')
     .replace(/^[-–~·,\s]+/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
+  // ★ 제목 끝에 **학생 이름**을 적어 보내시는 선생님이 있다(「… 오답학습) 조하윤」).
+  //   그대로 두면 학부모 브리핑과 평가관리에 학생 이름이 단원으로 박힌다. 아는 이름만 뗀다 —
+  //   낱말 꼴로 짐작해 떼면 「조하윤」이 아닌 진짜 단원 이름을 지울 수 있다.
+  const 이름 = String(studentName ?? '').trim()
+  if (이름) {
+    t = t.replace(new RegExp(`(^|\\s)${이름.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`, 'g'), ' ')
+      .replace(/\s{2,}/g, ' ').trim()
+  }
   return { unitName: t || null, level }
 }
 
@@ -776,10 +825,95 @@ export function levelForInsert(level: number | null | undefined): number {
  */
 export function wrongNoteFix(
   unitName: string, level: number | null, prevMainLevel: number | null,
+  opts?: { units?: string[]; similar?: boolean },
 ): { unitName: string; level: number | null } {
+  const 말 = opts?.similar ? '오답유사' : '오답'
+  // ★ 2026-11-18 — **그 날짜에 푼 단원 이름을 붙인다** (원장님 「너는 학습결과에 올릴때
+  //   해당날짜에 풀었던 학습지의 단원명이 있을거 아냐. 그럼 그 단원에 대한 오답, 오답유사가
+  //   되도록 붙여주면 됨」). 오답 제목에는 단원이 없고 날짜만 있어서, 그동안 학부모 브리핑에
+  //   「(2026.11.16) 오답과제」처럼 **날짜만** 나갔다.
+  const units = (opts?.units ?? []).map((u) => String(u ?? '').trim()).filter(Boolean)
+  if (units.length) {
+    // 글자가 길어지면 브리핑 한 칸을 먹는다(300자 한도) — 두 개까지 적고 나머지는 센다.
+    const 보일것 = units.slice(0, 2).join('·') + (units.length > 2 ? ` 외 ${units.length - 2}개` : '')
+    return { unitName: `${보일것} ${말}`, level: prevMainLevel ?? level }
+  }
+  // 그 날짜에 푼 학습지를 못 찾으면 **지어내지 않는다** — 적힌 것에 「오답」만 붙여 둔다.
   const t = String(unitName ?? '').trim()
-  const named = /오답\s*학습지/.test(t) ? t : (t ? `오답학습지 ${t}` : '오답학습지')
+  const named = new RegExp(`${말}`).test(t) ? t : (t ? `${t} ${말}` : 말)
   return { unitName: named.replace(/\s+/g, ' ').trim(), level: prevMainLevel ?? level }
+}
+
+/**
+ * 오답인가 **오답유사**인가 — 제목에 「유사」가 적혀 있으면 유사다.
+ *
+ * 매쓰홀릭에서 오는 꼴(2026-11-18 실측): 「(2026.11.18) 오답과제」 · 「(2026.11.18) 오답+유사
+ * 과제」 · 「오답유사학습 [오답 유사] (2026.11.16) 오답과제」 · 「다시풀기 (2026.11.16) 오답과제」.
+ * 「오답」과 「유사」 사이에 +·빈칸이 들어가므로 **「유사」 한 낱말만** 본다.
+ */
+export function isWrongSimilar(row: { title?: string | null; kind?: string | null }): boolean {
+  return /유사/.test(`${row.title ?? ''} ${row.kind ?? ''}`)
+}
+
+/**
+ * 오답 제목에 적힌 **날짜** — 「(2026.11.16) 오답과제」 → '2026-11-16'.
+ *
+ * 원장님 2026-11-18 「제목에 오답은 꼭 날짜가 기입이 될거거든」. 그 날짜가 **무엇을 틀렸는지**
+ * 가리키는 유일한 끈이다. 연도가 없는 꼴(「11/16 오답」)은 푼 날(`onDate`)의 연도로 메운다 —
+ * 연말에 「12/30 오답」을 1월에 풀면 해가 넘어가므로, 앞선 날짜가 되게 한 해 뺀다.
+ */
+export function wrongNoteDateOf(title: string, onDate?: string | null): string | null {
+  const t = String(title ?? '')
+  const full = /(\d{4})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})/.exec(t)
+  if (full) return `${full[1]}-${pad(Number(full[2]))}-${pad(Number(full[3]))}`
+  const md = /(?:^|[^0-9])(\d{1,2})\s*[.\-/]\s*(\d{1,2})(?:[^0-9]|$)/.exec(t)
+  if (!md) return null
+  const m = Number(md[1]), d = Number(md[2])
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null
+  const base = String(onDate ?? '').slice(0, 10)
+  let year = base ? Number(base.slice(0, 4)) : new Date().getFullYear()
+  if (base && `${year}-${pad(m)}-${pad(d)}` > base) year -= 1
+  return `${year}-${pad(m)}-${pad(d)}`
+}
+
+/**
+ * 꾸밈을 뗀 **단원 이름**. 「* 레벨학습지 (5-2) 4단원 *」 → '4단원'.
+ *
+ * 저장된 단원 칸에는 별표·머리표·학년·학기·문항 수가 섞여 있다(2026-11-18 실측:
+ * 「* 레벨학습지 (5-2) 4단원 *」 · 「[다푸네] 초등 6-2 4단원」 · 「6학년 1학기 1-2단원」 ·
+ * 「* 레벨학습지 (6-2) 4단원 (20문제) *」). 오답 이름에 그대로 붙이면 읽을 수가 없다.
+ */
+export function unitCore(unit?: string | null, unitName?: string | null): string {
+  const 씻기 = (v?: string | null) => String(v ?? '')
+    .replace(/[*＊]/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/레벨\s*학습지|오답\s*학습지|오답\s*유사|유형\s*학습지/g, ' ')
+    .replace(/\(\s*[0-9]+\s*문제\s*\)/g, ' ')
+    .replace(/\(\s*[1-6]\s*-\s*[12]\s*\)/g, ' ')          // (5-2)
+    .replace(/(초등|중등|고등)?\s*[1-6]\s*학년\s*[12]\s*학기/g, ' ')
+    .replace(/(초등|중등|고등|초|중|고)\s*[1-6]\s*-\s*[12](?![0-9])/g, ' ')  // 초6-2 · 초등 6-2
+    .replace(LEVEL, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s·,\-–~]+|[\s·,\-–~]+$/g, '')
+    .trim()
+  return 씻기(unit) || 씻기(unitName)
+}
+
+/**
+ * 그 **날짜에 푼** 레벨학습지·쌍둥이의 단원 이름들 (적힌 차례대로, 중복 없이).
+ * 오답 학습지에 붙일 단원을 여기서 찾는다. 오답끼리는 보지 않는다 —
+ * 「오답의 오답」이 되면 단원이 또 사라진다.
+ */
+export function unitsOnDate(list: WsCandidate[], date: string): string[] {
+  const out: string[] = []
+  for (const w of list) {
+    if (w.worksheet_type === 'similar') continue
+    const 푼날 = String(w.submitted_at ?? w.assigned_at ?? '').slice(0, 10)
+    if (푼날 !== date) continue
+    const u = unitCore(w.unit, w.unit_name)
+    if (u && !out.includes(u)) out.push(u)
+  }
+  return out
 }
 
 export interface SessionLite { id: string; student_id: string; session_date: string; daily_test_score: number | null }

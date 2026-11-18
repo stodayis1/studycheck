@@ -62,7 +62,7 @@ export default function MatholicImportPage() {
    *   그 이름도 저절로 걸려야 한다.
    */
   const [books, setBooks] = useState<string[]>([])
-  const [done, setDone] = useState<{ daily: number; core: number; exam: number; filled: number; created: number; skipped: number; failed: string[] } | null>(null)
+  const [done, setDone] = useState<{ daily: number; core: number; exam: number; filled: number; created: number; skipped: number; failed: string[]; triggerBlocked?: number } | null>(null)
 
   /** 붙여넣은 글자를 읽고, 학생과 학습지를 찾아 둔다. 저장은 하지 않는다. */
   async function handleRead() {
@@ -181,10 +181,10 @@ export default function MatholicImportPage() {
     if (!confirm(`학습일지 데일리테스트 ${count.daily}건, 코어테스트 ${count.core}건, 진단평가 ${count.exam}건, 학습지 점수 채우기 ${count.fill}건, 학습지 새로 만들기 ${count.neo}건을 넣습니다. 계속할까요?`)) return
     setSaving(true)
     // 넣는 일은 lib/matholicApply.ts 한 곳에서 한다 — 스크립트도 같은 함수를 쓴다.
-    const { daily, core, exam, filled, created, failed } =
+    const { daily, core, exam, filled, created, failed, triggerBlocked } =
       await applyPlans(supabase, plans, { teacherName: currentUser?.name ?? null, books })
     setSaving(false)
-    setDone({ daily, core, exam, filled, created, skipped: count.skip, failed })
+    setDone({ daily, core, exam, filled, created, skipped: count.skip, failed, triggerBlocked })
     setPlans((prev) => prev.map((p) =>
       (p.mode === 'daily' || p.mode === 'core' || p.mode === 'exam' || p.mode === 'fill' || p.mode === 'new'
         ? { ...p, mode: 'done' as Mode, why: '넣었어요' } : p)))
@@ -349,6 +349,14 @@ export default function MatholicImportPage() {
               끝났어요 — 학습일지 데일리테스트 {done.daily}건 · 코어테스트 {done.core}건 · 진단평가 {done.exam}건 · 학습지 점수 채움 {done.filled}건 ·
               학습지 새로 만듦 {done.created}건 · 안 넣음 {done.skipped}건
             </p>
+            {/* ★ DB 트리거(초등 70점 미만 막이)가 아직 안 풀렸을 때. 점수는 들어갔고
+                닫히지만 않았다 — 무엇을 해야 하는지 그대로 적어 준다 (원장님 2026-11-18) */}
+            {!!done.triggerBlocked && (
+              <p className="text-[11px] font-bold mt-1" style={{ color: '#92400E' }}>
+                ※ {done.triggerBlocked}건은 점수만 들어가고 <b>완료로 닫히지 않았어요</b> —
+                docs/sql/학습지_자동완료.sql 을 아직 안 돌렸습니다. 돌린 뒤 다시 넣으면 저절로 닫혀요.
+              </p>
+            )}
             {done.failed.length > 0 && (
               <div className="mt-2">
                 <p className="text-[11px] font-bold" style={{ color: '#991B1B' }}>실패 {done.failed.length}건</p>

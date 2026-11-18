@@ -24,8 +24,8 @@ import { applyPlans } from '../lib/matholicApply.ts'
 import { formatWorksheetScope } from '../lib/utils.ts'
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('lib/matholic.ts')
-const { statusAfterScore } = await import('../lib/worksheetStatus.ts')
-const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers, levelForInsert, DEFAULT_LEVEL, isDiagnostic, parseDiagnosticTitle } =
+const { statusAfterScore, blockedByTrigger } = await import('../lib/worksheetStatus.ts')
+const { parseMatholic, findStudents, rankWorksheets, isClearWinner, alreadyIn, isDailyTest, coreTestRound, isEnoughOne, needsLevel, worksheetTypeOf, parseWorksheetTitle, pickByRule, pickSessionForDaily, resolveUnit, gradeFromCourse, isWrongNote, wrongNoteFix, prevLevelOf, matchTextbook, isTextbookLinked, normBook, nameDiffers, levelForInsert, DEFAULT_LEVEL, isDiagnostic, parseDiagnosticTitle, wrongNoteDateOf, isWrongSimilar, unitCore, unitsOnDate } =
   await import(pathToFileURL(target).href)
 
 /** 오늘을 고정한다 — 연도를 메우는 규칙이 날짜에 따라 달라지면 안 된다. */
@@ -717,20 +717,34 @@ T('점수가 들어오면 닫는다 (레벨학습지·쌍둥이·중등)', () =>
   && statusAfterScore({ worksheet_type: 'twin', grade_level: '초5', score: 30 }) === 'passed'
   && statusAfterScore({ worksheet_type: 'main', grade_level: '중2', score: 40 }) === 'passed')
 
-// ★ DB 트리거(docs/sql/초등학습지_70점_차단.sql)가 막는 **바로 그 줄**이다.
-//   여기서 닫으려 들면 update 가 에러로 떨어져 긁어 넣기가 통째로 멈춘다.
-T('초등 본 학습지 70점 미만은 안 닫는다 (DB 트리거와 같은 줄)', () =>
-  statusAfterScore({ worksheet_type: 'main', grade_level: '초6', score: 69 }) === 'scored'
-  && statusAfterScore({ worksheet_type: 'main', grade_level: '초1', score: 0 }) === 'scored')
+// ★★ 2026-11-18 — **예외 없이 닫는다** (원장님 「다 닫자 — 재도전 배정 안 함」).
+//   11-14 에 열어 뒀던 두 자리가 남은 손품의 전부였다(그 주 314건 중 10건).
+//   DB 트리거도 같이 풀어야 한다 — docs/sql/학습지_자동완료.sql.
+T('★ 초등 본 학습지 70점 미만도 닫는다 (원장님 2026-11-18)', () =>
+  statusAfterScore({ worksheet_type: 'main', grade_level: '초6', score: 69 }) === 'passed'
+  && statusAfterScore({ worksheet_type: 'main', grade_level: '초1', score: 0 }) === 'passed')
 
-// ★ 오답유사는 틀린 것만 모아 점수가 잘 나온다 — 원래가 70점 미만이면 재도전이 따라와야 한다.
-//   원래 점수를 **모르면 닫지 않는다** (모르는 채로 닫는 쪽이 위험하다).
-T('초등 오답유사는 원래 점수를 알고 70점 이상일 때만 닫는다', () =>
-  statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95, parentScore: 60 }) === 'scored'
-  && statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95 }) === 'scored'
-  && statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95, parentScore: 80 }) === 'passed'
-  // 중등 오답유사는 규칙 대상이 아니다
+// ★ 트리거가 아직 안 풀렸을 때를 알아봐야 한다 — 못 알아보면 점수 채우기가 통째로 멈춘다.
+T('★ 트리거 거절을 알아본다 (그때는 점수만 넣고 열어 둔다)', () =>
+  blockedByTrigger('초등 레벨학습지 70점 미만은 재도전 또는 오답유사로만 넘길 수 있어요') === true
+  && blockedByTrigger('null value in column "current_level" violates not-null constraint') === false
+  && blockedByTrigger(null) === false)
+
+// ★ 오답유사도 닫는다 — 원래 학습지 점수를 보지 않는다 (2026-11-18).
+//   재도전 학습지는 선생님이 매쓰홀릭에서 내시고 그것이 다시 긁혀 들어온다.
+T('★ 초등 오답유사도 원래 점수와 상관없이 닫는다', () =>
+  statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95, parentScore: 60 }) === 'passed'
+  && statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 95 }) === 'passed'
+  && statusAfterScore({ worksheet_type: 'similar', grade_level: '초5', score: 30 }) === 'passed'
   && statusAfterScore({ worksheet_type: 'similar', grade_level: '중3', score: 50 }) === 'passed')
+
+// ★ 화면에서도 **자동 재도전 배정**이 없어졌는지 본다 — 함수만 고치고 화면에 남겨 두면
+//   초등 오답유사에 재도전이 계속 따라붙는다(에러는 안 난다).
+T('★ 학습지관리 화면에 자동 재도전 배정이 남아 있지 않다', () => {
+  const src = fs.readFileSync(path.resolve('app/teacher/assignments/page.tsx'), 'utf8')
+  // 지난 처리 기록을 보여 주는 자리의 'auto_retry' 는 **남아 있어야** 한다 — 부르는 자리만 본다
+  return !/handleRetry\([^)]*'auto_retry'\)/.test(src) && src.includes('blockedByTrigger')
+})
 
 T('점수가 없으면 안 닫는다', () =>
   statusAfterScore({ worksheet_type: 'main', grade_level: '초6', score: null }) === 'scored')
@@ -786,13 +800,68 @@ T('오답은 레벨이 없어도 막지 않는다 (물려받으니까)', () =>
   needsLevel({ title: '오답문제 2회차', kind: '학습지' }) === false
   && needsLevel({ title: '초6-2 3단원 소수의 나눗셈', kind: '학습지' }) === true)
 
-T('오답 제목에 「오답학습지」를 넣고, 레벨은 직전 레벨학습지와 같게', () => {
-  const a = wrongNoteFix('3단원 소수의 나눗셈', null, 3.5)
-  const b = wrongNoteFix('오답학습지 3단원', 2, 4)
+// ★★ 2026-11-18 — 오답 이름은 **그 날짜에 푼 단원**으로 짓는다 (원장님 「해당날짜에
+//   풀었던 학습지의 단원명이 있을거 아냐. 그럼 그 단원에 대한 오답, 오답유사가 되도록」).
+//   그동안은 학부모 브리핑에 「(2026.11.16) 오답과제」처럼 **날짜만** 나갔다.
+T('★ 오답 이름에 그 날짜의 단원을 붙인다 (원장님 2026-11-18)', () => {
+  const a = wrongNoteFix('(2026.11.16) 오답과제', null, 3.5, { units: ['4단원'] })
+  const b = wrongNoteFix('(2026.11.16) 오답과제', null, 3.5, { units: ['4단원'], similar: true })
+  const c = wrongNoteFix('(2026.11.16) 오답과제', null, 3.5, { units: ['4단원', '5단원'] })
+  const d = wrongNoteFix('(2026.11.16) 오답과제', null, 3.5, { units: ['1단원', '2단원', '3단원', '4단원'] })
+  return a.unitName === '4단원 오답' && a.level === 3.5
+    && b.unitName === '4단원 오답유사'
+    && c.unitName === '4단원·5단원 오답'
+    // 글자가 길어지면 브리핑 한 칸을 먹는다 — 두 개까지 적고 나머지는 센다
+    && d.unitName === '1단원·2단원 외 2개 오답'
+})
+
+T('단원을 못 찾으면 지어내지 않는다 (적힌 글자에 「오답」만)', () => {
+  const a = wrongNoteFix('(2026.11.16) 오답과제', null, 3.5, { units: [] })
+  const b = wrongNoteFix('3단원 소수의 나눗셈', null, 3.5)
   const c = wrongNoteFix('3단원', 2.5, null)
-  return a.unitName === '오답학습지 3단원 소수의 나눗셈' && a.level === 3.5
-    && b.unitName === '오답학습지 3단원' && b.level === 4          // 이미 있으면 안 겹쳐 쓴다
-    && c.unitName === '오답학습지 3단원' && c.level === 2.5        // 직전이 없으면 적힌 대로
+  return a.unitName === '(2026.11.16) 오답과제' && a.level === 3.5   // 이미 「오답」이 있으면 안 겹쳐 쓴다
+    && b.unitName === '3단원 소수의 나눗셈 오답' && b.level === 3.5
+    && c.unitName === '3단원 오답' && c.level === 2.5                // 직전이 없으면 적힌 대로
+})
+
+T('★ 오답 제목의 날짜를 읽는다', () =>
+  wrongNoteDateOf('(2026.11.16) 오답과제', '2026-11-18') === '2026-11-16'
+  && wrongNoteDateOf('오답유사학습 [오답 유사] (2026.11.16) 오답과제', '2026-11-18') === '2026-11-16'
+  && wrongNoteDateOf('2026-11-16 오답', '2026-11-18') === '2026-11-16'
+  // 연도가 없으면 푼 날의 해로 메우고, 앞선 날짜가 되게 한 해 뺀다 (연말 함정)
+  && wrongNoteDateOf('11/16 오답', '2026-11-18') === '2026-11-16'
+  && wrongNoteDateOf('12/30 오답', '2027-01-05') === '2026-12-30'
+  && wrongNoteDateOf('오답과제', '2026-11-18') === null)
+
+T('★ 오답유사는 「유사」 한 낱말로 가른다', () =>
+  isWrongSimilar({ title: '(2026.11.18) 오답+유사 과제', kind: '학습지' }) === true
+  && isWrongSimilar({ title: '오답유사학습 [오답 유사] (2026.11.16) 오답과제', kind: '학습지' }) === true
+  && isWrongSimilar({ title: '(2026.11.18) 오답과제', kind: '학습지' }) === false
+  && isWrongSimilar({ title: '다시풀기 (2026.11.16) 오답과제', kind: '학습지' }) === false)
+
+T('★ 단원 이름에서 꾸밈을 뗀다', () =>
+  unitCore('* 레벨학습지 (5-2) 4단원 *') === '4단원'
+  && unitCore('* 레벨학습지 (6-2) 4단원 (20문제) *') === '4단원'
+  && unitCore('[다푸네] 초등 6-2 4단원') === '4단원'
+  && unitCore('6학년 1학기 1-2단원') === '1-2단원'
+  && unitCore('VII. 피타고라스 정리', '1. 피타고라스 정리와 활용') === 'VII. 피타고라스 정리'
+  && unitCore(null, '1. 피타고라스 정리와 활용') === '1. 피타고라스 정리와 활용'
+  && unitCore('* *', null) === '')
+
+T('★ 그 날짜에 푼 레벨학습지에서만 단원을 모은다 (오답끼리는 안 본다)', () => {
+  const w = (type: string, date: string, unit: string) =>
+    ({ id: unit + date, student_id: 'S', grade_level: '초5', unit, unit_name: null,
+      current_level: 3, worksheet_type: type, status: 'passed', score: 80,
+      assigned_at: date + 'T12:00:00+09:00', submitted_at: date + 'T12:00:00+09:00' })
+  const list = [
+    w('main', '2026-11-16', '* 레벨학습지 (5-2) 4단원 *'),
+    w('main', '2026-11-16', '* 레벨학습지 (5-2) 4단원 *'),     // 같은 단원은 한 번만
+    w('twin', '2026-11-16', '[다푸네] 초등 5-2 5단원'),
+    w('similar', '2026-11-16', '오답학습지 (2026.11.15) 오답과제'),  // 오답은 안 본다
+    w('main', '2026-11-17', '* 레벨학습지 (5-2) 6단원 *'),     // 다른 날은 안 본다
+  ] as any
+  const got = unitsOnDate(list, '2026-11-16')
+  return got.join() === '4단원,5단원' && unitsOnDate(list, '2026-11-14').length === 0
 })
 
 T('직전 레벨은 그 날짜까지의 마지막 레벨학습지에서 가져온다', () => {
@@ -929,12 +998,36 @@ T('주간·주말·진단평가는 진단평가로 간다 (레벨이 없을 때)
   && isDiagnostic({ title: '11월 주말평가(1) - 기본도형[2단계]', kind: '진단평가', level: null }) === true
   && isDiagnostic({ title: '11월 첫째주 선행 주간평가', kind: '진단평가', level: null }) === true)
 
-// ★ 같은 「주간평가」라는 말이 학습지 메뉴에서도 쓰인다. 레벨로 갈라야 한다 —
-//   안 가르면 레벨학습지가 통째로 평가관리로 새어 나간다(2026-11-06 하루에 5건).
-T('레벨이 적힌 주간평가는 레벨학습지다 (평가로 새지 않는다)', () =>
-  isDiagnostic({ title: '중1-2 1. 기본도형 ~ 3. 입체도형_Lv3.5', kind: '주간평가', level: 3.5 }) === false
-  && isDiagnostic({ title: '[주간평가] 중1-1 2. 문자와 식_Lv4', kind: '학습지', level: 4 }) === false
-  && worksheetTypeOf({ title: '[주간평가] 중1-1 2. 문자와 식_Lv4', kind: '학습지' }, BOOKS) === 'main')
+// ★★ 2026-11-18 — **평가 낱말이 레벨보다 먼저다** (원장님 최종 규칙:
+//   「평가 학습지 … 제목 필수 키워드 : 단원명 + 레벨」). 평가에도 레벨을 쓰시기로 했으니
+//   레벨로 가르면 평가가 전부 레벨학습지로 밀린다. 11-06 규칙을 뒤집은 자리다.
+T('★ 레벨이 적혀 있어도 주간평가는 평가다 (원장님 2026-11-18)', () =>
+  isDiagnostic({ title: '중1-2 1. 기본도형 ~ 3. 입체도형_Lv3.5', kind: '주간평가', level: 3.5 }) === true
+  && isDiagnostic({ title: '[주간평가] 중1-1 2. 문자와 식_Lv4', kind: '학습지', level: 4 }) === true
+  // 단원과 레벨은 평가관리의 두 칸으로 들어간다 — 레벨이 사라지지 않아야 한다
+  && parseDiagnosticTitle('[주간평가] 중1-1 2. 문자와 식_Lv4').level === 4
+  && (parseDiagnosticTitle('[주간평가] 중1-1 2. 문자와 식_Lv4').unitName ?? '').includes('문자와 식'))
+
+// ★ 2026-11-17 조하윤 학생 진단평가가 「(2026.11.17) ( +토요수업 오답학습) 조하윤」으로
+//   들어갔다. 날짜가 괄호째 앞에 붙어 오고, 「주간평가」만 떼면 괄호가 깨진 채 남고,
+//   제목 끝에 **학생 이름**이 적혀 있었다. 단원 칸에 그대로 박히면 평가관리가 흩어지고
+//   학부모 브리핑에도 그 글자가 나간다.
+T('★ 평가 단원에서 날짜·깨진 괄호·학생 이름을 뗀다 (2026-11-17 조하윤)', () => {
+  const d = parseDiagnosticTitle('(2026.11.17) (주간평가+토요수업 오답학습) 조하윤', '조하윤')
+  const e = parseDiagnosticTitle('(2026.11.17) (주간평가+토요수업 오답학습) 조하윤')
+  return d.unitName === '토요수업 오답학습'
+    // 이름을 안 넘기면 **이름은 남는다** — 짐작해서 떼지 않는다(진짜 단원을 지울 수 있다)
+    && e.unitName === '토요수업 오답학습 조하윤'
+})
+
+T('평가 단원에서 날짜만 적힌 제목은 비운다 (지어내지 않는다)', () =>
+  parseDiagnosticTitle('(2026.11.17) 주간평가').unitName === null)
+
+// ★ 「단원평가」는 여전히 평가로 보내지 않는다 — 스터디체크의 단원평가는 **초등 학교시험**이고
+//   매쓰홀릭 초등 레벨학습지 제목에 그 말이 흔하다. 보내면 학교 점수 칸에 학원 점수가 쌓인다.
+T('단원평가는 평가로 보내지 않는다 (레벨이 있어도·없어도)', () =>
+  isDiagnostic({ title: '4학년 2학기 4단원 단원평가 Lv3', kind: '학습지', level: 3 }) === false
+  && isDiagnostic({ title: '4학년 2학기 4단원 단원평가', kind: '학습지', level: null }) === false)
 
 // ★ 월간평가는 코어테스트다(2026-11-02). 진단평가가 그것을 가로채면 평가관리에서
 //   어느 시험 점수인지 다시 알 수 없다.
@@ -998,7 +1091,7 @@ T('매쓰홀릭 화면이 진단평가를 평가관리에 넣는다', () => {
   // ★ 「있나」만 보면 안 된다 — `if (false && isDiagnostic(row))` 로 꺼 두어도 통과한다.
   //   갈림길이 **그 판정만 보고** 갈리는지 꼴까지 본다.
   return /\n\s*if \(isDiagnostic\(row\)\) \{/.test(plan)
-    && plan.includes('parseDiagnosticTitle(row.title)')
+    && /parseDiagnosticTitle\(row\.title,\s*picked\.name\)/.test(plan)
     && /exam_type: '진단평가'/.test(apply)
     && /unit_name: p\.exam\?\.unitName/.test(apply)
     && /level: p\.exam\?\.level/.test(apply)
