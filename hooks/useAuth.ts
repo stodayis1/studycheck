@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isMine } from '@/lib/teachers'
+import { isMine, gradeLevelOf, supervisorScopeOf, visibleInSupervisorMode } from '@/lib/teachers'
 
 const SESSION_KEY = 'studycheck_student'
 const ADMIN_MODE_KEY = 'studycheck_admin_mode'
@@ -187,9 +187,7 @@ export function useAuth() {
   }
 
   /** 「중1」→「중」, 「초6」→「초」, 「고2」→「고」 — 학교급 */
-  function gradeLevel(grade?: string | null) {
-    return (grade ?? '').trim().charAt(0)
-  }
+  const gradeLevel = gradeLevelOf
 
   /**
    * 담당 강사 칸(「김은수, 박경미」)에 내 이름이 있나 —
@@ -215,11 +213,15 @@ export function useAuth() {
    * 화면에서 직접 거르는 곳(수업일지·반 관리)도 이 함수를 써서 기준을 한 곳에 둔다.
    */
   function supervisorScope(grade?: string | null): 'scope' | 'same-level' | null {
-    const g = (grade ?? '').trim()
-    if (!g) return null
-    if (supervisorGrades.includes(g)) return 'scope'
-    const levels = new Set(supervisorGrades.map(gradeLevel))
-    return levels.has(gradeLevel(g)) ? 'same-level' : null
+    return supervisorScopeOf(supervisorGrades, grade)
+  }
+
+  /**
+   * 주임모드에서 이 학생이 보이나 — **내 담당이면 학년과 상관없이 보인다.**
+   * 규칙은 lib/teachers.ts 한 곳에 있다(수업일지도 같은 함수를 쓴다).
+   */
+  function visibleInSupervisor(student: { grade?: string | null; teacher_name?: string | null; clinic_teacher_name?: string | null }) {
+    return visibleInSupervisorMode(supervisorGrades, student.grade, isMyStudent(student))
   }
 
   // 이 학생을 "볼" 권한이 있는지 - 화면마다 제각각 구현되어 있던 teacher_name 매칭 로직을 한 곳으로 모음.
@@ -233,11 +235,7 @@ export function useAuth() {
     // ★ 주임모드가 켜져 있으면 **그 범위로 좁힌다 — 관리자·직원도 마찬가지다.**
     //   이 모드의 목적이 「주임 선생님이 보는 화면을 그대로 본다」인데, 켜 둔 채로 전체가
     //   보이면 모드가 아무 일도 안 하는 셈이다. 전체는 주임모드를 끄면 그대로 보인다.
-    if (isSupervisorModeActive()) {
-      const scope = supervisorScope(student.grade)
-      if (!scope) return false
-      return scope === 'scope' || isMyStudent(student)
-    }
+    if (isSupervisorModeActive()) return visibleInSupervisor(student)
     if (canManageAllStudents()) return true
     return isMyStudent(student)
   }

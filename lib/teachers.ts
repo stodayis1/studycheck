@@ -90,3 +90,50 @@ export function staffCanSeeStudent(
   const g = String(student.grade ?? '').trim()
   return !!g && (who.supervisorGrades ?? []).includes(g)
 }
+
+/* ───────────────────── 주임모드에서 누가 보이나 (순수 규칙) ─────────────────────
+ * 화면(hooks/useAuth.ts)과 수업일지가 **같은 함수**를 쓴다. 각자 베껴 쓰면 한쪽만
+ * 고쳐져 「이 화면에서만 안 보인다」가 된다 — 2026-10-14 에 한 번 그랬다.
+ */
+
+/** 「중1」→「중」, 「초6」→「초」, 「고2」→「고」 — 학교급 */
+export function gradeLevelOf(grade?: string | null): string {
+  return String(grade ?? '').trim().charAt(0)
+}
+
+/**
+ * 주임모드에서 이 학년을 화면에 올려도 되나.
+ *   'scope'      = 담당 학년 → **누구 학생이든** 보인다 (주임의 본래 목적)
+ *   'same-level' = 담당 학년은 아니지만 같은 학교급
+ *   null         = 담당 학년도 아니고 학교급도 다르다
+ */
+export function supervisorScopeOf(
+  supervisorGrades: string[] | null | undefined, grade?: string | null,
+): 'scope' | 'same-level' | null {
+  const g = String(grade ?? '').trim()
+  const grades = supervisorGrades ?? []
+  if (!g) return null
+  if (grades.includes(g)) return 'scope'
+  const levels = new Set(grades.map(gradeLevelOf))
+  return levels.has(gradeLevelOf(g)) ? 'same-level' : null
+}
+
+/**
+ * 주임모드에서 이 학생이 보이나.
+ *
+ * ★ **내 담당 학생은 학년과 상관없이 늘 보인다** (원장님 2026-11-18 「1번으로 고쳐줘」).
+ *   전에는 학년을 먼저 보고 **담당인지 묻지도 않고** 숨겼다. 그래서 중등주임인
+ *   신애진 선생님이 손예원(초6) 학생의 담당으로 적혔는데도 수업일지에 안 떴다 —
+ *   초6 이 「중1·중2·중3」도 아니고 같은 학교급도 아니라서다. 에러도 안 나고 조용히 빈다.
+ *   12월 진급으로 **초6 을 중등 선생님께 옮기는 동안 계속 걸릴 자리**라 순서를 뒤집었다.
+ *
+ * 담당이 아닌 학생은 전과 같다 — **담당 학년만** 보인다(같은 학교급이라고 남의 학생까지
+ * 보이지는 않는다. 2026-10-09 원장님 지적으로 생긴 기준).
+ */
+export function visibleInSupervisorMode(
+  supervisorGrades: string[] | null | undefined, grade: string | null | undefined, mine: boolean,
+): boolean {
+  if (mine) return true
+  return supervisorScopeOf(supervisorGrades, grade) === 'scope'
+}
+
