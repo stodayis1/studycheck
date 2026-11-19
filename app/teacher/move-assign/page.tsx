@@ -195,6 +195,13 @@ export default function MoveAssignPage() {
   async function confirmOne(st: Student, on: boolean) {
     setConfBusy(st.id)
     try {
+      // ★ 첫 제안 그대로 두신 학생은 저장된 줄이 **없다**(고를 것이 없었으니까).
+      //   확정은 「이 계획대로 옮겼다」는 뜻이라, 그 제안을 먼저 계획으로 적어 둔다.
+      //   안 그러면 서버가 「아직 배정을 고르지 않은 학생」이라고 막는다.
+      if (on && !rows.some((r) => r.student_id === st.id)) {
+        const p = assign[st.id] ?? { t: '', wd: '', we: '', ex: '' }
+        await save(st, p, trackOfGrade(st.grade))
+      }
       const res = await apiFetch('/api/move-assign', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentId: st.id, action: on ? 'confirm' : 'unconfirm' }),
@@ -294,6 +301,7 @@ export default function MoveAssignPage() {
     확정: tabStudents.filter((s) => conf.get(s.id)?.confirmed).length,
     대기: tabStudents.filter((s) => conf.get(s.id)?.state === 'open').length,
     다름: tabStudents.filter((s) => conf.get(s.id)?.state === 'applied').length,
+    시간바뀜: tabStudents.filter((s) => conf.get(s.id)?.state === 'noPlan').length,
   }
 
   if (allowed !== true) return (
@@ -352,6 +360,11 @@ export default function MoveAssignPage() {
             {센것.다름 > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
                 시간표는 바뀌었는데 계획과 다른 학생 {센것.다름}명
+              </span>
+            )}
+            {센것.시간바뀜 > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-bold">
+                시간표가 바뀐 학생 {센것.시간바뀜}명 — 맞으면 「확정」
               </span>
             )}
           </span>
@@ -1168,18 +1181,25 @@ function ConfirmCell({ info, canConfirm, busy, onConfirm }: {
     </div>
   )
 
-  if (state === 'applied') return (
-    <div className="whitespace-nowrap">
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
-        <i className="ti ti-alert-triangle align-[-0.125em]" /> 계획과 다름
-      </span>
-      <span className="block text-[11px] text-gray-500 mt-0.5">시간표 바뀜 · {info?.req?.want_text ?? ''}</span>
-      {canConfirm && (
-        <button onClick={() => onConfirm(true)} disabled={busy}
-          className={cx(단추, 'mt-1 bg-emerald-600 border-emerald-600 text-white')}>그래도 확정</button>
-      )}
-    </div>
-  )
+  if (state === 'applied' || state === 'noPlan') {
+    const 어긋남 = state === 'applied'
+    return (
+      <div className="whitespace-nowrap">
+        <span className={cx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold',
+          어긋남 ? 'bg-rose-100 text-rose-800' : 'bg-gray-100 text-gray-600')}>
+          <i className={cx('align-[-0.125em]', 어긋남 ? 'ti ti-alert-triangle' : 'ti ti-clock-check')} />
+          {어긋남 ? ' 계획과 다름' : ' 시간표 바뀜'}
+        </span>
+        <span className="block text-[11px] text-gray-500 mt-0.5">{info?.req?.want_text ?? ''}</span>
+        {canConfirm && (
+          <button onClick={() => onConfirm(true)} disabled={busy}
+            className={cx(단추, 'mt-1', 어긋남 ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-200 text-gray-500')}>
+            {어긋남 ? '그래도 확정' : '확정'}
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="whitespace-nowrap">

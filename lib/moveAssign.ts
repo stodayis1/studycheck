@@ -570,10 +570,16 @@ export function wantLines(want: any): TimeLine[] | null {
  *   'plan'    아직 아무 일 없음 (계획)
  *   'open'    담당 선생님이 시간표 변경요청을 올렸고 원장님 확인을 기다린다
  *   'auto'    반영된 요청의 시간표가 **계획과 같다** → 확정
- *   'applied' 반영됐지만 계획과 같다고 할 수 없다 (시간이 다르거나 견줄 계획이 없다)
+ *   'applied' 계획이 있는데 **시간이 다르다** → 빨갛게 띄운다
+ *   'noPlan'  반영됐지만 **견줄 시간 계획이 없다**(중등 판, 시간을 안 고른 줄) → 그냥 알린다
  *   'hand'    손으로 누른 확정
+ *
+ * ★ 'applied' 와 'noPlan' 을 가른 까닭 (2026-11-19, 운영 데이터로 재 보고)
+ *   중등 판은 선생님만 정하므로 **어떤 요청이든** 견줄 수가 없다. 둘을 한데 두면 10월에
+ *   보통의 시간표 변경이 있었던 초6 학생들이 다 빨간 「계획과 다름」으로 떴다 — 아무 문제도
+ *   없는데 문제처럼 보인다. 빨간 것은 **계획이 있는데 어긋난 줄**만이다.
  */
-export type ConfirmState = 'plan' | 'open' | 'auto' | 'applied' | 'hand'
+export type ConfirmState = 'plan' | 'open' | 'auto' | 'applied' | 'noPlan' | 'hand'
 
 export interface ConfirmRow {
   teacher_name?: string | null; weekday_slot?: string | null; weekend_slot?: string | null
@@ -595,7 +601,8 @@ export function confirmStateOf(track: Track, row?: ConfirmRow | null, req?: Conf
       extra: row?.extra_slot, newTime: row?.new_time,
     })
     const want = wantLines(req.want)
-    const 같다 = !!plan && !!want && linesKey(plan) === linesKey(want)
+    if (!plan) return { state: 'noPlan', confirmed: false }      // 견줄 계획이 없다
+    const 같다 = !!want && linesKey(plan) === linesKey(want)
     return { state: 같다 ? 'auto' : 'applied', confirmed: 같다 }
   }
   return { state: 'plan', confirmed: false }
