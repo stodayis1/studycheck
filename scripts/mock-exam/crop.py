@@ -29,9 +29,21 @@ for pi in range(len(d) if LIMIT is None else LIMIT):
         for k, (y, no) in enumerate(hs):
             stop = [w[1] for w in ws if w[4] == "확인" and x0 <= w[0] < x1 and w[1] > y]
             y1 = hs[k + 1][0] - 8 if k + 1 < len(hs) else (min(stop) - 14 if stop else bottom)
-            c = im.crop([int(v * Z) for v in (x0, y - 16, x1, y1)]); a = np.asarray(c.convert("L"))
-            rows = np.where((a < 200).sum(1) > 1)[0]; cols = np.where((a < 200).sum(0) > 1)[0]
-            c = c.crop((max(cols[0] - 10, 0), max(rows[0] - 10, 0), min(cols[-1] + 10, c.width), min(rows[-1] + 10, c.height)))
+            # 위쪽: 번호 줄보다 높이 솟은 분수·지수가 잘리지 않게 넉넉히(45pt) 잡은 뒤,
+            # 번호 줄에서 위로 올라가며 빈 줄이 12px(약 4pt) 이어지는 곳에서 끊는다 → 앞 문항 끝·머리말 줄은 빠진다
+            top = max(y - 45, hs[k - 1][0] + 4 if k > 0 else p.rect.height * 0.06)
+            c = im.crop([int(v * Z) for v in (x0, top, x1, y1)]); a = np.asarray(c.convert("L"))
+            ink = (a < 200).sum(1) > 1
+            r = int((y - top) * Z); gap = 0; first = r
+            while r > 0:
+                r -= 1
+                if ink[r]: first = r; gap = 0
+                else:
+                    gap += 1
+                    if gap >= 12: break
+            a2 = a[first:]
+            rows = np.where((a2 < 200).sum(1) > 1)[0]; cols = np.where((a2 < 200).sum(0) > 1)[0]
+            c = c.crop((max(cols[0] - 10, 0), max(first + rows[0] - 10, 0), min(cols[-1] + 10, c.width), min(first + rows[-1] + 10, c.height)))
             s_ = FORCE if FORCE and no >= 23 else ("공통" if FORCE else sec)
             os.makedirs(os.path.join(R, "crops", s_), exist_ok=True)
             c.save(os.path.join(R, "crops", s_, f"{no:02d}.png")); out.append((s_, no))
