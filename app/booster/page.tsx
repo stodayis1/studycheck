@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import {
   BOOSTER, BOOSTER_SLUG, BOOSTER_TEST_SLUG, 개인정보안내, 동의항목, 학년보기,
-  남은시간, 신청서검사, 완료문구, 마감문구, 접수상태보기, 번호꼴,
+  남은시간, 신청서검사, 완료문구, 마감문구, 접수상태보기, 번호꼴, type 접수상태,
 } from '@/lib/booster'
 
 const NAVY = '#15329B'
@@ -45,7 +45,18 @@ export default function BoosterPage() {
    *   깨지면 React 가 그 부분을 통째로 다시 그린다 — 21:59:59 에 화면이 깜빡이면 안 된다.
    *   그래서 **브라우저에 올라온 뒤에만** 시계를 켠다. 그 전에는 시계 자리를 비워 둔다.
    */
-  const [지금, set지금] = useState<Date | null>(null)
+  const [올라옴, set올라옴] = useState(false)
+  /**
+   * ★ 1초마다 바뀌는 것은 **카운트다운 숫자뿐**이다. 그래서 상태(접수전/접수중/마감)만
+   *   여기에 두고, 숫자는 <카운트다운> 안에서 혼자 돈다.
+   *
+   *   전에는 1초마다 화면 **전체**를 다시 그려서, 입력칸 세 개의 속성이 1초에 세 번씩
+   *   다시 쓰였다(값은 그대로인데도). 자리가 흔들리진 않지만, 10시 정각에 폰에서
+   *   적고 계실 때 헛일이다. (원장님 2026-11-19 「화면이 왜 계속 떨려」를 재다가 찾았다.)
+   *
+   *   set상태 에 같은 값을 넣으면 React 가 다시 그리지 않는다 — 그래서 1초마다 불러도 된다.
+   */
+  const [상태, set상태] = useState<접수상태 | null>(null)
 
   const [f, setF] = useState({
     student_name: '', grade: '', parent_name: '', parent_phone: '',
@@ -58,7 +69,7 @@ export default function BoosterPage() {
 
   /* ── 연습용 주소인지 (마운트 뒤에 읽는다 — useSearchParams 안 씀) ─────── */
   useEffect(() => {
-    set지금(new Date())            // ★ 여기서 처음 켠다 (서버에서는 안 돈다)
+    set올라옴(true)                // ★ 여기서 처음 켠다 (서버에서는 안 돈다)
     try {
       const t = new URLSearchParams(window.location.search).get('test')
       if (t === '1') { setSlug(BOOSTER_TEST_SLUG); set연습(true) }
@@ -78,22 +89,24 @@ export default function BoosterPage() {
 
   useEffect(() => { 현황받기() }, [현황받기])
 
-  /* ── 1초마다 시계, 10초마다 남은 자리 ────────────────────────────────── */
-  useEffect(() => {
-    const t1 = setInterval(() => set지금(new Date(Date.now() + 시차.current)), 1000)
-    const t2 = setInterval(() => { if (!결과) 현황받기() }, 10000)
-    return () => { clearInterval(t1); clearInterval(t2) }
-  }, [현황받기, 결과])
-
   const 정원 = 현황?.capacity ?? BOOSTER.정원
   const 나간자리 = 현황?.seatsTaken ?? 0
   const 남음 = 현황?.seatsLeft ?? 정원
-  const 접수시작 = 현황 ? new Date(현황.opensAt) : new Date(BOOSTER.접수시작ISO)
-  // ★ 지금(시계)이 없으면 아직 브라우저에 안 올라온 것이다 — 아무 말도 하지 않는다
-  const 상태 = !지금 ? null
-    : 현황?.isOpen === false ? '마감'
-    : 접수상태보기({ now: 지금, 나간자리, 정원, 접수시작 })
-  const 카운트 = 지금 ? 남은시간(지금, 접수시작) : null
+  const 접수시작ms = (현황 ? new Date(현황.opensAt) : new Date(BOOSTER.접수시작ISO)).getTime()
+  const 창구닫힘 = 현황?.isOpen === false
+
+  /* ── 1초마다 상태를 보고, 10초마다 남은 자리를 받는다 ───────────────── */
+  useEffect(() => {
+    if (!올라옴) return
+    const 보기 = () => set상태(창구닫힘 ? '마감' : 접수상태보기({
+      now: new Date(Date.now() + 시차.current),
+      나간자리, 정원, 접수시작: new Date(접수시작ms),
+    }))
+    보기()
+    const t1 = setInterval(보기, 1000)           // 같은 값이면 React 가 그냥 넘긴다
+    const t2 = setInterval(() => { if (!결과) 현황받기() }, 10000)
+    return () => { clearInterval(t1); clearInterval(t2) }
+  }, [올라옴, 현황받기, 결과, 창구닫힘, 나간자리, 정원, 접수시작ms])
 
   const 다적음 = 신청서검사({ ...f, is_enrolled: 재원 ?? undefined, agreements: 동의 }).length === 0
   const 누를수있나 = 상태 === '접수중' && 다적음 && !보내는중
@@ -144,7 +157,7 @@ export default function BoosterPage() {
         {결과 ? <결과화면 결과={결과} /> : (
           <>
             {/* 상태 띠 */}
-            <상태띠 상태={상태} 카운트={카운트} 남음={남음} 정원={정원} 못불러옴={못불러옴} />
+            <상태띠 상태={상태} 시작ms={접수시작ms} 시차={시차} 남음={남음} 정원={정원} 못불러옴={못불러옴} />
 
             {/* 특강 정보 */}
             <section style={S.card}>
@@ -244,8 +257,24 @@ export default function BoosterPage() {
 
 /* ── 조각들 ──────────────────────────────────────────────────────────── */
 
-function 상태띠({ 상태, 카운트, 남음, 정원, 못불러옴 }: {
-  상태: ReturnType<typeof 접수상태보기> | null; 카운트: ReturnType<typeof 남은시간>
+/**
+ * 카운트다운 숫자 — **여기만** 1초마다 다시 그린다.
+ * 위쪽 화면(입력칸·동의)은 1초마다 다시 그릴 까닭이 없다.
+ */
+function 카운트다운({ 시작ms, 시차 }: { 시작ms: number; 시차: { current: number } }) {
+  const [, 또] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => 또(n => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const c = 남은시간(new Date(Date.now() + 시차.current), new Date(시작ms))
+  if (!c) return <>곧 시작합니다</>
+  const 두자리 = (n: number) => String(n).padStart(2, '0')
+  return <>{c.일 > 0 ? `${c.일}일 ` : ''}{두자리(c.시)}:{두자리(c.분)}:{두자리(c.초)}</>
+}
+
+function 상태띠({ 상태, 시작ms, 시차, 남음, 정원, 못불러옴 }: {
+  상태: 접수상태 | null; 시작ms: number; 시차: { current: number }
   남음: number; 정원: number; 못불러옴: boolean
 }) {
   // 아직 브라우저에 안 올라왔다 — 자리만 잡아 둔다 (숫자를 먼저 적으면 하이드레이션이 깨진다)
@@ -264,12 +293,7 @@ function 상태띠({ 상태, 카운트, 남음, 정원, 못불러옴 }: {
   if (상태 === '접수전') return (
     <div style={{ ...S.band, background: NAVY }}>
       <div style={S.bandSub}>접수 시작까지</div>
-      <div style={S.bandBig}>
-        {카운트
-          ? (카운트.일 > 0 ? `${카운트.일}일 ` : '') +
-            `${String(카운트.시).padStart(2, '0')}:${String(카운트.분).padStart(2, '0')}:${String(카운트.초).padStart(2, '0')}`
-          : '곧 시작합니다'}
-      </div>
+      <div style={S.bandBig}><카운트다운 시작ms={시작ms} 시차={시차} /></div>
       <div style={S.bandSub}>{BOOSTER.접수시작표시} 정각 · 선착순 {정원}명</div>
     </div>
   )

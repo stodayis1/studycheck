@@ -136,6 +136,7 @@ const SQL = readFileSync('docs/sql/부스터특강_선착순신청.sql', 'utf8')
 const API = 주석빼기(readFileSync('app/api/booster/route.ts', 'utf8'))
 const ADMIN_API = 주석빼기(readFileSync('app/api/booster/admin/route.ts', 'utf8'))
 const PAGE = 주석빼기(readFileSync('app/booster/page.tsx', 'utf8'))
+const ADMIN_PAGE = 주석빼기(readFileSync('app/teacher/booster/page.tsx', 'utf8'))
 
 function SQL검사(원본) {
   const 걸림 = []
@@ -194,6 +195,35 @@ function SQL검사(원본) {
   return 걸림
 }
 틀린것.push(...SQL검사(SQL))
+
+/**
+ * 화면이 **끝없이 되풀이해 불러오지 않는지.**
+ *
+ * 원장님 2026-11-19: 「잘되긴 하는데 화면이 왜 계속 떨려」
+ *
+ * `useAuth()` 의 isAdmin 은 **화면이 그려질 때마다 새로 만들어지는 함수**다
+ * (hooks/useAuth.ts 의 `function isAdmin()`). 그것을 useEffect 의 의존성 목록에 넣으면
+ *   불러옴 → 그려짐 → isAdmin 이 새 함수 → 「바뀌었네」 → 또 불러옴 → …
+ * 가 되어 화면이 떨리고 API 를 쉬지 않고 두드린다.
+ *
+ * 값(boolean)으로 바꿔서 넘겨야 한다.
+ */
+function 되풀이검사(소스) {
+  const 걸림 = []
+  // useEffect(…, [… isAdmin …]) 꼴을 찾는다 (원장인가 같은 값은 괜찮다)
+  for (const m of 소스.matchAll(/useEffect\([\s\S]*?\}\s*,\s*\[([^\]]*)\]\s*\)/g)) {
+    const 목록 = m[1]
+    if (/(^|[^가-힣\w])isAdmin(\s*[,\]]|$)/.test(목록)) {
+      걸림.push('★ useEffect 의존성에 isAdmin 함수를 넣었다 — 끝없이 다시 불러 화면이 떨린다')
+    }
+  }
+  // useMemo 도 같은 함정이지만 상태를 안 바꾸니 떨리진 않는다 — 여기서는 보지 않는다
+  if (!/const\s+원장인가\s*=\s*isAdmin\(\)/.test(소스)) {
+    걸림.push('원장 여부를 값으로 잡아 두지 않았다 (const 원장인가 = isAdmin())')
+  }
+  return 걸림
+}
+틀린것.push(...되풀이검사(ADMIN_PAGE))
 
 function API검사([api, page, adminApi]) {
   const 걸림 = []
@@ -279,6 +309,12 @@ const 망가진것 = [
       ADMIN_API.replace("if (b.action === 'cancel') {", "if (b.action === 'cancel') {\n  await supabase.rpc('dec', { seats_taken: 1 })")])],
   ['화면이 서버 시각을 안 쓴다',
     () => API검사([API, PAGE.replace(/serverNow/g, 'clientNow'), ADMIN_API])],
+  // ★ 2026-11-19 — 원장님 화면이 떨리던 그 코드
+  ['원장 화면이 isAdmin 함수를 의존성에 넣는다 (끝없이 다시 부른다)',
+    () => 되풀이검사(`const 원장인가 = isAdmin()
+useEffect(() => { if (isAdmin()) 불러오기() }, [불러오기, isAdmin])`)],
+  ['원장 화면이 원장 여부를 값으로 안 잡는다',
+    () => 되풀이검사(`useEffect(() => { 불러오기() }, [불러오기])`)],
 ]
 
 let 잡힌수 = 0
