@@ -191,6 +191,20 @@ function Inner() {
         .mx-q { break-inside: avoid; page-break-inside: avoid; margin-bottom: 7mm; }
         .mx-sol { break-inside: avoid-page; border-top: 1.5px solid ${NAVY}; padding-top: 3mm; margin-bottom: 8mm; }
         .mx-break { break-before: page; }
+        /* 문제지 한 쪽 = A4 인쇄 영역(188 × 273mm) 안에 머리줄 + 2단 × 2문항 */
+        .mx-page { height: 270mm; display: flex; flex-direction: column; break-after: page; page-break-after: always; }
+        .mx-page:last-child { break-after: auto; page-break-after: auto; }
+        .mx-pagehead { height: 9mm; flex: none; display: flex; justify-content: space-between; align-items: flex-end;
+                       border-bottom: 1.5px solid ${NAVY}; padding-bottom: 1.5mm; font-size: 9pt; color: #333; }
+        .mx-pagehead b { color: ${NAVY}; }
+        .mx-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr;
+                   column-gap: 8mm; padding-top: 4mm; position: relative; }
+        .mx-grid::before { content: ''; position: absolute; left: 50%; top: 4mm; bottom: 0; border-left: 0.6px solid #bbb; }
+        .mx-col { min-height: 0; display: flex; flex-direction: column; }
+        .mx-cell { height: 50%; min-height: 0; overflow: hidden; padding-right: 2mm; }
+        .mx-cell.tall { height: 100%; }
+        .mx-cell img { display: block; max-width: 100%; }
+        @media screen { .mx-page { border: 1px solid #e5e7eb; padding: 6mm; margin-bottom: 6mm; box-sizing: content-box; } }
         .katex { font-size: 1.05em; }
       `}</style>
     </div>
@@ -326,20 +340,58 @@ function PrintSheet({ exam, track, list, mode }: { exam: MockExam; track: Track 
       </div>
     </div>
   )
+  // 문제지: 한 쪽에 2단 × 단마다 2문항 = 4문항 (원장님 2026-11-19 「따닥따닥 붙어 있으면 안 됨, 한 단에 2문항씩만」).
+  // 문항 칸 높이를 고정해 아래가 풀이 공간으로 남는다. 순서는 시험지처럼 왼쪽 단 위·아래 → 오른쪽 단 위·아래.
+  // 글자 크기는 모든 문항이 같게 — 원본 단 너비(그림 폭)를 인쇄 단 너비에 맞추는 한 배율.
+  // 반 단(약 124mm)에 안 들어가는 긴 문항(빈칸 추론 등)은 한 단을 통째로 쓴다 → 그래도 한 단에 2문항을 넘지 않는다.
+  const COL_MM = 86, HALF_MM = 124, FULL_MM = 252
+  const sized = list.map((q) => {
+    const wmm = (q.w ?? 900) * MM_PER_PX, hmm = (q.h ?? 600) * MM_PER_PX
+    const s = Math.min(1, COL_MM / wmm)
+    const tall = hmm * s > HALF_MM
+    const h = Math.min(hmm * s, tall ? FULL_MM : HALF_MM)
+    return { q, tall, wmm: (wmm * s * h) / (hmm * s), hmm: h }
+  })
+  const cols: (typeof sized)[] = []
+  for (const it of sized) {
+    const cur = cols[cols.length - 1]
+    const used = cur ? cur.reduce((n, x) => n + (x.tall ? 2 : 1), 0) : 2
+    if (!cur || used + (it.tall ? 2 : 1) > 2) cols.push([it])
+    else cur.push(it)
+  }
+  const pages: (typeof sized)[][] = []
+  for (let i = 0; i < cols.length; i += 2) pages.push(cols.slice(i, i + 2))
   return (
     <div className="mx-print mt-4">
-      {mode !== 'solutions' && (
-        <section>
-          {head('문제지')}
-          <div style={{ columns: 2, columnGap: '8mm' }}>
-            {list.map((q) => (
-              <div key={q.sec + q.no} className="mx-q">
-                {mode === 'both' ? (
-                  <><QImg q={q} print /><div className="mt-2"><Solution q={q} /></div></>
-                ) : <QImg q={q} print />}
+      {mode === 'problems' && pages.map((pg, pi) => (
+        <section key={pi} className="mx-page">
+          <div className="mx-pagehead">
+            <b>{exam.title}</b>
+            <span>{track ? `공통 + ${track}` : exam.grade} · {pi + 1} / {pages.length}</span>
+          </div>
+          <div className="mx-grid">
+            {pg.map((col, ci) => (
+              <div key={ci} className="mx-col">
+                {col.map(({ q, tall, wmm, hmm }) => (
+                  <div key={q.sec + q.no} className={`mx-cell${tall ? ' tall' : ''}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={q.image} alt={`${q.no}번`} style={{ width: `${wmm.toFixed(1)}mm`, height: `${hmm.toFixed(1)}mm` }} />
+                  </div>
+                ))}
               </div>
             ))}
           </div>
+        </section>
+      ))}
+      {mode === 'both' && (
+        <section>
+          {head('문제 + 해설')}
+          {list.map((q) => (
+            <div key={q.sec + q.no} className="mx-sol">
+              <QImg q={q} print />
+              <div className="mt-2"><Solution q={q} /></div>
+            </div>
+          ))}
         </section>
       )}
       {mode === 'solutions' && (

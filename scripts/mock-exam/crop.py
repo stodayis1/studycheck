@@ -4,11 +4,14 @@
 # 고1·고2 학평처럼 선택과목이 없으면 모두 「공통」 폴더에 들어간다.
 # 문항 번호 「N.」 글자 위치로 자르고, 쪽 맨 아래 「확인 사항」 상자 위에서 멈춘다.
 # 글자 정보가 없는 그림 PDF 는 자르지 못한다 → 알려 주고 멈춘다.
+# EBSi 고3 학평 PDF 는 선택과목마다 따로(공통 22 + 그 과목 8) 있고 머리말로 가를 수 없다
+#   → 4번째 인자로 과목을 주면 23~30번을 그 과목으로 넣는다:  crop.py "<회차>" 문제지_미적.pdf 0 미적
 import pymupdf, re, os, sys, numpy as np
 from PIL import Image
 sys.stdout.reconfigure(encoding="utf-8")
 R = sys.argv[1]; F = sys.argv[2] if len(sys.argv) > 2 else "문제지.pdf"
-LIMIT = int(sys.argv[3]) if len(sys.argv) > 3 else None
+LIMIT = int(sys.argv[3]) if len(sys.argv) > 3 and int(sys.argv[3]) > 0 else None
+FORCE = sys.argv[4] if len(sys.argv) > 4 else None
 d = pymupdf.open(os.path.join(R, "원본", F)); Z = 200 / 72
 W = d[0].rect.width; MID = W / 2
 COLS = [(W * 0.083, MID - 5), (MID + 1, W * 0.917)]
@@ -29,8 +32,9 @@ for pi in range(len(d) if LIMIT is None else LIMIT):
             c = im.crop([int(v * Z) for v in (x0, y - 16, x1, y1)]); a = np.asarray(c.convert("L"))
             rows = np.where((a < 200).sum(1) > 1)[0]; cols = np.where((a < 200).sum(0) > 1)[0]
             c = c.crop((max(cols[0] - 10, 0), max(rows[0] - 10, 0), min(cols[-1] + 10, c.width), min(rows[-1] + 10, c.height)))
-            os.makedirs(os.path.join(R, "crops", sec), exist_ok=True)
-            c.save(os.path.join(R, "crops", sec, f"{no:02d}.png")); out.append((sec, no))
+            s_ = FORCE if FORCE and no >= 23 else ("공통" if FORCE else sec)
+            os.makedirs(os.path.join(R, "crops", s_), exist_ok=True)
+            c.save(os.path.join(R, "crops", s_, f"{no:02d}.png")); out.append((s_, no))
 by = {}
 for s, n in out: by.setdefault(s, []).append(n)
 print(len(out), {s: sorted(v) for s, v in by.items()})
