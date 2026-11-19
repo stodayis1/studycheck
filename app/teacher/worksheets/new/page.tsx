@@ -83,7 +83,7 @@ export default function WorksheetsPage() {
         { title: '오답 · 오답유사', desc: '학생별 틀린 문제와 같은 유형 출제', color: '#f97316', href: '/teacher/gradings' },
         { title: '고난도', desc: '레벨 4 이상 (쎈 B상·C단계)', color: '#ef4444', preset: { levels: [4, 5, 6], mode: 'hard', title: '고난도' } },
         { title: '서술형', desc: '주관식 문항만 모아서', color: '#10b981', preset: { answerType: 'written', title: '서술형' } },
-        { title: '모의고사 기출', desc: '아직 문제가 없습니다', color: '#94a3b8', soon: true },
+        { title: '모의고사 기출', desc: '회차별 전 문항 해설 · 문제지 · 해설지 인쇄', color: '#64748b', href: '/teacher/mock-exams' },
       ],
     },
   ]
