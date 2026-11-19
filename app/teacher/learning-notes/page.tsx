@@ -3422,6 +3422,12 @@ ${e?.message ?? '연결 실패'}
                                 title="진도·과제·알림장이 하나도 없어요. 밤 9시 자동 발송에서는 빠지고 다음 날 오전 11시로 미뤄집니다."
                                 style={{ background: '#FEF3C7', color: '#92400E' }}>출결만 적힘</span>
                             )}
+                            {/* 알림톡이 막힌 집 — 문자로 나간다 (원장님 2026-11-19) */}
+                            {p.sms && (
+                              <span className="px-1.5 py-0.5 rounded-md font-bold"
+                                title="이 학생은 알림톡이 계속 거절돼서 문자로 보냅니다. 내용은 같고 링크가 글 끝에 붙어요."
+                                style={{ background: '#E0F2FE', color: '#075985' }}>문자로</span>
+                            )}
                             {/* 결석은 학부모께 안 나간다 (원장님 2026-11-18). 일지는 그대로 써야 한다. */}
                             {p.absent && (
                               <span className="px-1.5 py-0.5 rounded-md font-bold"

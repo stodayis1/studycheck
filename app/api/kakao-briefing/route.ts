@@ -38,6 +38,7 @@ import { buildBriefing, diagnosticLabel } from '@/lib/briefing'
 import { snapshots } from '@/lib/briefingSnapshots'
 import { fetchOpsMakeups } from '@/lib/opsMakeups'
 import { briefingBlockFor, blocksPreviewToo } from '@/lib/briefingBlock'
+import { briefChannelOf, briefSmsText } from '@/lib/briefSms'
 import { fetchOpsTeacherPhones } from '@/lib/opsTeachers'
 import { mainTeacherOf } from '@/lib/teachers'
 
@@ -86,6 +87,10 @@ export interface BriefingSummary {
   skippedExam: { name: string }[]
   /** 결석이라 일부러 안 보낸 학생 (원장님 2026-11-18) */
   skippedAbsent?: { name: string }[]
+  /** 알림톡 대신 **문자로** 나간 수 (원장님 2026-11-19) */
+  smsSent?: number
+  /** 문자가 한 통을 넘었거나 링크를 뺀 건 — 눈에 보여야 한다 */
+  smsLong?: string[]
   /** 연습용(가짜) 학생이라 일부러 안 보낸 학생 */
   skippedTest?: { name: string }[]
   /** 밤 9시에 「출결만 찍혀 있어」 다음 날 오전 11시로 미룬 학생 */
@@ -108,6 +113,8 @@ export interface BriefingSummary {
     thin?: boolean
     /** 결석이라 학부모님께는 안 나간다 (원장님 2026-11-18). 목록에는 사유와 함께 보인다. */
     absent?: boolean
+    /** 알림톡이 아니라 **문자**로 나간다 (원장님 2026-11-19) */
+    sms?: boolean
   }[]
   /** 「선생님께 보내기」에서 고를 수 있는 분 — 원장·주임 (담당 강사는 줄마다 따로) */
   staffOptions?: { admins: string[]; supervisors: string[] }
@@ -185,7 +192,9 @@ async function run(opts: {
   }
 
   const [{ data: students }, { data: notes }, { data: fbs }, { data: already }] = await Promise.all([
-    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id, teacher_name, is_test').in('id', studentIds),
+    // ★ brief_by_sms — 이 학생은 알림톡 대신 문자로 (원장님 2026-11-19).
+    //   칸을 안 읽어 오면 **늘 알림톡으로** 나간다. 에러도 안 난다.
+    db.from('students').select('id, name, grade, parent_phone, is_active, ops_student_id, teacher_name, is_test, brief_by_sms').in('id', studentIds),
     db.from('learning_notes').select('*').in('session_id', sessionIds),
     // 알림장은 session_id 가 없어 작성 시각으로 묶는다. 한국 날짜 하루치를 UTC 범위로 받는다.
     db.from('feedbacks').select('*').in('student_id', studentIds)
@@ -359,6 +368,11 @@ async function run(opts: {
     const already = !opts.testPhone && sentAlready.has(student.id)
     if (already && !dryRun && !opts.includeSent && !opts.resend) { out.skippedAlreadySent++; continue }
 
+    // ★ **알림톡 대신 문자로 보낼 학생** (원장님 2026-11-19). 카카오가 번호를 스팸으로
+    //   막아 둔 집은 몇 번을 보내도 거절된다 — 최온유(초3)가 그랬다(11/17·11/18 3건 전부).
+    //   표시는 students.brief_by_sms 한 칸이고, 칸이 없으면 지금까지처럼 알림톡이다.
+    //   ★ **미리보기보다 앞에서** 정한다 — 화면에도 「문자로 나감」을 적어 줘야 한다.
+    const 문자로 = briefChannelOf(student) === 'sms'
     const dayFbs = (fbs ?? []).filter((f: any) => f.student_id === student.id)
     const brief = buildBriefing({
       studentName: student.name, studentGrade: student.grade, session: ses, note, feedbacks: dayFbs,
@@ -399,6 +413,8 @@ async function run(opts: {
         thin: 껍데기,
         // 결석이라 학부모께는 안 나간다 — 화면에 사유로 적어 준다.
         absent: 결석제외,
+        // 알림톡이 아니라 문자로 나간다 — 미리보기에서도 보여야 한다.
+        sms: 문자로,
       })
       // ★ 결석은 「보낼 대상」에 세지 않는다. 세면 미리보기 머리글이 실제보다 많아져서,
       //   원장님이 보낸 뒤 「왜 N명이 빠졌나」를 다시 세게 된다.
@@ -474,25 +490,48 @@ async function run(opts: {
           })
         : 우리버튼
 
-      const r = await sendAlimtalk({ ...cfg!, tplCode: tplForThis }, {
-        to,
-        name: student.name,
-        subject: `${student.name} 학생 수업 브리핑`,
-        message: brief.body,
-        buttons,
-        failoverMessage: brief.body,
-      })
-      if (r.point != null) out.pointLeft = r.point
-      if (r.unit != null) out.unitCost = r.unit
+      // ★ **알림톡 대신 문자로 보낼 학생** (원장님 2026-11-19). 카카오가 번호를 스팸으로
+      //   막아 둔 집은 몇 번을 보내도 거절된다 — 최온유(초3)가 그랬다(11/17·11/18 3건 전부).
+      //   글은 알림톡과 **똑같고**, 버튼이 없으니 링크를 글 끝에 적는다(lib/briefSms.ts).
+      //   표시는 students.brief_by_sms 한 칸이고, 칸이 없으면 지금까지처럼 알림톡이다.
+      let 테스트발송 = !!cfg!.testMode
+      if (문자로) {
+        const sms = briefSmsText({
+          body: brief.body,
+          links: buttons.map((b: any) => ({ name: b.name, url: b.linkMo })),
+        })
+        const s = await sendSmsViaOps({ to, text: sms.text, refType: 'briefing', refId: student.id })
+        // 알림톡과 같게 — 실패하면 던진다. 아래 catch 가 이름과 함께 모아 준다.
+        if (!s.ok) throw new Error(s.error ?? '문자 발송 실패')
+        테스트발송 = !!s.dryRun
+        out.smsSent = (out.smsSent ?? 0) + 1
+        if (sms.dropped || sms.tooLong) {
+          out.smsLong = [...(out.smsLong ?? []),
+            `${student.name} — ${sms.bytes}바이트${sms.dropped ? ` · 링크 ${sms.dropped}개 뺌` : ''}${sms.tooLong ? ' · 한 통을 넘음' : ''}`]
+        }
+      } else {
+        const r = await sendAlimtalk({ ...cfg!, tplCode: tplForThis }, {
+          to,
+          name: student.name,
+          subject: `${student.name} 학생 수업 브리핑`,
+          message: brief.body,
+          buttons,
+          failoverMessage: brief.body,
+        })
+        if (r.point != null) out.pointLeft = r.point
+        if (r.unit != null) out.unitCost = r.unit
+      }
 
       // 성공을 적는다. 유일 제약에 걸리면(동시에 두 번 돌았다) 발송은 이미 됐으므로 조용히 넘긴다.
       // ★ **테스트로 보낸 것은 기록하지 않는다** — 기록하면 그 학생의 진짜 발송이 영영 막힌다.
       //   테스트 번호로 보낸 경우와, 알리고 테스트 모드(ALIGO_TEST_MODE 가 N 이 아닐 때)가 그렇다.
       //   테스트 모드에서는 알리고가 실제로 보내지도, 요금을 받지도 않는다.
-      if (!opts.testPhone && !cfg!.testMode) {
+      if (!opts.testPhone && !테스트발송) {
         const 보낸기록 = {
           student_id: student.id, session_date: date, session_id: ses.id,
           to_phone: String(student.parent_phone), status: 'sent', body_len: brief.bodyLen,
+          // 어느 길로 나갔나 — 알림톡 점검(aligo)에 안 잡히는 건을 가리려면 이 칸이 있어야 한다
+          channel: 문자로 ? 'sms' : 'alimtalk',
           sent_at: new Date().toISOString(),
         }
         if (opts.resend && already) {
