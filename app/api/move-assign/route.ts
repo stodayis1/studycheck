@@ -23,7 +23,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { staffOrDeny } from '@/lib/apiAuth'
-import { WD, WE, EXTRA, GRADES_ELEM, parseNewTime } from '@/lib/moveAssign'
+import { WD, WE, EXTRA, GRADES_ELEM, parseNewTime, planLines, linesKey, pickRequests } from '@/lib/moveAssign'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -46,15 +46,15 @@ function admin() {
  *   deny — 막는 응답(통과면 null)
  *   full — 두 탭 모두 볼 사람인가(can_see_high_curriculum)
  */
-async function allow(req: Request): Promise<{ deny: NextResponse | null; full: boolean; name: string }> {
+async function allow(req: Request): Promise<{ deny: NextResponse | null; full: boolean; name: string; admin: boolean }> {
   const who = await staffOrDeny(req)
-  if (who.deny) return { deny: who.deny, full: false, name: '' }
+  if (who.deny) return { deny: who.deny, full: false, name: '', admin: false }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
   if (!url || !anon)
-    return { deny: NextResponse.json({ error: '서버 설정이 올바르지 않아요.' }, { status: 500 }), full: false, name: '' }
+    return { deny: NextResponse.json({ error: '서버 설정이 올바르지 않아요.' }, { status: 500 }), full: false, name: '', admin: false }
 
   const asUser = createClient(url, anon, {
     auth: { persistSession: false },
@@ -65,10 +65,10 @@ async function allow(req: Request): Promise<{ deny: NextResponse | null; full: b
     asUser.rpc('can_see_high_curriculum'),
   ])
   if (board.error || high.error)
-    return { deny: NextResponse.json({ error: '권한을 확인하지 못했어요.' }, { status: 500 }), full: false, name: '' }
+    return { deny: NextResponse.json({ error: '권한을 확인하지 못했어요.' }, { status: 500 }), full: false, name: '', admin: false }
   if (board.data !== true)
-    return { deny: NextResponse.json({ error: '이 화면을 볼 수 있는 선생님만 쓸 수 있어요.' }, { status: 403 }), full: false, name: '' }
-  return { deny: null, full: high.data === true, name: who.name }
+    return { deny: NextResponse.json({ error: '이 화면을 볼 수 있는 선생님만 쓸 수 있어요.' }, { status: 403 }), full: false, name: '', admin: false }
+  return { deny: null, full: high.data === true, name: who.name, admin: who.role === 'admin' }
 }
 
 /** 수파베이스는 한 번에 1000행만 준다 — 다 읽을 때는 돌려 가며 읽는다. */
@@ -103,22 +103,75 @@ export async function GET(req: Request) {
         .in('student_id', ids.slice(i, i + 100)).order('id')))
     }
 
-    let rows = await all(() => db.from('class_move_assign')
-      .select('student_id, track, teacher_name, weekday_slot, weekend_slot, extra_slot, new_time').order('student_id'))
+    // ★ 확정 칸은 SQL(docs/sql/진급배정판_확정.sql)이 들어간 뒤에 생긴다. 칸이 없을 때
+    //   그냥 읽으면 **판이 통째로 안 뜬다** — 코드가 먼저 올라가도 멀쩡하게, 없으면 빼고 읽는다.
+    //   그때는 confirmReady=false 로 내려 화면이 「확정」 단추를 숨긴다.
+    const 기본칸 = 'student_id, track, teacher_name, weekday_slot, weekend_slot, extra_slot, new_time'
+    let confirmReady = true
+    let rows: any[]
+    try {
+      rows = await all(() => db.from('class_move_assign')
+        .select(기본칸 + ', confirmed_at, confirmed_by_name, confirmed_note').order('student_id'))
+    } catch {
+      confirmReady = false
+      rows = await all(() => db.from('class_move_assign').select(기본칸).order('student_id'))
+    }
     // 고등 권한이 없는 사람에게는 고등 판 줄도 내려 주지 않는다
     if (!full) rows = rows.filter((r: any) => r.track === '중등' || r.track === '초등')
 
-    return NextResponse.json({ students, schedules, rows, full })
+    // ★ 시간표 변경요청 — 이 판이 「확정」을 가르는 근거다 (원장님 2026-11-19).
+    //   담당 선생님이 올리고(open) 원장님이 「반영」을 누르면(applied) 진짜 시간표가 바뀐다.
+    //   한 학생에 **기다리는 요청이 있으면 그것**, 없으면 **가장 늦게 반영된 것**을 쓴다.
+    const reqRows: any[] = []
+    for (let i = 0; i < ids.length; i += 100) {   // in() 은 100개씩 끊는다
+      reqRows.push(...await all(() => db.from('schedule_change_requests')
+        .select('student_id, status, want, want_text, requested_at, requested_by_name, decided_at')
+        .in('student_id', ids.slice(i, i + 100))
+        .in('status', ['open', 'applied']).order('id')))
+    }
+    // 고르는 규칙은 lib 한 곳 — 기다리는 요청이 먼저, 같은 상태끼리는 늦게 올라온 것.
+    const reqs = pickRequests(reqRows)
+
+    return NextResponse.json({ students, schedules, rows, reqs, full, confirmReady })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? '읽지 못했어요.' }, { status: 500 })
   }
 }
 
 export async function POST(req: Request) {
-  const { deny, full, name } = await allow(req)
+  const { deny, full, name, admin: isAdmin } = await allow(req)
   if (deny) return deny
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: '잘못된 요청이에요.' }, { status: 400 }) }
+
+  // ★ 손으로 누르는 확정 / 확정 해제 (원장님 2026-11-19).
+  //   **원장님만** 누른다 — 확정은 「실제 시간표가 바뀌었다」는 뜻이고, 시간표를 바꾸는 것도
+  //   원장님뿐이다(시간표 변경요청의 「반영」). 선생님은 상태만 보신다.
+  //   계획을 안 고치고 확정 칸만 손댄다 — 여기서 upsert 를 쓰면 안 고른 칸이 빈칸으로 덮인다.
+  const action = String(body?.action ?? '')
+  if (action === 'confirm' || action === 'unconfirm') {
+    if (!isAdmin) return NextResponse.json({ error: '확정은 원장님만 할 수 있어요.' }, { status: 403 })
+    const sid = String(body?.studentId ?? '')
+    if (!sid) return NextResponse.json({ error: '학생을 알 수 없어요.' }, { status: 400 })
+    const db = admin()
+    const { data: row } = await db.from('class_move_assign')
+      .select('student_id, track').eq('student_id', sid).maybeSingle()
+    if (!row) return NextResponse.json({ error: '아직 배정을 고르지 않은 학생이에요.' }, { status: 404 })
+    if ((row as any).track === '고등' && !full)
+      return NextResponse.json({ error: '「중3 → 고등」은 고등 선생님만 고칠 수 있어요.' }, { status: 403 })
+    const { error } = await db.from('class_move_assign').update(
+      action === 'confirm'
+        ? { confirmed_at: new Date().toISOString(), confirmed_by_name: name || null,
+            confirmed_note: typeof body?.note === 'string' ? body.note.slice(0, 200) : null }
+        : { confirmed_at: null, confirmed_by_name: null, confirmed_note: null }
+    ).eq('student_id', sid)
+    if (error) return NextResponse.json({
+      error: /confirmed_at/.test(error.message)
+        ? 'docs/sql/진급배정판_확정.sql 을 먼저 넣어 주세요 (확정 칸이 아직 없어요).'
+        : error.message,
+    }, { status: 500 })
+    return NextResponse.json({ ok: true, confirmed: action === 'confirm' })
+  }
 
   const studentId = String(body?.studentId ?? '')
   const track = String(body?.track ?? '')
@@ -150,6 +203,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '요일·시작 시각·교시를 다 골라야 해요.' }, { status: 400 })
 
   const db = admin()
+
+  // ★ 계획을 **바꾸면 확정을 푼다** — 확정은 「이 계획대로 시간표를 바꿨다」는 뜻이다.
+  //   계획이 달라졌는데 확정이 남아 있으면 판이 조용히 거짓이 된다.
+  //   확정 칸이 아직 없으면(SQL 전) 풀 것도 없다 — 읽기 실패로 저장을 막지 않는다.
+  let 확정풀림 = false
+  const { data: before } = await db.from('class_move_assign')
+    .select('teacher_name, weekday_slot, weekend_slot, extra_slot, new_time, confirmed_at')
+    .eq('student_id', studentId).maybeSingle()
+  if ((before as any)?.confirmed_at) {
+    const b: any = before
+    const 전 = [b.teacher_name ?? '', b.weekday_slot ?? '', b.weekend_slot ?? '', b.extra_slot ?? '',
+      linesKey(planLines(track as any, { newTime: b.new_time }))].join('|')
+    const 후 = [teacher || '', weekday || '', weekend || '', extra || '',
+      linesKey(planLines(track as any, { newTime }))].join('|')
+    확정풀림 = 전 !== 후
+  }
+
   const { error } = await db.from('class_move_assign').upsert({
     student_id: studentId,
     track,
@@ -160,7 +230,8 @@ export async function POST(req: Request) {
     new_time: track === '초등' ? newTime : null,
     updated_at: new Date().toISOString(),
     updated_by_name: name || null,
+    ...(확정풀림 ? { confirmed_at: null, confirmed_by_name: null, confirmed_note: null } : {}),
   }, { onConflict: 'student_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, unconfirmed: 확정풀림 })
 }

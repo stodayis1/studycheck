@@ -15,6 +15,7 @@ import {
   GRADES_ELEM, ELEM_PICKS, ELEM_STARTS, ELEM_PERIODS, nextGrade, elemDraft,
   parseNewTime, newTimeText, newTimeAt, newTimeDays, sameTime, withDay,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff, toMin,
+  planLines, wantLines, linesKey, confirmStateOf, pickRequests,
 } from '../lib/moveAssign.ts'
 
 let bad = 0
@@ -196,6 +197,117 @@ ok(sameTime(t3, parseNewTime([...요일별].reverse())), '적는 차례가 달�
 ok(!sameTime(t3, withDay(t3, '금', { start: '18:00', periods: 2 })), '한 요일만 달라도 다른 시간')
 ok(sameTime(null, null) && sameTime(null, []) && !sameTime(t3, null), '빈 것끼리만 같다')
 
+/* ─────────── 확정 — 계획이 실제 시간표로 옮겨졌는가 (원장님 2026-11-19) ───────────
+ * 반영된 시간표 변경요청이 **계획과 같을 때만** 확정이다. 진급과 상관없는 보통의
+ * 시간표 변경까지 확정으로 세면 판이 조용히 거짓이 된다 — 그래서 하나하나 재 본다.
+ */
+
+// ⓖ-1 고등 판 — 타임 조각(수업 + 클리닉)을 요일별로 이어 붙여야 한다.
+//      운영 고1 시간표가 그 꼴로 적혀 있다: 「화17:30·3교시」 = ja (수업 17:30~19:30 + 클리닉 19:30~20:30)
+{
+  const ja = planLines('고등', { weekday: 'ja' })
+  ok(!!ja && ja.length === 2, '화·목 타임은 두 줄이어야 한다')
+  ok(linesKey(ja) === linesKey([{ day: '화', start: '17:30', minutes: 180 }, { day: '목', start: '17:30', minutes: 180 }]),
+    'ja 타임은 화·목 17:30 부터 180분(수업 2시간 + 클리닉 1시간)으로 이어 붙어야 한다')
+  const at1 = planLines('고등', { weekday: 'at1' })
+  ok(linesKey(at1) === linesKey([{ day: '월', start: '16:00', minutes: 180 }, { day: '금', start: '16:00', minutes: 180 }]),
+    'at1 타임은 월·금 16:00 부터 180분')
+  // 붙지 않은 조각은 **따로** 남아야 한다 — 추가 클리닉(20~21시)은 4~7시 타임과 떨어져 있다
+  const 떨어진것 = planLines('고등', { weekday: 'at1', extra: 'c-mf' })
+  ok((떨어진것 ?? []).length === 4, '떨어진 조각은 한 줄로 이어 붙이면 안 된다')
+  ok(planLines('고등', {}) === null, '아무 타임도 안 고르면 견줄 계획이 없다(null)')
+  ok(planLines('중등', { weekday: 'ja' }) === null, '중등 판은 선생님만 정한다 — 시간 계획이 없다')
+}
+
+// ⓖ-2 초등 판 — 바뀔 시간이 그대로 쓰인다. 비워 두면 견줄 것이 없다.
+{
+  const nt = [{ day: '화', start: '14:00', periods: 2 }, { day: '금', start: '17:00', periods: 2 }]
+  ok(linesKey(planLines('초등', { newTime: nt })) ===
+     linesKey([{ day: '화', start: '14:00', minutes: 120 }, { day: '금', start: '17:00', minutes: 120 }]),
+    '초등 바뀔 시간은 교시 × 60분으로 센다')
+  ok(planLines('초등', { newTime: null }) === null, '비워 두면(지금 시간표 그대로) 견줄 계획이 없다')
+  // 예전 꼴도 읽는다 (parseNewTime 과 같은 길)
+  ok(planLines('초등', { newTime: { days: ['화', '목'], start: '14:00', periods: 2 } })?.length === 2,
+    '예전 꼴(요일 묶음 하나)도 읽어야 한다')
+}
+
+// ⓖ-3 요청의 want — 적는 꼴이 다르다({day,time,periods}). 어긋난 줄은 버린다.
+ok(linesKey(wantLines([{ day: '화', time: '14:00:00', periods: 2 }])) ===
+   linesKey([{ day: '화', start: '14:00', minutes: 120 }]), "요청의 time 은 'HH:MM' 로 잘라 읽는다")
+ok(wantLines([{ day: '해', time: '14:00', periods: 2 }]) === null, '없는 요일은 버린다')
+ok(wantLines([{ day: '화', time: '14:00', periods: 0 }]) === null, '0교시는 버린다')
+ok(wantLines(null) === null && wantLines([]) === null, '요청이 없으면 null')
+ok(linesKey([{ day: '금', start: '17:00', minutes: 120 }, { day: '화', start: '14:00', minutes: 120 }]) ===
+   linesKey([{ day: '화', start: '14:00', minutes: 120 }, { day: '금', start: '17:00', minutes: 120 }]),
+  '적힌 차례가 뒤집혀도 같은 시간표로 봐야 한다')
+
+// ⓖ-4 줄의 상태 — 이 다섯 가지가 화면·서버·검사에서 같아야 한다
+{
+  const 초등계획 = { new_time: [{ day: '화', start: '14:00', periods: 2 }] }
+  const 같은요청 = { status: 'applied', want: [{ day: '화', time: '14:00', periods: 2 }], decided_at: '2026-11-19' }
+  const 다른요청 = { status: 'applied', want: [{ day: '목', time: '16:00', periods: 2 }], decided_at: '2026-11-19' }
+
+  ok(confirmStateOf('초등', 초등계획, null).state === 'plan', '아무 일 없으면 계획')
+  ok(confirmStateOf('초등', 초등계획, { status: 'open', want: [] } as any).state === 'open',
+    '올라온 요청이 있으면 「요청 올라옴」')
+  const 저절로 = confirmStateOf('초등', 초등계획, 같은요청 as any)
+  ok(저절로.state === 'auto' && 저절로.confirmed, '반영된 요청이 계획과 같으면 저절로 확정')
+  const 다름 = confirmStateOf('초등', 초등계획, 다른요청 as any)
+  ok(다름.state === 'applied' && !다름.confirmed,
+    '★ 반영됐어도 계획과 시간이 다르면 확정이 아니다 — 보통의 시간표 변경을 확정으로 세면 판이 거짓이 된다')
+  // 견줄 계획이 없는 줄(중등 판·시간 안 정함)도 저절로 확정되지 않는다
+  ok(confirmStateOf('중등', { teacher_name: '김은수' }, 같은요청 as any).state === 'applied',
+    '중등 판은 견줄 시간 계획이 없으니 저절로 확정되지 않는다')
+  // 손으로 누른 확정은 요청보다 앞선다
+  const 손으로 = confirmStateOf('초등', { ...초등계획, confirmed_at: '2026-11-19T00:00:00Z', confirmed_by_name: '윤지혜' }, 다른요청 as any)
+  ok(손으로.state === 'hand' && 손으로.confirmed, '손으로 누른 확정이 있으면 그것이 이긴다')
+  ok(confirmStateOf('초등', 초등계획, { status: 'open', want: [] } as any).confirmed === false,
+    '기다리는 요청은 아직 확정이 아니다')
+}
+
+// ⓖ-5 한 학생에 요청이 여러 건이면 어느 것을 보나
+{
+  const 줄 = [
+    { student_id: 'a', status: 'applied', requested_at: '2026-03-01' },
+    { student_id: 'a', status: 'applied', requested_at: '2026-11-10' },
+    { student_id: 'b', status: 'applied', requested_at: '2026-11-10' },
+    { student_id: 'b', status: 'open', requested_at: '2026-03-01' },
+  ]
+  const got = new Map(pickRequests(줄).map((r) => [r.student_id, r]))
+  ok(got.get('a')?.requested_at === '2026-11-10', '반영된 것이 여럿이면 늦게 올라온 것을 본다')
+  ok(got.get('b')?.status === 'open',
+    '★ 기다리는 요청이 반영된 것보다 먼저다 — 지금 할 일이 그것이다(올라온 차례와 상관없이)')
+  ok(pickRequests([]).length === 0 && pickRequests([{ student_id: '' } as any]).length === 0,
+    '빈 줄·학생 없는 줄은 버린다')
+}
+
+// ⓖ-6 확정 칸이 아직 없을 때(SQL 전)도 판이 떠야 한다
+{
+  const api = fs.readFileSync('app/api/move-assign/route.ts', 'utf8')
+  ok(/confirmReady = false/.test(api) && api.includes("db.from('class_move_assign').select(기본칸)"),
+    '★ 확정 칸이 없으면 빼고 읽어야 한다 — 그냥 읽으면 판이 통째로 안 뜬다(SQL 보다 코드가 먼저 올라갈 수 있다)')
+  ok(api.includes('confirmReady }'), '칸이 있는지를 화면에 알려 줘야 한다')
+  ok(api.includes('pickRequests(reqRows)'), '요청 고르기는 lib 함수로 — 서버가 베껴 쓰면 검사와 갈라진다')
+  const page = fs.readFileSync('app/teacher/move-assign/page.tsx', 'utf8')
+  ok(/currentUser\?\.role === 'admin' && confirmReady/.test(page),
+    '칸이 없으면 확정 단추를 숨겨야 한다 — 눌러도 조용히 실패할 자리는 안 보이는 편이 낫다')
+}
+
+// ⓖ-5 서버가 확정을 **원장님만** 하게 막나 · 계획을 바꾸면 확정을 푸나
+{
+  const api = fs.readFileSync('app/api/move-assign/route.ts', 'utf8')
+  ok(/action === 'confirm' \|\| action === 'unconfirm'/.test(api), '확정·확정해제 길이 서버에 있어야 한다')
+  ok(/if \(!isAdmin\) return NextResponse\.json\(\{ error: '확정은 원장님만/.test(api),
+    '확정은 서버에서도 원장님만 — 화면만 가리면 주소로 부를 수 있다')
+  ok(api.includes("from('class_move_assign').update("),
+    '확정은 update 로 — upsert 를 쓰면 안 고른 칸이 빈칸으로 덮인다')
+  ok(/확정풀림/.test(api), '계획을 바꾸면 확정을 풀어야 한다')
+  const page = fs.readFileSync('app/teacher/move-assign/page.tsx', 'utf8')
+  ok(/currentUser\?\.role === 'admin'/.test(page),
+    "확정 단추는 isAdmin() 이 아니라 role 로 — isAdmin() 은 관리자모드 토글까지 봐서 강사모드의 원장님께 사라진다")
+  ok(page.includes('confirmStateOf('), '화면이 상태를 lib 함수로 가려야 한다(베껴 쓰면 서버와 갈라진다)')
+}
+
 // ── 여기부터는 운영 데이터 (.env.local 이 있을 때만)
 for (const f of ['.env.local', '.env']) {
   if (!fs.existsSync(f)) continue
@@ -315,7 +427,8 @@ if (!url || !key) {
 
   // 칸이 하나하나 다 있나 (읽기만) — 화면이 고르는 칸을 DB 가 모르면
   // **저장만 조용히 실패한다**(화면은 그대로 보인다). 칸을 더할 때마다 여기에 이름을 넣는다.
-  for (const col of ['track', 'teacher_name', 'weekday_slot', 'weekend_slot', 'extra_slot', 'new_time']) {
+  for (const col of ['track', 'teacher_name', 'weekday_slot', 'weekend_slot', 'extra_slot', 'new_time',
+    'confirmed_at', 'confirmed_by_name', 'confirmed_note']) {
     const { error: colErr } = await db.from('class_move_assign').select(col).limit(1)
     ok(!colErr, '칸 class_move_assign.' + col + ' 이 없다 — docs/sql/ 의 알맞은 .sql 을 적용했나')
   }
