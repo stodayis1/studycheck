@@ -255,9 +255,17 @@ ok(linesKey([{ day: '금', start: '17:00', minutes: 120 }, { day: '화', start: 
   const 다름 = confirmStateOf('초등', 초등계획, 다른요청 as any)
   ok(다름.state === 'applied' && !다름.confirmed,
     '★ 반영됐어도 계획과 시간이 다르면 확정이 아니다 — 보통의 시간표 변경을 확정으로 세면 판이 거짓이 된다')
-  // 견줄 계획이 없는 줄(중등 판·시간 안 정함)도 저절로 확정되지 않는다
-  ok(confirmStateOf('중등', { teacher_name: '김은수' }, 같은요청 as any).state === 'applied',
-    '중등 판은 견줄 시간 계획이 없으니 저절로 확정되지 않는다')
+  // ★ 견줄 계획이 없는 줄은 'noPlan' — **빨간 「계획과 다름」으로 띄우지 않는다.**
+  //   중등 판은 선생님만 정하므로 어떤 요청이든 견줄 수 없다. 한데 묶으면 보통의 시간표
+  //   변경이 있었던 초6 학생이 다 문제처럼 빨갛게 뜬다(2026-11-19 운영 데이터에서 3명).
+  ok(confirmStateOf('중등', { teacher_name: '김은수' }, 같은요청 as any).state === 'noPlan',
+    '중등 판은 견줄 시간 계획이 없다 — 「계획과 다름」이 아니라 「시간표 바뀜」이다')
+  ok(confirmStateOf('초등', { new_time: null }, 같은요청 as any).state === 'noPlan',
+    '초등 판에서 시간을 안 고른 줄도 견줄 것이 없다')
+  ok(confirmStateOf('고등', { teacher_name: '최대호' }, 같은요청 as any).state === 'noPlan',
+    '고등 판에서 타임을 안 고른 줄도 견줄 것이 없다')
+  ok(!confirmStateOf('중등', { teacher_name: '김은수' }, 같은요청 as any).confirmed,
+    '견줄 계획이 없으면 저절로 확정되지도 않는다')
   // 손으로 누른 확정은 요청보다 앞선다
   const 손으로 = confirmStateOf('초등', { ...초등계획, confirmed_at: '2026-11-19T00:00:00Z', confirmed_by_name: '윤지혜' }, 다른요청 as any)
   ok(손으로.state === 'hand' && 손으로.confirmed, '손으로 누른 확정이 있으면 그것이 이긴다')
@@ -303,6 +311,9 @@ ok(linesKey([{ day: '금', start: '17:00', minutes: 120 }, { day: '화', start: 
     '확정은 update 로 — upsert 를 쓰면 안 고른 칸이 빈칸으로 덮인다')
   ok(/확정풀림/.test(api), '계획을 바꾸면 확정을 풀어야 한다')
   const page = fs.readFileSync('app/teacher/move-assign/page.tsx', 'utf8')
+  // 저장된 줄이 없는 학생(첫 제안 그대로)도 확정할 수 있어야 한다 — 운영 요청 17건 중 12건이 그랬다
+  ok(/if \(on && !rows\.some\(/.test(page),
+    '★ 저장된 줄이 없으면 첫 제안을 계획으로 먼저 적어야 한다 — 안 그러면 확정이 404 로 막힌다')
   ok(/currentUser\?\.role === 'admin'/.test(page),
     "확정 단추는 isAdmin() 이 아니라 role 로 — isAdmin() 은 관리자모드 토글까지 봐서 강사모드의 원장님께 사라진다")
   ok(page.includes('confirmStateOf('), '화면이 상태를 lib 함수로 가려야 한다(베껴 쓰면 서버와 갈라진다)')
