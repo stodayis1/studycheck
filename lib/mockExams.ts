@@ -20,6 +20,8 @@ export type MockExam = {
 export type Track = '확률과 통계' | '미적분' | '기하'
 export const TRACK_KEY: Record<Track, string> = { '확률과 통계': '확통', '미적분': '미적', '기하': '기하' }
 
+// 회차 목록은 보관함 mock/index.json 에 있다 (scripts/mock-exam/upload.mjs 가 회차 폴더의 meta.json 으로 고쳐 쓴다).
+// 그래서 회차를 더할 때 앱을 다시 배포하지 않아도 된다. 아래는 index.json 이 없을 때만 쓰는 첫 회차.
 export const MOCK_EXAMS: MockExam[] = [
   {
     slug: '2027-suneung', year: 2027, title: '2027학년도 대학수학능력시험 수학', short: '2027 수능',
@@ -28,6 +30,11 @@ export const MOCK_EXAMS: MockExam[] = [
     note: '정답은 평가원 가답안(홀수형) 기준 — 정답 확정 2026-12-01',
   },
 ]
+
+// 목록 정렬: 학년도 최신 → 고3·고2·고1 → 시행일 최신
+export function sortExams<T extends MockExam>(list: T[]): T[] {
+  return [...list].sort((a, b) => b.year - a.year || b.grade.localeCompare(a.grade) || b.date.localeCompare(a.date))
+}
 
 export const DIFFS = ['상', '중상', '중', '중하', '하'] as const
 export type Diff = (typeof DIFFS)[number]

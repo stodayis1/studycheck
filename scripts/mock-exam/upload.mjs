@@ -8,7 +8,9 @@
  * <회차 폴더>/해설/<과목>_NN.json   문항 해설 (모양은 lib/mockExams.ts 의 MockQuestion)
  * → 보관함 exam-analysis 의 mock/<slug>/<영문 과목>/NN.png 와 mock/<slug>/data.json
  *
- * 그림은 이미 있으면 덮어쓴다(다시 자른 그림을 반영해야 하므로). 회차는 lib/mockExams.ts 의 MOCK_EXAMS 에도 적어야 목록에 보인다.
+ * <회차 폴더>/meta.json            회차 정보 (lib/mockExams.ts 의 MockExam 모양) → 보관함 mock/index.json 에 넣어 목록에 보이게 한다
+ *
+ * 그림은 이미 있으면 덮어쓴다(다시 자른 그림을 반영해야 하므로). 앱을 다시 배포하지 않아도 목록에 바로 나온다.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -46,6 +48,16 @@ const body = JSON.stringify({ slug, questions })
 // 보관함 exam-analysis 는 pdf·png·jpeg·octet-stream 만 받는다 → json 도 octet-stream 으로 올린다
 const { error } = await s.storage.from(BUCKET).upload(`mock/${slug}/data.json`, Buffer.from(body), { contentType: 'application/octet-stream', upsert: true })
 if (error) { console.error('✗ data.json', error.message); process.exit(1) }
+
+// 회차 목록(mock/index.json)에 이 회차를 넣거나 바꾼다
+const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'))
+if (meta.slug !== slug) { console.error('meta.json 의 slug 가 다릅니다:', meta.slug); process.exit(1) }
+const idx = await s.storage.from(BUCKET).download('mock/index.json')
+const list = idx.error ? [] : JSON.parse(await idx.data.text())
+const next = [...list.filter((m) => m.slug !== slug), { ...meta, count: questions.length }]
+const ir = await s.storage.from(BUCKET).upload('mock/index.json', Buffer.from(JSON.stringify(next)), { contentType: 'application/octet-stream', upsert: true })
+if (ir.error) { console.error('✗ index.json', ir.error.message); process.exit(1) }
+console.log('목록:', next.map((m) => `${m.short}(${m.count})`).join(' · '))
 
 // 올린 것을 다시 내려받아 센다
 const { data } = await s.storage.from(BUCKET).download(`mock/${slug}/data.json`)
