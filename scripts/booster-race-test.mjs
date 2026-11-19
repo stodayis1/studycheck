@@ -140,10 +140,24 @@ async function main() {
   확인(이른?.ok === false && 이른.reason === 'not_yet',
     `시작 전에는 막힌다 (돌아온 까닭: ${이른?.reason})`)
 
-  // 1초 전에도 막혀야 한다
-  await 되돌리기(new Date(Date.now() + 1500).toISOString())
-  const 직전 = (await 신청('1초전', '01055557777')).data
-  확인(직전?.ok === false && 직전.reason === 'not_yet', '시작 1.5초 전에도 막힌다')
+  // ★ 열리는 순간을 **앞뒤로** 재 본다.
+  //   여유를 1~2초로 두면 DB 왕복이 그보다 오래 걸려 시험이 제멋대로 떨어진다
+  //   (2026-11-19 실제로 그랬다). 그래서 **먼저 준비를 다 끝내고**, 남은 시간을 재서
+  //   「열리기 전 한 번 · 열린 뒤 한 번」을 돌린다.
+  const 여유ms = 8000
+  await 되돌리기(new Date(Date.now() + 여유ms).toISOString())
+  const { data: ss } = await db.from('booster_sessions')
+    .select('opens_at').eq('slug', TEST_SLUG).single()
+  const 열리는때 = new Date(ss.opens_at).getTime()
+
+  const 전 = (await 신청('열리기전', '01055557777')).data
+  const 전남음 = 열리는때 - Date.now()
+  확인(전?.ok === false && 전.reason === 'not_yet',
+    `열리기 ${(전남음 / 1000).toFixed(1)}초 전에는 막힌다 (${전?.reason})`)
+
+  await new Promise(r => setTimeout(r, Math.max(0, 열리는때 - Date.now()) + 300))
+  const 후 = (await 신청('열린뒤', '01055559999')).data
+  확인(후?.ok === true, `열린 뒤에는 바로 들어간다 (자리 ${후?.seat_no}번)`)
 
   /* ── 6. 동의를 안 하면 못 넣는다 ─────────────────────────────────── */
   console.log('\n6) 동의 없이 밀어 넣기 (앱을 거치지 않고 DB 함수를 직접 부름)')
