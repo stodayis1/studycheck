@@ -9,7 +9,7 @@
 // ★ 취소해도 자리는 **자동으로 안 열린다.** 「자리 다시 열기」를 따로 누르셔야 한다.
 // ★ 연습용 특강을 같은 화면에서 본다 — 먼저 연습으로 다 돌려 보고 실제를 여신다.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Header } from '@/components/common/Header'
 import { useAuth } from '@/hooks/useAuth'
 import { apiFetch } from '@/lib/apiFetch'
@@ -48,23 +48,41 @@ export default function BoosterAdminPage() {
   const [err, setErr] = useState('')
   const [일하는중, set일하는중] = useState(false)
 
-  const 불러오기 = useCallback(async () => {
-    setLoading(true); setErr('')
+  /**
+   * ★ isAdmin 은 **화면이 그려질 때마다 새로 만들어지는 함수**다 (hooks/useAuth.ts 의
+   *   `function isAdmin()`). 그래서 useEffect 의 「바뀌면 다시 해라」 목록에 **넣으면 안 된다.**
+   *
+   *   넣었더니 이렇게 됐다 (원장님 2026-11-19 「화면이 왜 계속 떨려」):
+   *     불러옴 → 화면이 그려짐 → isAdmin 이 새 함수 → 「바뀌었네」 → 또 불러옴 → …
+   *   끝없이 되풀이해서 화면이 떨리고, 그동안 /api/booster/admin 을 계속 두드린다.
+   *
+   *   그래서 **값(true/false)으로 바꿔서** 넘긴다. 값은 안 바뀌면 그대로다.
+   */
+  const 원장인가 = isAdmin()
+
+  /** 켜 두고 보실 때 30초마다 조용히 새로 고친다 — 「불러오는 중」을 띄우지 않는다 */
+  const 불러오기 = useCallback(async (조용히 = false) => {
+    if (!조용히) setLoading(true)
+    setErr('')
     try {
       const res = await apiFetch(`/api/booster/admin?slug=${encodeURIComponent(slug)}`)
       const j = await res.json()
       if (!res.ok) { setErr(j.error || '불러오지 못했어요.'); setD(null); return }
       setD(j)
-    } catch { setErr('불러오지 못했어요.') } finally { setLoading(false) }
+    } catch { setErr('불러오지 못했어요.') } finally { if (!조용히) setLoading(false) }
   }, [slug])
 
-  useEffect(() => { if (isAdmin()) 불러오기() }, [불러오기, isAdmin])
+  useEffect(() => { if (원장인가) 불러오기() }, [불러오기, 원장인가])
 
-  // 접수 중에는 30초마다 새로 — 켜 두고 보실 수 있게
+  // 접수 중에는 30초마다 새로 — 켜 두고 보실 수 있게.
+  // ★ 「지금 뭔가 누르는 중인가」는 ref 로 본다. 목록에 넣으면 누를 때마다 시계가 되감긴다.
+  const 일하는중Ref = useRef(false)
+  일하는중Ref.current = 일하는중
   useEffect(() => {
-    const t = setInterval(() => { if (isAdmin() && !일하는중) 불러오기() }, 30000)
+    if (!원장인가) return
+    const t = setInterval(() => { if (!일하는중Ref.current) 불러오기(true) }, 30000)
     return () => clearInterval(t)
-  }, [불러오기, isAdmin, 일하는중])
+  }, [불러오기, 원장인가])
 
   async function 보내기(body: any, 물음: string) {
     if (!confirm(물음)) return
@@ -89,7 +107,7 @@ export default function BoosterAdminPage() {
   }
 
   if (authLoading) return <Shell><div style={S.빈}>불러오는 중…</div></Shell>
-  if (!isAdmin()) return <Shell><div style={S.빈}>관리자만 접근할 수 있습니다.</div></Shell>
+  if (!원장인가) return <Shell><div style={S.빈}>관리자만 접근할 수 있습니다.</div></Shell>
 
   const 링크 = BASE + '/booster' + (slug === BOOSTER_TEST_SLUG ? '?test=1' : '')
   const 확정 = (d?.applications ?? []).filter(a => a.status === 'confirmed')
