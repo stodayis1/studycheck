@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { ATT_EXAM, isExamAbsence } from '@/lib/attendance'
 import { MonthlyReportView } from '@/components/report/MonthlyReport'
+import { ScoreClassReportView } from '@/components/report/ScoreClassReport'
 
 // 카카오톡 인앱 브라우저에서 클라이언트 fetch가 먹통이 되는 경우가 있어서
 // (링크는 오는데 눌러보면 빈 화면) 서버에서 미리 데이터를 읽어 HTML에 담아 보내도록 변경.
@@ -75,6 +76,8 @@ interface ReportLink {
   report_type: 'daily' | 'monthly' | 'quarterly' | 'monthly_report'
     // 카톡 브리핑 버튼 뒤 화면들
     | 'worksheet_scores' | 'attendance_rate' | 'daily_notice'
+    // S코어반 학습 기록 (원장님 2026-11-19) — 판정 없이 기록만
+    | 'score_class'
   period_label: string
   period_start: string
   period_end: string
@@ -224,6 +227,9 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   // 월간 학습 리포트 (원장님 2026-10-20). 선생님 미리보기와 **같은 화면**을 쓴다 —
   // 미리보기와 학부모님이 보시는 것이 다르면 그 어긋남은 아무도 못 잡는다.
   if (link.report_type === 'monthly_report') return <MonthlyReportView d={link.data as any} />
+  // S코어반 학습 기록 (원장님 2026-11-19). 월간 리포트는 전교생에게 같은 꼴로 나가지만
+  // 이쪽은 **선행 과정을 따라가고 있는지**를 보여 준다 — 보는 것이 달라서 화면을 따로 둔다.
+  if (link.report_type === 'score_class') return <ScoreClassReportView d={link.data as any} />
 
   const d = link.data as Exclude<ReportLink['data'], DailyReportData>
   const isQuarterly = link.report_type === 'quarterly'

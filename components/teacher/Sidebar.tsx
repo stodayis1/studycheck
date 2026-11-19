@@ -51,6 +51,9 @@ const ITEM = {
   // ★ 학교 기출은 여기가 아니라 위 「기출 모음」으로 간다.
   pdfWorksheets: { href: '/teacher/pdf-worksheets', label: 'PDF 학습지', icon: 'ti-file-import' },
   reports:       { href: '/teacher/reports',        label: '보고서',       icon: 'ti-chart-bar' },
+  // S코어반 학습 기록 — 학생을 골라 **링크만** 만든다. 보내는 것은 원장님이 직접
+  // (원장님 2026-11-19). 월간 리포트는 전교생 공통이라 이쪽을 따로 뒀다.
+  scoreClass:    { href: '/teacher/reports/s-core', label: 'S코어반 기록', icon: 'ti-link' },
   importRecords: { href: '/teacher/import-records', label: '학습기록가져오기', icon: 'ti-file-import' },
   // ★ 「학습지출제」와 「출제한 학습지」를 한 메뉴로 합쳤다 (원장님 2026-10-22).
   //   안에서 탭으로 간다 — 내 학습지 / 개별과제 / 학습지 현황 / 새 학습지 만들기
@@ -101,7 +104,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {
-    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.booster, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
+    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.scoreClass, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.booster, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
     groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords, ITEM.typeConcepts, ITEM.changeLog] })
   } else {
     // 강사도 학습기록 가져오기는 쓴다. 나머지 둘은 원장 전용 화면이라 넣지 않는다.
