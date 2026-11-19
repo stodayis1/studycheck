@@ -29,6 +29,8 @@ for (const [sec, list] of Object.entries(ANS)) {
     if (!(q.steps || []).length) bad.push(`${id} 빈칸 steps`)
     if (!['상', '중상', '중', '중하', '하'].includes(q.difficulty)) bad.push(`${id} 난이도 ${q.difficulty}`)
     const texts = [q.read, q.approach, ...(q.steps || []), q.why, q.know, q.mistakes, q.review, ...(q.choices || []).map((c) => c.note)]
+    // \frac 의 \f 가 폼피드로 바뀌는 식으로 역슬래시가 깨지면 KaTeX 는 오류 없이 엉뚱한 글자를 그린다 → 제어문자를 따로 잡는다
+    for (const t of texts) if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(t || '')) tex.push(`${id}: 제어문자(깨진 역슬래시) — ${JSON.stringify((t || '').slice(0, 40))}`)
     for (const t of texts) {
       for (const m of (t || '').matchAll(/\$\$([\s\S]+?)\$\$|\$([^$]+?)\$/g)) {
         try { katex.renderToString(m[1] ?? m[2], { throwOnError: true, strict: false }) } catch (e) { tex.push(`${id}: ${(m[1] ?? m[2]).slice(0, 50)} — ${e.message.slice(0, 60)}`) }
