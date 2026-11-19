@@ -302,7 +302,6 @@ export default function TeacherAssignmentsPage() {
   const [semesterWS, setSemesterWS] = useState<StudentWorksheet[]>([])
   // 최근 6개월 본 학습지 (2차·3차 회차 계산용 - 중등은 학기 값이 없어 학기로 못 자른다)
   const [roundWS, setRoundWS] = useState<StudentWorksheet[]>([])
-  const [showUnpassed, setShowUnpassed] = useState(true)
 
   // 원장 전용 처리 기록
   const [actionLogs, setActionLogs] = useState<ActionLog[]>([])
@@ -462,23 +461,6 @@ export default function TeacherAssignmentsPage() {
     (searchText === '' || getStudentName(t.student_id).includes(searchText))
   )
 
-  // 이번 학기 "70점을 못 넘긴 채 멈춘 단원" - 학교 단원평가는 학교 진도 순서대로 보니까,
-  // 앞 단원을 통과 못 하고 넘어갔다면 그 단원평가는 코앞이거나 이미 지나간 것
-  const unpassedUnits = (() => {
-    const groups: Record<string, StudentWorksheet[]> = {}
-    semesterWS.forEach((w) => {
-      if (!myStudentIds.has(w.student_id)) return
-      const key = `${w.student_id}|${w.grade_level}|${w.unit}`
-      if (!groups[key]) groups[key] = []
-      groups[key].push(w)
-    })
-    return Object.values(groups)
-      .map((rows) => ({ rows, pass: getUnitPass(rows) }))
-      .filter((g) => g.pass?.state === 'fail')
-      .map((g) => ({ student_id: g.rows[0].student_id, sample: g.rows[0], last: g.pass!.last }))
-      .filter((u) => filterByGroup(students.filter((s) => s.id === u.student_id)).length > 0)
-      .sort((a, b) => getStudentName(a.student_id).localeCompare(getStudentName(b.student_id)) || a.sample.unit.localeCompare(b.sample.unit))
-  })()
   const myPendingOverrides = overrideRequests.filter((r) => myStudentIds.has(r.student_id))
 
   // 재도전 회차: 같은 학생·학년·학기·단원·레벨의 본 학습지(main)를 배정순으로 센다 (1차=처음, 2차=두 번째...)
@@ -798,18 +780,6 @@ export default function TeacherAssignmentsPage() {
   }
 
   // 통과 못 한 채 멈춘 단원에 같은 레벨 재도전 배정 (마지막으로 채점한 레벨 그대로)
-  async function handleAssignUnitRetry(last: StudentWorksheet, lower = false) {
-    const level = lower ? Math.max(1.0, last.current_level - 0.5) : last.current_level
-    const { error } = await supabase.from('student_worksheets').insert({
-      student_id: last.student_id, subject: '수학',
-      grade_level: last.grade_level, unit: last.unit, unit_name: last.unit_name, semester: last.semester ?? null,
-      current_level: level, status: 'assigned', worksheet_type: 'main',
-    })
-    if (error) { alert('배정 실패: ' + error.message); return }
-    fetchData()
-    flashToast(`${getStudentName(last.student_id)} ${last.unit} ${level}레벨 재도전 배정했어요`)
-  }
-
   async function loadActionLogs() {
     setActionLogsLoading(true)
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -993,57 +963,6 @@ export default function TeacherAssignmentsPage() {
                       )
                     })}
                   </div>
-                </div>
-              )}
-
-              {/* 이번 학기 통과 못 한 채 멈춘 단원 */}
-              {unpassedUnits.length > 0 && (
-                <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #fca5a5' }}>
-                  <button onClick={() => setShowUnpassed((v) => !v)}
-                    className="w-full px-4 py-3 flex items-center gap-2 text-left" style={{ background: '#fef2f2' }}>
-                    <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#991b1b' }} />
-                    <div className="flex-1">
-                      <p className="text-sm font-bold" style={{ color: '#991b1b' }}>{PASS_SCORE}점 못 넘기고 멈춘 단원 {unpassedUnits.length}건</p>
-                      <p className="text-[11px]" style={{ color: '#b91c1c' }}>이번 {getCurrentSemester().semester}학기 · 학교 단원평가 전에 재도전시켜 주세요</p>
-                    </div>
-                    <i className={`ti ${showUnpassed ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 14, color: '#b91c1c' }} />
-                  </button>
-                  {showUnpassed && (
-                    <div className="divide-y divide-gray-50">
-                      {unpassedUnits.map(({ student_id, sample, last }) => {
-                        const student = students.find((s) => s.id === student_id)
-                        return (
-                          <div key={`${student_id}|${sample.grade_level}|${sample.unit}`} className="px-4 py-2.5 flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-gray-800">
-                                {getStudentName(student_id)}
-                                <span className="font-normal text-gray-500 ml-1.5">{formatUnit(sample.grade_level, sample.unit, sample.unit_name)}</span>
-                              </p>
-                              <p className="text-[10px] mt-0.5" style={{ color: '#991b1b' }}>
-                                {last ? `마지막 채점 ${last.current_level}레벨${retryRoundById[last.id] >= 2 ? ` ${retryRoundById[last.id]}차` : ''} ${last.score}점` : '채점 기록 없이 종료'}
-                              </p>
-                            </div>
-                            {student && isEditable(student) && (last ?? sample) && (
-                              <>
-                                {canRetryDown(last ?? sample) && (
-                                  <button onClick={() => handleAssignUnitRetry(last ?? sample, true)}
-                                    className="px-2.5 py-1 text-[10px] font-bold rounded-lg whitespace-nowrap shrink-0"
-                                    style={{ background: 'white', color: '#991b1b', border: '1px solid #fca5a5' }}>
-                                    레벨↓ 재도전
-                                  </button>
-                                )}
-                                <button onClick={() => handleAssignUnitRetry(last ?? sample)}
-                                  className="px-2.5 py-1 text-[10px] font-bold rounded-lg whitespace-nowrap shrink-0"
-                                  style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626' }}>
-                                  재도전 배정
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
                 </div>
               )}
 
