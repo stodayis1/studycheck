@@ -57,6 +57,8 @@ const ITEM = {
   //   (components/teacher/WorksheetTabs.tsx).
   worksheets:    { href: '/teacher/worksheets',     label: '학습지 출제',  icon: 'ti-files' },
   survey:        { href: '/teacher/survey',         label: '학부모 설문',  icon: 'ti-clipboard-text' },
+  // 부스터 특강 선착순 신청 현황 — 학부모 연락처가 드러나므로 원장 전용 (원장님 2026-11-19).
+  booster:       { href: '/teacher/booster',        label: '특강 신청현황', icon: 'ti-list-numbers' },
   typeConcepts:  { href: '/teacher/type-concepts',  label: '대표개념 연결', icon: 'ti-bulb' },
   gradings:      { href: '/teacher/gradings',       label: '채점결과',     icon: 'ti-checkbox' },
   scan:          { href: '/teacher/scan',           label: 'QR 채점',      icon: 'ti-qrcode' },
@@ -99,7 +101,7 @@ function buildNavGroups(admin: boolean, showBulk: boolean, 영상과제: boolean
     { title: '보고', items: [ITEM.reports, ITEM.myRecords] },
   ]
   if (admin) {
-    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
+    groups.push({ title: '원장 전용', items: [ITEM.classMap, ITEM.worksheets, ITEM.gradings, ITEM.scan, ITEM.survey, ITEM.booster, ITEM.firstSet, ITEM.workStatus, ITEM.settings] })
     groups.push({ title: '가끔 쓰는 것', collapsed: true, items: [ITEM.importRecords, ITEM.typeConcepts, ITEM.changeLog] })
   } else {
     // 강사도 학습기록 가져오기는 쓴다. 나머지 둘은 원장 전용 화면이라 넣지 않는다.
