@@ -485,3 +485,139 @@ export function withDay(t: NewTime | null | undefined, day: string, v: { start: 
   const 더할것 = v ? [{ day, start: v.start, periods: v.periods }] : []
   return parseNewTime([...남길것, ...더할것])
 }
+
+/* ───────────── 확정 — 계획이 **실제 시간표로 옮겨졌는가** (원장님 2026-11-19) ─────────────
+ * 「진급 배정판에서 시간표 변경이 확정된(반이동) 친구들은 담당 선생님이 시간표 변경요청을
+ *   올릴거거든. 그럼 진급배정판에서 해당학생들도 확정지어주면 됨」
+ *
+ * 그동안 이 판은 **계획**이고 실제 시간표는 `schedules` 였다. 둘을 잇는 길이 「시간표
+ * 변경요청」(schedule_change_requests)이다 — 담당 선생님이 올리고 원장님이 「반영」을 누르면
+ * 그때 진짜 시간표가 바뀐다. 그래서 그 요청을 보고 이 판의 줄이 끝났는지를 가른다.
+ *
+ * ★ **저절로 확정되는 것은 저장하지 않는다.** 요청 표를 읽어 그때그때 가른다 —
+ *   베껴 저장하면 요청이 취소·되돌려졌을 때 이 판만 「확정」으로 남아 거짓이 된다.
+ *   `confirmed_at` 에 적히는 것은 **손으로 누른 확정**뿐이다.
+ * ★ 반영된 요청이 있어도 **계획과 시간이 다르면 확정이 아니다.** 진급과 상관없는 보통의
+ *   시간표 변경(지금도 날마다 올라온다)까지 확정으로 세면 판이 조용히 거짓이 된다.
+ */
+
+/** 요일 하나 · 시작 시각 · 몇 분. 판을 가로질러 시간을 견주는 공통 꼴. */
+export interface TimeLine { day: string; start: string; minutes: number }
+
+const DAYS_ALL: readonly string[] = [...DAYS_WD, ...DAYS_WE]
+
+/** 같은 시간표인지 한 글자로 — 적힌 차례가 뒤집혀도 같게 나온다. */
+export function linesKey(lines: TimeLine[] | null | undefined): string {
+  if (!lines || !lines.length) return ''
+  return lines.map((l) => `${l.day}|${l.start}|${l.minutes}`).sort().join(' / ')
+}
+
+/**
+ * **계획**의 시간.
+ *   · 고등 판 — 타임 조각(수업 + 클리닉)을 요일별로 **이어 붙인다.** 실제 시간표도 그 꼴로
+ *     적혀 있다(고1 「화17:30·3교시」 = ja 타임의 수업 17:30~19:30 + 클리닉 19:30~20:30).
+ *   · 초등 판 — 바뀔 시간(new_time). 비워 두면 「지금 시간표 그대로」라 견줄 것이 없다.
+ *   · 중등 판 — **선생님만** 정한다. 시간 계획이 없으므로 null.
+ */
+export function planLines(track: Track, p: {
+  weekday?: string | null; weekend?: string | null; extra?: string | null; newTime?: any
+}): TimeLine[] | null {
+  if (track === '초등') {
+    const t = parseNewTime(p.newTime)
+    if (!t) return null
+    return t.map((d) => ({ day: d.day, start: d.start, minutes: Math.round(d.periods * PERIOD_MIN) }))
+  }
+  if (track !== '고등') return null
+  const pieces = piecesOf(p.weekday, p.weekend, p.extra)
+  if (!pieces.length) return null
+  const byDay = new Map<string, [number, number][]>()
+  for (const [, day, a, b] of pieces) {
+    if (!byDay.has(day)) byDay.set(day, [])
+    byDay.get(day)!.push([a, b])
+  }
+  const out: TimeLine[] = []
+  for (const [day, spans] of byDay) {
+    spans.sort((x, y) => x[0] - y[0])
+    let [s, e] = spans[0]
+    for (const [a, b] of spans.slice(1)) {
+      if (a <= e) { e = Math.max(e, b); continue }   // 붙어 있거나 겹치면 한 줄로
+      out.push({ day, start: toHHMM(s), minutes: e - s })
+      s = a; e = b
+    }
+    out.push({ day, start: toHHMM(s), minutes: e - s })
+  }
+  return out.length ? out : null
+}
+
+/**
+ * **시간표 변경요청**의 want → 공통 꼴. 요청은 `[{day,time,periods}]` 로 적힌다
+ * (`app/api/schedule-change-request`). 어긋난 줄은 버린다.
+ */
+export function wantLines(want: any): TimeLine[] | null {
+  const out: TimeLine[] = []
+  for (const r of Array.isArray(want) ? want : []) {
+    const day = String(r?.day ?? '').trim()
+    const start = String(r?.time ?? r?.start ?? '').slice(0, 5)
+    const minutes = Math.round((Number(r?.periods) || 0) * PERIOD_MIN)
+    if (!DAYS_ALL.includes(day) || !/^\d{2}:\d{2}$/.test(start) || minutes <= 0) continue
+    out.push({ day, start, minutes })
+  }
+  return out.length ? out : null
+}
+
+/**
+ * 한 줄의 상태 — 화면·서버·검사가 **이 함수 하나**를 같이 쓴다.
+ *   'plan'    아직 아무 일 없음 (계획)
+ *   'open'    담당 선생님이 시간표 변경요청을 올렸고 원장님 확인을 기다린다
+ *   'auto'    반영된 요청의 시간표가 **계획과 같다** → 확정
+ *   'applied' 반영됐지만 계획과 같다고 할 수 없다 (시간이 다르거나 견줄 계획이 없다)
+ *   'hand'    손으로 누른 확정
+ */
+export type ConfirmState = 'plan' | 'open' | 'auto' | 'applied' | 'hand'
+
+export interface ConfirmRow {
+  teacher_name?: string | null; weekday_slot?: string | null; weekend_slot?: string | null
+  extra_slot?: string | null; new_time?: any
+  confirmed_at?: string | null; confirmed_by_name?: string | null; confirmed_note?: string | null
+}
+export interface ConfirmReq {
+  status?: string | null; want?: any; want_text?: string | null
+  decided_at?: string | null; requested_at?: string | null; requested_by_name?: string | null
+}
+
+export function confirmStateOf(track: Track, row?: ConfirmRow | null, req?: ConfirmReq | null)
+  : { state: ConfirmState; confirmed: boolean } {
+  if (row?.confirmed_at) return { state: 'hand', confirmed: true }
+  if (req?.status === 'open') return { state: 'open', confirmed: false }
+  if (req?.status === 'applied') {
+    const plan = planLines(track, {
+      weekday: row?.weekday_slot, weekend: row?.weekend_slot,
+      extra: row?.extra_slot, newTime: row?.new_time,
+    })
+    const want = wantLines(req.want)
+    const 같다 = !!plan && !!want && linesKey(plan) === linesKey(want)
+    return { state: 같다 ? 'auto' : 'applied', confirmed: 같다 }
+  }
+  return { state: 'plan', confirmed: false }
+}
+
+/**
+ * 한 학생에 요청이 여러 건 쌓여 있을 때 **어느 것을 볼까.**
+ *   ① **기다리는 요청(open)이 먼저다** — 원장님이 아직 결정하지 않은 것이 지금 할 일이다.
+ *   ② 같은 상태끼리는 **늦게 올라온 것.** 11월에 반영된 것과 3월에 반영된 것이 있으면 11월 것이다.
+ * 차례를 서버의 `order()` 에 맡기지 않는다 — 읽는 차례가 바뀌면 **보이는 줄이 조용히 달라진다.**
+ */
+export function pickRequests<T extends { student_id: string; status?: string | null; requested_at?: string | null }>(
+  rows: T[]
+): T[] {
+  const best = new Map<string, T>()
+  for (const r of rows ?? []) {
+    if (!r?.student_id) continue
+    const 있던것 = best.get(r.student_id)
+    if (!있던것) { best.set(r.student_id, r); continue }
+    const a = 있던것.status === 'open', b = r.status === 'open'
+    if (a !== b) { if (b) best.set(r.student_id, r); continue }
+    if (String(r.requested_at ?? '') >= String(있던것.requested_at ?? '')) best.set(r.student_id, r)
+  }
+  return [...best.values()]
+}

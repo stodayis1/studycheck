@@ -33,12 +33,31 @@ import {
   GRADES_ELEM, ELEM_PICKS, ELEM_STARTS, ELEM_PERIODS, nextGrade, elemDraft,
   parseNewTime, newTimeText, newTimeAt, newTimeDays, sameTime, withDay, type NewTime,
   keyOf, isAt, worksOn, weekendPickable, weekendOwner, oddSaturday, clashesWithOff,
-  toMin, type Track,
+  toMin, type Track, confirmStateOf, type ConfirmState,
 } from '@/lib/moveAssign'
 
 interface Student { id: string; name: string; grade: string | null; teacher_name: string | null }
 interface Sched { student_id: string; day_of_week: string; start_time: string; periods: number }
-interface Row { student_id: string; track: Track; teacher_name: string | null; weekday_slot: string | null; weekend_slot: string | null; extra_slot: string | null; new_time?: any }
+interface Row {
+  student_id: string; track: Track; teacher_name: string | null
+  weekday_slot: string | null; weekend_slot: string | null; extra_slot: string | null; new_time?: any
+  confirmed_at?: string | null; confirmed_by_name?: string | null; confirmed_note?: string | null
+}
+/** 그 학생의 시간표 변경요청 — 「확정」을 가르는 근거 (원장님 2026-11-19) */
+interface Req {
+  student_id: string; status: string; want: any; want_text: string | null
+  requested_at: string | null; requested_by_name: string | null; decided_at: string | null
+}
+/** 한 줄의 상태 — 판단은 lib/moveAssign.ts `confirmStateOf` 한 곳에만 있다 */
+type Conf = { state: ConfirmState; confirmed: boolean; req: Req | null; row: Row | null }
+
+/** 학년으로 어느 판인지 — 저장된 줄이 있으면 그쪽 track 이 이긴다 */
+function trackOfGrade(g: string | null | undefined): Track {
+  const x = String(g ?? '').trim()
+  if ((GRADES_ELEM as readonly string[]).includes(x)) return '초등'
+  if (x === '초6') return '중등'
+  return '고등'
+}
 /** 화면에서 들고 다니는 한 학생의 배정 */
 type Pick3 = { t: string; wd: string; we: string; ex: string; nt?: NewTime | null }
 
@@ -57,6 +76,16 @@ export default function MoveAssignPage() {
   const [assign, setAssign] = useState<Record<string, Pick3>>({})
   const [loading, setLoading] = useState(true)
   const [hint, setHint] = useState('')
+  // 저장된 줄과 시간표 변경요청 — 「확정」 상태를 가르는 데 쓴다 (원장님 2026-11-19)
+  const [rows, setRows] = useState<Row[]>([])
+  const [reqs, setReqs] = useState<Req[]>([])
+  const [confBusy, setConfBusy] = useState('')
+  // 확정 칸이 DB 에 있나 (docs/sql/진급배정판_확정.sql). 없으면 단추를 숨긴다 —
+  // 눌러도 저장만 조용히 실패할 자리는 아예 안 보이는 편이 낫다.
+  const [confirmReady, setConfirmReady] = useState(false)
+  // ★ 확정은 원장님만 누른다. isAdmin() 이 아니라 role 을 그대로 본다 —
+  //   isAdmin() 은 「관리자모드」 토글까지 봐서 원장님이 강사모드로 살피는 동안 사라진다.
+  const canConfirm = currentUser?.role === 'admin' && confirmReady
 
   useEffect(() => {
     if (!currentUser) return
@@ -96,7 +125,10 @@ export default function MoveAssignPage() {
       const real: Student[] = j.students ?? []
       setStudents(real)
       setScheds(j.schedules ?? [])
-      const rows: Row[] = j.rows ?? []
+      const savedRows: Row[] = j.rows ?? []
+      setRows(savedRows)
+      setReqs(j.reqs ?? [])
+      setConfirmReady(j.confirmReady !== false)
 
       // 저장된 것이 있으면 그쪽이 이기고, 없으면 처음 제안(DRAFT_*)을 보여 준다.
       const next: Record<string, Pick3> = {}
@@ -109,12 +141,12 @@ export default function MoveAssignPage() {
           : st.grade === '초6' ? (DRAFT_MID[k] ? [DRAFT_MID[k], '', ''] : null) : DRAFT_HIGH[k]
         if (d && d[0]) next[st.id] = { t: d[0], wd: d[1], we: d[2], ex: '' }
       }
-      for (const r of rows) next[r.student_id] = {
+      for (const r of savedRows) next[r.student_id] = {
         t: r.teacher_name ?? '', wd: r.weekday_slot ?? '', we: r.weekend_slot ?? '', ex: r.extra_slot ?? '',
         nt: parseNewTime(r.new_time),
       }
       setAssign(next)
-      setHint(rows.length ? `저장된 배정 ${rows.length}건을 읽었어요. 고르면 바로 저장됩니다.` : '고르면 바로 저장됩니다.')
+      setHint(savedRows.length ? `저장된 배정 ${savedRows.length}건을 읽었어요. 고르면 바로 저장됩니다.` : '고르면 바로 저장됩니다.')
     } catch (e: any) {
       setHint('읽지 못했어요 — ' + (e?.message ?? '연결 실패'))
     }
@@ -132,10 +164,49 @@ export default function MoveAssignPage() {
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error ?? '저장하지 못했어요')
+      if (j?.unconfirmed) {
+        // 계획이 달라졌으니 확정은 거짓이 된다 — 서버가 풀었고, 화면도 다시 읽는다.
+        setHint(`계획을 바꿨으니 확정을 풀었어요 · ${st.name}`)
+        load()
+        return
+      }
       setHint('저장했어요 · ' + st.name)
+      // 들고 있는 줄도 같이 고친다 — 확정 상태가 바뀐 계획으로 다시 가려져야 한다
+      setRows((prev) => {
+        const 바뀐줄: Row = {
+          ...(prev.find((r) => r.student_id === st.id) ?? { student_id: st.id, track } as Row),
+          track, teacher_name: p.t || null, weekday_slot: p.wd || null,
+          weekend_slot: p.we || null, extra_slot: p.ex || null, new_time: p.nt ?? null,
+        }
+        return prev.some((r) => r.student_id === st.id)
+          ? prev.map((r) => (r.student_id === st.id ? 바뀐줄 : r))
+          : [...prev, 바뀐줄]
+      })
     } catch (e: any) {
       setHint('저장하지 못했어요 — ' + (e?.message ?? '연결 실패'))
     }
+  }
+
+  /**
+   * 「확정」 — 계획대로 실제 시간표를 바꿨다는 표시 (원장님 2026-11-19).
+   * 시간표 변경요청이 반영되면 저절로 확정으로 보이므로, 이 단추는 **그 말고** —
+   * 담당만 바뀌는 학생, 중등 판처럼 견줄 시간 계획이 없는 줄에 쓴다.
+   */
+  async function confirmOne(st: Student, on: boolean) {
+    setConfBusy(st.id)
+    try {
+      const res = await apiFetch('/api/move-assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: st.id, action: on ? 'confirm' : 'unconfirm' }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error ?? '하지 못했어요')
+      setHint((on ? '확정했어요 · ' : '확정을 풀었어요 · ') + st.name)
+      await load()
+    } catch (e: any) {
+      setHint('하지 못했어요 — ' + (e?.message ?? '연결 실패'))
+    }
+    setConfBusy('')
   }
 
   function setOne(st: Student, track: Track, part: 't' | 'wd' | 'we' | 'ex', value: string) {
@@ -198,6 +269,33 @@ export default function MoveAssignPage() {
     return out
   }, [scheds])
 
+  /**
+   * 줄마다 「확정」 상태 — 판단은 `confirmStateOf` 한 곳에만 있다(화면·서버·검사가 같이 쓴다).
+   * 반영된 요청의 시간표가 계획과 **같을 때만** 확정으로 센다 — 진급과 상관없는 보통의
+   * 시간표 변경까지 세면 판이 조용히 거짓이 된다.
+   */
+  const conf = useMemo(() => {
+    const reqBy = new Map(reqs.map((r) => [r.student_id, r]))
+    const rowBy = new Map(rows.map((r) => [r.student_id, r]))
+    const out = new Map<string, Conf>()
+    for (const st of students) {
+      const row = rowBy.get(st.id) ?? null
+      const req = reqBy.get(st.id) ?? null
+      const track = (row?.track as Track) ?? trackOfGrade(st.grade)
+      const { state, confirmed } = confirmStateOf(track, row as any, req as any)
+      out.set(st.id, { state, confirmed, req, row })
+    }
+    return out
+  }, [students, rows, reqs])
+
+  /** 지금 보는 탭에 오르는 학생 — 요약 숫자를 그 판 기준으로 센다 */
+  const tabStudents = tab === '고등' ? (byGrade['중3'] ?? []) : tab === '중등' ? (byGrade['초6'] ?? []) : elem
+  const 센것 = {
+    확정: tabStudents.filter((s) => conf.get(s.id)?.confirmed).length,
+    대기: tabStudents.filter((s) => conf.get(s.id)?.state === 'open').length,
+    다름: tabStudents.filter((s) => conf.get(s.id)?.state === 'applied').length,
+  }
+
   if (allowed !== true) return (
     <div className="min-h-screen bg-gray-50">
       <Header title="진급 배정판" subtitle="중3 → 고등 · 초6 → 중등" />
@@ -234,6 +332,29 @@ export default function MoveAssignPage() {
           {!full && (
             <span className="block mt-1">초등 담당 선생님께는 <b>「초6 → 중등」</b>과 <b>「초등 진급」</b>만 보여요 — 고등부 명단은 내려받지도 않습니다.</span>
           )}
+          <span className="block mt-2 pt-2 border-t border-gray-100">
+            <b className="text-gray-800">옮기는 일은 「시간표 변경요청」으로 합니다.</b> 담당 선생님이
+            <b> 학생관리</b> 화면에서 그 학생의 시간표 변경요청을 올리고, 원장님이 <b>「반영」</b>을 누르면
+            실제 시간표가 바뀝니다. 그러면 이 판에서도 그 학생이 <b className="text-emerald-700">확정</b>으로 바뀝니다 —
+            <b> 계획과 시간이 같을 때만</b>이에요(진급과 상관없는 시간표 변경을 확정으로 세지 않으려고요).
+            담당만 바뀌는 학생은 맨 오른쪽 <b>「확정」</b>을 눌러 표시하세요.
+          </span>
+          <span className="block mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-bold text-gray-700">
+              {tabStudents.length}명 중 <span className="text-emerald-700">확정 {센것.확정}명</span>
+              <span className="text-gray-400"> · 남은 {tabStudents.length - 센것.확정}명</span>
+            </span>
+            {센것.대기 > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
+                시간표 변경요청 대기 {센것.대기}건
+              </span>
+            )}
+            {센것.다름 > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
+                시간표는 바뀌었는데 계획과 다른 학생 {센것.다름}명
+              </span>
+            )}
+          </span>
           <span className="block mt-1 text-gray-400">{loading ? '불러오는 중…' : hint}</span>
         </div>
 
@@ -241,6 +362,7 @@ export default function MoveAssignPage() {
           ? <ElemBoard
               elem={elem} e6={byGrade['초6'] ?? []}
               assign={assign} nowText={nowText} daysOf={daysOf} scheds={scheds}
+              conf={conf} canConfirm={canConfirm} confBusy={confBusy} onConfirm={confirmOne}
               onPick={(st, v) => setOne(st, '초등', 't', v)}
               onTime={setTime} />
           : tab === '고등'
@@ -248,12 +370,14 @@ export default function MoveAssignPage() {
               m3={byGrade['중3'] ?? []}
               others={students.filter((s) => s.grade !== '중3' && DRAFT_HIGH[keyOf(s.name, s.grade)])}
               assign={assign} nowText={nowText}
+              conf={conf} canConfirm={canConfirm} confBusy={confBusy} onConfirm={confirmOne}
               onPick={(st, part, v) => setOne(st, '고등', part, v)} />
           : <MidBoard
               e6={byGrade['초6'] ?? []}
               mid={students.filter((s) => s.grade === '중1' || s.grade === '중2')}
               leaving={byGrade['중3'] ?? []}
               assign={assign} nowText={nowText} daysOf={daysOf} scheds={scheds}
+              conf={conf} canConfirm={canConfirm} confBusy={confBusy} onConfirm={confirmOne}
               onPick={(st, v) => setOne(st, '중등', 't', v)} />}
       </div>
     </div>
@@ -262,9 +386,11 @@ export default function MoveAssignPage() {
 
 /* ────────────────────────── 중3 → 고등 ────────────────────────── */
 
-function HighBoard({ m3, others, assign, nowText, onPick }: {
+function HighBoard({ m3, others, assign, nowText, conf, canConfirm, confBusy, onConfirm, onPick }: {
   m3: Student[]; others: Student[]
   assign: Record<string, Pick3>; nowText: Record<string, string>
+  conf: Map<string, Conf>; canConfirm: boolean; confBusy: string
+  onConfirm: (st: Student, on: boolean) => void
   onPick: (st: Student, part: 't' | 'wd' | 'we' | 'ex', v: string) => void
 }) {
   const all = [...m3, ...others]
@@ -385,6 +511,7 @@ function HighBoard({ m3, others, assign, nowText, onPick }: {
                 <th className="text-left px-3 py-2 font-medium">반</th>
                 <th className="text-left px-3 py-2 font-medium">토 · 일</th>
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">추가 클리닉</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">확정</th>
               </tr>
             </thead>
             <tbody>
@@ -417,6 +544,10 @@ function HighBoard({ m3, others, assign, nowText, onPick }: {
                       {/* 따로 부르는 자리 — 비워 두면 안 부른다 (원장님 2026-11-17) */}
                       <Sel value={p.ex} unset={!p.ex} disabled={stay} onChange={(v) => onPick(s, 'ex', v)}
                         options={[['', '— 안 부름'], ...Object.entries(EXTRA).map(([k, g]) => [k, g.label] as [string, string])]} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <ConfirmCell info={conf.get(s.id)} canConfirm={canConfirm}
+                        busy={confBusy === s.id} onConfirm={(on) => onConfirm(s, on)} />
                     </td>
                   </tr>
                 )
@@ -504,10 +635,12 @@ function Grid({ who, days, rows, span, cell }: {
 
 /* ────────────────────────── 초6 → 중등 ────────────────────────── */
 
-function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, onPick }: {
+function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, conf, canConfirm, confBusy, onConfirm, onPick }: {
   e6: Student[]; mid: Student[]; leaving: Student[]
   assign: Record<string, Pick3>; nowText: Record<string, string>
   daysOf: Record<string, string[]>; scheds: Sched[]
+  conf: Map<string, Conf>; canConfirm: boolean; confBusy: string
+  onConfirm: (st: Student, on: boolean) => void
   onPick: (st: Student, v: string) => void
 }) {
   /** 그 학생이 그 칸(요일·시각 30분)에 수업이 있나 — 지금 시간표 그대로 */
@@ -571,6 +704,7 @@ function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, onPick }:
                 <th className="text-left px-3 py-2 font-medium">학생</th>
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">지금 다니는 시간</th>
                 <th className="text-left px-3 py-2 font-medium">넘길 선생님</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">확정</th>
               </tr>
             </thead>
             <tbody>
@@ -592,6 +726,10 @@ function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, onPick }:
                           {t} 선생님은 {bad.join('·')}요일에 안 계세요
                         </span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <ConfirmCell info={conf.get(s.id)} canConfirm={canConfirm}
+                        busy={confBusy === s.id} onConfirm={(on) => onConfirm(s, on)} />
                     </td>
                   </tr>
                 )
@@ -679,10 +817,12 @@ function MidBoard({ e6, mid, leaving, assign, nowText, daysOf, scheds, onPick }:
  *   ② 빠지는 자리는 중3 이 아니라 **중등으로 올라가는 초6** 이다.
  */
 
-function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }: {
+function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, conf, canConfirm, confBusy, onConfirm, onPick, onTime }: {
   elem: Student[]; e6: Student[]
   assign: Record<string, Pick3>; nowText: Record<string, string>
   daysOf: Record<string, string[]>; scheds: Sched[]
+  conf: Map<string, Conf>; canConfirm: boolean; confBusy: string
+  onConfirm: (st: Student, on: boolean) => void
   onPick: (st: Student, v: string) => void
   onTime: (st: Student, nt: NewTime | null) => void
 }) {
@@ -791,6 +931,7 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">지금 다니는 시간</th>
                 <th className="text-left px-3 py-2 font-medium">맡을 선생님</th>
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">바뀔 시간</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">확정</th>
               </tr>
             </thead>
             <tbody>
@@ -825,6 +966,10 @@ function ElemBoard({ elem, e6, assign, nowText, daysOf, scheds, onPick, onTime }
                           바뀜 · {newTimeText(nowTime.get(s.id) ?? null) || '지금 시간표'} → {newTimeText(바뀔시간(s))}
                         </span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <ConfirmCell info={conf.get(s.id)} canConfirm={canConfirm}
+                        busy={confBusy === s.id} onConfirm={(on) => onConfirm(s, on)} />
                     </td>
                   </tr>
                 )
@@ -973,6 +1118,79 @@ function TimePick({ now, value, onChange }: {
 }
 
 /* ────────────────────────── 고르는 칸 ────────────────────────── */
+
+/**
+ * 「확정」 칸 — 이 줄이 **실제 시간표로 옮겨졌는지** (원장님 2026-11-19).
+ *
+ * 다섯 가지로 보인다 (판단은 lib/moveAssign.ts `confirmStateOf` 한 곳)
+ *   확정 (요청 반영)  반영된 시간표 변경요청이 계획과 **같다** — 저절로 이렇게 보인다
+ *   확정 (손으로)     원장님이 눌러 표시했다 — 담당만 바뀌는 학생 등
+ *   요청 올라옴       담당 선생님이 올렸고 원장님 「반영」을 기다린다
+ *   계획과 다름       시간표는 바뀌었는데 계획과 다르다 — 그냥 확정으로 세지 않는다
+ *   —                 아직 아무 일 없다
+ *
+ * ★ 단추는 **원장님께만** 보인다. 확정은 「시간표를 바꿨다」는 뜻이고 시간표를 바꾸는 것도
+ *   원장님뿐이다(요청의 「반영」). 서버도 같이 막는다 — 화면만 가리면 주소로 부를 수 있다.
+ */
+function ConfirmCell({ info, canConfirm, busy, onConfirm }: {
+  info?: Conf | null; canConfirm: boolean; busy: boolean; onConfirm: (on: boolean) => void
+}) {
+  const state: ConfirmState = info?.state ?? 'plan'
+  const 날 = (v: any) => (v ? String(v).slice(5, 10).replace('-', '/') : '')
+  const 단추 = 'px-2 py-0.5 rounded-lg border text-[11px] font-bold disabled:opacity-40'
+
+  if (state === 'hand' || state === 'auto') return (
+    <div className="whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+        <i className="ti ti-circle-check align-[-0.125em]" /> 확정
+      </span>
+      <span className="block text-[11px] text-gray-400 mt-0.5">
+        {state === 'auto'
+          ? `시간표 변경요청 반영${날(info?.req?.decided_at) ? ' · ' + 날(info?.req?.decided_at) : ''}`
+          : `${날(info?.row?.confirmed_at)}${info?.row?.confirmed_by_name ? ' · ' + info.row.confirmed_by_name : ''}`}
+      </span>
+      {canConfirm && state === 'hand' && (
+        <button onClick={() => onConfirm(false)} disabled={busy}
+          className={cx(단추, 'mt-1 bg-white border-gray-200 text-gray-500')}>확정 풀기</button>
+      )}
+    </div>
+  )
+
+  if (state === 'open') return (
+    <div className="whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
+        <i className="ti ti-clock-edit align-[-0.125em]" /> 요청 올라옴
+      </span>
+      <span className="block text-[11px] text-gray-500 mt-0.5">{info?.req?.want_text ?? ''}</span>
+      <span className="block text-[11px] text-gray-400">
+        {info?.req?.requested_by_name ? info.req.requested_by_name + ' 선생님' : ''} · 학생관리에서 반영
+      </span>
+    </div>
+  )
+
+  if (state === 'applied') return (
+    <div className="whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
+        <i className="ti ti-alert-triangle align-[-0.125em]" /> 계획과 다름
+      </span>
+      <span className="block text-[11px] text-gray-500 mt-0.5">시간표 바뀜 · {info?.req?.want_text ?? ''}</span>
+      {canConfirm && (
+        <button onClick={() => onConfirm(true)} disabled={busy}
+          className={cx(단추, 'mt-1 bg-emerald-600 border-emerald-600 text-white')}>그래도 확정</button>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="whitespace-nowrap">
+      <span className="text-gray-300">—</span>
+      {canConfirm && (
+        <button onClick={() => onConfirm(true)} disabled={busy}
+          className={cx(단추, 'ml-1 bg-white border-gray-200 text-gray-500')}>확정</button>
+      )}
+    </div>
+  )
+}
 
 function Sel({ value, options, onChange, unset, disabled }: {
   value: string; options: [string, string][]; onChange: (v: string) => void
