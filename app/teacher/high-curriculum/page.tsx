@@ -195,18 +195,50 @@ export default function HighCurriculumPage() {
               )
             })}
           </div>
-          <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl">
+          {/* ★ 칸마다 무엇을 적는지 **표 위에 한 줄로** 적어 둔다 (원장님 2026-11-19
+              「무슨말인지 모르겠어 · 너무 복잡해」). 머리글만으로는 「예: 2차시」가 무슨 뜻인지
+              — 그 교재로 몇 번에 나가라는 것인지 — 알 수가 없다. */}
+          <div className="rounded-xl border px-3.5 py-2.5 text-[13px] leading-relaxed"
+            style={{ background: '#f5f7fb', borderColor: '#dde1e8', color: '#3c4454' }}>
+            <b style={{ color: ACCENT }}>차시 칸</b>에는 그 소단원을 <b>그 교재로 몇 번에 나가는지</b> 적습니다 (예: 2차시).
+            뒤 칸은 <b>데일리테스트 문항 수</b> · <b>숙제 문항 수</b> · <b>토요 테스트를 몇 주차에 보는지</b>입니다.
+            <span className="block mt-1 text-gray-500">
+              지금은 <b>차시 칸만</b> 채우시면 됩니다 — 나머지는 비워 두셔도 됩니다. 숫자만 적으셔도 합계가 더해집니다.
+            </span>
+          </div>
+
+          {/* ★ 칸 이름이 **늘 보이게** (원장님 2026-11-19 「무슨말인지 모르겠어 · 너무 복잡해」).
+              소단원이 12~19줄이라 조금만 내려도 머리글이 화면 밖으로 나가고, 그러면 빈칸만 남아
+              「여기에 뭘 넣으라는 거지」가 된다.
+
+              ★★ **표 상자 안에서 세로로 굴린다**(overflow-auto + max-height). 처음엔 화면 기준
+                sticky(top: 64px)로 붙여 봤는데 **안 붙었다** — 감싼 상자가 `overflow-x-auto` 라
+                CSS 가 세로도 auto 로 만들고, 그러면 sticky 는 화면이 아니라 **그 상자**를 기준으로
+                삼는다. 상자는 안 굴러서 머리글이 표 한가운데 끼어 버렸다(브라우저로 두 방식을
+                나란히 띄워 눈으로 확인했다).
+              ★ 배경색은 **th 에** 준다 — tr 에만 주면 떠 있을 때 뒷줄이 비친다.
+              ★ 아랫줄은 border 가 아니라 **inset 그림자**로 긋는다 — border-collapse 표에서는
+                sticky 로 떠오른 칸의 테두리가 같이 안 따라온다. */}
+          <div className="overflow-auto max-h-[70vh] bg-white border border-gray-200 rounded-xl">
             <table className="w-full border-collapse text-sm" style={{ minWidth: 900 }}>
               <thead>
-                <tr className="bg-gray-100 text-gray-700">
-                  <th className="px-2.5 py-2 text-left border-b border-r border-gray-200 w-12">번호</th>
-                  <th className="px-2.5 py-2 text-left border-b border-r border-gray-200">소단원</th>
+                <tr className="text-gray-700">
+                  <th className="sticky top-0 z-20 bg-gray-100 px-2.5 py-2 text-left border-r border-gray-200 w-12"
+                    style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>번호</th>
+                  <th className="sticky top-0 z-20 bg-gray-100 px-2.5 py-2 text-left border-r border-gray-200"
+                    style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>소단원</th>
                   {lr.map((r) => (
-                    <th key={r.id} className="px-2.5 py-2 text-left border-b border-r border-gray-200">
+                    <th key={r.id} className="sticky top-0 z-20 bg-gray-100 px-2.5 py-2 text-left border-r border-gray-200"
+                      style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>
                       {r.label} 차시<span className="block text-xs font-normal text-gray-500">{bookName(r, tab)}</span>
                     </th>
                   ))}
-                  {UNIT_COLS.map(([f, label]) => <th key={f} className="px-2.5 py-2 text-left border-b border-r last:border-r-0 border-gray-200">{label}</th>)}
+                  {UNIT_COLS.map(([f, label]) => (
+                    <th key={f} className="sticky top-0 z-20 bg-gray-100 px-2.5 py-2 text-left border-r last:border-r-0 border-gray-200"
+                      style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>
+                      {label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
