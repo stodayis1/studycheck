@@ -67,6 +67,8 @@ interface Student {
   ops_student_id?: string | null
   /** 학습일지를 안 쓰는 학생 — 시간표에는 뜨지만 일지 작성·미작성·강사 알림에서 뺀다 */
   skip_lesson_note?: boolean
+  /** 켜면 학부모 브리핑을 알림톡 대신 문자로 (원장님 2026-11-19) */
+  brief_by_sms?: boolean
   on_leave?: boolean | null
   leave_start_date?: string | null
   leave_end_date?: string | null
@@ -381,6 +383,7 @@ export default function TeacherStudentsPage() {
         textbook_grade: editStudent.textbook_grade,
         wise_step: editStudent.wise_step || 'W',
         skip_lesson_note: !!editStudent.skip_lesson_note,
+        brief_by_sms: !!editStudent.brief_by_sms,
       })
       .eq('id', editStudent.id)
     if (error) { alert('수정 중 오류가 발생했습니다.'); return }
@@ -1214,6 +1217,28 @@ OPS 학생목록에는 여전히 휴원으로 남아 있어요 — 거기서 「
                     <span className="block text-sm font-bold text-gray-800">학습일지를 쓰지 않는 학생</span>
                     <span className="block text-[11px] text-gray-400 mt-0.5">
                       시간표에는 「일지 없음」으로 그대로 뜨고, 작성 목록·미작성 보기·담당 강사 알림 문자에서 빠집니다.
+                    </span>
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* 알림톡이 막힌 집 — 브리핑을 문자로 (원장님 2026-11-19).
+                카카오가 번호를 스팸으로 막으면 알림톡은 다시 보내도 계속 거절된다
+                (최온유 초3: 11/17 브리핑 1건 + 11/18 재발송 2건 전부 「스팸」). */}
+            {isAdmin() && (
+              <div className="rounded-xl border border-gray-200 p-3">
+                <button onClick={() => setEditStudent({ ...editStudent, brief_by_sms: !editStudent.brief_by_sms })}
+                  className="flex items-start gap-2.5 w-full text-left">
+                  <span className={cx('w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center mt-0.5',
+                    editStudent.brief_by_sms ? 'bg-[#9FE1CB] border-[#9FE1CB] text-white' : 'bg-white border-gray-300')}>
+                    {editStudent.brief_by_sms && <i className="ti ti-check" style={{ fontSize: 13 }} />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-bold text-gray-800">학부모 브리핑을 문자로 보내기</span>
+                    <span className="block text-[11px] text-gray-400 mt-0.5">
+                      카카오가 그 번호를 막아 알림톡이 계속 거절될 때만 켜 주세요. 내용은 똑같고,
+                      버튼 대신 링크가 글 끝에 붙습니다. 문자 요금이 알림톡보다 비쌉니다.
                     </span>
                   </span>
                 </button>
