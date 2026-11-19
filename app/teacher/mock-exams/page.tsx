@@ -17,6 +17,7 @@ type Row = MockExam & { ready: boolean; count: number }
 export default function MockExamsPage() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [err, setErr] = useState('')
+  const [year, setYear] = useState<number | null>(null)   // 학년도 탭 (원장님 2026-11-19: 년도별로 탭으로)
 
   useEffect(() => {
     apiFetch('/api/mock-exams')
@@ -24,6 +25,10 @@ export default function MockExamsPage() {
         const j = await r.json()
         if (!r.ok) throw new Error(j.error ?? '불러오지 못했습니다.')
         setRows(j.exams)
+        let saved: number | null = null
+        try { saved = Number(localStorage.getItem('mockExamYear')) || null } catch { /* 무시 */ }
+        const ys = [...new Set((j.exams as Row[]).map((r) => r.year))]
+        setYear(saved && ys.includes(saved) ? saved : Math.max(...ys))
       })
       .catch((e) => setErr(e.message))
   }, [])
@@ -39,9 +44,22 @@ export default function MockExamsPage() {
         <Link href="/teacher/worksheets/new" className="text-xs text-gray-500 hover:underline">← 학습지 만들기</Link>
         {err && <p className="mt-6 text-center text-gray-500">{err}</p>}
         {!rows && !err && <p className="mt-6 text-center text-gray-400">불러오는 중…</p>}
-        {years.map((y) => (
-          <section key={y} className="mt-6">
-            <h2 className="mb-3 text-base font-bold" style={{ color: NAVY }}>{y}학년도</h2>
+        {years.length > 0 && (
+          <div className="mt-5 flex gap-1 border-b">
+            {years.map((y) => (
+              <button key={y}
+                onClick={() => { setYear(y); try { localStorage.setItem('mockExamYear', String(y)) } catch { /* 무시 */ } }}
+                className="-mb-px rounded-t-lg border px-4 py-2 text-sm font-semibold"
+                style={year === y
+                  ? { background: '#fff', color: NAVY, borderColor: '#e5e7eb', borderBottomColor: '#fff' }
+                  : { background: 'transparent', color: '#9ca3af', borderColor: 'transparent' }}>
+                {y}학년도
+              </button>
+            ))}
+          </div>
+        )}
+        {years.filter((y) => y === year).map((y) => (
+          <section key={y} className="mt-5">
             {grades(y).map((g) => (
             <div key={g} className="mb-4">
             <div className="mb-2 text-xs font-semibold text-gray-500">{g}</div>
