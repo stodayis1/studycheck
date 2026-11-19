@@ -8,7 +8,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { denyIfNotStaff } from '@/lib/apiAuth'
-import { MOCK_EXAMS, type MockData } from '@/lib/mockExams'
+import { MOCK_EXAMS, sortExams, type MockData, type MockExam } from '@/lib/mockExams'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -27,23 +27,27 @@ async function readData(s: ReturnType<typeof db>, slug: string): Promise<MockDat
   return JSON.parse(await data.text())
 }
 
+async function readIndex(s: ReturnType<typeof db>): Promise<(MockExam & { count?: number })[]> {
+  const { data, error } = await s.storage.from(BUCKET).download('mock/index.json')
+  if (error || !data) {
+    return Promise.all(MOCK_EXAMS.map(async (m) => ({ ...m, count: (await readData(s, m.slug))?.questions.length ?? 0 })))
+  }
+  return JSON.parse(await data.text())
+}
+
 export async function GET(req: Request) {
   const deny = await denyIfNotStaff(req)
   if (deny) return deny
   const s = db()
   const slug = new URL(req.url).searchParams.get('slug')
 
+  const index = await readIndex(s)
   if (!slug) {
-    const list = await Promise.all(
-      MOCK_EXAMS.map(async (m) => {
-        const d = await readData(s, m.slug)
-        return { ...m, ready: !!d, count: d?.questions.length ?? 0 }
-      })
-    )
-    return NextResponse.json({ exams: list })
+    // index.json 에 문항 수(count)가 같이 적혀 있어 회차마다 data.json 을 열지 않는다
+    return NextResponse.json({ exams: sortExams(index).map((m) => ({ ...m, ready: (m.count ?? 0) > 0, count: m.count ?? 0 })) })
   }
 
-  const exam = MOCK_EXAMS.find((m) => m.slug === slug)
+  const exam = index.find((m) => m.slug === slug)
   if (!exam) return NextResponse.json({ error: '없는 회차입니다.' }, { status: 404 })
   const d = await readData(s, slug)
   if (!d) return NextResponse.json({ error: '아직 해설이 올라오지 않았습니다.' }, { status: 404 })

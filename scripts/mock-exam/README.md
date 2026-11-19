@@ -6,14 +6,18 @@
 ## 한 회차 넣는 순서 (2027 수능 기준)
 1. 원본 PDF 받기 — 수능·평가원은 평가원 공개 페이지, 학력평가는 교육청 공개 자료. 받기 전에 원장님께 파일 이름·출처·크기를 여쭌다.
    `C:\Users\USER\문제은행\모의고사\<회차>\원본\`
-2. 자르기 — `python scripts/mock-exam/crop_suneung.py` (문항 번호 「N.」 글자 위치로 자른다. 쪽 맨 아래 「확인 사항」 상자 위에서 멈춘다).
-   다른 회차는 파일 이름·쪽 범위(SEC)만 바꾼다. 다 자른 뒤 **묶음 그림으로 눈으로 확인**(위가 잘린 지수·아래 상자가 섞인 것).
+2. 자르기 — `python scripts/mock-exam/crop.py "<회차 폴더>" [문제지.pdf] [쪽 수]` (문항 번호 「N.」 글자 위치로 자른다.
+   과목은 쪽 머리말의 (확률과 통계)·(미적분)·(기하)로 가른다 — 쪽 아래 「확인 사항」에도 과목 이름이 있어 머리말만 본다.
+   수능 PDF 는 홀수형·짝수형이 붙어 있어 쪽 수 20 을 준다). 다 자른 뒤 **묶음 그림으로 눈으로 확인**(위가 잘린 지수·아래 상자가 섞인 것).
+   정답 — 평가원 정답표는 `python scripts/mock-exam/answers.py "<회차 폴더>" [정답표.pdf]` → `answers.json` (배점 합 100 을 확인한다).
+   학평 정답은 EBSi 정답 그림을 읽어 같은 꼴의 answers.json 을 만든다.
 3. 해설 쓰기 — 서브에이전트로 과목·번호대별 나눠 쓴다. 지시서 꼴은 「문항마다 `해설\<과목>_NN.json`, 공식 정답과 같아야 함, 웹 검색 금지」.
    모양은 `lib/mockExams.ts` 의 `MockQuestion`. 수식은 `$…$` (KaTeX).
-4. 검산 — 정답·배점·선지 수·정답 표시·빈칸·KaTeX 를 스크립트로 확인한다. **틀린 기대값을 넣었을 때 실패하는지**도 본다.
+4. 검산 — `node scripts/mock-exam/check.cjs "<회차 폴더>"` (정답·배점·선지 수·정답 표시·빈칸·KaTeX). **answers.json 을 일부러 틀리게 한 사본에서 실패하는지**도 본다.
 5. 올리기 — `node scripts/mock-exam/upload.mjs <slug> "<회차 폴더>"` → 보관함 exam-analysis 의 `mock/<slug>/`.
    (이 보관함은 json 을 안 받아 data.json 을 octet-stream 으로 올린다)
-6. `lib/mockExams.ts` 의 `MOCK_EXAMS` 에 회차를 적는다 → 목록에 보인다.
+6. `<회차 폴더>/meta.json` (slug·year·title·short·grade·kind·date·minutes·tracks·note)을 먼저 써 둔다 — upload.mjs 가 보관함 `mock/index.json` 에 넣어 **배포 없이** 목록에 보인다.
+   선택과목이 없는 고1·고2 학평은 `tracks: []`, 문항은 모두 「공통」.
 
 ## 주의
 - 수능 정답은 당일엔 **가답안**이다. 정답 확정일(2027 수능은 2026-12-01)에 정답표를 다시 받아 맞춰 본다.

@@ -29,6 +29,7 @@ export default function MockExamsPage() {
   }, [])
 
   const years = [...new Set((rows ?? []).map((r) => r.year))].sort((a, b) => b - a)
+  const grades = (y: number) => [...new Set(rows!.filter((r) => r.year === y).map((r) => r.grade))].sort().reverse()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -41,8 +42,11 @@ export default function MockExamsPage() {
         {years.map((y) => (
           <section key={y} className="mt-6">
             <h2 className="mb-3 text-base font-bold" style={{ color: NAVY }}>{y}학년도</h2>
+            {grades(y).map((g) => (
+            <div key={g} className="mb-4">
+            <div className="mb-2 text-xs font-semibold text-gray-500">{g}</div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {rows!.filter((r) => r.year === y).map((r) => (
+              {rows!.filter((r) => r.year === y && r.grade === g).map((r) => (
                 <Link key={r.slug} href={r.ready ? `/teacher/mock-exams/view?slug=${r.slug}` : '#'}
                   className={`block rounded-xl border bg-white px-5 py-4 transition ${r.ready ? 'hover:-translate-y-0.5 hover:shadow-md' : 'pointer-events-none opacity-50'}`}
                   style={{ borderLeft: '4px solid #64748b' }}>
@@ -51,12 +55,14 @@ export default function MockExamsPage() {
                     <span className="text-xs text-gray-400">{r.grade} · {r.kind}</span>
                   </div>
                   <div className="mt-1 text-xs text-gray-600">
-                    {r.ready ? `해설 ${r.count}문항 · ${r.tracks.join(' · ')}` : '해설 준비 중'}
+                    {r.ready ? `해설 ${r.count}문항${r.tracks.length ? ' · ' + r.tracks.join(' · ') : ''}` : '해설 준비 중'}
                   </div>
                   {r.note && <div className="mt-1 text-[11px] text-gray-400">{r.note}</div>}
                 </Link>
               ))}
             </div>
+            </div>
+            ))}
           </section>
         ))}
       </div>
