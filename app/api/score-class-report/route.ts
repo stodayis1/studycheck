@@ -1,8 +1,9 @@
 /**
  * S코어반 학습 기록 보고서 — 링크 만들기 (원장님 2026-11-19).
  *
- *   GET  /api/score-class-report?from=&to=   → 고를 수 있는 학생 + 이미 만든 링크
- *   POST /api/score-class-report             → { studentIds, from, to } 로 링크를 만든다
+ *   GET    /api/score-class-report?from=&to= → 고를 수 있는 학생 + 이미 만든 링크
+ *   POST   /api/score-class-report           → { studentIds, from, to } 로 링크를 만든다
+ *   DELETE /api/score-class-report           → { tokens } 로 만든 링크를 지운다
  *
  * ★ 링크를 찍을 때 값을 report_links.data 에 **그대로 박아 둔다**(스냅샷).
  *   나중에 학습지가 지워지거나 교재가 바뀌어도 보내 드린 보고서는 그대로여야 한다.
@@ -54,6 +55,8 @@ export async function GET(req: Request) {
   const { data: links } = await db.from('report_links')
     .select('student_id, token, period_label, created_at')
     .eq('report_type', TYPE).order('created_at', { ascending: false }).limit(200)
+  // ※ created_at 은 **시각까지** 내려보낸다 — 같은 날 여러 번 만들면 날짜만으로는 어느 것이
+  //   어느 것인지 가릴 수 없다(2026-11-20 에 하루 다섯 번 만들어 스무 줄이 쌓였다).
 
   return NextResponse.json({
     from, to,
@@ -163,4 +166,38 @@ export async function POST(req: Request) {
     }
   }
   return NextResponse.json({ ok: true, from, to, results: out })
+}
+
+/**
+ * 만든 링크를 지운다 — `{ tokens: string[] }`.
+ *
+ * ★ **지우면 그 주소는 그 자리에서 죽는다.** 이미 보내 드린 링크라면 학부모님이 여셨을 때
+ *   「없는 주소」가 된다. 되돌릴 수 없다(스냅샷까지 같이 사라진다) — 화면에서 한 번 더 여쭌다.
+ * ★ **이 보고서 종류만** 지운다(`report_type = 'score_class'`). 월간 리포트·카톡 브리핑 링크가
+ *   같은 표에 있어서, 종류를 안 걸면 엉뚱한 링크가 지워진다.
+ * ★ 토큰으로만 지운다 — 학생 id 로 지우면 「그 학생 것 전부」가 날아간다.
+ * ★ 지운 **줄 수를 세어 돌려준다.** 화면이 그 숫자로 확인한다 — 「성공」은 성공이 아니다.
+ */
+export async function DELETE(req: Request) {
+  const deny = await denyIfNotStaff(req, { adminOnly: true })
+  if (deny) return deny
+
+  let body: any
+  try { body = await req.json() } catch { return NextResponse.json({ error: '잘못된 요청이에요.' }, { status: 400 }) }
+  const tokens: string[] = Array.isArray(body?.tokens)
+    ? Array.from(new Set(body.tokens.map((t: any) => String(t ?? '').trim()).filter(Boolean)))
+    : []
+  if (!tokens.length) return NextResponse.json({ error: '지울 것을 골라 주세요.' }, { status: 400 })
+  // 한 번에 너무 많이 지우지 않는다 — 실수로 전부 고르고 눌렀을 때의 마지막 막이다.
+  if (tokens.length > 100) {
+    return NextResponse.json({ error: '한 번에 100개까지만 지울 수 있어요.' }, { status: 400 })
+  }
+
+  const db = admin()
+  const { data, error } = await db.from('report_links')
+    .delete().eq('report_type', TYPE).in('token', tokens).select('token')
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const deleted = (data ?? []).length
+  return NextResponse.json({ ok: true, deleted, asked: tokens.length })
 }

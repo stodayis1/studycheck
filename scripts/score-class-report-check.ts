@@ -157,6 +157,34 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
     'X 반 진도가 **실제로 보내져야** 한다 — 칸만 있고 안 보내면 원장님이 적으신 글이 조용히 버려진다'.slice(2))
   ok(!/sendAlimtalk|sendSmsViaOps|sendPush/.test(links),
     'X 이 화면은 아무것도 보내지 않는다 — 보내는 것은 원장님이 직접 하신다'.slice(2))
+
+  // ── 만든 링크 지우기 (원장님 2026-11-20 「지울거 선택해서 삭제할수 있도록 삭제버튼 만들어줘」)
+  //    지우면 그 주소는 그 자리에서 죽는다. 막이가 하나라도 빠지면 엉뚱한 링크가 날아간다.
+  // ★ 괄호까지 본다 — 「DELETE」만 찾으면 `DELETE_OFF` 로 이름만 바꿔 꺼 놓아도 통과한다
+  //   (2026-11-20 망가뜨려 시험에서 실제로 통과했다).
+  ok(/export async function DELETE\(/.test(api2), '만든 링크를 지우는 길이 있어야 한다')
+  const del = api2.slice(api2.indexOf('export async function DELETE('))
+  ok(/denyIfNotStaff\(req, \{ adminOnly: true \}\)/.test(del),
+    'X 지우기는 **원장 전용**이어야 한다 — 화면만 가리면 주소로 부를 수 있다'.slice(2))
+  ok(/\.eq\('report_type', TYPE\)/.test(del),
+    'X **이 보고서 종류만** 지워야 한다 — 종류를 안 걸면 월간 리포트 링크까지 지워진다'.slice(2))
+  ok(/\.in\('token'/.test(del),
+    'X 토큰으로만 지워야 한다 — 학생 id 로 지우면 그 학생 것이 통째로 날아간다'.slice(2))
+  ok(!/\.eq\('student_id'/.test(del), 'X 지우기에서 학생 id 를 가늠쇠로 쓰면 안 된다'.slice(2))
+  ok(/deleted/.test(del),
+    'X **지운 줄 수**를 돌려줘야 한다 — 「성공」은 성공이 아니다(2026-11-14)'.slice(2))
+
+  ok(/method: 'DELETE'/.test(links), '화면이 지우기를 실제로 불러야 한다 — 단추만 있으면 안 된다')
+  ok(/JSON\.stringify\(\{ tokens/.test(links),
+    'X 고른 토큰이 **실제로 보내져야** 한다'.slice(2))
+  ok(/confirm\(/.test(links.slice(links.indexOf('async function 지우기'))),
+    'X 지우기 전에 한 번 더 여쭈어야 한다 — 되돌릴 수 없다'.slice(2))
+  ok(/지울것/.test(links) && !/picked\.includes\(p\.token\)/.test(links),
+    'X 지울 것 고르기는 **학생 고르기와 따로**여야 한다 — 섞으면 만들려다 지운다'.slice(2))
+  ok(/toLocaleTimeString/.test(links),
+    'X 만든 **시각**을 적어야 한다 — 같은 날 여러 번 만들면 날짜만으로는 못 가린다'.slice(2))
+  ok(/만든 링크를 지울 수 있어요/.test(manual),
+    'X 사용 매뉴얼에 적어야 한다 — 단추를 더하면 매뉴얼도 같이 고친다'.slice(2))
 }
 
 // ④ 보완해야 할 점 (원장님 2026-11-20 「각 학생들거 보고서 나갈때 보완해야 할점 이런거 써주면 좋을듯」)
