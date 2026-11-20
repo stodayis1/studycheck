@@ -70,6 +70,76 @@ export interface ScoreClassReport {
   madeAt: string
 }
 
+/** 코어테스트인가 — 표마다 적는 말이 다르다 ('코어테스트' · 'CORE테스트' · 'core') */
+export function isCoreKind(kind: string | null | undefined): boolean {
+  return /코어|core/i.test(String(kind ?? ''))
+}
+
+/**
+ * 평가 기록 모으기 — **같은 시험이 두 표에 들어 있다.**
+ *
+ * 코어테스트를 `core_tests` 에도 적고 `exams` 에도 적어 둔 날이 있다. 그대로 두면
+ * 한 번 친 시험이 보고서에 두 줄, 많게는 **네 줄**로 찍힌다
+ * (2026-11-19 확인: 안준혁 05-11 에 75 · 78 · 80 · 79 네 값).
+ * 학부모께 가는 화면이라 **한 시험은 한 줄**이어야 한다.
+ *
+ * 규칙은 **하나다 — 같은 날 코어테스트는 한 줄.** 두 표를 날짜로 맞추는 규칙을 따로 두었다가
+ * 지웠다(2026-11-20): 지워도 이 한 줄 규칙이 같은 값을 내서 **망가뜨려도 검사가 통과했다.**
+ * 못 재는 규칙은 두지 않는다.
+ *
+ * 남길 줄을 고르는 차례 ① `core_tests` 쪽 ② 회차를 적어 둔 줄 ③ 앞 회차.
+ * (2026-11-19 확인: 임지원 05-11 예비1·예비2 둘 다 77, 26분 차이로 입력 /
+ *  안준혁 05-27 회차 없이 92 적고 3분 뒤 「본고사」 88 로 다시 적음).
+ * 코어테스트가 아닌 평가(학교시험·단원평가)는 건드리지 않는다 — 같은 날 여러 번 볼 수 있다.
+ *
+ * ★ 어느 표의 점수가 맞는지는 기계가 못 정한다. 값이 갈리는 날은 원장님께 알린다.
+ */
+export function 평가모으기(cores: any[], exams: any[]): ScoreClassReport['exams'] {
+  type 줄 = ScoreClassReport['exams'][0] & { _코어표: boolean }
+  const 모두: 줄[] = [
+    ...(cores ?? []).map((c: any) => ({
+      date: 날(c.test_date), kind: '코어테스트', title: String(c.test_round ?? ''),
+      score: Number(c.score), total: Number(c.total_score ?? 100), _코어표: true,
+    })),
+    ...(exams ?? []).map((e: any) => ({
+      date: 날(e.exam_date), kind: String(e.exam_type ?? '평가'),
+      title: String(e.title || e.unit_name || ''),
+      score: Number(e.score), total: Number(e.total_score ?? 100), _코어표: false,
+    })),
+  ].filter((e) => !Number.isNaN(e.score))
+
+  const 회차 = (t: string) => {
+    const m = String(t).match(/\d+/)
+    return m ? Number(m[0]) : 99
+  }
+  /** a 가 b 보다 남길 만하면 음수 */
+  const 좋은쪽 = (a: 줄, b: 줄) => {
+    if (a._코어표 !== b._코어표) return a._코어표 ? -1 : 1
+    const 제목 = (x: 줄) => (String(x.title).trim() ? 0 : 1)
+    if (제목(a) !== 제목(b)) return 제목(a) - 제목(b)
+    return 회차(a.title) - 회차(b.title)
+  }
+
+  const 코어한줄 = new Map<string, 줄>()
+  const 나머지: 줄[] = []
+  const 본것 = new Set<string>()
+  for (const e of 모두) {
+    if (isCoreKind(e.kind)) {
+      const 앞 = 코어한줄.get(e.date)
+      if (!앞 || 좋은쪽(e, 앞) < 0) 코어한줄.set(e.date, e)
+      continue
+    }
+    // 코어테스트가 아닌 평가는 글자까지 똑같은 줄만 한 줄로 (같은 표에 두 번 적힌 것)
+    const k = [e.date, e.kind, e.title, e.score].join('|')
+    if (본것.has(k)) continue
+    본것.add(k)
+    나머지.push(e)
+  }
+  return [...나머지, ...코어한줄.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(({ _코어표, ...e }) => e)
+}
+
 type DB = { from: (t: string) => any }
 
 /** 수파베이스는 한 번에 1000행만 준다 — 다 읽을 때는 돌려 가며 읽는다. */
@@ -184,17 +254,7 @@ export async function buildScoreClassReport(
         return 지금 ? `${지금.grade ?? ''}-${지금.semester ?? ''} ${지금.textbook_name ?? ''}` : null
       })(),
     },
-    exams: [
-      ...cores.map((c: any) => ({
-        date: 날(c.test_date), kind: 'CORE테스트', title: String(c.test_round ?? ''),
-        score: Number(c.score), total: Number(c.total_score ?? 100),
-      })),
-      ...exams.map((e: any) => ({
-        date: 날(e.exam_date), kind: String(e.exam_type ?? '평가'),
-        title: String(e.title || e.unit_name || ''),
-        score: Number(e.score), total: Number(e.total_score ?? 100),
-      })),
-    ].filter((e) => !Number.isNaN(e.score)).sort((a, b) => a.date.localeCompare(b.date)),
+    exams: 평가모으기(cores, exams),
     madeAt: new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10),
   }
 }

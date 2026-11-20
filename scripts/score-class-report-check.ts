@@ -9,7 +9,7 @@
  */
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { isAhead, aheadCourseOf, buildScoreClassReport } from '../lib/scoreClassReport.ts'
+import { isAhead, aheadCourseOf, isCoreKind, 평가모으기, buildScoreClassReport } from '../lib/scoreClassReport.ts'
 
 let bad = 0
 function ok(cond: boolean, what: string) {
@@ -31,6 +31,56 @@ ok(aheadCourseOf('초6', [{ grade_level: '초6' }, { grade_level: '초5' }]) ===
   '선행이 하나도 없으면 null 이다')
 ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { grade_level: '중1' }]) === '중1',
   '더 위 과정이 섞여 있어도 많이 푼 쪽을 고른다')
+
+// ②-2 같은 시험이 두 줄로 찍히지 않나 — 코어테스트가 core_tests 와 exams 양쪽에 들어 있다
+{
+  ok(isCoreKind('코어테스트') && isCoreKind('CORE테스트') && !isCoreKind('학교시험'),
+    '코어테스트를 적는 말이 표마다 달라도 같은 것으로 봐야 한다')
+
+  // 2026-11-19 운영 데이터 그대로 — 안준혁 05-11 은 네 줄이었다
+  const 한줄 = 평가모으기(
+    [{ test_date: '2026-05-11', test_round: '예비1', score: 75, total_score: 100 }],
+    [
+      { exam_date: '2026-05-11', exam_type: '코어테스트', title: '', score: 78, total_score: 100 },
+      { exam_date: '2026-05-11', exam_type: '코어테스트', title: '예비 1회', score: 80, total_score: 100 },
+      { exam_date: '2026-05-11', exam_type: '코어테스트', title: '예비 1회', score: 79, total_score: 100 },
+    ])
+  ok(한줄.length === 1, `같은 날 코어테스트는 한 줄이어야 한다 (지금 ${한줄.length}줄)`)
+  ok(한줄[0]?.score === 75, '코어테스트는 core_tests 쪽 점수를 쓴다')
+
+  // 학교시험은 건드리지 않는다 — 같은 날 코어테스트가 있어도 남아야 한다
+  const 섞임 = 평가모으기(
+    [{ test_date: '2026-09-21', test_round: '본고사', score: 88, total_score: 100 }],
+    [{ exam_date: '2026-09-21', exam_type: '학교시험', title: '단원평가', score: 90, total_score: 100 }])
+  ok(섞임.length === 2, `같은 날 학교시험은 따로 남아야 한다 (지금 ${섞임.length}줄)`)
+
+  // core_tests 가 없는 날의 코어테스트는 exams 쪽이 그대로 남는다
+  const 혼자 = 평가모으기([], [{ exam_date: '2026-07-21', exam_type: '코어테스트', title: '예비 1회', score: 56, total_score: 100 }])
+  ok(혼자.length === 1 && 혼자[0].score === 56, 'core_tests 에 없는 날은 exams 쪽이 남아야 한다')
+
+  // 같은 표 안에서 두 번 적힌 날 — 회차를 적은 줄을 쓴다 (안준혁 05-27)
+  const 회차없는쪽 = 평가모으기([], [
+    { exam_date: '2026-05-27', exam_type: '코어테스트', title: '', score: 92, total_score: 100 },
+    { exam_date: '2026-05-27', exam_type: '코어테스트', title: '본고사', score: 88, total_score: 100 },
+  ])
+  ok(회차없는쪽.length === 1 && 회차없는쪽[0].score === 88,
+    `회차를 적은 줄을 써야 한다 (지금 ${회차없는쪽.length}줄 · ${회차없는쪽[0]?.score}점)`)
+
+  // 둘 다 회차가 적혀 있으면 앞 회차 (임지원 05-11 예비1·예비2 둘 다 77)
+  const 두회차 = 평가모으기([
+    { test_date: '2026-05-11', test_round: '예비2', score: 77, total_score: 100 },
+    { test_date: '2026-05-11', test_round: '예비1', score: 77, total_score: 100 },
+  ], [])
+  ok(두회차.length === 1 && 두회차[0].title === '예비1',
+    `둘 다 회차가 있으면 앞 회차 (지금 ${두회차.length}줄 · ${두회차[0]?.title})`)
+
+  // 같은 표 안에서 글자까지 똑같이 두 번 들어간 것도 한 줄
+  const 똑같이 = 평가모으기([], [
+    { exam_date: '2026-11-16', exam_type: '학교시험', title: '단원평가', score: 95, total_score: 100 },
+    { exam_date: '2026-11-16', exam_type: '학교시험', title: '단원평가', score: 95, total_score: 100 },
+  ])
+  ok(똑같이.length === 1, `똑같은 줄이 두 번 들어가면 한 줄로 (지금 ${똑같이.length}줄)`)
+}
 
 // ③ 보고서 종류가 열려 있나 · 보내는 길이 없나 (원장님이 직접 보내신다)
 {
@@ -107,6 +157,10 @@ if (!url || !key) {
     ok(r.ahead.passed <= r.ahead.count, `${st.name} 통과 건수가 전체보다 많다`)
     // 판정 글자가 데이터에 섞여 들어가지 않았는지
     ok(!JSON.stringify(r).includes('유지 권장'), `${st.name} 보고서 데이터에 판정이 섞였다`)
+    // 같은 날 코어테스트가 두 줄로 찍히지 않는지 — 두 표에 같은 시험이 들어 있다
+    const 코어날 = r.exams.filter((e) => isCoreKind(e.kind)).map((e) => e.date)
+    ok(new Set(코어날).size === 코어날.length,
+      `${st.name} 같은 날 코어테스트가 ${코어날.length - new Set(코어날).size}줄 더 찍힌다`)
   }
 
   // ★ 아는 값과 맞는지 — 2026-11-19 에 SQL 로 직접 센 값
