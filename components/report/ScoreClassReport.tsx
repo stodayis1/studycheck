@@ -20,6 +20,16 @@ const BODY = '#374151'
 const MUTED = '#9ca3af'
 const BOX = '#f7f8fa'
 
+/**
+ * 회독 색 — **진도표 화면(app/teacher/curriculum)과 같은 규칙**이어야 한다.
+ * 원장님이 정하신 것: 1회독 파랑 · 2회독 초록 · 3회독 빨강 · 4회독 이상 보라.
+ * 두 곳이 갈리면 선생님이 보는 색과 학부모가 보는 색이 달라진다.
+ */
+const ROUND_COLOR: Record<number, string> = { 1: '#3b82f6', 2: '#22c55e', 3: '#ef4444' }
+function 회독색(n: number) {
+  return n <= 0 ? MUTED : (ROUND_COLOR[n] ?? '#a855f7')
+}
+
 function tone(v: number | null, good = 85, mid = 70) {
   if (v == null) return MUTED
   if (v >= good) return NAVY
@@ -53,6 +63,9 @@ export function ScoreClassReportView({ d }: { d: ScoreClassReport }) {
   // 옛 링크(스냅샷)에는 보완점이 안 들어 있다 — 그때의 값으로 그 자리에서 뽑는다.
   // 뽑는 함수가 보고서 값만 보기 때문에 DB 를 다시 읽지 않아도 된다.
   const 보완 = d.improve ?? 보완점뽑기(d)
+  // ★ 2026-11-20 전에 만든 스냅샷에는 progress 칸이 **아예 없다.** 없는 줄 모르고 읽으면
+  //   학부모 화면이 하얗게 뜬다. 보내 드린 링크는 그대로 살아 있어야 한다.
+  const 진도 = d.progress ?? { classLabel: null, courses: [] }
   const 성취도줄 = 보완.items.some((x) => x.key === 'achievement')
 
   return (
@@ -196,7 +209,39 @@ export function ScoreClassReportView({ d }: { d: ScoreClassReport }) {
         </div>
       </Card>
 
-      <Card title="교재 진도">
+      {진도.courses.length > 0 && (
+        <Card title="진도표" note="과정마다 몇 회독까지 돌았는지입니다. 「2회독」은 그 과정을 두 번째로 보고 있다는 말이고, 뒤 숫자는 그 과정 전체 개념 가운데 몇 개까지 왔는지입니다.">
+          {진도.classLabel && (
+            <p style={{ margin: '0 0 10px', fontSize: 14 }}>
+              반 진도 <b style={{ color: NAVY }}>{진도.classLabel}</b>
+            </p>
+          )}
+          {진도.courses.map((c, i) => (
+            <div key={i} style={{ marginBottom: i === 진도.courses.length - 1 ? 0 : 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 5 }}>
+                {c.course} 과정
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {c.rounds.map((r) => (
+                  <span key={r.round} style={{
+                    fontSize: 12, fontWeight: 700, color: '#fff', background: 회독색(r.round),
+                    borderRadius: 999, padding: '4px 10px',
+                  }}>
+                    {r.round}회독 {r.done}/{c.total}
+                  </span>
+                ))}
+              </div>
+              {c.books.length > 0 && (
+                <p style={{ margin: '5px 0 0', fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+                  본 교재 {c.books.join(' · ')}
+                </p>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Card title="교재">
         {d.books.current && (
           <p style={{ margin: '0 0 10px', fontSize: 14 }}>
             지금 나가는 교재 <b style={{ color: NAVY }}>{d.books.current}</b>
