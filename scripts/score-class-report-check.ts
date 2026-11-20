@@ -112,13 +112,25 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
   ok(!/유지|보완|관찰|탈락/.test(view),
     'X 학부모께 가는 보고서에 판정을 넣지 않는다 — 기록만 (원장님 2026-11-19)'.slice(2))
 
-  const teacher = fs.readFileSync('app/teacher/reports/s-core/page.tsx', 'utf8')
-  ok(/if \(!isAdmin\(\)\) return/.test(teacher), '화면도 원장 전용으로 막아야 한다')
+  // ★ 2026-11-20 부터 따로 있던 메뉴가 아니라 **보고서 화면의 탭**이다 (원장님 지시).
+  //   탭이 화면에서 **원장님께만** 보여야 하고, 옛 주소가 남아 있으면 안 된다.
+  const reports = fs.readFileSync('app/teacher/reports/page.tsx', 'utf8')
+  ok(/\['score','S코어반 기록'\]/.test(reports), '보고서 화면에 「S코어반 기록」 탭이 있어야 한다')
+  ok((reports.match(/currentUser\?\.role === 'admin'/g) ?? []).length >= 2,
+    'X 탭 단추와 탭 내용 **둘 다** 원장님만이어야 한다 — 한쪽만 막으면 다른 쪽이 열린다'.slice(2))
+  ok(!/isAdmin\(\)[^\n]*\['score'/.test(reports),
+    'X 탭을 isAdmin() 으로 가리면 원장님이 강사모드로 보실 때 원장님께도 사라진다(c24f180)'.slice(2))
+  ok(!fs.existsSync('app/teacher/reports/s-core'), '따로 있던 화면은 지워져야 한다 — 두 자리에 같은 것이 있으면 안 된다')
+
   const side = fs.readFileSync('components/teacher/Sidebar.tsx', 'utf8')
-  ok(/ITEM\.scoreClass/.test(side) && /'원장 전용'[^]*ITEM\.scoreClass/.test(side),
-    '메뉴는 「원장 전용」 묶음에 들어가야 한다')
+  ok(!/s-core|scoreClass/.test(side), '사이드바에 옛 메뉴가 남아 있으면 안 된다')
   const manual = fs.readFileSync('app/teacher/manual/page.tsx', 'utf8')
-  ok(manual.includes("'/teacher/reports/s-core'"), '사용 매뉴얼에도 적어야 한다 — 선생님들이 이걸 보고 일한다')
+  ok(!manual.includes('/teacher/reports/s-core'), '매뉴얼에 옛 주소가 남아 있으면 안 된다')
+  ok(/S코어반 기록/.test(manual), '사용 매뉴얼에 적어야 한다 — 선생님들이 이걸 보고 일한다')
+
+  const links = 주석뺀(fs.readFileSync('components/teacher/ScoreClassLinks.tsx', 'utf8'))
+  ok(!/sendAlimtalk|sendSmsViaOps|sendPush/.test(links),
+    'X 이 화면은 아무것도 보내지 않는다 — 보내는 것은 원장님이 직접 하신다'.slice(2))
 }
 
 // ── 여기부터는 운영 데이터 (환경파일이 있을 때만)
