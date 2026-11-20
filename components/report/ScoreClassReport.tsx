@@ -65,7 +65,8 @@ export function ScoreClassReportView({ d }: { d: ScoreClassReport }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Big label={`${선행} 범위 평균`} value={n1(d.ahead.avg)} color={tone(d.ahead.avg, 80, 70)} />
           <Big label="현 학년 범위" value={n1(d.own.avg)} color={tone(d.own.avg)} />
-          <Big label="다시 푼 학습지" value={n1(d.retry.avg)} color={tone(d.retry.avg, 80, 70)} />
+          {/* ★ 점수다. 「다시 푼 학습지 64」만 적으면 **64건**으로 읽힌다 (2026-11-20) */}
+          <Big label={`다시 푼 학습지 ${d.retry.count}건 평균`} value={n1(d.retry.avg)} color={tone(d.retry.avg, 80, 70)} />
           <Big label="숙제 완료율" value={d.homework.pct == null ? '—' : d.homework.pct + '%'} color={tone(d.homework.pct, 90, 80)} />
         </div>
       </Card>

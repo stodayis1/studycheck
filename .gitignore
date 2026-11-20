@@ -56,3 +56,6 @@ scripts/twin-gen/out/
 
 # 시험 학습 저장소 — 운영 자료가 아니지만 git 에 들어가지 않는다 (EXEC-041)
 .learning-test-store/
+
+# S코어반 보고서 링크 — 주소만 알면 열리는 학생 기록이라 저장소에 올리지 않는다 (2026-11-20)
+docs/S코어반보고서/_링크.txt
