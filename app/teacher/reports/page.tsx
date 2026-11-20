@@ -13,6 +13,7 @@ import { reportPushResult, reportSendError } from '@/lib/reportSend'
 import { isExamAbsence } from '@/lib/attendance'
 import { teachersOf, isMine } from '@/lib/teachers'
 import { MonthlyReportView } from '@/components/report/MonthlyReport'
+import { ScoreClassLinks } from '@/components/teacher/ScoreClassLinks'
 
 // 학습분석리포트 미리보기 색상 - 공개 리포트 페이지(app/report/[token])의 tierColor와 동일한 기준
 function laTierColor(v: number | null, good = 85, mid = 70) {
@@ -156,7 +157,7 @@ export default function TeacherReportsPage() {
   const [dailyTestSessions, setDailyTestSessions] = useState<{ session_date: string; daily_test_unit: string | null; daily_test_score: number }[]>([])
 
   // 월간보고서 상태
-  const [activeTab, setActiveTab] = useState<'report' | 'monthly' | 'ranking'>('report')
+  const [activeTab, setActiveTab] = useState<'report' | 'monthly' | 'ranking' | 'score'>('report')
   const [mStudent, setMStudent] = useState<Student | null>(null)
   const [mSearchText, setMSearchText] = useState('')
   const [mYear, setMYear] = useState(new Date().getFullYear())
@@ -932,14 +933,26 @@ export default function TeacherReportsPage() {
           {/* ★ 「성적표」는 뺐다 (원장님 2026-11-05 「성적표 메뉴는 필요 없을거 같아」) —
               안 쓰시는 데다 월간 보고서와 내용이 겹쳤다. 코어테스트 점수·학습지 기록은
               그대로 남아 있고(지운 것은 화면뿐이다), 월간 보고서에서 본다. */}
-          {([['report','학습 보고서'],['monthly','월간 보고서'], ...((isAdmin() || isSupervisorModeActive()) ? [['ranking','코어테스트 등수']] : [])] as [string,string][]).map(([tab,label]) => (
-            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'ranking')}
+          {/* ★ 「S코어반 기록」은 원장님만 (원장님 2026-11-20 「탭을 하나 더 만들어서 관리할 수 있도록」).
+              `currentUser?.role` 로 본다 — `isAdmin()` 은 관리자모드 토글까지 봐서 원장님이
+              강사모드로 살피시는 동안 원장님께도 사라진다(c24f180). 서버도 adminOnly 로 막혀 있다. */}
+          {([['report','학습 보고서'],['monthly','월간 보고서'],
+             ...((isAdmin() || isSupervisorModeActive()) ? [['ranking','코어테스트 등수']] : []),
+             ...(currentUser?.role === 'admin' ? [['score','S코어반 기록']] : [])] as [string,string][]).map(([tab,label]) => (
+            <button key={tab} onClick={() => setActiveTab(tab as 'report'|'monthly'|'ranking'|'score')}
               className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
               style={activeTab === tab ? { background: '#1a1a2e', color: 'white' } : { background: '#f3f4f6', color: '#6b7280' }}>
               {label}
             </button>
           ))}
         </div>
+
+        {/* ══ S코어반 기록 탭 (원장 전용) ══
+            따로 있던 /teacher/reports/s-core 메뉴를 2026-11-20 에 여기로 들였다.
+            링크만 만든다 — 보내는 것은 원장님이 직접 하신다. */}
+        {activeTab === 'score' && currentUser?.role === 'admin' && (
+          <ScoreClassLinks ready={!!currentUser} />
+        )}
 
         {/* ══ 월간보고서 탭 ══ */}
         {activeTab === 'monthly' && (
