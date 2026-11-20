@@ -69,8 +69,14 @@ export interface ScoreClassReport {
   exams: { date: string; kind: string; title: string; score: number; total: number }[]
   /** 수업 중 성취도 — **선생님이 적는 기록**이다. 측정값이 아니다 */
   achievement: { low: { date: string; pct: number }[]; recent: number | null; before: number | null }
-  /** 진도 — 반이 지금 나가는 단원과 이 학생이 최근 푼 단원 */
-  pace: { classUnit: string | null; mine: string | null; behind: boolean }
+  /**
+   * 진도 — **진도표**에서 읽는다 (원장님 2026-11-20 「너 진도표는 안보니」).
+   * `classUnit` 은 원장님이 적어 넣으신 반 진도 글 또는 과정 이름, `course` 는 과정 이름,
+   * `mine` 은 이 학생이 가 있는 자리.
+   */
+  pace: { classUnit: string | null; course: string | null; mine: string | null; behind: boolean }
+  /** 진도표 — 과정별 회독. 보고서에 표로 보여 드린다 */
+  progress: { classLabel: string | null; courses: 진도자리[] }
   /** 보완해야 할 점 — 기록에서 문턱을 못 넘은 것만 (원장님 2026-11-20) */
   improve: Improve
   /** 원장님이 직접 적어 넣는 한 줄. 안 적으면 null */
@@ -132,71 +138,173 @@ export function 같은날같은값(perStudent: { date: string; pct: number }[][]
 }
 
 /**
- * 그 학습지 단원 이름이 **진도로 셀 수 있는 것**인가.
+ * 진도표의 과정 차례.
  *
- * 「전범위」·「오답학습지 (2026.11.16) 오답+유사 과제」 같은 이름은 **과정의 자리가 아니다.**
- * 전범위는 어느 단원까지 갔는지 말해 주지 않고, 오답 학습지는 이미 푼 단원을 다시 푸는 것이다.
- * 이걸 안 걸러내면 반 전체가 「전범위」를 나가고 있는 것으로 잡힌다 (2026-11-20 실제 데이터).
+ * ★ `concepts.grade` 에 **실제로 쓰이는 값**이어야 한다 — 고등은 「고1」이 아니라 과목명으로 적힌다.
+ *   app/teacher/curriculum/page.tsx 의 GRADE_ORDER 와 같은 줄이다.
  */
-export function 진도단원인가(unit: string | null | undefined): boolean {
-  const u = String(unit ?? '').trim()
-  if (!u) return false
-  return !/전범위|오답|유사|쌍둥이|모의|과제/.test(u)
-}
+const COURSE_ORDER = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중2모의고사', '중3', '중3모의고사', '공통수학1', '공통수학2', '대수', '미적분1', '확률과통계', '기하']
 
-/** 단원 이름 다듬기 — 띄어쓰기가 두 번 들어간 줄이 있다 (「정수와  유리수」) */
-export function 단원키(unit: string | null | undefined): string {
-  return String(unit ?? '').trim().replace(/\s+/g, ' ')
+/** '중1' + 2 → '중1-2' */
+export function 과정이름(grade: string | null | undefined, semester: number | null | undefined): string {
+  const g = String(grade ?? '').trim()
+  const s = Number(semester)
+  return Number.isFinite(s) && s > 0 ? `${g}-${s}` : g
 }
 
 /**
- * 반이 지금 나가는 단원 고르기.
+ * 과정을 줄 세우는 번호. **모르는 학년은 -1** 을 돌려준다 —
+ * 모르는 것을 0 으로 두면 「초1보다 뒤」가 되어 그 학생이 전부 「진도가 뒤」로 찍힌다.
+ */
+export function 과정번호(grade: string | null | undefined, semester: number | null | undefined): number {
+  const i = COURSE_ORDER.indexOf(String(grade ?? '').trim())
+  if (i < 0) return -1
+  const s = Number(semester)
+  return i * 10 + (Number.isFinite(s) && s > 0 ? Math.min(s, 9) : 0)
+}
+
+/**
+ * 보고서에 적을 반 진도 글.
+ *
+ * ★ 원장님이 적어 넣으신 글이 **먼저**다. 수업에서 지금 나가는 곳은 진도표보다 앞서 있을 수 있고,
+ *   그건 기계가 알 수 없다 (2026-11-20 학습지로 추정했다가 「1. 기본도형」으로 틀렸다 —
+ *   실제 반 진도는 중1-2 개념서 1회를 끝내고 유형서 2회독 중이었다).
+ */
+export function 반진도말(classLabel: string | null | undefined, course: string | null | undefined): string | null {
+  return String(classLabel ?? '').trim() || String(course ?? '').trim() || null
+}
+
+/** 진도표에서 읽은 한 과정의 자리 */
+export interface 진도자리 {
+  /** '중1-2' */
+  course: string
+  order: number
+  /** 「N회독 이상 끝낸 개념 수」. 회독이 높은 것부터 */
+  rounds: { round: number; done: number }[]
+  /** 그 과정의 전체 개념 수 */
+  total: number
+  /** 그 과정에서 본 교재 이름 */
+  books: string[]
+}
+
+/**
+ * 한 학생의 **진도표**를 과정별로 모은다. (원장님 2026-11-20
+ * 「지금 반진도는 중1-2 개념서 1회 끝내고 1-2 유형서로 2회독 중이야. 너 진도표는 안보니」)
+ *
+ * ★ **학습지가 아니라 진도표가 진도다.** 학습지 단원 이름으로 진도를 추정하면
+ *   틀린다 — 오답·전범위 학습지가 섞이고, 수업에서 나간 것이 학습지로 안 나올 수도 있다.
+ * ★ 같은 개념이 교재별로 여러 줄에 적히므로 **개념마다 가장 높은 회독만** 남긴다
+ *   (lib/curriculumProgress.ts 와 같은 규칙 — 두 곳이 갈리면 진도표 화면과 보고서가 다른 말을 한다).
+ * ★ 「N회독」은 **N회독 이상** 끝낸 개념 수다. 회독별로 따로 세면 3회독 한 개념이
+ *   1회독 칸에서 빠져 「1회독을 아직 안 끝냈다」가 된다.
+ */
+export function 진도모으기(
+  checks: { concept_id: string; check_count: number; student_textbook_id?: string | null }[],
+  concepts: { id: string; grade: string | null; semester: number | null }[],
+  books?: { id: string; textbook_name?: string | null; textbook_type?: string | null }[],
+): 진도자리[] {
+  const C = new Map(concepts.map((c) => [String(c.id), c]))
+  const B = new Map((books ?? []).map((b) => [String(b.id), b]))
+
+  // 그 과정의 전체 개념 수 (분모) — 기록이 아니라 **과정표**에서 센다
+  const 분모 = new Map<string, number>()
+  for (const c of concepts) {
+    const k = 과정이름(c.grade, c.semester)
+    분모.set(k, (분모.get(k) ?? 0) + 1)
+  }
+
+  const 개념최고 = new Map<string, number>()
+  const 과정교재 = new Map<string, Set<string>>()
+  for (const p of checks) {
+    const c = C.get(String(p.concept_id))
+    if (!c) continue
+    const n = Number(p.check_count)
+    if (!Number.isFinite(n) || n < 1) continue
+    const cur = 개념최고.get(String(p.concept_id)) ?? 0
+    if (n > cur) 개념최고.set(String(p.concept_id), n)
+    const k = 과정이름(c.grade, c.semester)
+    const b = p.student_textbook_id ? B.get(String(p.student_textbook_id)) : null
+    const 이름 = String(b?.textbook_name ?? '').trim()
+    if (이름) {
+      if (!과정교재.has(k)) 과정교재.set(k, new Set())
+      과정교재.get(k)!.add(이름)
+    }
+  }
+
+  const 과정별 = new Map<string, number[]>()
+  const 과정번호표 = new Map<string, number>()
+  for (const [conceptId, n] of 개념최고) {
+    const c = C.get(conceptId)!
+    const k = 과정이름(c.grade, c.semester)
+    if (!과정별.has(k)) 과정별.set(k, [])
+    과정별.get(k)!.push(n)
+    과정번호표.set(k, 과정번호(c.grade, c.semester))
+  }
+
+  const out: 진도자리[] = []
+  for (const [course, ns] of 과정별) {
+    const 최고 = Math.max(...ns)
+    const rounds: { round: number; done: number }[] = []
+    for (let n = 최고; n >= 1; n--) rounds.push({ round: n, done: ns.filter((v) => v >= n).length })
+    out.push({
+      course,
+      order: 과정번호표.get(course) ?? -1,
+      rounds,
+      total: 분모.get(course) ?? ns.length,
+      books: [...(과정교재.get(course) ?? [])],
+    })
+  }
+  return out.sort((a, b) => b.order - a.order)
+}
+
+/**
+ * 반이 지금 하고 있는 과정 — 고른 학생들 중 **과반**이 진도표에 기록을 가진 **가장 앞선** 과정.
  *
  * 반을 가르는 칸이 DB 에 없다. 그래서 **원장님이 그 번에 고른 학생들**을 한 반으로 본다
  * (보고서 링크를 만들 때 고르는 그 명단 — components/teacher/ScoreClassLinks.tsx).
  *
- * ★ **과반**이 최근에 푼 단원만 「반이 나가는 곳」으로 인정한다. 한두 명이 먼저 나간 단원을
- *   반의 진도로 치면 나머지 모두가 「느리다」고 찍힌다.
- * ★ 비기면 **더 최근**에 푼 단원.
- * ★ 돌려주는 것은 **단원 이름 하나**다. 누가 몇 명인지는 돌려주지 않는다 —
+ * ★ **과반**이 닿은 과정만 「반이 하는 곳」으로 인정한다. 한 명이 먼저 나간 과정을 반 진도로
+ *   치면 나머지 모두가 「뒤」로 찍힌다.
+ * ★ 돌려주는 것은 **과정 이름 하나**다. 누가 몇 명인지는 돌려주지 않는다 —
  *   보고서에 순위·반 평균은 넣지 않는다 (docs/S코어반_유지기준.md 7번).
  */
-export function 반단원고르기(
-  perStudent: { unit: string; date: string }[][],
-): string | null {
-  const 사람수 = new Map<string, Set<number>>()
-  const 마지막 = new Map<string, string>()
+export function 반과정고르기(perStudent: 진도자리[][]): { course: string; order: number } | null {
+  const 누구 = new Map<string, Set<number>>()
+  const 번호 = new Map<string, number>()
   perStudent.forEach((rows, i) => {
     for (const r of rows) {
-      if (!진도단원인가(r.unit)) continue
-      const k = 단원키(r.unit)
-      if (!사람수.has(k)) 사람수.set(k, new Set())
-      사람수.get(k)!.add(i)
-      if (!마지막.has(k) || r.date > 마지막.get(k)!) 마지막.set(k, r.date)
+      if (r.order < 0) continue
+      if (!누구.has(r.course)) 누구.set(r.course, new Set())
+      누구.get(r.course)!.add(i)
+      번호.set(r.course, r.order)
     }
   })
   const 과반 = Math.floor(perStudent.length / 2) + 1
-  let best: string | null = null
-  for (const [k, who] of 사람수) {
+  let best: { course: string; order: number } | null = null
+  for (const [c, who] of 누구) {
     if (who.size < 과반) continue
-    if (!best) { best = k; continue }
-    const a = who.size, b = 사람수.get(best)!.size
-    if (a > b || (a === b && (마지막.get(k) ?? '') > (마지막.get(best) ?? ''))) best = k
+    const o = 번호.get(c)!
+    if (!best || o > best.order) best = { course: c, order: o }
   }
   return best
 }
 
 /**
- * 반 단원을 아직 안 풀었나.
+ * 반 과정보다 **앞 과정**에 있나 (= 진도가 뒤).
  *
- * ★ **자료가 없으면 「뒤에 있다」고 하지 않는다.** 아직 안 적힌 것과 못 따라가는 것은 다르다.
- *   이 한 줄을 빼면 최근 8주에 학습지 기록이 없는 학생이 전부 「진도가 뒤」로 찍힌다.
+ * ★ **진도표에 기록이 없으면 「뒤에 있다」고 하지 않는다.** 아직 안 적힌 것과 못 따라가는 것은 다르다.
+ *   이 한 줄을 빼면 진도표가 비어 있는 학생이 전부 「진도가 뒤」로 찍힌다.
  *   (그래서 build 안에 두지 않고 꺼냈다 — 안에 있으면 망가뜨려도 검사가 통과했다. 2026-11-20)
+ * ★ 같은 과정 안에서 회독이 덜 돌았다고 「뒤」라고 하지 않는다 — 한 과정은 몇 달에 걸쳐 돌고,
+ *   회독은 교재 배정 시점에 따라 들쭉날쭉하다. **과정이 갈릴 때만** 말한다.
  */
-export function 진도뒤인가(반단원: string | null | undefined, 내단원: string[]): boolean {
-  if (!반단원) return false
-  if (!내단원.length) return false
-  return !내단원.includes(단원키(반단원))
+export function 진도뒤인가(반: { order: number } | null | undefined, 내: 진도자리[]): boolean {
+  if (!반) return false
+  // 빈 진도표는 **-1** 이다. 0 으로 두면 「초1보다 뒤」가 되어 그 학생이 「진도가 뒤」로 찍힌다.
+  // (`Math.max()` 는 빈 배열에 -Infinity 를 준다 — 그래서 빗장 하나로 두 경우를 다 막는다)
+  const 내최고 = 내.length ? Math.max(...내.map((r) => r.order)) : -1
+  if (내최고 < 0) return false
+  return 내최고 < 반.order
 }
 
 export interface ImproveItem {
@@ -236,7 +344,7 @@ export function 보완점뽑기(d: ScoreClassReport): Improve {
   //   아예 안 들어 있어서, 없는 줄 모르고 읽으면 **학부모 화면이 하얗게 뜬다.**
   //   보내 드린 링크는 그대로 살아 있어야 한다.
   const 성취 = d.achievement ?? { low: [], recent: null, before: null }
-  const 진도 = d.pace ?? { classUnit: null, mine: null, behind: false }
+  const 진도 = d.pace ?? { classUnit: null, course: null, mine: null, behind: false }
   const 약한단원 = d.weak ?? []
   const 목록있음 = 약한단원.length > 0
 
@@ -264,11 +372,11 @@ export function 보완점뽑기(d: ScoreClassReport): Improve {
   //      순위도 반 평균도 쓰지 않는다 — 수업 계획표에 적힌 자리를 그대로 알려 드리는 꼴이다.
   if (진도.behind && 진도.classUnit) items.push({
     key: 'pace',
-    title: `${선행} 과정 진도 메우기`,
-    fact: `반은 지금 「${진도.classUnit}」을 나가고 있습니다.`
-      + (진도.mine ? ` 최근 8주에 푼 ${선행} 학습지는 「${진도.mine}」 범위입니다.` : ''),
-    todo: '앞 단원을 한 번 더 다지는 중이라 진도가 뒤에 있습니다. '
-      + '전 범위 평가는 반이 함께 보므로, 남은 단원을 메우는 것이 먼저입니다. '
+    title: '반 진도 따라가기',
+    fact: `반 진도는 「${진도.classUnit}」입니다.`
+      + (진도.mine ? ` 진도표에 적힌 지금 자리는 「${진도.mine}」입니다.` : ''),
+    todo: '앞 과정을 한 번 더 다지는 중입니다. 전 범위 평가는 반이 함께 보므로, '
+      + (진도.course ? `${진도.course} 과정을 메우는 것이 먼저입니다. ` : '남은 과정을 메우는 것이 먼저입니다. ')
       + '못 넘은 단원은 재학습 과제로 따로 드립니다.',
   })
 
@@ -416,7 +524,15 @@ const 날 = (v: any) => String(v ?? '').slice(0, 10)
 
 export async function buildScoreClassReport(
   db: DB, studentId: string, from: string, to: string,
-  opts?: { classUnit?: string | null; skipDates?: string[] },
+  opts?: {
+    /** 원장님이 적어 넣으신 반 진도 글. 안 적으시면 과정 이름을 쓴다 */
+    classLabel?: string | null
+    /** 반이 하는 과정 — 고른 학생 전체를 보고 **한 번만** 구해서 넘긴다 */
+    classCourse?: { course: string; order: number } | null
+    /** 과정표 — 학생마다 926행을 다시 읽지 않게 넘겨 받는다 */
+    concepts?: { id: string; grade: string | null; semester: number | null }[]
+    skipDates?: string[]
+  },
 ): Promise<ScoreClassReport> {
   const { data: st } = await db.from('students')
     .select('id, name, grade, school, teacher_name').eq('id', studentId).maybeSingle()
@@ -432,8 +548,18 @@ export async function buildScoreClassReport(
     .eq('student_id', studentId).gte('created_at', from).lte('created_at', to + 'T23:59:59').order('id'))
 
   const books = await all(() => db.from('student_textbooks')
-    .select('textbook_name, grade, semester, status, assigned_at')
+    .select('id, textbook_name, textbook_type, grade, semester, status, assigned_at')
     .eq('student_id', studentId).order('assigned_at'))
+
+  // ── 진도표 (원장님 2026-11-20 「너 진도표는 안보니」)
+  //    ★ 구간(from~to)으로 자르지 않는다. 진도는 「올해 몇 건 풀었나」가 아니라
+  //      **지금 어디까지 왔나**다. 작년에 끝낸 과정도 지금 자리를 말해 준다.
+  const checks = await all(() => db.from('progress_checks')
+    .select('concept_id, check_count, student_textbook_id')
+    .eq('student_id', studentId).order('id'))
+  const concepts = opts?.concepts ?? await all(() => db.from('concepts')
+    .select('id, grade, semester').order('id'))
+  const 내진도 = 진도모으기(checks as any, concepts as any, books as any)
 
   const exams = await all(() => db.from('exams')
     .select('exam_date, exam_type, title, unit_name, score, total_score')
@@ -530,16 +656,23 @@ export async function buildScoreClassReport(
       }
     })(),
     pace: (() => {
-      const 반단원 = opts?.classUnit ? 단원키(opts.classUnit) : null
-      const 내최근 = 최근.filter(선행).filter((r) => 진도단원인가(r.unit_name ?? r.unit))
-        .sort((a, b) => 날(b.submitted_at).localeCompare(날(a.submitted_at)))
-      const 내단원 = [...new Set(내최근.map((r) => 단원키(r.unit_name ?? r.unit)))]
+      const 반 = opts?.classCourse ?? null
+      const 앞자리 = 내진도[0] ?? null
+      const 내자리말 = 앞자리
+        ? `${앞자리.course} ${앞자리.rounds[0]?.round ?? 1}회독`
+        : null
       return {
-        classUnit: 반단원,
-        mine: 내단원[0] ?? null,
-        behind: 진도뒤인가(반단원, 내단원),
+        classUnit: 반진도말(opts?.classLabel, 반?.course),
+        course: 반?.course ?? null,
+        mine: 내자리말,
+        behind: 진도뒤인가(반, 내진도),
       }
     })(),
+    progress: {
+      classLabel: 반진도말(opts?.classLabel, opts?.classCourse?.course),
+      // 오래된 과정까지 다 실으면 학부모께 읽을 것이 너무 많아진다 — **앞선 세 과정**만
+      courses: 내진도.slice(0, 3),
+    },
     improve: { items: [], thin: [] },
     teacherNote: null,
     madeAt: new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10),

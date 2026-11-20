@@ -40,6 +40,9 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
   const [hint, setHint] = useState('')
   // 학생마다 원장님이 적어 넣는 한 줄. 적지 않으면 보고서에 그 칸이 안 나온다.
   const [notes, setNotes] = useState<Record<string, string>>({})
+  // 반 진도 — 원장님이 직접 적으신다. 수업에서 지금 나가는 곳은 진도표보다 앞서 있을 수 있고
+  // 그건 기계가 알 수 없다 (2026-11-20 학습지로 추정했다가 틀렸다).
+  const [classProgress, setClassProgress] = useState('')
 
   useEffect(() => { if (ready) load() }, [ready])
 
@@ -86,7 +89,7 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
     try {
       const res = await apiFetch('/api/score-class-report', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentIds: picked, from, to, notes }),
+        body: JSON.stringify({ studentIds: picked, from, to, notes, classProgress }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j?.error ?? '만들지 못했어요')
@@ -140,6 +143,19 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
             className="px-3 py-2 border border-gray-200 rounded-xl" />
           <span className="text-[11px] text-gray-400">기본은 올해 1월 1일부터 오늘까지예요.</span>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <label className="block text-xs font-bold text-gray-700 mb-1">
+            반 진도 <span className="font-normal text-gray-400">— 수업에서 지금 나가고 있는 곳</span>
+          </label>
+          <input value={classProgress} onChange={(e) => setClassProgress(e.target.value)} maxLength={60}
+            placeholder="예) 중1-2 개념서 1회 끝, 중1-2 유형서 2회독 중"
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+          <p className="mt-1 text-[11px] text-gray-500 leading-relaxed">
+            적으신 글이 보고서의 「진도」 칸과 「보완해야 할 점」에 그대로 나갑니다.
+            비워 두면 <b>진도표에서 과반이 닿은 과정</b>을 적습니다 — 수업 진도가 진도표보다 앞서 있으면
+            여기 적어 주세요.
+          </p>
         </div>
       </section>
 

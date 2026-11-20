@@ -11,7 +11,8 @@ import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import {
   isAhead, aheadCourseOf, isCoreKind, 평가모으기, buildScoreClassReport,
-  진도단원인가, 단원키, 반단원고르기, 진도뒤인가, 같은날같은값, 보완점뽑기, 문턱, type ScoreClassReport,
+  과정이름, 과정번호, 진도모으기, 반과정고르기, 진도뒤인가, 반진도말, 같은날같은값, 보완점뽑기, 문턱,
+  type ScoreClassReport, type 진도자리,
 } from '../lib/scoreClassReport.ts'
 
 let bad = 0
@@ -118,6 +119,12 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
     'X 학부모께 가는 보고서에 반을 정하는 말을 넣지 않는다 (원장님 2026-11-19 「기록만 넣고」)'.slice(2))
   ok(/보완해야 할 점/.test(view), '보완해야 할 점이 보고서에 있어야 한다 (원장님 2026-11-20)')
   ok(/teacherNote/.test(view), '원장님이 적어 넣으신 한 줄을 실어야 한다')
+  // 2026-11-20 — 원장님 「진도도 보고서에 나오게 해줘」
+  ok(/진도/.test(view) && /회독/.test(view), '진도(회독)가 보고서에 나와야 한다 (원장님 2026-11-20)')
+  ok(/d\.progress \?\?/.test(view),
+    'X 옛 링크 스냅샷에는 progress 칸이 없다 — 없는 줄 모르고 읽으면 학부모 화면이 하얗게 뜬다'.slice(2))
+  ok(/'#3b82f6'/.test(view) && /'#22c55e'/.test(view) && /'#ef4444'/.test(view),
+    'X 회독 색은 진도표 화면과 같아야 한다 (1회독 파랑 · 2회독 초록 · 3회독 빨강)'.slice(2))
 
   // ★ 2026-11-20 부터 따로 있던 메뉴가 아니라 **보고서 화면의 탭**이다 (원장님 지시).
   //   탭이 화면에서 **원장님께만** 보여야 하고, 옛 주소가 남아 있으면 안 된다.
@@ -135,55 +142,137 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
   ok(!manual.includes('/teacher/reports/s-core'), '매뉴얼에 옛 주소가 남아 있으면 안 된다')
   ok(/S코어반 기록/.test(manual), '사용 매뉴얼에 적어야 한다 — 선생님들이 이걸 보고 일한다')
 
+  // 반 진도는 **원장님이 적으신다** — 수업 진도는 진도표보다 앞서 있을 수 있고 기계는 모른다
+  //   (2026-11-20 학습지로 추정했다가 「1. 기본도형」으로 틀렸다)
+  const api2 = 주석뺀(fs.readFileSync('app/api/score-class-report/route.ts', 'utf8'))
+  ok(/classProgress/.test(api2), '반 진도를 원장님이 적어 넣을 수 있어야 한다')
+  ok(/progress_checks/.test(api2) && /concepts/.test(api2),
+    'X 진도는 **진도표**에서 읽어야 한다 — 학습지 단원 이름으로 추정하면 틀린다'.slice(2))
+  ok(!/student_worksheets[^\n]*unit_name[^\n]*in\('student_id'/.test(api2),
+    'X 반 진도를 학습지에서 뽑던 길이 남아 있으면 안 된다'.slice(2))
+
   const links = 주석뺀(fs.readFileSync('components/teacher/ScoreClassLinks.tsx', 'utf8'))
+  ok(/useState/.test(links) && /classProgress/.test(links), '링크 만드는 화면에 반 진도 칸이 있어야 한다')
+  ok(/JSON\.stringify\(\{[^}]*classProgress/.test(links),
+    'X 반 진도가 **실제로 보내져야** 한다 — 칸만 있고 안 보내면 원장님이 적으신 글이 조용히 버려진다'.slice(2))
   ok(!/sendAlimtalk|sendSmsViaOps|sendPush/.test(links),
     'X 이 화면은 아무것도 보내지 않는다 — 보내는 것은 원장님이 직접 하신다'.slice(2))
 }
 
 // ④ 보완해야 할 점 (원장님 2026-11-20 「각 학생들거 보고서 나갈때 보완해야 할점 이런거 써주면 좋을듯」)
 {
-  // ④-1 진도로 셀 수 있는 단원인가 — 이걸 안 걸러내면 **반 전체가 「전범위」를 나가는 것**이 된다
-  ok(진도단원인가('1. 기본도형'), '단원 이름은 진도로 센다')
-  ok(!진도단원인가('전범위'), '「전범위」는 어느 단원까지 갔는지 말해 주지 않는다')
-  ok(!진도단원인가('오답학습지 (2026.11.16) 오답+유사 과제'), '오답 학습지는 이미 푼 단원을 다시 푸는 것이다')
-  ok(!진도단원인가('') && !진도단원인가(null), '단원이 안 적힌 줄은 진도로 세지 않는다')
-  ok(단원키('2. 정수와  유리수') === '2. 정수와 유리수', '띄어쓰기가 두 번 들어간 단원 이름을 같은 것으로 본다')
+  // ④-1 진도는 **진도표**에서 읽는다 (원장님 2026-11-20 「너 진도표는 안보니」).
+  //      학습지 단원 이름으로 추정했다가 반 진도를 「1. 기본도형」으로 잡았는데,
+  //      실제 반 진도는 **중1-2 개념서 1회를 끝내고 유형서 2회독 중**이었다.
+  ok(과정이름('중1', 2) === '중1-2', '과정 이름은 「학년-학기」다')
+  ok(과정이름('중1', null) === '중1', '학기를 모르면 학년만 적는다')
+  ok(과정번호('중1', 2) > 과정번호('중1', 1), '같은 학년에서는 2학기가 뒤다')
+  ok(과정번호('중1', 1) > 과정번호('초6', 2), '중1-1 은 초6-2 보다 뒤다')
+  ok(과정번호('공통수학1', 1) > 과정번호('중3', 2), '고등 과목은 중3 보다 뒤다 (고등은 과목명으로 적힌다)')
+  ok(과정번호('중등', 1) === -1,
+    'X 학년 이름이 아닌 글자는 -1 이다 — 0 으로 두면 「초1보다 뒤」가 되어 전부 「진도가 뒤」로 찍힌다'.slice(2))
 
-  // ④-2 반이 나가는 단원 — 2026-11-20 운영 데이터 모양 그대로 (6명 중 4명이 기본도형)
-  const 반 = [
-    [{ unit: '전범위', date: '2026-11-18' }, { unit: '1. 기본도형', date: '2026-11-18' }],
-    [{ unit: '전범위', date: '2026-10-30' }, { unit: '1. 기본도형', date: '2026-11-06' }],
-    [{ unit: '전범위', date: '2026-11-18' }, { unit: '1. 기본도형', date: '2026-11-18' }],
-    [{ unit: '전범위', date: '2026-11-18' }, { unit: '1. 기본도형', date: '2026-11-18' }],
-    [{ unit: '1. 문자의 사용과 식의 계산', date: '2026-11-11' }, { unit: '전범위', date: '2026-11-18' }],
-    [{ unit: '1. 문자의 사용과 식의 계산', date: '2026-11-06' }, { unit: '전범위', date: '2026-11-18' }],
-  ]
-  ok(반단원고르기(반) === '1. 기본도형',
-    `과반이 푼 단원을 반 진도로 본다 (지금 ${반단원고르기(반)})`)
+  // ④-1-2 진도 모으기 — 2026-11-20 운영 데이터 모양 (중1-2 48개 중 11개가 2회독)
+  {
+    const concepts = [
+      ...Array.from({ length: 48 }, (_, i) => ({ id: 'b' + i, grade: '중1', semester: 2 })),
+      ...Array.from({ length: 60 }, (_, i) => ({ id: 'a' + i, grade: '중1', semester: 1 })),
+    ]
+    const books = [
+      { id: 'T1', textbook_name: '개념+유형라이트', textbook_type: '개념서' },
+      { id: 'T2', textbook_name: '쎈', textbook_type: '유형서' },
+    ]
+    const checks = [
+      // 개념서로 48개 1회독
+      ...Array.from({ length: 48 }, (_, i) => ({ concept_id: 'b' + i, check_count: 1, student_textbook_id: 'T1' })),
+      // 유형서로 앞 11개를 2회독
+      ...Array.from({ length: 11 }, (_, i) => ({ concept_id: 'b' + i, check_count: 2, student_textbook_id: 'T2' })),
+    ]
+    const got = 진도모으기(checks, concepts, books)
+    ok(got.length === 1 && got[0].course === '중1-2', `진도표에서 과정을 읽는다 (지금 ${got.map((g) => g.course).join(',')})`)
+    const r1 = got[0].rounds.find((r) => r.round === 1)
+    const r2 = got[0].rounds.find((r) => r.round === 2)
+    ok(r1?.done === 48,
+      `X 「1회독」은 **1회독 이상** 끝낸 개념 수다 — 회독별로 따로 세면 2회독 한 개념이 1회독에서 빠진다 (지금 ${r1?.done})`.slice(2))
+    ok(r2?.done === 11, `2회독 이상 끝낸 개념은 11개다 (지금 ${r2?.done})`)
+    ok(got[0].total === 48,
+      `X 분모는 **과정표**에서 센다 — 기록 수로 세면 덜 푼 학생이 100% 로 보인다 (지금 ${got[0].total})`.slice(2))
+    ok(got[0].books.join(' · ') === '개념+유형라이트 · 쎈', '그 과정에서 본 교재 이름을 모은다')
 
-  // ★ 망가뜨려 시험 — 「전범위」를 걸러내지 않으면 여섯 명 모두가 푼 「전범위」가 반 진도가 된다.
-  //   그러면 아무도 「뒤에 있다」로 안 잡혀 진도 줄이 영원히 안 나온다.
-  ok(반단원고르기([
-    [{ unit: '전범위', date: '2026-11-18' }],
-    [{ unit: '전범위', date: '2026-11-18' }],
-    [{ unit: '전범위', date: '2026-11-18' }],
-  ]) === null, '「전범위」만 있으면 반 진도를 정하지 않는다')
+    // 같은 개념이 교재별로 여러 줄에 적힌다 — **가장 높은 회독만** 남겨야 한다
+    const 두줄 = 진도모으기([
+      { concept_id: 'b0', check_count: 1, student_textbook_id: 'T1' },
+      { concept_id: 'b0', check_count: 3, student_textbook_id: 'T2' },
+    ], concepts, books)
+    ok(두줄[0].rounds.find((r) => r.round === 1)?.done === 1,
+      'X 같은 개념이 교재별로 두 줄이어도 개념 하나로 센다'.slice(2))
+    ok(두줄[0].rounds.find((r) => r.round === 3)?.done === 1, '개념마다 가장 높은 회독을 남긴다')
+    const 거꾸로 = 진도모으기([
+      { concept_id: 'b0', check_count: 3, student_textbook_id: 'T2' },
+      { concept_id: 'b0', check_count: 1, student_textbook_id: 'T1' },
+    ], concepts, books)
+    ok(거꾸로[0].rounds.find((r) => r.round === 3)?.done === 1,
+      'X 줄 순서가 거꾸로여도 가장 높은 회독을 남긴다 — 마지막 줄을 쓰면 회독이 깎인다'.slice(2))
 
-  // 한두 명이 먼저 나간 단원은 반 진도가 아니다 — 그러면 나머지 모두가 「느리다」로 찍힌다
-  ok(반단원고르기([
-    [{ unit: '2. 원과 부채꼴', date: '2026-11-18' }],
-    [{ unit: '1. 기본도형', date: '2026-11-18' }],
-    [{ unit: '1. 기본도형', date: '2026-11-18' }],
-    [{ unit: '1. 문자의 사용과 식의 계산', date: '2026-11-18' }],
-  ]) === null, '과반이 안 되면 반 진도를 정하지 않는다 (4명 중 2명)')
+    // 앞선 과정이 먼저 나와야 한다 — 학부모 화면이 「중1-2 → 중1-1」 차례로 읽힌다
+    const 섞인 = 진도모으기([
+      { concept_id: 'a0', check_count: 2, student_textbook_id: null },
+      { concept_id: 'b0', check_count: 1, student_textbook_id: null },
+    ], concepts)
+    ok(섞인[0].course === '중1-2', `앞선 과정이 먼저다 (지금 ${섞인.map((g) => g.course).join(',')})`)
+  }
 
-  // ④-2-2 뒤에 있다고 말할 수 있는 때 — **자료가 없으면 말하지 않는다**
-  ok(진도뒤인가('1. 기본도형', ['1. 문자의 사용과 식의 계산']), '반 단원을 안 풀었으면 뒤에 있는 것이다')
-  ok(!진도뒤인가('1. 기본도형', ['1. 기본도형', '전범위']), '반 단원을 풀었으면 뒤에 있는 것이 아니다')
-  ok(!진도뒤인가('1. 기본도형', []),
-    'X 최근 8주 기록이 없으면 뒤에 있다고 하지 않는다 — 안 적힌 것과 못 따라가는 것은 다르다'.slice(2))
-  ok(!진도뒤인가(null, ['1. 문자의 사용과 식의 계산']), '반 진도를 모르면 뒤에 있다고 하지 않는다')
-  ok(!진도뒤인가('2. 정수와  유리수', ['2. 정수와 유리수']), '띄어쓰기만 다른 단원은 같은 것으로 본다')
+  // ④-2 반이 하는 과정 — 2026-11-20 운영 데이터 모양 (여섯 명 중 **다섯 명**이 중1-2, 한 명은 중1-1)
+  const 자리 = (course: string, order: number): 진도자리 =>
+    ({ course, order, rounds: [{ round: 1, done: 1 }], total: 48, books: [] })
+  const 중1_1 = 과정번호('중1', 1)
+  const 중1_2 = 과정번호('중1', 2)
+  {
+    const 반 = [
+      [자리('중1-2', 중1_2), 자리('중1-1', 중1_1)],
+      [자리('중1-2', 중1_2), 자리('중1-1', 중1_1)],
+      [자리('중1-2', 중1_2), 자리('중1-1', 중1_1)],
+      [자리('중1-2', 중1_2), 자리('중1-1', 중1_1)],
+      [자리('중1-2', 중1_2), 자리('중1-1', 중1_1)],
+      [자리('중1-1', 중1_1)],
+    ]
+    ok(반과정고르기(반)?.course === '중1-2',
+      `과반이 닿은 **가장 앞선** 과정을 반 진도로 본다 (지금 ${반과정고르기(반)?.course})`)
+  }
+
+  // 한두 명이 먼저 나간 과정은 반 진도가 아니다 — 그러면 나머지 모두가 「뒤」로 찍힌다
+  ok(반과정고르기([
+    [자리('중2-1', 과정번호('중2', 1)), 자리('중1-2', 중1_2)],
+    [자리('중1-2', 중1_2)],
+    [자리('중1-2', 중1_2)],
+    [자리('중1-1', 중1_1)],
+  ])?.course === '중1-2', '한 명만 닿은 중2-1 은 반 진도가 아니다')
+  ok(반과정고르기([
+    [자리('중1-2', 중1_2)],
+    [자리('중1-1', 중1_1)],
+  ]) === null, '과반이 안 되면 반 진도를 정하지 않는다 (2명이 서로 다른 과정)')
+  ok(반과정고르기([[], [], []]) === null, '진도표가 비어 있으면 반 진도를 정하지 않는다')
+  ok(반과정고르기([
+    [자리('중등', -1)], [자리('중등', -1)], [자리('중등', -1)],
+  ]) === null, '학년 이름이 아닌 과정은 반 진도로 삼지 않는다')
+
+  // ④-2-2 뒤에 있다고 말할 수 있는 때 — **진도표가 비어 있으면 말하지 않는다**
+  ok(진도뒤인가({ order: 중1_2 }, [자리('중1-1', 중1_1)]), '반 과정보다 앞 과정에 있으면 뒤에 있는 것이다')
+  ok(!진도뒤인가({ order: 중1_2 }, [자리('중1-2', 중1_2), 자리('중1-1', 중1_1)]),
+    '반 과정에 닿아 있으면 뒤에 있는 것이 아니다')
+  ok(!진도뒤인가({ order: 중1_2 }, [자리('중2-1', 과정번호('중2', 1))]), '반보다 앞서 있으면 뒤가 아니다')
+  ok(!진도뒤인가({ order: 중1_2 }, []),
+    'X 진도표에 기록이 없으면 뒤에 있다고 하지 않는다 — 안 적힌 것과 못 따라가는 것은 다르다'.slice(2))
+  ok(!진도뒤인가(null, [자리('중1-1', 중1_1)]), '반 진도를 모르면 뒤에 있다고 하지 않는다')
+  ok(!진도뒤인가({ order: 중1_2 }, [자리('중등', -1)]),
+    'X 학년을 못 읽은 과정만 있으면 뒤에 있다고 하지 않는다'.slice(2))
+
+  // ④-2-3 반 진도 글 — **원장님이 적으신 글이 먼저다**
+  ok(반진도말('중1-2 개념서 1회 끝, 유형서 2회독 중', '중1-2') === '중1-2 개념서 1회 끝, 유형서 2회독 중',
+    'X 원장님이 적으신 반 진도 글이 **그대로** 나가야 한다 — 수업 진도는 진도표보다 앞설 수 있다'.slice(2))
+  ok(반진도말('', '중1-2') === '중1-2', '안 적으시면 진도표에서 구한 과정 이름을 쓴다')
+  ok(반진도말('   ', '중1-2') === '중1-2', '빈칸만 적으신 것은 안 적으신 것으로 본다')
+  ok(반진도말(null, null) === null, '둘 다 없으면 null — 그러면 진도 줄이 아예 안 나온다')
 
   // ④-2-3 한꺼번에 적힌 날 — 2026-11-02 에 여섯 명 **전원**의 성취도가 0% 였다.
   //        사람이 한 명씩 보고 적은 값이 전원 똑같을 수는 없다. 그대로 두면 학부모 네 분이 본다.
@@ -221,7 +310,8 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
     books: { done: [], current: null },
     exams: [],
     achievement: { low: [], recent: 100, before: 100 },
-    pace: { classUnit: null, mine: null, behind: false },
+    pace: { classUnit: null, course: null, mine: null, behind: false },
+    progress: { classLabel: null, courses: [] },
     improve: { items: [], thin: [] },
     teacherNote: null,
     madeAt: '2026-11-20',
@@ -230,17 +320,21 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
 
   ok(키들(빈보고서).length === 0, `기준을 다 넘으면 보완점이 없어야 한다 (지금 ${키들(빈보고서).join(',')})`)
 
-  // 진도 — 반 단원을 안 푼 학생 (2026-11-20 에 여섯 명 중 두 명이 이 모양이었다)
-  const 뒤 = { ...빈보고서, pace: { classUnit: '1. 기본도형', mine: '1. 문자의 사용과 식의 계산', behind: true } }
-  ok(키들(뒤).includes('pace'), '반이 나간 단원을 안 풀었으면 진도 줄이 나와야 한다')
+  // 진도 — 반 과정에 아직 못 닿은 학생 (2026-11-20 에 여섯 명 중 한 명이 이 모양이었다)
+  const 뒤 = { ...빈보고서, pace: {
+    classUnit: '중1-2 개념서 1회 끝, 중1-2 유형서 2회독 중', course: '중1-2', mine: '중1-1 2회독', behind: true } }
+  ok(키들(뒤).includes('pace'), '반 과정에 못 닿았으면 진도 줄이 나와야 한다')
   const 진도줄 = 보완점뽑기(뒤).items.find((x) => x.key === 'pace')!
-  ok(진도줄.fact.includes('1. 기본도형'), '진도 줄에 반이 나가는 단원이 적혀야 한다')
+  ok(진도줄.fact.includes('중1-2 유형서 2회독 중'),
+    'X 원장님이 적어 넣으신 반 진도 글이 **그대로** 보고서에 나가야 한다'.slice(2))
+  ok(진도줄.fact.includes('중1-1 2회독'), '진도 줄에 그 학생이 가 있는 자리가 적혀야 한다')
+  ok(진도줄.todo.includes('중1-2'), '메워야 할 과정이 적혀야 한다')
   ok(!/느리|뒤처|다른 학생|친구들|평균보다/.test(진도줄.fact + 진도줄.todo),
     'X 진도 줄에 다른 학생과 견주는 말을 쓰지 않는다 (원장님 2026-11-20 「좀 돌려서 써줘」)'.slice(2))
 
-  // ★ 자료가 없으면 뒤에 있다고 하지 않는다 — 안 적힌 것과 못 따라가는 것은 다르다
-  ok(!키들({ ...빈보고서, pace: { classUnit: '1. 기본도형', mine: null, behind: false } }).includes('pace'),
-    '최근 8주 기록이 없으면 진도 줄을 넣지 않는다')
+  // ★ 진도표가 비어 있으면 뒤에 있다고 하지 않는다 — 안 적힌 것과 못 따라가는 것은 다르다
+  ok(!키들({ ...빈보고서, pace: { classUnit: '중1-2', course: '중1-2', mine: null, behind: false } }).includes('pace'),
+    '진도표에 기록이 없으면 진도 줄을 넣지 않는다')
 
   // 성취도 — 반 전체가 같은 날 0% 로 적힌 일이 있었다. **한 번뿐이면 넣지 않는다**
   ok(!키들({ ...빈보고서, achievement: { low: [{ date: '2026-11-02', pct: 0 }], recent: 96, before: 100 } })
@@ -270,7 +364,7 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
   // 반을 정하는 말이 보완점에 섞이지 않는지
   const 다섞임 = {
     ...빈보고서,
-    pace: { classUnit: '1. 기본도형', mine: '1. 문자의 사용과 식의 계산', behind: true },
+    pace: { classUnit: '중1-2 유형서 2회독 중', course: '중1-2', mine: '중1-1 2회독', behind: true },
     lessons: { total: 51, onTime: 40, late: 2, absent: 9 },
     homework: { done: 30, total: 48, pct: 62.5 },
     ahead: { count: 29, avg: 67.8, passed: 15, recent8w: { count: 18, avg: 70 } },
@@ -286,6 +380,7 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
     const 옛링크: any = { ...빈보고서 }
     delete 옛링크.achievement
     delete 옛링크.pace
+    delete 옛링크.progress
     delete 옛링크.improve
     delete 옛링크.teacherNote
     let 터짐: string | null = null
@@ -315,6 +410,17 @@ for (const f of ['.env' + '.local', '.env']) {
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
   }
 }
+/** 1000행 벽을 넘겨 전부 읽는다 (route.ts 와 같은 규칙) */
+async function 전부(make: () => any): Promise<any[]> {
+  const out: any[] = []
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await make().range(i, i + 999)
+    if (error) throw new Error(error.message)
+    out.push(...(data ?? []))
+    if ((data ?? []).length < 1000) return out
+  }
+}
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!url || !key) {
@@ -363,6 +469,57 @@ if (!url || !key) {
     ok(r.own.count === 18, `홍채은 현 학년 범위는 18건이어야 한다 (지금 ${r.own.count})`)
     ok(r.lessons.absent === 9, `홍채은 결석은 9회여야 한다 (지금 ${r.lessons.absent})`)
     ok(r.homework.done === 33, `홍채은 숙제는 33회여야 한다 (지금 ${r.homework.done})`)
+  }
+
+  // ★ 진도 — **진도표**에서 읽는지 (원장님 2026-11-20 「너 진도표는 안보니」).
+  //   학습지 단원으로 추정했을 때는 반 진도가 「1. 기본도형」으로 나왔다. 실제 반 진도는
+  //   **중1-2 개념서 1회를 끝내고 유형서 2회독 중**이다. 이름은 적지 않는다 — 명수로만 센다.
+  {
+    const ids = 명단.map((s) => s.id)
+    const concepts = await 전부(() => db.from('concepts').select('id, grade, semester').order('id'))
+    const checks = await 전부(() => db.from('progress_checks')
+      .select('student_id, concept_id, check_count, student_textbook_id').in('student_id', ids).order('id'))
+    ok(checks.length > 1000,
+      `X 진도표가 1000행에서 잘렸다 — 쪽을 넘겨 읽어야 한다 (지금 ${checks.length}행)`.slice(2))
+
+    const 사람별 = ids.map((id) =>
+      진도모으기(checks.filter((c: any) => String(c.student_id) === String(id)) as any, concepts as any))
+    const 반 = 반과정고르기(사람별)
+    ok(반?.course === '중1-2', `반 진도는 진도표에서 중1-2 로 나와야 한다 (지금 ${반?.course})`)
+
+    const 뒤인사람 = 사람별.filter((내) => 진도뒤인가(반, 내)).length
+    ok(뒤인사람 === 1, `진도가 반보다 뒤인 학생은 1명이어야 한다 (지금 ${뒤인사람}명)`)
+
+    // 중1-2 에 닿은 학생은 1회독을 48개까지 센다 (분모는 과정표에서 — 48개)
+    const 중1_2들 = 사람별.map((내) => 내.find((c) => c.course === '중1-2')).filter(Boolean) as any[]
+    ok(중1_2들.length === 명단.length - 1, `중1-2 에 닿은 학생은 ${명단.length - 1}명이어야 한다 (지금 ${중1_2들.length}명)`)
+    ok(중1_2들.every((c) => c.total === 48), `중1-2 과정 개념은 48개다 (지금 ${[...new Set(중1_2들.map((c) => c.total))].join(',')})`)
+    ok(중1_2들.some((c) => c.rounds.some((r: any) => r.round >= 2)),
+      '중1-2 를 2회독 중인 학생이 있어야 한다 (반 진도가 유형서 2회독이다)')
+    const 한바퀴 = 중1_2들.filter((c) => (c.rounds.find((r: any) => r.round === 1)?.done ?? 0) === 48).length
+    ok(한바퀴 >= 4, `중1-2 를 1회독 끝낸 학생이 과반이어야 한다 (지금 ${한바퀴}명)`)
+  }
+
+  // 보고서에 진도 칸이 실제로 들어가는지
+  for (const st of 명단) {
+    const r = await buildScoreClassReport(db as any, st.id, 올해.from, 올해.to)
+    ok(r.progress.courses.length > 0, `${st.name} 보고서에 진도가 비어 있다`)
+    ok(r.progress.courses.length <= 3, `${st.name} 진도는 앞선 세 과정까지만 싣는다 (지금 ${r.progress.courses.length}개)`)
+    ok(r.progress.courses.every((c) => c.rounds.every((x) => x.done <= c.total)),
+      `${st.name} 끝낸 개념 수가 과정 전체보다 많다`)
+    // 회독은 높은 쪽이 적거나 같아야 한다 — 「2회독 이상」은 「1회독 이상」의 부분집합이다
+    ok(r.progress.courses.every((c) => c.rounds.every((x, i) => i === 0 || x.done >= c.rounds[i - 1].done)),
+      `${st.name} 회독이 올라갈수록 끝낸 개념이 늘어난다 — 「N회독 이상」으로 안 세고 있다`)
+  }
+
+  // ★ 진도는 **구간(from~to)으로 자르지 않는다.** 진도는 「올해 몇 건 풀었나」가 아니라
+  //   **지금 어디까지 왔나**다. 작년에 끝낸 과정도 지금 자리를 말해 준다.
+  {
+    const st = 명단[0]
+    const 넓게 = await buildScoreClassReport(db as any, st.id, 올해.from, 올해.to)
+    const 하루 = await buildScoreClassReport(db as any, st.id, 올해.to, 올해.to)
+    ok(하루.progress.courses.length === 넓게.progress.courses.length && 하루.progress.courses.length > 0,
+      `X 구간을 하루로 좁혀도 진도는 그대로여야 한다 (넓게 ${넓게.progress.courses.length}개 · 하루 ${하루.progress.courses.length}개)`.slice(2))
   }
 
   // 링크를 하나도 만들지 않았는지 — 검사가 운영 데이터를 건드리면 안 된다
