@@ -1,13 +1,16 @@
 /**
  * S코어반 학습 기록 보고서 — 학부모께 링크로 보내는 화면 (원장님 2026-11-19).
  *
- * ★ **판정(유지/보완)을 담지 않는다.** 기록만 보여 드린다.
+ * ★ **반을 정하는 판정은 담지 않는다** — 그건 원장님이 따로 전하신다.
+ *   「보완해야 할 점」은 기록에서 뽑은 것이고(lib/scoreClassReport.ts 보완점뽑기), 반을 정하는
+ *   말(유지·일반반)은 여기 나오지 않는다 (원장님 2026-11-19 「기록만 넣고」 /
+ *   2026-11-20 「보완해야 할점 이런거 써주면 좋을듯」).
  * ★ 카카오톡 인앱 브라우저에서 클라이언트 JS 가 먹통이 되는 일이 있어서
  *   **서버에서 그린 HTML 그대로** 보이게 한다 — 상태도, 효과도 쓰지 않는다
  *   (월간 보고서와 같은 규칙. app/report/[token]/page.tsx 머리말 참고).
  * ★ 다른 학생과의 비교·순위·반 평균은 **넣지 않는다.**
  */
-import type { ScoreClassReport } from '@/lib/scoreClassReport'
+import { 보완점뽑기, type ScoreClassReport } from '@/lib/scoreClassReport'
 
 const NAVY = '#0f3460'
 const ORANGE = '#D85A30'
@@ -47,6 +50,10 @@ function Big({ label, value, color }: { label: string; value: string; color?: st
 export function ScoreClassReportView({ d }: { d: ScoreClassReport }) {
   const 선행 = d.aheadCourse ?? '선행'
   const 최대 = Math.max(1, ...d.monthly.map((m) => m.count))
+  // 옛 링크(스냅샷)에는 보완점이 안 들어 있다 — 그때의 값으로 그 자리에서 뽑는다.
+  // 뽑는 함수가 보고서 값만 보기 때문에 DB 를 다시 읽지 않아도 된다.
+  const 보완 = d.improve ?? 보완점뽑기(d)
+  const 성취도줄 = 보완.items.some((x) => x.key === 'achievement')
 
   return (
     <main style={{ maxWidth: 560, margin: '0 auto', padding: '18px 14px 40px', fontFamily: 'system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif', color: BODY, background: '#fff' }}>
@@ -69,6 +76,43 @@ export function ScoreClassReportView({ d }: { d: ScoreClassReport }) {
           <Big label={`다시 푼 학습지 ${d.retry.count}건 평균`} value={n1(d.retry.avg)} color={tone(d.retry.avg, 80, 70)} />
           <Big label="숙제 완료율" value={d.homework.pct == null ? '—' : d.homework.pct + '%'} color={tone(d.homework.pct, 90, 80)} />
         </div>
+      </Card>
+
+      <Card title="보완해야 할 점" note="기록에서 기준을 넘지 못한 것만 적었습니다. 줄마다 그 숫자를 함께 적어 두었습니다.">
+        {보완.items.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+            지금은 기준을 넘지 못한 항목이 없습니다.
+          </p>
+        ) : (
+          <ol style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 13 }}>
+            {보완.items.map((x, i) => (
+              <li key={x.key} style={{ padding: i ? '12px 0 0' : 0, marginTop: i ? 12 : 0, borderTop: i ? `1px solid ${BORDER}` : 'none' }}>
+                <div style={{ fontWeight: 800, color: NAVY, fontSize: 14 }}>{x.title}</div>
+                <div style={{ fontSize: 12, color: ORANGE, margin: '3px 0 5px', lineHeight: 1.6 }}>{x.fact}</div>
+                <div style={{ lineHeight: 1.7 }}>{x.todo}</div>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {보완.thin.length > 0 && (
+          <p style={{ margin: '12px 0 0', fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
+            {보완.thin.join(' · ')} — 아직 자료가 적어 평균으로는 보지 않았습니다.
+          </p>
+        )}
+
+        {성취도줄 && (
+          <p style={{ margin: '10px 0 0', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+            성취도는 선생님이 수업을 보며 적어 두는 기록입니다. 시험 점수처럼 재는 값은 아닙니다.
+          </p>
+        )}
+
+        {d.teacherNote && (
+          <div style={{ marginTop: 14, background: BOX, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 11, color: MUTED, marginBottom: 4 }}>담당 선생님 말씀</div>
+            <div style={{ fontSize: 13, lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>{d.teacherNote}</div>
+          </div>
+        )}
       </Card>
 
       <Card title="달마다 학습지 성적" note="푼 건수와 평균 점수입니다. 괄호 안은 70점을 넘지 못해 다시 푼 건수입니다.">

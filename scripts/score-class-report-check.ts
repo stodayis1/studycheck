@@ -9,7 +9,10 @@
  */
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { isAhead, aheadCourseOf, isCoreKind, 평가모으기, buildScoreClassReport } from '../lib/scoreClassReport.ts'
+import {
+  isAhead, aheadCourseOf, isCoreKind, 평가모으기, buildScoreClassReport,
+  진도단원인가, 단원키, 반단원고르기, 진도뒤인가, 같은날같은값, 보완점뽑기, 문턱, type ScoreClassReport,
+} from '../lib/scoreClassReport.ts'
 
 let bad = 0
 function ok(cond: boolean, what: string) {
@@ -109,8 +112,12 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
   const view = 주석뺀(fs.readFileSync('components/report/ScoreClassReport.tsx', 'utf8'))
   ok(!/useState|useEffect|onClick/.test(view),
     'X 학부모 화면은 서버에서 그린 HTML 뿐이어야 한다 — 카톡 인앱 브라우저에서 JS 가 먹통이 된다'.slice(2))
-  ok(!/유지|보완|관찰|탈락/.test(view),
-    'X 학부모께 가는 보고서에 판정을 넣지 않는다 — 기록만 (원장님 2026-11-19)'.slice(2))
+  // 2026-11-20 — 「보완해야 할 점」은 들어가게 됐다(원장님 지시). 넣지 않는 것은
+  // **반을 정하는 말**이다. 그건 원장님이 따로 전하신다.
+  ok(!/일반반|탈락|유지 권장|반 이동|보완 4주|관찰 대상|순위|반 평균/.test(view),
+    'X 학부모께 가는 보고서에 반을 정하는 말을 넣지 않는다 (원장님 2026-11-19 「기록만 넣고」)'.slice(2))
+  ok(/보완해야 할 점/.test(view), '보완해야 할 점이 보고서에 있어야 한다 (원장님 2026-11-20)')
+  ok(/teacherNote/.test(view), '원장님이 적어 넣으신 한 줄을 실어야 한다')
 
   // ★ 2026-11-20 부터 따로 있던 메뉴가 아니라 **보고서 화면의 탭**이다 (원장님 지시).
   //   탭이 화면에서 **원장님께만** 보여야 하고, 옛 주소가 남아 있으면 안 된다.
@@ -131,6 +138,173 @@ ok(aheadCourseOf('초6', [{ grade_level: '중2' }, { grade_level: '중1' }, { gr
   const links = 주석뺀(fs.readFileSync('components/teacher/ScoreClassLinks.tsx', 'utf8'))
   ok(!/sendAlimtalk|sendSmsViaOps|sendPush/.test(links),
     'X 이 화면은 아무것도 보내지 않는다 — 보내는 것은 원장님이 직접 하신다'.slice(2))
+}
+
+// ④ 보완해야 할 점 (원장님 2026-11-20 「각 학생들거 보고서 나갈때 보완해야 할점 이런거 써주면 좋을듯」)
+{
+  // ④-1 진도로 셀 수 있는 단원인가 — 이걸 안 걸러내면 **반 전체가 「전범위」를 나가는 것**이 된다
+  ok(진도단원인가('1. 기본도형'), '단원 이름은 진도로 센다')
+  ok(!진도단원인가('전범위'), '「전범위」는 어느 단원까지 갔는지 말해 주지 않는다')
+  ok(!진도단원인가('오답학습지 (2026.11.16) 오답+유사 과제'), '오답 학습지는 이미 푼 단원을 다시 푸는 것이다')
+  ok(!진도단원인가('') && !진도단원인가(null), '단원이 안 적힌 줄은 진도로 세지 않는다')
+  ok(단원키('2. 정수와  유리수') === '2. 정수와 유리수', '띄어쓰기가 두 번 들어간 단원 이름을 같은 것으로 본다')
+
+  // ④-2 반이 나가는 단원 — 2026-11-20 운영 데이터 모양 그대로 (6명 중 4명이 기본도형)
+  const 반 = [
+    [{ unit: '전범위', date: '2026-11-18' }, { unit: '1. 기본도형', date: '2026-11-18' }],
+    [{ unit: '전범위', date: '2026-10-30' }, { unit: '1. 기본도형', date: '2026-11-06' }],
+    [{ unit: '전범위', date: '2026-11-18' }, { unit: '1. 기본도형', date: '2026-11-18' }],
+    [{ unit: '전범위', date: '2026-11-18' }, { unit: '1. 기본도형', date: '2026-11-18' }],
+    [{ unit: '1. 문자의 사용과 식의 계산', date: '2026-11-11' }, { unit: '전범위', date: '2026-11-18' }],
+    [{ unit: '1. 문자의 사용과 식의 계산', date: '2026-11-06' }, { unit: '전범위', date: '2026-11-18' }],
+  ]
+  ok(반단원고르기(반) === '1. 기본도형',
+    `과반이 푼 단원을 반 진도로 본다 (지금 ${반단원고르기(반)})`)
+
+  // ★ 망가뜨려 시험 — 「전범위」를 걸러내지 않으면 여섯 명 모두가 푼 「전범위」가 반 진도가 된다.
+  //   그러면 아무도 「뒤에 있다」로 안 잡혀 진도 줄이 영원히 안 나온다.
+  ok(반단원고르기([
+    [{ unit: '전범위', date: '2026-11-18' }],
+    [{ unit: '전범위', date: '2026-11-18' }],
+    [{ unit: '전범위', date: '2026-11-18' }],
+  ]) === null, '「전범위」만 있으면 반 진도를 정하지 않는다')
+
+  // 한두 명이 먼저 나간 단원은 반 진도가 아니다 — 그러면 나머지 모두가 「느리다」로 찍힌다
+  ok(반단원고르기([
+    [{ unit: '2. 원과 부채꼴', date: '2026-11-18' }],
+    [{ unit: '1. 기본도형', date: '2026-11-18' }],
+    [{ unit: '1. 기본도형', date: '2026-11-18' }],
+    [{ unit: '1. 문자의 사용과 식의 계산', date: '2026-11-18' }],
+  ]) === null, '과반이 안 되면 반 진도를 정하지 않는다 (4명 중 2명)')
+
+  // ④-2-2 뒤에 있다고 말할 수 있는 때 — **자료가 없으면 말하지 않는다**
+  ok(진도뒤인가('1. 기본도형', ['1. 문자의 사용과 식의 계산']), '반 단원을 안 풀었으면 뒤에 있는 것이다')
+  ok(!진도뒤인가('1. 기본도형', ['1. 기본도형', '전범위']), '반 단원을 풀었으면 뒤에 있는 것이 아니다')
+  ok(!진도뒤인가('1. 기본도형', []),
+    'X 최근 8주 기록이 없으면 뒤에 있다고 하지 않는다 — 안 적힌 것과 못 따라가는 것은 다르다'.slice(2))
+  ok(!진도뒤인가(null, ['1. 문자의 사용과 식의 계산']), '반 진도를 모르면 뒤에 있다고 하지 않는다')
+  ok(!진도뒤인가('2. 정수와  유리수', ['2. 정수와 유리수']), '띄어쓰기만 다른 단원은 같은 것으로 본다')
+
+  // ④-2-3 한꺼번에 적힌 날 — 2026-11-02 에 여섯 명 **전원**의 성취도가 0% 였다.
+  //        사람이 한 명씩 보고 적은 값이 전원 똑같을 수는 없다. 그대로 두면 학부모 네 분이 본다.
+  {
+    const 반 = [
+      [{ date: '2026-11-02', pct: 0 }, { date: '2026-11-09', pct: 50 }],
+      [{ date: '2026-11-02', pct: 0 }, { date: '2026-11-09', pct: 100 }],
+      [{ date: '2026-11-02', pct: 0 }, { date: '2026-11-09', pct: 100 }],
+      [{ date: '2026-11-02', pct: 0 }, { date: '2026-11-09', pct: 100 }],
+    ]
+    const 뺄날 = 같은날같은값(반)
+    ok(뺄날.includes('2026-11-02'), '전원이 같은 값으로 적힌 날은 빼야 한다')
+    ok(!뺄날.includes('2026-11-09'), '값이 갈리는 날은 그 학생의 기록이므로 남겨야 한다')
+    ok(같은날같은값([[{ date: '2026-11-02', pct: 0 }], [{ date: '2026-11-02', pct: 0 }]]).length === 0,
+      '두 명이 우연히 같은 것은 흔하다 — 세 명 이상일 때만 뺀다')
+    // ★ 반 전체가 100% 인 날은 흔하다 — 이걸 안 좁히면 뺄 날이 스물두 날로 불어난다
+    ok(같은날같은값([
+      [{ date: '2026-10-14', pct: 100 }], [{ date: '2026-10-14', pct: 100 }],
+      [{ date: '2026-10-14', pct: 100 }], [{ date: '2026-10-14', pct: 100 }],
+    ]).length === 0, '반 전체가 100% 인 날은 빼는 날이 아니다')
+  }
+
+  // ④-3 보완점 뽑기
+  const 빈보고서: ScoreClassReport = {
+    student: { name: '시험', grade: '초6', school: null, teacher: null },
+    period: { from: '2026-01-01', to: '2026-11-18', label: '2026.01 ~ 2026.11' },
+    aheadCourse: '중1',
+    monthly: [],
+    ahead: { count: 20, avg: 85, passed: 18, recent8w: { count: 6, avg: 85 } },
+    own: { count: 20, avg: 90 },
+    retry: { count: 20, avg: 85 },
+    weak: [],
+    lessons: { total: 50, onTime: 48, late: 2, absent: 0 },
+    homework: { done: 50, total: 50, pct: 100 },
+    books: { done: [], current: null },
+    exams: [],
+    achievement: { low: [], recent: 100, before: 100 },
+    pace: { classUnit: null, mine: null, behind: false },
+    improve: { items: [], thin: [] },
+    teacherNote: null,
+    madeAt: '2026-11-20',
+  }
+  const 키들 = (r: ScoreClassReport) => 보완점뽑기(r).items.map((x) => x.key)
+
+  ok(키들(빈보고서).length === 0, `기준을 다 넘으면 보완점이 없어야 한다 (지금 ${키들(빈보고서).join(',')})`)
+
+  // 진도 — 반 단원을 안 푼 학생 (2026-11-20 에 여섯 명 중 두 명이 이 모양이었다)
+  const 뒤 = { ...빈보고서, pace: { classUnit: '1. 기본도형', mine: '1. 문자의 사용과 식의 계산', behind: true } }
+  ok(키들(뒤).includes('pace'), '반이 나간 단원을 안 풀었으면 진도 줄이 나와야 한다')
+  const 진도줄 = 보완점뽑기(뒤).items.find((x) => x.key === 'pace')!
+  ok(진도줄.fact.includes('1. 기본도형'), '진도 줄에 반이 나가는 단원이 적혀야 한다')
+  ok(!/느리|뒤처|다른 학생|친구들|평균보다/.test(진도줄.fact + 진도줄.todo),
+    'X 진도 줄에 다른 학생과 견주는 말을 쓰지 않는다 (원장님 2026-11-20 「좀 돌려서 써줘」)'.slice(2))
+
+  // ★ 자료가 없으면 뒤에 있다고 하지 않는다 — 안 적힌 것과 못 따라가는 것은 다르다
+  ok(!키들({ ...빈보고서, pace: { classUnit: '1. 기본도형', mine: null, behind: false } }).includes('pace'),
+    '최근 8주 기록이 없으면 진도 줄을 넣지 않는다')
+
+  // 성취도 — 반 전체가 같은 날 0% 로 적힌 일이 있었다. **한 번뿐이면 넣지 않는다**
+  ok(!키들({ ...빈보고서, achievement: { low: [{ date: '2026-11-02', pct: 0 }], recent: 96, before: 100 } })
+    .includes('achievement'), '성취도가 한 번 낮게 적힌 것으로는 보완점을 만들지 않는다 (입력 사고)')
+  const 성취 = { ...빈보고서, achievement: {
+    low: [{ date: '2026-10-19', pct: 50 }, { date: '2026-10-31', pct: 50 }, { date: '2026-11-02', pct: 0 }],
+    recent: 94.7, before: 99.3 } }
+  ok(키들(성취).includes('achievement'), '성취도가 두 번 이상 낮게 적히면 보완점이 된다')
+  ok(보완점뽑기(성취).items.find((x) => x.key === 'achievement')!.fact.includes('10/19'),
+    'X 성취도 줄에는 **그 날짜**가 적혀야 한다 — 평균(94.7)으로는 아무 말도 할 수 없다'.slice(2))
+
+  // 문턱 넷
+  ok(키들({ ...빈보고서, lessons: { total: 51, onTime: 40, late: 2, absent: 9 } }).includes('attend'),
+    '출석률이 기준 아래면 보완점이 된다')
+  ok(키들({ ...빈보고서, homework: { done: 30, total: 48, pct: 62.5 } }).includes('homework'),
+    '숙제 비율이 기준 아래면 보완점이 된다')
+  ok(키들({ ...빈보고서, ahead: { count: 29, avg: 67.8, passed: 15, recent8w: { count: 18, avg: 70 } } }).includes('ahead'),
+    '선행 범위 평균이 기준 아래면 보완점이 된다')
+  ok(키들({ ...빈보고서, own: { count: 18, avg: 79.9 } }).includes('own'),
+    '현 학년 범위 평균이 기준 아래면 보완점이 된다')
+
+  // ★ 자료가 적으면 판정하지 않는다 (docs/S코어반_유지기준.md 1번)
+  const 적음 = { ...빈보고서, ahead: { count: 5, avg: 40, passed: 1, recent8w: { count: 3, avg: 40 } } }
+  ok(!키들(적음).includes('ahead'), '선행 자료가 8건 미만이면 평균으로 보지 않는다')
+  ok(보완점뽑기(적음).thin.some((t) => t.includes('5건')), '대신 「자료가 적다」로 적어 둬야 한다')
+
+  // 반을 정하는 말이 보완점에 섞이지 않는지
+  const 다섞임 = {
+    ...빈보고서,
+    pace: { classUnit: '1. 기본도형', mine: '1. 문자의 사용과 식의 계산', behind: true },
+    lessons: { total: 51, onTime: 40, late: 2, absent: 9 },
+    homework: { done: 30, total: 48, pct: 62.5 },
+    ahead: { count: 29, avg: 67.8, passed: 15, recent8w: { count: 18, avg: 70 } },
+    weak: [{ date: '2026-11-11', unit: '1. 문자의 사용과 식의 계산', score: 68 }],
+  }
+  const 글자 = JSON.stringify(보완점뽑기(다섞임))
+  ok(!/일반반|탈락|유지 권장|반 이동|순위|반 평균/.test(글자), '보완점에 반을 정하는 말이 섞이면 안 된다')
+  ok(!/느리|뒤처|다른 학생|친구들/.test(글자), '보완점에 다른 학생과 견주는 말이 섞이면 안 된다')
+
+  // ④-3-2 옛 링크(스냅샷)에는 achievement·pace·improve 가 없다.
+  //        없는 줄 모르고 읽으면 **학부모 화면이 하얗게 뜬다.** 보내 드린 링크는 살아 있어야 한다.
+  {
+    const 옛링크: any = { ...빈보고서 }
+    delete 옛링크.achievement
+    delete 옛링크.pace
+    delete 옛링크.improve
+    delete 옛링크.teacherNote
+    let 터짐: string | null = null
+    try { 보완점뽑기(옛링크) } catch (e: any) { 터짐 = e?.message ?? '알 수 없는 오류' }
+    ok(터짐 === null, `X 옛 링크에서 보완점을 뽑다가 터진다 (${터짐}) — 보내 드린 링크가 하얗게 뜬다`.slice(2))
+
+    // 2026-11-19 에 실제로 만든 스냅샷 모양 — 칸이 모자라도 뽑히는 것은 뽑혀야 한다
+    const 옛것: any = { ...옛링크, homework: { done: 30, total: 48, pct: 62.5 } }
+    ok(보완점뽑기(옛것).items.some((x) => x.key === 'homework'),
+      '옛 링크에서도 있는 칸으로는 보완점을 뽑아야 한다')
+  }
+
+  // ④-4 문턱이 문서와 같은 값인가 — 두 곳이 갈리면 보고서가 문서와 다른 말을 한다
+  const 문서 = fs.readFileSync('docs/S코어반_유지기준.md', 'utf8').split('\n')
+  const 줄찾기 = (키: string) => 문서.find((l) => l.startsWith('|') && l.includes(키)) ?? ''
+  ok(줄찾기('현 학년').includes(`${문턱.own}점 이상`), `문서의 현 학년 문턱이 ${문턱.own}점이어야 한다`)
+  ok(줄찾기('선행(').includes(`${문턱.ahead}점 이상`), `문서의 선행 문턱이 ${문턱.ahead}점이어야 한다`)
+  ok(줄찾기('숙제를 해 온').includes(`${문턱.homework}% 이상`), `문서의 숙제 문턱이 ${문턱.homework}%여야 한다`)
+  ok(줄찾기('출석률').includes(`${문턱.attend}% 이상`), `문서의 출석 문턱이 ${문턱.attend}%여야 한다`)
 }
 
 // ── 여기부터는 운영 데이터 (환경파일이 있을 때만)
@@ -169,6 +343,10 @@ if (!url || !key) {
     ok(r.ahead.passed <= r.ahead.count, `${st.name} 통과 건수가 전체보다 많다`)
     // 판정 글자가 데이터에 섞여 들어가지 않았는지
     ok(!JSON.stringify(r).includes('유지 권장'), `${st.name} 보고서 데이터에 판정이 섞였다`)
+    // 보완점이 들어 있고, 반을 정하는 말이 안 섞였는지
+    ok(Array.isArray(r.improve?.items), `${st.name} 보완점이 안 들어 있다`)
+    ok(!/일반반|탈락|유지 권장|느리|다른 학생/.test(JSON.stringify(r.improve)),
+      `${st.name} 보완점에 쓰면 안 되는 말이 섞였다`)
     // 같은 날 코어테스트가 두 줄로 찍히지 않는지 — 두 표에 같은 시험이 들어 있다
     const 코어날 = r.exams.filter((e) => isCoreKind(e.kind)).map((e) => e.date)
     ok(new Set(코어날).size === 코어날.length,
