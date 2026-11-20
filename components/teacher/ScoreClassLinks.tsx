@@ -7,6 +7,9 @@
  *   관리할 수 있도록 해줘」 — 따로 있던 `/teacher/reports/s-core` 메뉴를 없애고 여기로 들였다.
  *   (월간 보고서도 같은 길을 걸었다 — app/teacher/reports/page.tsx 머리말 참고)
  *
+ * 2026-11-20 — 보고서에 **보완해야 할 점**이 들어간다. 기록에서 기계로 뽑고, 원장님이 적어 넣으신
+ * 한 줄을 그 아래에 그대로 싣는다 (원장님 「보완해야 할점 이런거 써주면 좋을듯」).
+ *
  * 여기서는 **링크만 만든다.** 문자·카톡 발송은 하지 않는다 — 주소를 복사해 원장님이 보내신다
  * (원장님 2026-11-19 「보내는건 내가 보낼거야」).
  *
@@ -35,6 +38,8 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
   const [busy, setBusy] = useState(false)
   const [made, setMade] = useState<Made[]>([])
   const [hint, setHint] = useState('')
+  // 학생마다 원장님이 적어 넣는 한 줄. 적지 않으면 보고서에 그 칸이 안 나온다.
+  const [notes, setNotes] = useState<Record<string, string>>({})
 
   useEffect(() => { if (ready) load() }, [ready])
 
@@ -81,7 +86,7 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
     try {
       const res = await apiFetch('/api/score-class-report', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentIds: picked, from, to }),
+        body: JSON.stringify({ studentIds: picked, from, to, notes }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j?.error ?? '만들지 못했어요')
@@ -114,8 +119,13 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
         <b className="text-gray-800">여기서는 링크만 만듭니다.</b> 만들어도 아무에게도 가지 않아요 —
         주소를 복사해 원장님이 직접 보내시면 됩니다.
         <span className="block mt-1">
-          보고서에는 <b>기록만</b> 들어갑니다 — 달마다 학습지 성적, 선행 과정 성취도, 다시 푼 학습지,
-          더 봐야 할 단원, 수업·숙제, 교재, 평가 기록. <b>유지·보완 같은 판정은 넣지 않습니다.</b>
+          보고서에는 <b>기록</b>과 <b>보완해야 할 점</b>이 들어갑니다 — 달마다 학습지 성적,
+          선행 과정 진도, 다시 푼 학습지, 더 봐야 할 단원, 수업·숙제, 교재, 평가 기록.
+        </span>
+        <span className="block mt-1">
+          보완해야 할 점은 <b>기록에서 기준을 넘지 못한 것만</b> 뽑아 적습니다(줄마다 그 숫자가 함께 나갑니다).
+          진도는 <b>이번에 고른 학생들이 지금 나가는 단원</b>을 기준으로 봅니다 — 다른 학생 이름·순위·반 평균은
+          넣지 않습니다. <b>어느 반으로 갈지 정하는 말은 넣지 않습니다.</b>
         </span>
         <span className="block mt-1 text-gray-400">{hint}</span>
       </div>
@@ -157,6 +167,27 @@ export function ScoreClassLinks({ ready }: { ready: boolean }) {
           ))}
           {보이는학생.length === 0 && <div className="px-4 py-6 text-center text-xs text-gray-400">찾는 학생이 없어요.</div>}
         </div>
+        {고른학생.length > 0 && (
+          <div className="px-4 py-3 border-t border-gray-100">
+            <h4 className="font-bold text-gray-800 text-sm">보완해야 할 점에 한 줄 더하기 <span className="text-gray-400 font-normal text-[11px]">(안 적으셔도 됩니다)</span></h4>
+            <p className="text-[11px] text-gray-500 mb-2">
+              기록에서 뽑은 보완점은 자동으로 들어갑니다. 수업에서 보신 것을 더하고 싶으실 때만 적어 주세요 —
+              적으신 글은 <b>「담당 선생님 말씀」</b>으로 그대로 나갑니다.
+            </p>
+            <div className="space-y-2">
+              {고른학생.map((s) => (
+                <div key={s.id} className="flex items-start gap-2">
+                  <b className="text-gray-700 text-xs w-14 pt-2 shrink-0">{s.name}</b>
+                  <textarea
+                    value={notes[s.id] ?? ''} rows={2} maxLength={400}
+                    onChange={(e) => setNotes((p) => ({ ...p, [s.id]: e.target.value }))}
+                    placeholder="예) 도형 단원은 그림을 직접 그려 풀면 훨씬 정확해집니다."
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-xs leading-relaxed" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
           <button onClick={make} disabled={busy || !picked.length}
             className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-40">
