@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import {
-  BOOSTER, BOOSTER_SLUG, BOOSTER_TEST_SLUG, 개인정보안내, 동의항목, 학년보기,
+  BOOSTER, BOOSTER_SLUG, BOOSTER_TEST_SLUG, 개인정보안내, 동의항목, 학년보기, 재원생안내,
   남은시간, 신청서검사, 완료문구, 마감문구, 접수상태보기, 번호꼴,
 } from '@/lib/booster'
 
@@ -50,7 +50,6 @@ export default function BoosterPage() {
   const [f, setF] = useState({
     student_name: '', grade: '', parent_name: '', parent_phone: '',
   })
-  const [재원, set재원] = useState<boolean | null>(null)
   const [동의, set동의] = useState<boolean[]>(동의항목.map(() => false))
   const [보내는중, set보내는중] = useState(false)
   const [틀림, set틀림] = useState('')
@@ -95,18 +94,18 @@ export default function BoosterPage() {
     : 접수상태보기({ now: 지금, 나간자리, 정원, 접수시작 })
   const 카운트 = 지금 ? 남은시간(지금, 접수시작) : null
 
-  const 다적음 = 신청서검사({ ...f, is_enrolled: 재원 ?? undefined, agreements: 동의 }).length === 0
+  const 다적음 = 신청서검사({ ...f, agreements: 동의 }).length === 0
   const 누를수있나 = 상태 === '접수중' && 다적음 && !보내는중
 
   /* ── 보내기 ──────────────────────────────────────────────────────────── */
   async function 신청하기() {
-    const 틀린것 = 신청서검사({ ...f, is_enrolled: 재원 ?? undefined, agreements: 동의 })
+    const 틀린것 = 신청서검사({ ...f, agreements: 동의 })
     if (틀린것.length) { set틀림(틀린것[0]); return }
     set틀림(''); set보내는중(true)
     try {
       const res = await fetch('/api/booster', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, ...f, is_enrolled: 재원, agreements: 동의 }),
+        body: JSON.stringify({ slug, ...f, agreements: 동의 }),
       })
       const j: any = await res.json().catch((): any => null)
       if (!res.ok || !j) { set틀림('신청을 보내지 못했어요. 다시 눌러 주세요.'); return }
@@ -162,6 +161,7 @@ export default function BoosterPage() {
             {/* 신청서 */}
             <section style={S.card}>
               <h2 style={S.h2}>신청하기</h2>
+              <p style={S.재원안내}>{재원생안내}</p>
 
               <글칸 이름="학생 이름" 값={f.student_name}
                 바꿈={v => setF(p => ({ ...p, student_name: v }))} 예시="홍길동" />
@@ -181,17 +181,7 @@ export default function BoosterPage() {
 
               <글칸 이름="학부모님 연락처" 값={f.parent_phone}
                 바꿈={v => setF(p => ({ ...p, parent_phone: v }))} 예시="010-1234-5678"
-                타입="tel" 도움="접수 확정 안내를 이 번호로 드립니다" />
-
-              <div style={S.field}>
-                <label style={S.label}>현재 수학의지혜에 다니고 있나요?</label>
-                <div style={S.chips}>
-                  <button type="button" onClick={() => set재원(true)}
-                    style={{ ...S.chip, ...(재원 === true ? S.chipOn : {}) }}>네, 다니고 있어요</button>
-                  <button type="button" onClick={() => set재원(false)}
-                    style={{ ...S.chip, ...(재원 === false ? S.chipOn : {}) }}>아니요</button>
-                </div>
-              </div>
+                타입="tel" 도움="학원에 등록된 번호로 적어 주세요 · 재원생 확인과 접수 확정 안내에 씁니다" />
             </section>
 
             {/* 개인정보 */}
@@ -363,6 +353,7 @@ const S = {
   작은글: { fontSize: 11.5, color: '#6B7280', margin: '10px 0 0', lineHeight: 1.6 },
   도움: { fontSize: 11.5, color: '#6B7280', margin: '5px 0 0' },
   field: { marginBottom: 14 },
+  재원안내: { margin: '0 0 14px', padding: '10px 12px', background: '#EEF2FF', color: '#1E2A78', borderRadius: 10, fontSize: 13.5, lineHeight: 1.55, fontWeight: 600 },
   label: { display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6, color: '#374151' },
   input: { width: '100%', boxSizing: 'border-box' as const, padding: '12px 13px', fontSize: 16,
     border: '1.5px solid #CBD5E1', borderRadius: 10, outline: 'none', background: '#fff' },

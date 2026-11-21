@@ -20,7 +20,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { BOOSTER_SLUG, BOOSTER_TEST_SLUG, 숫자만, 번호꼴, 신청서검사, 동의항목 } from '@/lib/booster'
+import { BOOSTER_SLUG, BOOSTER_TEST_SLUG, 숫자만, 번호꼴, 신청서검사, 동의항목, 재원아님문구 } from '@/lib/booster'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -91,7 +91,8 @@ export async function POST(req: NextRequest) {
     p_parent_name: 글(b.parent_name, 20),
     p_parent_phone: 번호꼴(b.parent_phone),
     p_phone_digits: phone_digits,
-    p_is_enrolled: b.is_enrolled === true,
+    // ★ 재원 여부는 학부모님 답을 쓰지 않는다 — DB 함수가 students 에서 찾아 적는다.
+    p_is_enrolled: false,
     p_agreed_count: 동의수,
   })
 
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
       race: '정원이 모두 찼습니다.',
       duplicate: '이미 신청하신 학생입니다.',
       need_agreement: '신청 전 확인 세 가지에 모두 동의해 주세요.',
+      not_enrolled: 재원아님문구,
     }
     const reason = String(data?.reason ?? '')
     return NextResponse.json(

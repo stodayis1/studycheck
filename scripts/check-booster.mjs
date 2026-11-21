@@ -88,8 +88,8 @@ const 신청규칙 = [
   [{ ...바른신청, parent_name: '' }, false, '학부모 이름이 없다'],
   [{ ...바른신청, parent_phone: '' }, false, '연락처가 없다'],
   [{ ...바른신청, parent_phone: '010-123' }, false, '번호가 짧다'],
-  [{ ...바른신청, is_enrolled: undefined }, false, '재원 여부를 안 골랐다'],
-  [{ ...바른신청, is_enrolled: true }, true, '재원생도 신청할 수 있다'],
+  // ★ 재원 여부는 화면에서 묻지 않는다 — DB 함수가 students 에서 본다 (원장님 2026-11-21)
+  [{ ...바른신청, is_enrolled: undefined }, true, '재원 여부를 안 보내도 된다 (DB 가 확인)'],
   // ★ 동의는 **전부** 받아야 한다 — 무료라 노쇼가 진짜 손해다
   [{ ...바른신청, agreements: [true, true, false] }, false, '★ 동의 하나가 빠졌다'],
   [{ ...바른신청, agreements: [true, false, false] }, false, '동의 둘이 빠졌다'],
@@ -133,6 +133,7 @@ const 주석빼기 = s => s
   .replace(/^\s*\/\/.*$/gm, '')
 
 const SQL = readFileSync('docs/sql/부스터특강_선착순신청.sql', 'utf8')
+const SQL재원 = readFileSync('docs/sql/부스터특강_재원생만.sql', 'utf8')
 const API = 주석빼기(readFileSync('app/api/booster/route.ts', 'utf8'))
 const ADMIN_API = 주석빼기(readFileSync('app/api/booster/admin/route.ts', 'utf8'))
 const PAGE = 주석빼기(readFileSync('app/booster/page.tsx', 'utf8'))
@@ -195,6 +196,38 @@ function SQL검사(원본) {
 }
 틀린것.push(...SQL검사(SQL))
 
+/* ── 7-2. 재원생만 (원장님 2026-11-21) — DB 함수가 students 로 확인하는가 ─── */
+function 재원SQL검사(원본) {
+  const 걸림 = []
+  const sql = 원본.replace(/^\s*--.*$/gm, '')
+  // 다시 쓴 함수도 정원 잠금을 그대로 가져야 한다
+  if (!/for\s+update/i.test(sql)) 걸림.push('★ 다시 쓴 booster_apply() 가 행을 안 잠근다')
+  if (!/now\(\)\s*<\s*s\.opens_at/i.test(sql)) 걸림.push('★ 다시 쓴 booster_apply() 가 접수 시각을 안 본다')
+  if (!/duplicate/i.test(sql)) 걸림.push('다시 쓴 booster_apply() 가 중복을 안 막는다')
+  // 재원생 확인은 학부모 답(p_is_enrolled)이 아니라 students 에서
+  if (!/from\s+public\.students[\s\S]{0,80}where\s+st\.is_active/i.test(sql)) {
+    걸림.push('★ 재원생을 students(is_active) 에서 찾지 않는다')
+  }
+  if (!/parent_phone/i.test(sql)) 걸림.push('★ 등록된 보호자 번호와 맞춰 보지 않는다')
+  if (!/if\s+s\.enrolled_only\s+and\s+not\s+v_enrolled\s+then\s+return[^;]*not_enrolled/i.test(sql)) {
+    걸림.push('★ 재원생이 아니면 막는 줄(not_enrolled)이 없다')
+  }
+  if (/v_enrolled\s*:=\s*p_is_enrolled/i.test(sql) || /coalesce\(\s*p_is_enrolled/i.test(sql)) {
+    걸림.push('★ 학부모가 누른 「네」를 재원 확인으로 쓴다 — 누구나 통과한다')
+  }
+  if (!/p_phone_digits,\s*v_enrolled,\s*p_agreed_count/i.test(sql)) {
+    걸림.push('명단의 재원 표시를 DB 확인값이 아니라 신청서 답으로 적는다')
+  }
+  if (!/set\s+enrolled_only\s*=\s*true[\s\S]*yebi-jung1-booster-2026-12'/i.test(sql)) {
+    걸림.push('★ 실제 중1-1 특강에 재원생만(enrolled_only)을 안 켰다')
+  }
+  if (!/grant execute on function public\.booster_apply[^;]*to service_role/i.test(sql)) {
+    걸림.push('booster_apply 권한을 service_role 로 두지 않았다')
+  }
+  return 걸림
+}
+틀린것.push(...재원SQL검사(SQL재원))
+
 function API검사([api, page, adminApi]) {
   const 걸림 = []
   // ★ 서버가 스스로 세지 않는다 — DB 함수에 맡긴다
@@ -205,6 +238,9 @@ function API검사([api, page, adminApi]) {
   if (/from\(\s*'booster_applications'\s*\)[\s\S]{0,200}\.insert/.test(api)) {
     걸림.push('★ 신청 API 가 표에 직접 insert 한다 — 정원을 안 거친다')
   }
+  // ★ 재원 여부를 학부모 답으로 넘기지 않는다 (DB 가 students 에서 확인)
+  if (/p_is_enrolled:\s*b\./.test(api)) 걸림.push('★ 신청 API 가 학부모가 누른 재원 답을 DB 로 넘긴다')
+  if (!/not_enrolled/.test(api)) 걸림.push('신청 API 가 재원생 아님(not_enrolled)을 안내하지 않는다')
   // 화면과 같은 검사를 서버도 한다
   if (!/신청서검사/.test(api)) 걸림.push('신청 API 가 신청서검사() 를 안 쓴다 — 화면만 고쳐 빠져나갈 수 있다')
   // GET 은 숫자만
@@ -246,15 +282,22 @@ const 하나더 = (i) => {
 const 시각무시 = (i) => (i.나간자리 >= i.정원 ? '마감' : '접수중')
 /** 동의를 하나만 받아도 통과 */
 const 동의느슨 = (f) => 신청서검사({ ...f, agreements: [true, true, true] })
-/** 재원 여부를 안 봐도 통과 */
-const 재원무시 = (f) => 신청서검사({ ...f, is_enrolled: false })
 
 const 망가진것 = [
   ['접수 시작을 1분 일찍 연다 (21:59 에 들어간다)',   () => 상태검사(일찍염)],
   ['정원을 넘었을 때만 막는다 (7명째가 들어간다)',    () => 상태검사(하나더)],
   ['접수 시작을 아예 안 본다',                        () => 상태검사(시각무시)],
   ['동의를 안 해도 통과시킨다',                        () => 신청검사(동의느슨)],
-  ['재원 여부를 안 골라도 통과시킨다',                 () => 신청검사(재원무시)],
+  ['재원생이 아니어도 막지 않는다',
+    () => 재원SQL검사(SQL재원.replace(/if\s+s\.enrolled_only\s+and\s+not\s+v_enrolled\s+then[\s\S]*?end if;/i, ''))],
+  ['재원 확인을 학부모가 누른 「네」로 한다',
+    () => 재원SQL검사(SQL재원.replace(/v_enrolled\s*:=\s*exists\s*\([\s\S]*?\);/i, 'v_enrolled := coalesce(p_is_enrolled, false);'))],
+  ['다시 쓴 함수가 행 잠금을 잃었다',
+    () => 재원SQL검사(SQL재원.replace(/for\s+update/gi, ''))],
+  ['실제 특강에 재원생만을 안 켰다',
+    () => 재원SQL검사(SQL재원.replace(/'yebi-jung1-booster-2026-12',\s*/, ''))],
+  ['신청 API 가 학부모 답을 그대로 넘긴다',
+    () => API검사([API.replace('p_is_enrolled: false', 'p_is_enrolled: b.is_enrolled === true'), PAGE, ADMIN_API])],
   ['DB 함수가 행을 안 잠근다',
     () => SQL검사(SQL.replace(/for\s+update/gi, ''))],
   ['자리번호 유일 index 가 없다',
