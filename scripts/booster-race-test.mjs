@@ -54,12 +54,16 @@ const db = createClient(E.NEXT_PUBLIC_SUPABASE_URL, E.SUPABASE_SERVICE_ROLE_KEY,
 const 틀린것 = []
 const 확인 = (맞나, 말) => { if (맞나) console.log('  ✓ ' + 말); else { console.error('  ✗ ' + 말); 틀린것.push(말) } }
 
-/** 연습 특강을 처음 상태로 — 신청 다 지우고, 자리수 0, 지금 열려 있게 */
-async function 되돌리기(opensAt = '2026-01-01T00:00:00Z') {
+/**
+ * 연습 특강을 처음 상태로 — 신청 다 지우고, 자리수 0, 지금 열려 있게.
+ * ★ 재원생만(enrolled_only)은 **끈다.** 1~7번 시험은 가짜 이름 20명이 필요하다.
+ *   9번에서 켜고 시험한 뒤, 끝날 때 반드시 다시 켠다 (원장님 연습 화면은 실제와 같아야 한다).
+ */
+async function 되돌리기(opensAt = '2026-01-01T00:00:00Z', 재원생만 = false) {
   const { data: s } = await db.from('booster_sessions').select('id').eq('slug', TEST_SLUG).single()
   if (!s) { console.error('✗ 연습용 특강 줄이 없습니다. SQL 을 먼저 적용해 주세요.'); process.exit(1) }
   await db.from('booster_applications').delete().eq('session_id', s.id)
-  await db.from('booster_sessions').update({ seats_taken: 0, is_open: true, opens_at: opensAt }).eq('id', s.id)
+  await db.from('booster_sessions').update({ seats_taken: 0, is_open: true, opens_at: opensAt, enrolled_only: 재원생만 }).eq('id', s.id)
   return s.id
 }
 
@@ -173,8 +177,40 @@ async function main() {
   const 닫힘 = (await 신청('닫힌뒤', '01066667777')).data
   확인(닫힘?.ok === false && 닫힘.reason === 'closed', `창구가 닫히면 막힌다 (${닫힘?.reason})`)
 
+  /* ── 9. 재원생만 (원장님 2026-11-21) ─────────────────────────────── */
+  console.log('
+9) 재원생만 받는다 — 학생 이름 + 학원에 등록된 번호')
+  await 되돌리기(undefined, true)
+  const 외부 = (await 신청('재원아닌학생', '01012340000')).data
+  확인(외부?.ok === false && 외부.reason === 'not_enrolled',
+    `학원에 없는 학생은 막힌다 (${외부?.reason})`)
+
+  // 시험용 학생(students.is_test) 한 명으로 「들어가는 길」을 본다. 이름·번호는 화면에 찍지 않는다.
+  const { data: 시험학생 } = await db.from('students')
+    .select('name, parent_phone').eq('is_test', true).eq('is_active', true).not('parent_phone', 'is', null).limit(1).maybeSingle()
+  if (!시험학생) {
+    확인(false, '시험용 학생(is_test)이 없어 재원생 통과를 못 봤다')
+  } else {
+    const 번호 = 시험학생.parent_phone
+    const 틀린번호 = (await 신청(시험학생.name, '01000000000')).data
+    확인(틀린번호?.ok === false && 틀린번호.reason === 'not_enrolled',
+      `이름은 맞아도 번호가 등록된 것과 다르면 막힌다 (${틀린번호?.reason})`)
+    const 띄어씀 = 시험학생.name.length > 1 ? 시험학생.name[0] + ' ' + 시험학생.name.slice(1) : 시험학생.name
+    const 재원 = (await 신청(띄어씀, 번호)).data
+    확인(재원?.ok === true, `재원생은 들어간다 — 이름을 띄어 써도, 번호에 하이픈이 있어도 (자리 ${재원?.seat_no}번)`)
+    if (재원?.ok) {
+      const { data: 줄 } = await db.from('booster_applications').select('is_enrolled').eq('id', 재원.id).single()
+      확인(줄?.is_enrolled === true, '명단의 재원 표시는 DB 가 확인한 값(true)으로 적힌다')
+    }
+  }
+
+  // 끄면 다시 누구나 (다음 특강이 외부생도 받을 때를 위해)
+  await 되돌리기(undefined, false)
+  const 꺼짐 = (await 신청('재원아닌학생', '01012340000')).data
+  확인(꺼짐?.ok === true, '재원생만을 끈 특강은 외부 학생도 받는다')
+
   /* ── 8. 치우기 ───────────────────────────────────────────────────── */
-  await 되돌리기()
+  await 되돌리기(undefined, true)   // ★ 연습 화면도 실제처럼 재원생만으로 돌려 둔다
   const { count: 남은것 } = await db.from('booster_applications')
     .select('id', { count: 'exact', head: true }).eq('session_id', sid)
   확인(남은것 === 0, '연습 신청을 다 치웠다')
