@@ -118,5 +118,8 @@ $function$;
 -- 권한은 그대로 — 서버(service_role)만 부른다
 revoke all on function public.booster_apply(text, text, text, text, text, text, boolean, int) from public;
 grant execute on function public.booster_apply(text, text, text, text, text, text, boolean, int) to service_role;
+-- ★ public 에서 빼는 것만으로는 안 막힌다 — Supabase 는 anon·authenticated 에 따로 권한을 준다.
+--   2026-11-21 적용 뒤 확인해 보니 둘 다 직접 부를 수 있었다. 서버만 부르므로 뺀다.
+revoke execute on function public.booster_apply(text, text, text, text, text, text, boolean, int) from anon, authenticated;
 
 commit;
