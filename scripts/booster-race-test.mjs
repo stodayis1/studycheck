@@ -178,8 +178,7 @@ async function main() {
   확인(닫힘?.ok === false && 닫힘.reason === 'closed', `창구가 닫히면 막힌다 (${닫힘?.reason})`)
 
   /* ── 9. 재원생만 (원장님 2026-11-21) ─────────────────────────────── */
-  console.log('
-9) 재원생만 받는다 — 학생 이름 + 학원에 등록된 번호')
+  console.log('\n9) 재원생만 받는다 — 학생 이름 + 학원에 등록된 번호')
   await 되돌리기(undefined, true)
   const 외부 = (await 신청('재원아닌학생', '01012340000')).data
   확인(외부?.ok === false && 외부.reason === 'not_enrolled',
